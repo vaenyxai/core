@@ -1,0 +1,11 @@
+{
+  "name": "Sample — Summary Log",
+  "description": "A minimal reference Routine: feed it text, it summarises each entry with the Sample Text Summary method and keeps a running log you can revisit.",
+  "owner": "vaenyx-sample",
+  "version": "1.0.0",
+  "tags": ["sample"],
+  "mode": "accumulate",
+  "storage": { "journal": true, "gallery": true },
+  "deps": [{ "methodId": "sample-summary", "version": "1.0.0" }],
+  "flow": [{ "id": "summarise", "methodId": "sample-summary", "from": "journal" }]
+}

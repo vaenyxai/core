@@ -1,0 +1,30 @@
+services:
+  vaenyx:
+    build:
+      context: .
+    container_name: vaenyx
+    environment:
+      NODE_ENV: production
+      VAENYX_DATA_DIR: /app/data
+      VAENYX_HOST: 0.0.0.0
+      VAENYX_LOG_LEVEL: info
+      VAENYX_MIGRATIONS_DIR: ./migrations
+      VAENYX_PORT: 3000
+      VAENYX_WEB_DIST: ../web/dist
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    ports:
+      - "${VAENYX_BIND_ADDRESS:-127.0.0.1}:${VAENYX_PORT:-3000}:3000"
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data

@@ -1,0 +1,12 @@
+{
+  "input": {
+    "text": ""
+  },
+  "output": {
+    "summary": "There was nothing to summarise.",
+    "keyPoints": []
+  },
+  "note": "Empty-input guard.",
+  "source": "synthetic",
+  "time": "2026-06-16"
+}

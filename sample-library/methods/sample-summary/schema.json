@@ -1,0 +1,29 @@
+{
+  "input": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["text"],
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "The text to summarise."
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["summary", "keyPoints"],
+    "properties": {
+      "summary": {
+        "type": "string",
+        "description": "One-sentence plain-language summary."
+      },
+      "keyPoints": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "2-5 distinct points from the text."
+      }
+    }
+  }
+}

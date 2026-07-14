@@ -1,0 +1,40 @@
+name: CI
+
+# Manual only — runs nothing on push/PR to save GitHub Actions minutes.
+# Day-to-day, run these locally before pushing:
+#   npm run check && npm run test:production && npm run test:ops
+# Docker build and the Windows launcher are validated locally (this is a
+# Windows box; the Windows runner used to be billed at 2x). The dropped jobs:
+#   docker-smoke (docker build + health check), windows-launcher-smoke.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run checks
+        run: npm run check
+
+      - name: Run production smoke test
+        run: npm run test:production
+
+      - name: Run backup and restore smoke test
+        run: npm run test:ops

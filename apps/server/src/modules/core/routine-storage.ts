@@ -1,0 +1,197 @@
+// Vaenyx Library v2 — Routine local storage: Journal + Gallery.
+//
+// Each Routine keeps two private, on-device-only stores (docs/library-architecture
+// §14): the Journal (raw entries the family feeds in) and the Gallery (generated
+// results to revisit). Both live in the local SQLite DB and are NEVER uploaded.
+//
+// Step ① is the data model only: these are the CRUD primitives. They take an
+// optional chatId so step ② can bind a Routine run to its Chat (accumulate = one
+// persistent Chat); until then chatId is null. Gallery stores STRUCTURED output
+// (the result JSON), never rendered text, so the view layer can render and
+// re-render it later.
+
+import { randomUUID } from "node:crypto";
+
+import type {
+  RoutineGalleryItem,
+  RoutineJournalEntry,
+} from "@vaenyx/contracts";
+
+import type { DatabaseHandle } from "../../db/database.js";
+
+interface JournalRow {
+  id: string;
+  routine_id: string;
+  chat_id: string | null;
+  content: string;
+  created_at: string;
+}
+
+interface GalleryRow {
+  id: string;
+  routine_id: string;
+  chat_id: string | null;
+  step_id: string | null;
+  output: string;
+  output_valid: 0 | 1;
+  created_at: string;
+}
+
+function toJournalEntry(row: JournalRow): RoutineJournalEntry {
+  return {
+    id: row.id,
+    routineId: row.routine_id,
+    chatId: row.chat_id,
+    content: JSON.parse(row.content),
+    createdAt: row.created_at,
+  };
+}
+
+function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
+  return {
+    id: row.id,
+    routineId: row.routine_id,
+    chatId: row.chat_id,
+    stepId: row.step_id,
+    output: JSON.parse(row.output),
+    outputValid: row.output_valid === 1,
+    createdAt: row.created_at,
+  };
+}
+
+export function addJournalEntry(
+  database: DatabaseHandle,
+  input: { routineId: string; chatId?: string | null; content: unknown },
+): RoutineJournalEntry {
+  const id = randomUUID();
+  database.sqlite
+    .prepare(
+      `INSERT INTO routine_journal (id, routine_id, chat_id, content)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(id, input.routineId, input.chatId ?? null, JSON.stringify(input.content ?? null));
+
+  const row = database.sqlite
+    .prepare("SELECT * FROM routine_journal WHERE id = ?")
+    .get(id) as unknown as JournalRow;
+  return toJournalEntry(row);
+}
+
+export function listJournalEntries(
+  database: DatabaseHandle,
+  routineId: string,
+  chatId?: string | null,
+): RoutineJournalEntry[] {
+  const rows = (
+    chatId === undefined
+      ? database.sqlite
+          .prepare(
+            `SELECT * FROM routine_journal WHERE routine_id = ?
+             ORDER BY created_at DESC, id DESC`,
+          )
+          .all(routineId)
+      : database.sqlite
+          .prepare(
+            `SELECT * FROM routine_journal WHERE routine_id = ? AND chat_id IS ?
+             ORDER BY created_at DESC, id DESC`,
+          )
+          .all(routineId, chatId)
+  ) as unknown as JournalRow[];
+  return rows.map(toJournalEntry);
+}
+
+// Confirm-card corrections -> parse flywheel (③): the Owner's confirmed-correct
+// input for a message, saved so recent ones can be fed back as few-shot into
+// future parses. Local + private — never uploaded, rides the local backup.
+export interface RoutineParseExample {
+  message: string;
+  input: unknown;
+}
+
+export function addParseExample(
+  database: DatabaseHandle,
+  input: { routineId: string; message: string; input: unknown },
+): void {
+  database.sqlite
+    .prepare(
+      `INSERT INTO routine_parse_examples (id, routine_id, message, input)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(
+      randomUUID(),
+      input.routineId,
+      input.message,
+      JSON.stringify(input.input ?? null),
+    );
+}
+
+export function listParseExamples(
+  database: DatabaseHandle,
+  routineId: string,
+  limit: number,
+): RoutineParseExample[] {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT message, input FROM routine_parse_examples WHERE routine_id = ?
+       ORDER BY created_at DESC, id DESC LIMIT ?`,
+    )
+    .all(routineId, limit) as unknown as { message: string; input: string }[];
+  return rows.map((row) => ({
+    message: row.message,
+    input: JSON.parse(row.input) as unknown,
+  }));
+}
+
+export function addGalleryItem(
+  database: DatabaseHandle,
+  input: {
+    routineId: string;
+    chatId?: string | null;
+    stepId?: string | null;
+    output: unknown;
+    outputValid?: boolean;
+  },
+): RoutineGalleryItem {
+  const id = randomUUID();
+  database.sqlite
+    .prepare(
+      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      input.routineId,
+      input.chatId ?? null,
+      input.stepId ?? null,
+      JSON.stringify(input.output ?? null),
+      input.outputValid === false ? 0 : 1,
+    );
+
+  const row = database.sqlite
+    .prepare("SELECT * FROM routine_gallery WHERE id = ?")
+    .get(id) as unknown as GalleryRow;
+  return toGalleryItem(row);
+}
+
+export function listGalleryItems(
+  database: DatabaseHandle,
+  routineId: string,
+  chatId?: string | null,
+): RoutineGalleryItem[] {
+  const rows = (
+    chatId === undefined
+      ? database.sqlite
+          .prepare(
+            `SELECT * FROM routine_gallery WHERE routine_id = ?
+             ORDER BY created_at DESC, id DESC`,
+          )
+          .all(routineId)
+      : database.sqlite
+          .prepare(
+            `SELECT * FROM routine_gallery WHERE routine_id = ? AND chat_id IS ?
+             ORDER BY created_at DESC, id DESC`,
+          )
+          .all(routineId, chatId)
+  ) as unknown as GalleryRow[];
+  return rows.map(toGalleryItem);
+}

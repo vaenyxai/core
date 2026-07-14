@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "network": false,
+    "readFiles": false
+  },
+  "learning": {
+    "enabled": false,
+    "captures": []
+  }
+}

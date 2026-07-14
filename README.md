@@ -1,18 +1,74 @@
-# core (placeholder — will be the whole app, public MIT)
+# Vaenyx
 
-Future public home of the **entire Vaenyx client application** — engine,
-Vaenyx Me, and the Merit client — under the **MIT licence**, as one repo.
+**A self-hosted, local-first personal AI agent for your household.** Vaenyx
+runs on your own machine: your chats, memory, projects, tasks and files stay in
+a local SQLite database under your control, and you choose which AI model
+backend it talks to — a cloud provider under your own account, or a local model
+on your own hardware.
 
-**Decision 2026-07-11 (full open-source, revising the 2026-06-23 open-core
-split):** there is no engine/moat code split anymore. All client code goes
-public here; the former `core-private` concept is retired. What stays private
-forever is the *operation*, not the code: the operator's keys, the production
-Merit/identity ledger, the vaenyx.ai front door, and server-side anti-abuse
-configuration.
+> Status: pre-1.0, under active development. Interfaces and data formats may
+> still change between versions.
 
-**Not open yet.** The app currently lives in the private `vaenyx` repo
-(working copy `C:\Vaenyx`). This repo receives a **fresh-start snapshot**
-(clean current state; internal history stays archived in the private repo)
-once the launch-gate items and the open-source pre-flight checklist are done
-(MIT LICENSE, THIRD_PARTY_NOTICES manifest, README/CONTRIBUTING/SECURITY.md,
-legal v2.3, trademark filed). See the private repo's DECISIONS.md 2026-07-11.
+## What it does
+
+- **Chat + projects + memory** — a personal assistant that keeps its context on
+  your machine, organised into projects with reviewable memory.
+- **Pluggable model backends** — OpenAI (Codex CLI or API key), Anthropic
+  Claude, Google Gemini, or any OpenAI-compatible local endpoint (Ollama,
+  LM Studio); pick a default and switch per chat.
+- **Methods & Routines** — declarative building blocks (Methods) composed into
+  ready-to-use products (Routines) that run locally: feed one something, it
+  runs its steps and keeps a log.
+- **Community Library** — browse and install Methods/Routines shared by the
+  community; publish your own under a display name you choose. Community
+  content is declarative-only: installing it never installs or runs code.
+- **Scheduled tasks** — recurring runs with history, retry and cancel.
+- **Backup & restore** — one-click snapshots of your database and library,
+  stored locally.
+
+## Privacy posture
+
+Your instance's data lives in `userdata/` on your machine and is never
+committed or uploaded by Vaenyx. Chats you send to a **cloud** model provider
+do reach that provider under its own terms — that routing is your choice, per
+chat. Using the Community Library needs no account; publishing uses a Google or
+GitHub sign-in, with a self-chosen public display name. The formal terms,
+privacy policy and contributor terms live in [`docs/legal/`](docs/legal/) and
+inside the app under Settings → Legal.
+
+## Run it (Windows)
+
+Requirements: Node.js ≥ 24, npm ≥ 11.
+
+1. Double-click `Vaenyx-Start.cmd`.
+2. Open `http://localhost:3000` if the browser does not open automatically.
+3. Stop from Settings → Stop Vaenyx (or `Vaenyx-Stop.cmd`).
+
+`Vaenyx-Backup.cmd` snapshots your data; `Vaenyx-Update.cmd` updates from the
+configured Git remote. See the
+[Windows guide](docs/WINDOWS-MINI-PC-GUIDE.zh-CN.md) and the
+[migration guide](docs/MIGRATE-TO-NEW-PC.zh-CN.md).
+
+The server binds to `127.0.0.1` only. For phone access use an authenticated
+tunnel (e.g. Tailscale) — never expose the port directly to the internet.
+
+## Develop
+
+```bash
+npm ci
+npm run dev      # Fastify server + Vite web dev servers
+npm run check    # lint, typecheck, tests, build
+```
+
+Stack: React/Vite web app · Fastify server · shared TypeBox contracts ·
+SQLite. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Licence
+
+Code: [MIT](LICENSE). Third-party dependencies:
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (regenerated every release).
+The "Vaenyx" name and brand assets are **not** MIT-licensed — see the
+[Trademark Policy](docs/legal/trademark-policy.md); forks must rebrand.
+Community-published content is CC BY 4.0 under the Contributor Agreement.
+
+Security reports: [SECURITY.md](SECURITY.md).

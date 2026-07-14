@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Vaenyx is a self-hosted, local-first personal agent framework."
+    />
+    <meta name="theme-color" content="#1a1917" />
+    <link rel="icon" href="/vaenyx-mark.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Vaenyx</title>
+    <script>
+      // Apply the saved theme before the app renders, so there is no flash of
+      // the default theme on load. The picker lives in Settings → Appearance.
+      (function () {
+        try {
+          var saved = localStorage.getItem("vaenyx.theme");
+          if (saved) document.documentElement.dataset.theme = saved;
+        } catch (e) {
+          /* localStorage unavailable; default theme applies. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

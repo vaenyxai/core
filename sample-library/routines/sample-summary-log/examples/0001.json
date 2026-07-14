@@ -1,0 +1,16 @@
+{
+  "journal": {
+    "text": "The plumber quoted $1,200 to replace the hot water system, including parts and labour, with a two-year warranty. He can start next Tuesday."
+  },
+  "gallery": {
+    "summary": "A plumber quoted $1,200 to replace the hot water system with parts, labour, and a two-year warranty, able to start next Tuesday.",
+    "keyPoints": [
+      "$1,200 total, parts and labour included",
+      "Two-year warranty",
+      "Can start next Tuesday"
+    ]
+  },
+  "note": "One accumulate-mode run: a Journal entry in, the step's structured output archived to the Gallery.",
+  "source": "synthetic",
+  "time": "2026-06-20"
+}

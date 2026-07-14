@@ -1,0 +1,17 @@
+{
+  "name": "Vaenyx",
+  "short_name": "Vaenyx",
+  "description": "Self-hosted, local-first personal agent framework.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#262624",
+  "theme_color": "#262624",
+  "icons": [
+    {
+      "src": "/vaenyx-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

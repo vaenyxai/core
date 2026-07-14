@@ -1,0 +1,35 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Private Vaenyx instance data
+private/*
+!private/README.md
+data/*
+!data/README.md
+backups/
+# All personal data now lives under userdata/ (db, library, backups, config…) — never commit
+userdata/
+
+# Local tooling
+.codex-remote-attachments/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Claude Code local settings
+.claude/

@@ -1,0 +1,11 @@
+# Ship only the neutral sample seed. Everything else here — the Methods and
+# Routines you create or install — is local-private. Publish from inside the app
+# to reach the community store; created/installed content never belongs in this
+# framework repo.
+methods/*
+routines/*
+
+# Kept as the out-of-the-box demo seed:
+!methods/README.md
+!methods/sample-summary/
+!routines/sample-summary-log/

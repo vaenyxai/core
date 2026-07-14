@@ -1,0 +1,17 @@
+{
+  "input": {
+    "text": "The roof inspection found three cracked tiles on the north side and a blocked gutter. No structural damage was observed. Repairs are recommended before winter."
+  },
+  "output": {
+    "summary": "A roof inspection found minor tile and gutter issues but no structural damage, with repairs advised before winter.",
+    "keyPoints": [
+      "Three cracked tiles on the north side",
+      "One blocked gutter",
+      "No structural damage found",
+      "Repairs recommended before winter"
+    ]
+  },
+  "note": "Plain factual condensation; nothing invented beyond the text.",
+  "source": "synthetic",
+  "time": "2026-06-16"
+}
