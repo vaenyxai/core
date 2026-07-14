@@ -7,7 +7,8 @@
   ApproveVaenyxMeCandidateRequest,
   AuditEvent,
   BackupListResponse,
-  BackupConfig,
+  BackupConfigView,
+  BackupConfigUpdate,
   ModelProviderInfo,
   BootstrapStatus,
   ChangePasswordRequest,
@@ -106,12 +107,14 @@ export function fetchBackups(): Promise<BackupListResponse> {
   return requestJson<BackupListResponse>("/v1/system/backups");
 }
 
-export function fetchBackupConfig(): Promise<BackupConfig> {
-  return requestJson<BackupConfig>("/v1/system/backup-config");
+export function fetchBackupConfig(): Promise<BackupConfigView> {
+  return requestJson<BackupConfigView>("/v1/system/backup-config");
 }
 
-export function saveBackupConfig(config: BackupConfig): Promise<BackupConfig> {
-  return requestJson<BackupConfig>("/v1/system/backup-config", {
+export function saveBackupConfig(
+  config: BackupConfigUpdate,
+): Promise<BackupConfigView> {
+  return requestJson<BackupConfigView>("/v1/system/backup-config", {
     method: "PUT",
     body: JSON.stringify(config),
   });

@@ -73,6 +73,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.title": "Backup & Restore",
     "settings.backup.copy":
       "Save a snapshot of your Vaenyx — your settings, chats, tokens, and your own Methods & Routines — or roll back to an earlier one. Backups are plain files kept on this machine only: never uploaded, no GitHub, no account or login needed.",
+    "settings.backup.password": "Backup password (optional encryption)",
+    "settings.backup.passwordHintOn": "Encryption is ON. Leave empty to keep the current password; type a new one to replace it.",
+    "settings.backup.passwordHintOff": "Empty = no encryption. Set a password and new backups become encrypted files.",
+    "settings.backup.passwordWarn": "If you lose this password, encrypted backups CANNOT be opened. Write it down somewhere safe.",
+    "settings.backup.passwordClear": "Turn encryption off",
     "settings.backup.destination": "Backup folder",
     "settings.backup.destinationHint":
       "Full path. Leave empty for the default folder on this machine; set another disk, USB drive or NAS to keep copies off this machine.",
@@ -150,7 +155,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.disclaimer.health.gateAccept": "I Understand — Continue",
     "legal.disclaimer.health.gateCancel": "Not Now",
     "legal.notice.backup":
-      "Backups contain your private data — chats, memories and files. Store them somewhere safe.",
+      "Backups contain your private data — chats, memories and files. Store them somewhere safe. Optional encryption is available.",
     "legal.notice.settings.legalLinks":
       "Terms of Service, Privacy Policy, Contributor Agreement, Trademark Policy and Third-Party Notices apply to Vaenyx. Questions: hello@vaenyx.ai. (Email is handled on overseas servers — include only what's needed.)",
     "legal.disclaimer.aiGeneral.firstRun":
@@ -242,6 +247,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.title": "备份与还原",
     "settings.backup.copy":
       "为你的 Vaenyx 存一个快照(设置、聊天、Token,以及你自建的 Method 和 Routine),或回退到之前的某个快照。备份就是本机上的普通文件:绝不上传、不用 GitHub、不需账号或登录。",
+    "settings.backup.password": "备份密码(可选加密)",
+    "settings.backup.passwordHintOn": "加密已开启。留空 = 保持当前密码;输入新密码即替换。",
+    "settings.backup.passwordHintOff": "留空 = 不加密。设了密码后,新备份会打包成加密文件。",
+    "settings.backup.passwordWarn": "密码丢失 = 加密备份永远打不开。请把它写在安全的地方。",
+    "settings.backup.passwordClear": "关闭加密",
     "settings.backup.destination": "备份文件夹",
     "settings.backup.destinationHint":
       "完整路径。留空 = 本机默认文件夹;填另一块盘 / U 盘 / NAS 可把副本存到本机之外。",
@@ -317,7 +327,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.disclaimer.health.gateAccept": "我已了解——继续",
     "legal.disclaimer.health.gateCancel": "暂不继续",
     "legal.notice.backup":
-      "备份包含你的私人数据——聊天、记忆与文件。请妥善保管。",
+      "备份包含你的私人数据——聊天、记忆与文件。请妥善保管。可选择加密。",
     "legal.notice.settings.legalLinks":
       "Vaenyx 适用《服务条款》《隐私政策》《贡献者协议》《商标政策》与《第三方声明》。如有疑问:hello@vaenyx.ai。(邮件在海外服务器上处理——请只写必要信息。)",
     "legal.disclaimer.aiGeneral.firstRun":

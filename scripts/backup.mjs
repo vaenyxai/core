@@ -14,6 +14,7 @@ import {
   libraryDirectory,
   readBackupConfig,
 } from "./lib/paths.mjs";
+import { packDirectory } from "./lib/vbak.mjs";
 
 if (!existsSync(databasePath)) {
   throw new Error("No Vaenyx database exists yet. Start Vaenyx and complete setup first.");
@@ -71,6 +72,25 @@ if (existsSync(libraryDirectory)) {
   console.log("No library folder found; backed up the database without a library snapshot.");
 }
 
+// Optional encryption: with a backup password configured, pack the snapshot
+// (database + library) into one AES-256-GCM .vbak file and remove the plain
+// files. The manifest stays plaintext — it holds only metadata, so the backup
+// list works without decrypting anything.
+const passphrase =
+  process.env.VAENYX_BACKUP_PASSPHRASE || readBackupConfig().passphrase;
+let encrypted = false;
+if (passphrase) {
+  const archive = packDirectory(destinationDirectory, passphrase);
+  rmSync(resolve(destinationDirectory, "vaenyx.db"), { force: true });
+  rmSync(resolve(destinationDirectory, "library"), {
+    recursive: true,
+    force: true,
+  });
+  writeFileSync(resolve(destinationDirectory, "backup.vbak"), archive);
+  encrypted = true;
+  console.log("Backup encrypted (AES-256-GCM).");
+}
+
 writeFileSync(
   resolve(destinationDirectory, "manifest.json"),
   JSON.stringify(
@@ -80,6 +100,7 @@ writeFileSync(
       integrity: "ok",
       migrations: migrationCount?.count ?? 0,
       library,
+      encrypted,
       note: "Private Vaenyx instance backup. Keep this folder private.",
     },
     null,

@@ -52,9 +52,12 @@ export function listBackups(config: AppConfig): BackupEntry[] {
   for (const root of backupSearchRoots(config)) {
     for (const item of readdirSync(root, { withFileTypes: true })) {
       if (!item.isDirectory() || seen.has(item.name)) continue;
+      // Transient unpack folders a restore creates are never restore points.
+      if (item.name.startsWith("restore-unpack-")) continue;
       const folder = resolve(root, item.name);
-      // A valid restore point must contain a database file.
-      if (!existsSync(resolve(folder, "vaenyx.db"))) continue;
+      // A valid restore point holds a plain database or an encrypted archive.
+      const encrypted = existsSync(resolve(folder, "backup.vbak"));
+      if (!encrypted && !existsSync(resolve(folder, "vaenyx.db"))) continue;
       seen.add(item.name);
 
     const kind = item.name.startsWith("before-restore-") ? "safety" : "backup";
@@ -97,6 +100,7 @@ export function listBackups(config: AppConfig): BackupEntry[] {
         sizeBytes: folderSizeBytes(folder),
         migrations,
         library,
+        encrypted,
       });
     }
   }
@@ -109,8 +113,10 @@ export function listBackups(config: AppConfig): BackupEntry[] {
 
 export function backupExists(config: AppConfig, id: string): boolean {
   if (!isValidBackupId(id)) return false;
-  return backupSearchRoots(config).some((root) =>
-    existsSync(resolve(root, id, "vaenyx.db")),
+  return backupSearchRoots(config).some(
+    (root) =>
+      existsSync(resolve(root, id, "vaenyx.db")) ||
+      existsSync(resolve(root, id, "backup.vbak")),
   );
 }
 

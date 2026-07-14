@@ -4348,9 +4348,12 @@ function BackupPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
-  // Owner backup preferences: destination folder + keep-most-recent-N.
+  // Owner backup preferences: destination folder + keep-most-recent-N +
+  // optional encryption (password is write-only; we only know on/off).
   const [destination, setDestination] = useState("");
   const [keep, setKeep] = useState("");
+  const [encrypted, setEncrypted] = useState(false);
+  const [passphrase, setPassphrase] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
   const [configNotice, setConfigNotice] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -4374,21 +4377,31 @@ function BackupPanel() {
       .then((config) => {
         setDestination(config.destination ?? "");
         setKeep(config.keep === null ? "" : String(config.keep));
+        setEncrypted(config.encrypted);
       })
       .catch(() => {});
   }, []);
 
-  async function handleSaveConfig() {
+  // passphrase: undefined = keep current, null = turn encryption off, string =
+  // set/replace (matches the PUT contract).
+  async function handleSaveConfig(passphraseAction?: string | null) {
     setSavingConfig(true);
     setConfigError(null);
     setConfigNotice(null);
     const keepNumber = Number.parseInt(keep, 10);
     try {
-      await saveBackupConfig({
+      const saved = await saveBackupConfig({
         destination: destination.trim() === "" ? null : destination.trim(),
         keep:
           Number.isInteger(keepNumber) && keepNumber >= 1 ? keepNumber : null,
+        ...(passphraseAction !== undefined
+          ? { passphrase: passphraseAction }
+          : passphrase.trim() !== ""
+            ? { passphrase: passphrase.trim() }
+            : {}),
       });
+      setEncrypted(saved.encrypted);
+      setPassphrase("");
       setConfigNotice(t("settings.backup.configSaved"));
       void load();
     } catch (nextError) {
@@ -4485,15 +4498,44 @@ function BackupPanel() {
           value={keep}
         />
         <p className="library-note">{t("settings.backup.keepHint")}</p>
-        <button
-          className="secondary-button"
-          disabled={savingConfig}
-          onClick={() => void handleSaveConfig()}
-          style={{ alignSelf: "flex-start" }}
-          type="button"
-        >
-          {t("settings.backup.saveConfig")}
-        </button>
+        <label className="method-picker-label">
+          {t("settings.backup.password")}
+        </label>
+        <input
+          autoComplete="new-password"
+          className="method-rename-input"
+          onChange={(event) => setPassphrase(event.target.value)}
+          type="password"
+          value={passphrase}
+        />
+        <p className="library-note">
+          {encrypted
+            ? t("settings.backup.passwordHintOn")
+            : t("settings.backup.passwordHintOff")}
+        </p>
+        <p className="context-disclaimer">
+          {t("settings.backup.passwordWarn")}
+        </p>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <button
+            className="secondary-button"
+            disabled={savingConfig}
+            onClick={() => void handleSaveConfig()}
+            type="button"
+          >
+            {t("settings.backup.saveConfig")}
+          </button>
+          {encrypted ? (
+            <button
+              className="text-button"
+              disabled={savingConfig}
+              onClick={() => void handleSaveConfig(null)}
+              type="button"
+            >
+              {t("settings.backup.passwordClear")}
+            </button>
+          ) : null}
+        </div>
         {configNotice ? (
           <p className="settings-card-copy">{configNotice}</p>
         ) : null}

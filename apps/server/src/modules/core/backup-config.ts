@@ -17,6 +17,10 @@ import type { AppConfig } from "../../config.js";
 export interface BackupConfig {
   destination: string | null;
   keep: number | null;
+  // Backup password (optional encryption). Stored locally only — it protects
+  // the copies that leave this machine (USB / cloud-synced snapshots). NEVER
+  // returned by any endpoint; the API exposes only `encrypted: boolean`.
+  passphrase: string | null;
 }
 
 function configPath(config: AppConfig): string {
@@ -28,6 +32,7 @@ export function readBackupConfig(config: AppConfig): BackupConfig {
     const raw = JSON.parse(readFileSync(configPath(config), "utf8")) as {
       destination?: unknown;
       keep?: unknown;
+      passphrase?: unknown;
     };
     const destination =
       typeof raw.destination === "string" &&
@@ -41,9 +46,13 @@ export function readBackupConfig(config: AppConfig): BackupConfig {
       (raw.keep as number) <= 500
         ? (raw.keep as number)
         : null;
-    return { destination, keep };
+    const passphrase =
+      typeof raw.passphrase === "string" && raw.passphrase !== ""
+        ? raw.passphrase
+        : null;
+    return { destination, keep, passphrase };
   } catch {
-    return { destination: null, keep: null };
+    return { destination: null, keep: null, passphrase: null };
   }
 }
 

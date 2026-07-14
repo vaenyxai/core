@@ -1302,6 +1302,7 @@ export const BackupEntrySchema = Type.Object(
       },
       { additionalProperties: false },
     ),
+    encrypted: Type.Boolean(),
   },
   { additionalProperties: false },
 );
@@ -1315,19 +1316,35 @@ export const BackupListResponseSchema = Type.Object(
 
 // Owner-set backup preferences: optional destination folder (another disk,
 // USB, NAS or a cloud-synced folder — snapshots are write-once, so unlike the
-// live database they may be synced) + optional keep-most-recent-N retention.
-// Null = default local folder / keep everything.
-export const BackupConfigSchema = Type.Object(
+// live database they may be synced), optional keep-most-recent-N retention,
+// and optional encryption. The backup password itself is NEVER returned — the
+// view exposes only whether encryption is on.
+export const BackupConfigViewSchema = Type.Object(
   {
     destination: Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
     keep: Type.Union([Type.Integer({ minimum: 1, maximum: 500 }), Type.Null()]),
+    encrypted: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+// PUT body: passphrase absent = keep the current password; "" or null = turn
+// encryption off; a non-empty string = set/replace the password.
+export const BackupConfigUpdateSchema = Type.Object(
+  {
+    destination: Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+    keep: Type.Union([Type.Integer({ minimum: 1, maximum: 500 }), Type.Null()]),
+    passphrase: Type.Optional(
+      Type.Union([Type.String({ maxLength: 200 }), Type.Null()]),
+    ),
   },
   { additionalProperties: false },
 );
 
 export type BackupEntry = Static<typeof BackupEntrySchema>;
 export type BackupListResponse = Static<typeof BackupListResponseSchema>;
-export type BackupConfig = Static<typeof BackupConfigSchema>;
+export type BackupConfigView = Static<typeof BackupConfigViewSchema>;
+export type BackupConfigUpdate = Static<typeof BackupConfigUpdateSchema>;
 
 // Friendly routine input (Library v2 ③). When a routine's first Method needs
 // several fields, the chat message is AI-parsed into them and the Owner confirms

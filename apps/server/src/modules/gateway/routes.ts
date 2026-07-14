@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+﻿import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { Type } from "@sinclair/typebox";
@@ -47,8 +47,9 @@ import {
   LoginRequestSchema,
   MessageResponseSchema,
   BackupListResponseSchema,
-  BackupConfigSchema,
-  type BackupConfig,
+  BackupConfigViewSchema,
+  BackupConfigUpdateSchema,
+  type BackupConfigUpdate,
   ProjectMemorySchema,
   ProjectSchema,
   RejectVaenyxMeCandidateRequestSchema,
@@ -605,12 +606,14 @@ export async function registerGatewayRoutes(
     },
   );
 
-  // Owner-set backup preferences: destination folder + keep-most-recent-N.
+  // Owner-set backup preferences: destination folder + keep-most-recent-N +
+  // optional encryption. The password is write-only: the view exposes only
+  // `encrypted`, never the passphrase.
   app.get(
     "/v1/system/backup-config",
     {
       schema: {
-        response: { 200: BackupConfigSchema, 401: ErrorResponseSchema },
+        response: { 200: BackupConfigViewSchema, 401: ErrorResponseSchema },
       },
     },
     async (request, reply) => {
@@ -618,17 +621,22 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return readBackupConfigForOwner(context.config);
+      const current = readBackupConfigForOwner(context.config);
+      return {
+        destination: current.destination,
+        keep: current.keep,
+        encrypted: current.passphrase !== null,
+      };
     },
   );
 
-  app.put<{ Body: BackupConfig }>(
+  app.put<{ Body: BackupConfigUpdate }>(
     "/v1/system/backup-config",
     {
       schema: {
-        body: BackupConfigSchema,
+        body: BackupConfigUpdateSchema,
         response: {
-          200: BackupConfigSchema,
+          200: BackupConfigViewSchema,
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
         },
@@ -639,13 +647,24 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      const next: BackupConfig = {
+      const current = readBackupConfigForOwner(context.config);
+      // passphrase absent = keep current; "" or null = turn encryption off;
+      // a non-empty string = set/replace.
+      const passphrase =
+        request.body.passphrase === undefined
+          ? current.passphrase
+          : request.body.passphrase === null ||
+              request.body.passphrase.trim() === ""
+            ? null
+            : request.body.passphrase;
+      const next = {
         destination:
           typeof request.body.destination === "string" &&
           request.body.destination.trim() !== ""
             ? request.body.destination.trim()
             : null,
         keep: request.body.keep,
+        passphrase,
       };
       const saved = writeBackupConfig(context.config, next);
       if (!saved.ok) {
@@ -657,10 +676,14 @@ export async function registerGatewayRoutes(
         actorName: owner.name,
         action: "system.backup.configure",
         decision: "allowed",
-        reason: `Backup config set: destination=${next.destination ?? "(default)"} keep=${next.keep ?? "(all)"}.`,
+        reason: `Backup config set: destination=${next.destination ?? "(default)"} keep=${next.keep ?? "(all)"} encryption=${passphrase ? "on" : "off"}.`,
         resourceType: "system",
       });
-      return next;
+      return {
+        destination: next.destination,
+        keep: next.keep,
+        encrypted: passphrase !== null,
+      };
     },
   );
 

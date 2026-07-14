@@ -59,8 +59,12 @@ export const databasePath = resolve(dataDirectory, "vaenyx.db");
 // USB drive, NAS or a cloud-synced folder — snapshots are write-once files, so
 // unlike the live database they MAY be cloud-synced) and an optional
 // keep-most-recent-N retention count. Absent/invalid file = defaults.
+// Derived from the (env-aware) data directory — userdata/db → userdata/config —
+// so scripts and the server read the SAME file even under VAENYX_DATA_DIR
+// overrides (tests, custom installs).
 export const backupConfigPath = resolve(
-  userdataRoot,
+  dataDirectory,
+  "..",
   "config",
   "backup.json",
 );
@@ -78,9 +82,13 @@ export function readBackupConfig() {
       Number.isInteger(raw.keep) && raw.keep >= 1 && raw.keep <= 500
         ? raw.keep
         : null;
-    return { destination, keep };
+    const passphrase =
+      typeof raw.passphrase === "string" && raw.passphrase !== ""
+        ? raw.passphrase
+        : null;
+    return { destination, keep, passphrase };
   } catch {
-    return { destination: null, keep: null };
+    return { destination: null, keep: null, passphrase: null };
   }
 }
 
