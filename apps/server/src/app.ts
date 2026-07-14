@@ -9,6 +9,7 @@ import { createDatabase } from "./db/database.js";
 import { seedLibraryIfEmpty } from "./modules/core/library-seed.js";
 import { initModelRegistry } from "./modules/models/registry.js";
 import { reconcileInterruptedTasks, runDueTasks } from "./modules/core/tasks.js";
+import { runScheduledBackupIfDue } from "./modules/core/backup-schedule.js";
 import { autoScanVaenyxMe } from "./modules/core/vaenyx-me.js";
 import { registerGatewayRoutes } from "./modules/gateway/routes.js";
 import { renewSessionOnUse } from "./modules/guard/auth.js";
@@ -48,10 +49,19 @@ export async function buildApp(
   // crash; mark it failed so it is retriable instead of stuck forever.
   reconcileInterruptedTasks(database);
 
-  // In-process scheduler: once a minute, run any task whose schedule is due.
+  // In-process scheduler: once a minute, run any task whose schedule is due,
+  // and the automatic backup when its schedule says so.
   const schedulerTick = setInterval(() => {
     try {
       runDueTasks(database);
+    } catch (error) {
+      app.log.error(error);
+    }
+    try {
+      runScheduledBackupIfDue(config, {
+        info: (message) => app.log.info(message),
+        error: (message) => app.log.error(message),
+      });
     } catch (error) {
       app.log.error(error);
     }

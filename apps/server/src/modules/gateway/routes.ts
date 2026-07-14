@@ -135,6 +135,7 @@ import type { DatabaseHandle } from "../../db/database.js";
 import { listAgentProfiles, updateAgentProfileName } from "../core/agents.js";
 import { getSystemStatus } from "../core/system-status.js";
 import {
+  readBackupAutoState,
   readBackupConfig as readBackupConfigForOwner,
   writeBackupConfig,
 } from "../core/backup-config.js";
@@ -622,10 +623,14 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       const current = readBackupConfigForOwner(context.config);
+      const auto = readBackupAutoState(context.config);
       return {
         destination: current.destination,
         keep: current.keep,
         encrypted: current.passphrase !== null,
+        schedule: current.schedule,
+        lastAutoAt: auto.lastRunAt,
+        lastAutoOk: auto.lastOk,
       };
     },
   );
@@ -665,6 +670,7 @@ export async function registerGatewayRoutes(
             : null,
         keep: request.body.keep,
         passphrase,
+        schedule: request.body.schedule,
       };
       const saved = writeBackupConfig(context.config, next);
       if (!saved.ok) {
@@ -679,10 +685,14 @@ export async function registerGatewayRoutes(
         reason: `Backup config set: destination=${next.destination ?? "(default)"} keep=${next.keep ?? "(all)"} encryption=${passphrase ? "on" : "off"}.`,
         resourceType: "system",
       });
+      const autoNow = readBackupAutoState(context.config);
       return {
         destination: next.destination,
         keep: next.keep,
         encrypted: passphrase !== null,
+        schedule: next.schedule,
+        lastAutoAt: autoNow.lastRunAt,
+        lastAutoOk: autoNow.lastOk,
       };
     },
   );

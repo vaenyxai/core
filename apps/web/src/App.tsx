@@ -4354,6 +4354,14 @@ function BackupPanel() {
   const [keep, setKeep] = useState("");
   const [encrypted, setEncrypted] = useState(false);
   const [passphrase, setPassphrase] = useState("");
+  const [scheduleCadence, setScheduleCadence] = useState<
+    "off" | "daily" | "weekly"
+  >("off");
+  const [scheduleHour, setScheduleHour] = useState("3");
+  const [lastAuto, setLastAuto] = useState<{
+    at: string | null;
+    ok: boolean | null;
+  }>({ at: null, ok: null });
   const [savingConfig, setSavingConfig] = useState(false);
   const [configNotice, setConfigNotice] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -4378,6 +4386,9 @@ function BackupPanel() {
         setDestination(config.destination ?? "");
         setKeep(config.keep === null ? "" : String(config.keep));
         setEncrypted(config.encrypted);
+        setScheduleCadence(config.schedule?.cadence ?? "off");
+        setScheduleHour(String(config.schedule?.hour ?? 3));
+        setLastAuto({ at: config.lastAutoAt, ok: config.lastAutoOk });
       })
       .catch(() => {});
   }, []);
@@ -4390,10 +4401,23 @@ function BackupPanel() {
     setConfigNotice(null);
     const keepNumber = Number.parseInt(keep, 10);
     try {
+      const hourNumber = Number.parseInt(scheduleHour, 10);
       const saved = await saveBackupConfig({
         destination: destination.trim() === "" ? null : destination.trim(),
         keep:
           Number.isInteger(keepNumber) && keepNumber >= 1 ? keepNumber : null,
+        schedule:
+          scheduleCadence === "off"
+            ? null
+            : {
+                cadence: scheduleCadence,
+                hour:
+                  Number.isInteger(hourNumber) &&
+                  hourNumber >= 0 &&
+                  hourNumber <= 23
+                    ? hourNumber
+                    : 3,
+              },
         ...(passphraseAction !== undefined
           ? { passphrase: passphraseAction }
           : passphrase.trim() !== ""
@@ -4498,6 +4522,52 @@ function BackupPanel() {
           value={keep}
         />
         <p className="library-note">{t("settings.backup.keepHint")}</p>
+        <label className="method-picker-label">
+          {t("settings.backup.schedule")}
+        </label>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <select
+            className="composer-level-select"
+            onChange={(event) =>
+              setScheduleCadence(
+                event.target.value as "off" | "daily" | "weekly",
+              )
+            }
+            value={scheduleCadence}
+          >
+            <option value="off">{t("settings.backup.scheduleOff")}</option>
+            <option value="daily">{t("settings.backup.scheduleDaily")}</option>
+            <option value="weekly">
+              {t("settings.backup.scheduleWeekly")}
+            </option>
+          </select>
+          {scheduleCadence !== "off" ? (
+            <select
+              aria-label={t("settings.backup.scheduleHour")}
+              className="composer-level-select"
+              onChange={(event) => setScheduleHour(event.target.value)}
+              value={scheduleHour}
+            >
+              {Array.from({ length: 24 }, (_, hour) => (
+                <option key={hour} value={String(hour)}>
+                  {String(hour).padStart(2, "0")}:00
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+        {scheduleCadence !== "off" ? (
+          <p className="library-note">
+            {t("settings.backup.lastAuto")}:{" "}
+            {lastAuto.at
+              ? `${new Date(lastAuto.at).toLocaleString()} — ${
+                  lastAuto.ok
+                    ? t("settings.backup.lastAutoOk")
+                    : t("settings.backup.lastAutoFail")
+                }`
+              : t("settings.backup.lastAutoNever")}
+          </p>
+        ) : null}
         <label className="method-picker-label">
           {t("settings.backup.password")}
         </label>

@@ -1319,11 +1319,26 @@ export const BackupListResponseSchema = Type.Object(
 // live database they may be synced), optional keep-most-recent-N retention,
 // and optional encryption. The backup password itself is NEVER returned — the
 // view exposes only whether encryption is on.
+// Automatic backup schedule: daily at HH:00, or weekly (Sundays) at HH:00.
+export const BackupScheduleSchema = Type.Union([
+  Type.Object(
+    {
+      cadence: Type.Union([Type.Literal("daily"), Type.Literal("weekly")]),
+      hour: Type.Integer({ minimum: 0, maximum: 23 }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Null(),
+]);
+
 export const BackupConfigViewSchema = Type.Object(
   {
     destination: Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
     keep: Type.Union([Type.Integer({ minimum: 1, maximum: 500 }), Type.Null()]),
     encrypted: Type.Boolean(),
+    schedule: BackupScheduleSchema,
+    lastAutoAt: Type.Union([Type.String(), Type.Null()]),
+    lastAutoOk: Type.Union([Type.Boolean(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -1337,6 +1352,7 @@ export const BackupConfigUpdateSchema = Type.Object(
     passphrase: Type.Optional(
       Type.Union([Type.String({ maxLength: 200 }), Type.Null()]),
     ),
+    schedule: BackupScheduleSchema,
   },
   { additionalProperties: false },
 );
