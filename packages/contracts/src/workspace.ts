@@ -1313,8 +1313,21 @@ export const BackupListResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Owner-set backup preferences: optional destination folder (another disk,
+// USB, NAS or a cloud-synced folder — snapshots are write-once, so unlike the
+// live database they may be synced) + optional keep-most-recent-N retention.
+// Null = default local folder / keep everything.
+export const BackupConfigSchema = Type.Object(
+  {
+    destination: Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+    keep: Type.Union([Type.Integer({ minimum: 1, maximum: 500 }), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 export type BackupEntry = Static<typeof BackupEntrySchema>;
 export type BackupListResponse = Static<typeof BackupListResponseSchema>;
+export type BackupConfig = Static<typeof BackupConfigSchema>;
 
 // Friendly routine input (Library v2 ③). When a routine's first Method needs
 // several fields, the chat message is AI-parsed into them and the Owner confirms

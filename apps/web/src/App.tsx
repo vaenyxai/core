@@ -1,4 +1,4 @@
-import {
+﻿import {
   type CSSProperties,
   type FormEvent,
   type ReactNode,
@@ -49,6 +49,8 @@ import {
   approveVaenyxMeCandidate,
   cancelTask,
   fetchBackups,
+  fetchBackupConfig,
+  saveBackupConfig,
   createBackup,
   restoreBackup,
   createAskVaenyxConversation,
@@ -4346,6 +4348,12 @@ function BackupPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
+  // Owner backup preferences: destination folder + keep-most-recent-N.
+  const [destination, setDestination] = useState("");
+  const [keep, setKeep] = useState("");
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configNotice, setConfigNotice] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -4362,7 +4370,37 @@ function BackupPanel() {
 
   useEffect(() => {
     void load();
+    fetchBackupConfig()
+      .then((config) => {
+        setDestination(config.destination ?? "");
+        setKeep(config.keep === null ? "" : String(config.keep));
+      })
+      .catch(() => {});
   }, []);
+
+  async function handleSaveConfig() {
+    setSavingConfig(true);
+    setConfigError(null);
+    setConfigNotice(null);
+    const keepNumber = Number.parseInt(keep, 10);
+    try {
+      await saveBackupConfig({
+        destination: destination.trim() === "" ? null : destination.trim(),
+        keep:
+          Number.isInteger(keepNumber) && keepNumber >= 1 ? keepNumber : null,
+      });
+      setConfigNotice(t("settings.backup.configSaved"));
+      void load();
+    } catch (nextError) {
+      setConfigError(
+        nextError instanceof Error
+          ? nextError.message
+          : t("settings.backup.error"),
+      );
+    } finally {
+      setSavingConfig(false);
+    }
+  }
 
   async function handleCreate() {
     setBusy("create");
@@ -4413,6 +4451,54 @@ function BackupPanel() {
       <h2>{t("settings.backup.title")}</h2>
       <p className="settings-card-copy">{t("settings.backup.copy")}</p>
       <p className="context-disclaimer">{t("legal.notice.backup")}</p>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.4rem",
+          margin: "0.75rem 0",
+        }}
+      >
+        <label className="method-picker-label">
+          {t("settings.backup.destination")}
+        </label>
+        <input
+          className="method-rename-input"
+          onChange={(event) => setDestination(event.target.value)}
+          placeholder="D:\VaenyxBackups"
+          value={destination}
+        />
+        <p className="library-note">{t("settings.backup.destinationHint")}</p>
+        <p className="context-disclaimer">
+          {t("legal.notice.backup.cloudSync")}
+        </p>
+        <label className="method-picker-label">
+          {t("settings.backup.keep")}
+        </label>
+        <input
+          className="method-rename-input"
+          inputMode="numeric"
+          onChange={(event) => setKeep(event.target.value)}
+          placeholder="10"
+          style={{ maxWidth: "8rem" }}
+          value={keep}
+        />
+        <p className="library-note">{t("settings.backup.keepHint")}</p>
+        <button
+          className="secondary-button"
+          disabled={savingConfig}
+          onClick={() => void handleSaveConfig()}
+          style={{ alignSelf: "flex-start" }}
+          type="button"
+        >
+          {t("settings.backup.saveConfig")}
+        </button>
+        {configNotice ? (
+          <p className="settings-card-copy">{configNotice}</p>
+        ) : null}
+        {configError ? <p className="form-error">{configError}</p> : null}
+      </div>
 
       <button
         className="secondary-button"

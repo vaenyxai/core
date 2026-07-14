@@ -18,6 +18,11 @@ import { resolve } from "node:path";
 import type { BackupEntry } from "@vaenyx/contracts";
 
 import type { AppConfig } from "../../config.js";
+import {
+  backupSearchRoots,
+  effectiveBackupsDirectory,
+  readBackupConfig,
+} from "./backup-config.js";
 
 export const PENDING_RESTORE_FLAG = "pending-restore.flag";
 
@@ -42,15 +47,15 @@ function folderSizeBytes(directory: string): number {
 }
 
 export function listBackups(config: AppConfig): BackupEntry[] {
-  const root = config.backupsDirectory;
-  if (!existsSync(root)) return [];
-
   const entries: BackupEntry[] = [];
-  for (const item of readdirSync(root, { withFileTypes: true })) {
-    if (!item.isDirectory()) continue;
-    const folder = resolve(root, item.name);
-    // A valid restore point must contain a database file.
-    if (!existsSync(resolve(folder, "vaenyx.db"))) continue;
+  const seen = new Set<string>();
+  for (const root of backupSearchRoots(config)) {
+    for (const item of readdirSync(root, { withFileTypes: true })) {
+      if (!item.isDirectory() || seen.has(item.name)) continue;
+      const folder = resolve(root, item.name);
+      // A valid restore point must contain a database file.
+      if (!existsSync(resolve(folder, "vaenyx.db"))) continue;
+      seen.add(item.name);
 
     const kind = item.name.startsWith("before-restore-") ? "safety" : "backup";
     let createdAt = "";
@@ -85,14 +90,15 @@ export function listBackups(config: AppConfig): BackupEntry[] {
       }
     }
 
-    entries.push({
-      id: item.name,
-      createdAt,
-      kind,
-      sizeBytes: folderSizeBytes(folder),
-      migrations,
-      library,
-    });
+      entries.push({
+        id: item.name,
+        createdAt,
+        kind,
+        sizeBytes: folderSizeBytes(folder),
+        migrations,
+        library,
+      });
+    }
   }
 
   entries.sort((a, b) =>
@@ -103,7 +109,9 @@ export function listBackups(config: AppConfig): BackupEntry[] {
 
 export function backupExists(config: AppConfig, id: string): boolean {
   if (!isValidBackupId(id)) return false;
-  return existsSync(resolve(config.backupsDirectory, id, "vaenyx.db"));
+  return backupSearchRoots(config).some((root) =>
+    existsSync(resolve(root, id, "vaenyx.db")),
+  );
 }
 
 // Runs scripts/backup.mjs (reused, already tested) with the server's paths.
@@ -115,13 +123,18 @@ export function createBackupNow(config: AppConfig): {
   if (!existsSync(script)) {
     return { ok: false, output: "backup.mjs not found." };
   }
+  const backupConfig = readBackupConfig(config);
   const result = spawnSync(process.execPath, [script], {
     encoding: "utf8",
     windowsHide: true,
     env: {
       ...process.env,
       VAENYX_DATA_DIR: config.dataDirectory,
-      VAENYX_BACKUPS_DIR: config.backupsDirectory,
+      // Owner-configured destination wins; retention rides along the same way.
+      VAENYX_BACKUPS_DIR: effectiveBackupsDirectory(config),
+      ...(backupConfig.keep
+        ? { VAENYX_BACKUP_KEEP: String(backupConfig.keep) }
+        : {}),
     },
   });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();

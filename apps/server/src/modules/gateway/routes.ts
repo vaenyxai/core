@@ -47,6 +47,8 @@ import {
   LoginRequestSchema,
   MessageResponseSchema,
   BackupListResponseSchema,
+  BackupConfigSchema,
+  type BackupConfig,
   ProjectMemorySchema,
   ProjectSchema,
   RejectVaenyxMeCandidateRequestSchema,
@@ -131,6 +133,10 @@ import type { AppConfig } from "../../config.js";
 import type { DatabaseHandle } from "../../db/database.js";
 import { listAgentProfiles, updateAgentProfileName } from "../core/agents.js";
 import { getSystemStatus } from "../core/system-status.js";
+import {
+  readBackupConfig as readBackupConfigForOwner,
+  writeBackupConfig,
+} from "../core/backup-config.js";
 import {
   listBackups,
   createBackupNow,
@@ -596,6 +602,65 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       return { backups: listBackups(context.config) };
+    },
+  );
+
+  // Owner-set backup preferences: destination folder + keep-most-recent-N.
+  app.get(
+    "/v1/system/backup-config",
+    {
+      schema: {
+        response: { 200: BackupConfigSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return readBackupConfigForOwner(context.config);
+    },
+  );
+
+  app.put<{ Body: BackupConfig }>(
+    "/v1/system/backup-config",
+    {
+      schema: {
+        body: BackupConfigSchema,
+        response: {
+          200: BackupConfigSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const next: BackupConfig = {
+        destination:
+          typeof request.body.destination === "string" &&
+          request.body.destination.trim() !== ""
+            ? request.body.destination.trim()
+            : null,
+        keep: request.body.keep,
+      };
+      const saved = writeBackupConfig(context.config, next);
+      if (!saved.ok) {
+        return reply.code(400).send({ error: saved.error });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "system.backup.configure",
+        decision: "allowed",
+        reason: `Backup config set: destination=${next.destination ?? "(default)"} keep=${next.keep ?? "(all)"}.`,
+        resourceType: "system",
+      });
+      return next;
     },
   );
 

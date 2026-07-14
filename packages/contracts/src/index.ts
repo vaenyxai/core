@@ -1,4 +1,4 @@
-export { SystemStatusSchema, type SystemStatus } from "./system-status.js";
+﻿export { SystemStatusSchema, type SystemStatus } from "./system-status.js";
 export {
   BootstrapStatusSchema,
   AgentProfileSchema,
@@ -66,6 +66,7 @@ export {
   MessageResponseSchema,
   BackupEntrySchema,
   BackupListResponseSchema,
+  BackupConfigSchema,
   RoutineInputFieldSchema,
   RoutineRunChatRequestSchema,
   RoutineRunNeedsInputSchema,
@@ -166,6 +167,7 @@ export {
   type LibraryMethod,
   type BackupEntry,
   type BackupListResponse,
+  type BackupConfig,
   type RoutineInputField,
   type RoutineRunChatRequest,
   type RoutineRunNeedsInput,

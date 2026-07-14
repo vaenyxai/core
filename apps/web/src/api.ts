@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AppProfile,
   AskVaenyxConversation,
   AskVaenyxMessage,
@@ -7,6 +7,7 @@ import type {
   ApproveVaenyxMeCandidateRequest,
   AuditEvent,
   BackupListResponse,
+  BackupConfig,
   ModelProviderInfo,
   BootstrapStatus,
   ChangePasswordRequest,
@@ -103,6 +104,17 @@ export function shutdownVaenyx(): Promise<{ message: string }> {
 
 export function fetchBackups(): Promise<BackupListResponse> {
   return requestJson<BackupListResponse>("/v1/system/backups");
+}
+
+export function fetchBackupConfig(): Promise<BackupConfig> {
+  return requestJson<BackupConfig>("/v1/system/backup-config");
+}
+
+export function saveBackupConfig(config: BackupConfig): Promise<BackupConfig> {
+  return requestJson<BackupConfig>("/v1/system/backup-config", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
 }
 
 export function createBackup(): Promise<{ message: string }> {

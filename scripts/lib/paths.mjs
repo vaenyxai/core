@@ -10,8 +10,8 @@
 //      that have not migrated yet (userdata -> private/data -> data).
 //   3. If nothing exists yet, fall back to the userdata/ path so a fresh
 //      install creates data in the new canonical location.
-import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // This file lives at scripts/lib/paths.mjs, so the repo root is two levels up.
@@ -54,21 +54,60 @@ export const dataDirectory =
   dataCandidates[0];
 export const databasePath = resolve(dataDirectory, "vaenyx.db");
 
+// --- Backup config (userdata/config/backup.json) ---------------------------
+// Owner-set backup preferences: an optional destination folder (another disk,
+// USB drive, NAS or a cloud-synced folder — snapshots are write-once files, so
+// unlike the live database they MAY be cloud-synced) and an optional
+// keep-most-recent-N retention count. Absent/invalid file = defaults.
+export const backupConfigPath = resolve(
+  userdataRoot,
+  "config",
+  "backup.json",
+);
+
+export function readBackupConfig() {
+  try {
+    const raw = JSON.parse(readFileSync(backupConfigPath, "utf8"));
+    const destination =
+      typeof raw.destination === "string" &&
+      raw.destination.trim() !== "" &&
+      isAbsolute(raw.destination.trim())
+        ? raw.destination.trim()
+        : null;
+    const keep =
+      Number.isInteger(raw.keep) && raw.keep >= 1 && raw.keep <= 500
+        ? raw.keep
+        : null;
+    return { destination, keep };
+  } catch {
+    return { destination: null, keep: null };
+  }
+}
+
 // --- Backups directory ----------------------------------------------------
 const backupsCandidates = [
   resolve(userdataRoot, "backups"),
   resolve(repositoryRoot, "private", "backups"),
   resolve(repositoryRoot, "backups"),
 ];
+const configuredDestination = readBackupConfig().destination;
 export const backupsDirectory =
   fromEnv(process.env.VAENYX_BACKUPS_DIR) ??
+  configuredDestination ??
   firstExisting(backupsCandidates) ??
   backupsCandidates[0];
 
 // Every root a restore is allowed to read a backup from: the resolved backups
-// directory plus the known canonical roots, so an old backup still sitting
-// under private/backups stays restorable after migration.
-export const backupRoots = [...new Set([backupsDirectory, ...backupsCandidates])];
+// directory, the Owner-configured destination, plus the known canonical roots —
+// so an old backup under private/backups, or a snapshot on the configured
+// external destination, stays restorable either way.
+export const backupRoots = [
+  ...new Set(
+    [backupsDirectory, configuredDestination, ...backupsCandidates].filter(
+      Boolean,
+    ),
+  ),
+];
 
 // --- Library directory ----------------------------------------------------
 // Backups snapshot the whole library tree (methods + routines). The launcher

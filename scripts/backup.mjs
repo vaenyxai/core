@@ -1,10 +1,18 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import {
   backupsDirectory,
   databasePath,
   libraryDirectory,
+  readBackupConfig,
 } from "./lib/paths.mjs";
 
 if (!existsSync(databasePath)) {
@@ -80,3 +88,31 @@ writeFileSync(
 );
 
 console.log(`Backup created: ${destinationDirectory}`);
+
+// Retention: keep only the most recent N proper backups (never the safety
+// copies a restore creates). Prunes ONLY when the Owner has configured a keep
+// count — no silent deletion by default. Runs after a successful backup, so a
+// failed run never removes anything.
+const keepRaw = Number.parseInt(process.env.VAENYX_BACKUP_KEEP ?? "", 10);
+const keep =
+  Number.isInteger(keepRaw) && keepRaw >= 1
+    ? keepRaw
+    : readBackupConfig().keep;
+
+if (keep) {
+  const snapshots = readdirSync(backupsDirectory, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        !entry.name.startsWith("before-restore-") &&
+        existsSync(resolve(backupsDirectory, entry.name, "vaenyx.db")),
+    )
+    .map((entry) => entry.name)
+    .sort()
+    .reverse(); // timestamp names sort newest-first when reversed
+
+  for (const name of snapshots.slice(keep)) {
+    rmSync(resolve(backupsDirectory, name), { recursive: true, force: true });
+    console.log(`Retention: removed old backup ${name} (keeping ${keep}).`);
+  }
+}

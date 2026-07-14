@@ -1,4 +1,4 @@
-// Lightweight in-app i18n: a language state (en/zh) + a string lookup table.
+﻿// Lightweight in-app i18n: a language state (en/zh) + a string lookup table.
 // Real-time switch (React context re-renders), per-device memory (localStorage,
 // like the theme), default English. UI strings migrate into STRINGS gradually —
 // any key not yet translated falls back to English, then to the key itself, so
@@ -73,6 +73,15 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.title": "Backup & Restore",
     "settings.backup.copy":
       "Save a snapshot of your Vaenyx — your settings, chats, tokens, and your own Methods & Routines — or roll back to an earlier one. Backups are plain files kept on this machine only: never uploaded, no GitHub, no account or login needed.",
+    "settings.backup.destination": "Backup folder",
+    "settings.backup.destinationHint":
+      "Full path. Leave empty for the default folder on this machine; set another disk, USB drive or NAS to keep copies off this machine.",
+    "settings.backup.keep": "Keep most recent",
+    "settings.backup.keepHint": "Older backups are removed automatically after each new backup. Empty = keep all.",
+    "settings.backup.saveConfig": "Save backup settings",
+    "settings.backup.configSaved": "Backup settings saved.",
+    "legal.notice.backup.cloudSync":
+      "You can point your own cloud-sync service at the backup folder — that's your choice, under that service's terms. Never sync the live Vaenyx data folder itself.",
     "settings.backup.create": "Create backup now",
     "settings.backup.creating": "Creating backup…",
     "settings.backup.created": "Backup created.",
@@ -233,6 +242,15 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.title": "备份与还原",
     "settings.backup.copy":
       "为你的 Vaenyx 存一个快照(设置、聊天、Token,以及你自建的 Method 和 Routine),或回退到之前的某个快照。备份就是本机上的普通文件:绝不上传、不用 GitHub、不需账号或登录。",
+    "settings.backup.destination": "备份文件夹",
+    "settings.backup.destinationHint":
+      "完整路径。留空 = 本机默认文件夹;填另一块盘 / U 盘 / NAS 可把副本存到本机之外。",
+    "settings.backup.keep": "保留最近",
+    "settings.backup.keepHint": "每次备份成功后自动清理更旧的备份。留空 = 全部保留。",
+    "settings.backup.saveConfig": "保存备份设置",
+    "settings.backup.configSaved": "备份设置已保存。",
+    "legal.notice.backup.cloudSync":
+      "你可以让自己的云同步服务同步备份文件夹——这是你自己的选择,受该服务条款约束。切勿同步 Vaenyx 正在使用的实时数据文件夹。",
     "settings.backup.create": "立即备份",
     "settings.backup.creating": "备份中…",
     "settings.backup.created": "备份完成。",
