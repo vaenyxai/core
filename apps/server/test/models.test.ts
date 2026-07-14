@@ -161,6 +161,7 @@ describe("initModelRegistry", () => {
         local: { baseUrl: "http://127.0.0.1:11434/v1", model: "hermes" },
         anthropic: { apiKey: "sk-ant" },
         gemini: { apiKey: "g-key" },
+        grok: { apiKey: "xai-key" },
       }),
     );
 
@@ -170,12 +171,14 @@ describe("initModelRegistry", () => {
       "anthropic",
       "codex",
       "gemini",
+      "grok",
       "local",
       "openai",
     ]);
     expect(getModelRegistry().get("openai")?.name).toBe("OpenAI");
     expect(getModelRegistry().get("anthropic")?.name).toBe("Claude");
     expect(getModelRegistry().get("gemini")?.name).toBe("Gemini");
+    expect(getModelRegistry().get("grok")?.name).toBe("Grok");
   });
 
   it("is Codex-only when nothing is configured", () => {
@@ -197,6 +200,7 @@ describe("provider-settings", () => {
       "anthropic",
       "codex",
       "gemini",
+      "grok",
       "local",
       "openai",
     ]);

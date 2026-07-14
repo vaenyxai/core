@@ -48,6 +48,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     needsBaseUrl: false,
   },
   {
+    id: "grok",
+    name: "Grok",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: false,
+  },
+  {
     id: "local",
     name: "Local model",
     kind: "openai-compatible",

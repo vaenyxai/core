@@ -429,6 +429,22 @@ function AuthScreen({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Quick-connect: picking a model here routes straight to its connect card
+  // in Settings → Models after sign-in (parked in localStorage — connecting
+  // itself needs an unlocked instance, keys never touch this page).
+  const [connectChoice, setConnectChoice] = useState<string | null>(() =>
+    localStorage.getItem(CONNECT_MODEL_INTENT),
+  );
+
+  function chooseModel(id: string) {
+    if (connectChoice === id) {
+      localStorage.removeItem(CONNECT_MODEL_INTENT);
+      setConnectChoice(null);
+      return;
+    }
+    localStorage.setItem(CONNECT_MODEL_INTENT, id);
+    setConnectChoice(id);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -543,6 +559,34 @@ function AuthScreen({
                 : "Sign in"}
           </button>
         </form>
+
+        <div className="auth-models">
+          <p className="auth-models-title">
+            Connect a model after {bootstrap.setupRequired ? "setup" : "sign-in"}
+          </p>
+          <div className="auth-models-row">
+            {CONNECTABLE_MODELS.map((model) => (
+              <button
+                aria-pressed={connectChoice === model.id}
+                className={
+                  connectChoice === model.id
+                    ? "auth-model-button selected"
+                    : "auth-model-button"
+                }
+                key={model.id}
+                onClick={() => chooseModel(model.id)}
+                type="button"
+              >
+                {model.label}
+              </button>
+            ))}
+          </div>
+          <p className="auth-models-hint">
+            {connectChoice
+              ? "You'll land on that model's connection card."
+              : "Pick one to go straight to its connection card."}
+          </p>
+        </div>
 
         <p className="privacy-note">
           Local-first / 127.0.0.1 / Owner-controlled
@@ -4283,6 +4327,20 @@ function ModelsPanel() {
   >({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A sign-in-page model button parked a connect intent: highlight that
+  // provider's card once, then clear the intent so later visits open normally.
+  const [connectTarget] = useState<string | null>(() =>
+    localStorage.getItem(CONNECT_MODEL_INTENT),
+  );
+  useEffect(() => {
+    localStorage.removeItem(CONNECT_MODEL_INTENT);
+  }, []);
+  useEffect(() => {
+    if (!connectTarget || providers.length === 0) return;
+    document
+      .getElementById(`model-card-${connectTarget}`)
+      ?.scrollIntoView({ block: "center" });
+  }, [connectTarget, providers.length]);
 
   function reload() {
     fetchModelProviders()
@@ -4362,7 +4420,15 @@ function ModelsPanel() {
       {error ? <p className="form-error">{error}</p> : null}
       <div className="library-list">
         {providers.map((provider) => (
-          <div className="settings-card" key={provider.id}>
+          <div
+            className={
+              connectTarget === provider.id
+                ? "settings-card connect-target"
+                : "settings-card"
+            }
+            id={`model-card-${provider.id}`}
+            key={provider.id}
+          >
             <div className="library-card-head">
               <strong>{provider.name}</strong>
               <span className="library-chip">
@@ -4386,6 +4452,21 @@ function ModelsPanel() {
               ) : null}
             </div>
             <small>{provider.detail}</small>
+            {(() => {
+              const keyUrl = CONNECTABLE_MODELS.find(
+                (model) => model.id === provider.id,
+              )?.keyUrl;
+              return keyUrl ? (
+                <a
+                  className="model-key-link"
+                  href={keyUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Get an API key ↗
+                </a>
+              ) : null;
+            })()}
             {provider.kind === "cli-login" ? (
               <p className="library-note">Managed in the Connection tab.</p>
             ) : (
@@ -4876,7 +4957,9 @@ function SettingsPanel({
     | "backup"
     | "sharing"
     | "legal"
-  >("manual");
+    // A sign-in-page model button parked a connect intent: open on Models so
+    // the chosen provider's card is front and centre.
+  >(() => (localStorage.getItem(CONNECT_MODEL_INTENT) ? "models" : "manual"));
   const [stoppingVaenyx, setStoppingVaenyx] = useState(false);
   const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
   const [shutdownError, setShutdownError] = useState<string | null>(null);
@@ -7087,6 +7170,35 @@ function CreateRoutinePanel({
 // version-gated acknowledgements. Keep the two in step.
 const LEGAL_COPY_VERSION = "2.2";
 
+// Sign-in page model buttons: the chosen provider id is parked here, then the
+// workspace opens Settings → Models and highlights that provider's connect
+// card (cleared once the card is shown). The buttons are shortcuts, not
+// logins — API-key providers have no third-party OAuth for local apps.
+const CONNECT_MODEL_INTENT = "vaenyx-connect-model";
+
+// The sign-in page's quick-connect row and the Models panel's "get a key"
+// links share this list. Codex is the ChatGPT login; `local` needs no key.
+const CONNECTABLE_MODELS: Array<{
+  id: string;
+  label: string;
+  keyUrl: string | null;
+}> = [
+  { id: "codex", label: "ChatGPT (Codex)", keyUrl: null },
+  {
+    id: "openai",
+    label: "OpenAI",
+    keyUrl: "https://platform.openai.com/api-keys",
+  },
+  {
+    id: "anthropic",
+    label: "Claude",
+    keyUrl: "https://console.anthropic.com/settings/keys",
+  },
+  { id: "gemini", label: "Gemini", keyUrl: "https://aistudio.google.com/apikey" },
+  { id: "grok", label: "Grok", keyUrl: "https://console.x.ai" },
+  { id: "local", label: "Local", keyUrl: null },
+];
+
 function routineDomain(
   tags: string[],
 ): "health" | "finance" | "legal" | null {
@@ -9166,7 +9278,11 @@ function VaenyxWorkspace({
   onWorkspaceChange: (workspace: Workspace) => void;
 }) {
   const { t } = useI18n();
-  const [screen, setScreen] = useState<Screen>("ask-vaenyx");
+  // A model button on the sign-in page leaves a connect intent; land straight
+  // on Settings (whose Models tab picks it up) instead of the chat portal.
+  const [screen, setScreen] = useState<Screen>(() =>
+    localStorage.getItem(CONNECT_MODEL_INTENT) ? "settings" : "ask-vaenyx",
+  );
   const [askVaenyxConversations, setAskVaenyxConversations] = useState<
     AskVaenyxConversation[]
   >([]);

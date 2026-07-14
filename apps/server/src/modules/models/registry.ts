@@ -113,6 +113,19 @@ export function initModelRegistry(config: {
       }),
     );
   }
+  const grok = connections.grok;
+  if (grok?.apiKey) {
+    next.register(
+      new OpenAICompatibleProvider({
+        id: "grok",
+        name: "Grok",
+        baseUrl: grok.baseUrl ?? "https://api.x.ai/v1",
+        apiKey: grok.apiKey,
+        model: grok.model ?? "grok-4",
+        requiresKey: true,
+      }),
+    );
+  }
 
   // The Owner can pick which registered backend a chat uses; Codex stays the
   // default until one is chosen. An id that isn't registered is ignored.

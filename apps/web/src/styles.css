@@ -342,6 +342,74 @@ textarea::placeholder {
   text-align: center;
 }
 
+/* Sign-in page quick-connect: pick a model, land on its connect card */
+.auth-models {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.auth-models-title {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.auth-models-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.auth-model-button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-model-button:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.auth-model-button.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.auth-models-hint {
+  margin: 8px 0 0;
+  color: #6b685f;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* The connect card a sign-in-page model button points at */
+.settings-card.connect-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.model-key-link {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.model-key-link:hover {
+  text-decoration: underline;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width, 300px) minmax(0, 1fr);
