@@ -1,4 +1,4 @@
-﻿import {
+import {
   type CSSProperties,
   type FormEvent,
   type ReactNode,

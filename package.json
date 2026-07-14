@@ -25,6 +25,7 @@
     "test": "npm run build -w @vaenyx/contracts && npm run test -w @vaenyx/contracts && npm run test -w @vaenyx/server && npm run test -w @vaenyx/web",
     "test:production": "node scripts/production-smoke.mjs",
     "test:ops": "node scripts/ops-smoke.mjs",
+    "test:ui": "playwright test",
     "typecheck": "npm run build -w @vaenyx/contracts && npm run typecheck -w @vaenyx/server && npm run typecheck -w @vaenyx/web"
   },
   "engines": {
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^25.9.1",
     "concurrently": "^10.0.3",
     "eslint": "^10.4.1",
