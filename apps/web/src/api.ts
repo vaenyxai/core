@@ -55,6 +55,7 @@
   UpdateAppProfileResponse,
   UpdateProjectMemoryRequest,
   UpdateInstanceSettingsRequest,
+  UpdateProjectInstructionsRequest,
   UpdateProjectRequest,
   UpdateVaenyxThreadProjectRequest,
   UpdateVaenyxThreadStatusRequest,
@@ -912,6 +913,16 @@ export function updateProject(
   input: UpdateProjectRequest,
 ): Promise<Project> {
   return requestJson<Project>(`/v1/projects/${projectId}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProjectInstructions(
+  projectId: string,
+  input: UpdateProjectInstructionsRequest,
+): Promise<Project> {
+  return requestJson<Project>(`/v1/projects/${projectId}/instructions`, {
     method: "PUT",
     body: JSON.stringify(input),
   });

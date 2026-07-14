@@ -3722,6 +3722,40 @@ select {
   background: var(--accent-soft);
 }
 
+/* Dual instruction windows (spec §7), inside a project card */
+.project-instructions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.project-instructions summary {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-instructions label {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.project-instructions .card-actions {
+  margin-top: 8px;
+}
+
+.legal-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-faint, #b7b3a8);
+}
+
 /* Per-project memory, inside a project card */
 .project-memory {
   margin-top: 14px;

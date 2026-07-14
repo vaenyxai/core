@@ -50,6 +50,9 @@ export const ProjectSchema = Type.Object(
     threadCount: Type.Integer({ minimum: 0 }),
     chatThreadCount: Type.Integer({ minimum: 0 }),
     taskThreadCount: Type.Integer({ minimum: 0 }),
+    instructionsManual: Type.String(),
+    instructionsAuto: Type.String(),
+    instructionsAutoUpdatedAt: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -63,6 +66,17 @@ export const CreateProjectRequestSchema = Type.Object(
 );
 
 export const UpdateProjectRequestSchema = CreateProjectRequestSchema;
+
+// Dual instruction windows (spec §7): either window may be updated on its own.
+// Setting a window to "" clears it — that is how the Owner deletes the
+// automatic summary Document.
+export const UpdateProjectInstructionsRequestSchema = Type.Object(
+  {
+    manual: Type.Optional(Type.String({ maxLength: 4000 })),
+    auto: Type.Optional(Type.String({ maxLength: 8000 })),
+  },
+  { additionalProperties: false },
+);
 
 export const InstanceSettingsSchema = Type.Object(
   {
@@ -1561,6 +1575,9 @@ export type UpdateInstanceSettingsRequest = Static<
   typeof UpdateInstanceSettingsRequestSchema
 >;
 export type UpdateProjectRequest = Static<typeof UpdateProjectRequestSchema>;
+export type UpdateProjectInstructionsRequest = Static<
+  typeof UpdateProjectInstructionsRequestSchema
+>;
 export type Workspace = Static<typeof WorkspaceSchema>;
 export type ModelProviderInfo = Static<typeof ModelProviderInfoSchema>;
 export type ConnectModelProviderRequest = Static<

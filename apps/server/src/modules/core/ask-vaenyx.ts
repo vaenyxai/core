@@ -11,6 +11,7 @@ import type {
 import type { DatabaseHandle } from "../../db/database.js";
 import { resolveProvider } from "../models/registry.js";
 import { listProjectMemories } from "./memory.js";
+import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import {
   ensureChatThread,
   touchChatThread,
@@ -41,6 +42,8 @@ interface ConversationThreadContextRow {
   kind: "chat" | "task";
   project_id: string | null;
   project_name: string | null;
+  instructions_manual: string | null;
+  instructions_auto: string | null;
   task_id: string | null;
   task_title: string | null;
   task_request: string | null;
@@ -174,6 +177,8 @@ function getConversationProjectContext(
     .prepare(
       `SELECT vaenyx_threads.kind, vaenyx_threads.project_id,
               projects.name AS project_name,
+              projects.instructions_manual,
+              projects.instructions_auto,
               tasks.id AS task_id,
               tasks.title AS task_title,
               tasks.request AS task_request,
@@ -192,13 +197,36 @@ function getConversationProjectContext(
   }
 
   const projectName = row.project_name ?? row.project_id;
+  // Dual instruction windows (spec §7): the Owner's manual instructions and
+  // Vaenyx's automatic summary Document both ride into every chat in the
+  // project. Manual outranks automatic; the Owner's live words outrank both.
+  const instructionContext =
+    row.project_id === GENERAL_PROJECT_ID
+      ? []
+      : [
+          row.instructions_manual?.trim()
+            ? [
+                `The Owner's standing instructions for the ${projectName} project (always follow these):`,
+                row.instructions_manual.trim(),
+              ].join("\n")
+            : undefined,
+          row.instructions_auto?.trim()
+            ? [
+                `Vaenyx's automatic summary of the Owner's preferences for the ${projectName} project (follow unless the Owner's message or their standing instructions say otherwise):`,
+                row.instructions_auto.trim(),
+              ].join("\n")
+            : undefined,
+        ].filter((part): part is string => Boolean(part));
   const projectMemoryContext =
     row.project_id === GENERAL_PROJECT_ID
       ? undefined
-      : formatProjectMemoryContext(
-          projectName,
-          listProjectMemories(database, row.project_id),
-        );
+      : [
+          ...instructionContext,
+          formatProjectMemoryContext(
+            projectName,
+            listProjectMemories(database, row.project_id),
+          ),
+        ].join("\n\n");
 
   if (row.kind === "task") {
     const taskContext = [
@@ -532,6 +560,29 @@ export async function createAskVaenyxMessage(
     )
     .run(completedAt, conversationId);
   touchChatThread(database, conversationId, completedAt);
+
+  // Project auto-summary cadence (spec §7): count this completed round and,
+  // when due, rewrite the project's automatic instruction Document in the
+  // background. The reply is already stored — this can never affect the chat.
+  if (assistantStatus === "completed") {
+    try {
+      noteProjectRoundCompleted(
+        database,
+        conversationId,
+        (
+          database.sqlite
+            .prepare(
+              "SELECT model_provider_id FROM ask_vaenyx_conversations WHERE id = ?",
+            )
+            .get(conversationId) as
+            | { model_provider_id: string | null }
+            | undefined
+        )?.model_provider_id ?? null,
+      );
+    } catch {
+      // Counting must never break the chat response.
+    }
+  }
 
   return {
     conversation: toConversation(

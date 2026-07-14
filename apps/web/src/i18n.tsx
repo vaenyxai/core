@@ -185,6 +185,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "Automatic sharing is for improvements from your own use. If someone else uses this Vaenyx, use Review Each or Off unless they've agreed and you can confirm you hold the rights to share that example.",
     "legal.notice.modelPicker":
       "This chat uses the provider shown. Cloud providers receive your chat content — including context Vaenyx adds, like memories and project summaries — under their own terms.",
+    "legal.notice.project.autoSummary":
+      "Vaenyx keeps an automatic short summary of your preferences for this project and uses it as context in this project's chats. It's stored on this device — you can view, edit or delete it anytime. Nothing enters Vaenyx Me without your approval.",
     "legal.notice.modelConnect.cloud":
       "You're connecting a third-party AI provider. Your messages — plus any context Vaenyx adds, like saved memories, your profile, project summaries and attached files — will be sent to the provider you choose, under its terms, privacy policy and any fees it charges. Vaenyx doesn't control that provider.",
     "legal.notice.remoteAccess.enable":
@@ -369,6 +371,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "自动分享仅针对你自己使用所产生的改进。若他人也使用这台 Vaenyx,请改用 Review Each 或 Off,除非对方已同意、且你能确认自己拥有分享该示例所需的权利。",
     "legal.notice.modelPicker":
       "本对话使用所示的服务商。云端服务商将按其自身条款接收你的聊天内容,包括 Vaenyx 添加的上下文(如记忆与项目摘要)。",
+    "legal.notice.project.autoSummary":
+      "Vaenyx 会为此项目自动维护一份你的偏好摘要,并作为本项目对话的上下文使用。它存储在本设备上——你可以随时查看、编辑或删除。未经你的批准,任何内容都不会进入 Vaenyx Me。",
     "legal.notice.modelConnect.cloud":
       "你正在连接第三方 AI 服务商。你的消息,连同 Vaenyx 添加的上下文(如已保存的记忆、你的档案、项目摘要与附件),将发送给你所选的服务商,受其条款、隐私政策及其收费约束。Vaenyx 无法控制该服务商。",
     "legal.notice.remoteAccess.enable":

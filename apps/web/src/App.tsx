@@ -129,6 +129,7 @@ import {
   updateAppProfile,
   updateMemory,
   updateProject,
+  updateProjectInstructions,
   updateSettings,
   updateVaenyxThreadProject,
   updateVaenyxThreadStatus,
@@ -1682,6 +1683,126 @@ function ModesPanel() {
 
 // A project's memory, shown inside its project card: list + add + edit + delete,
 // scoped to that one project (no project selector needed).
+// Dual instruction windows (spec §7, locked 2026-07-02): a manual window the
+// Owner writes and an automatic Document Vaenyx rewrites from this project's
+// chats. Both are injected into the project's chat context. The automatic
+// window carries the B3 legal notice and is fully Owner-editable/deletable.
+function ProjectInstructionsSection({
+  project,
+  onUpdate,
+}: {
+  project: Project;
+  onUpdate: (project: Project) => void;
+}) {
+  const { t } = useI18n();
+  const [manual, setManual] = useState(project.instructionsManual);
+  const [auto, setAuto] = useState(project.instructionsAuto);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState<"manual" | "auto" | null>(null);
+
+  // A background rewrite may land while the panel is open; follow the server
+  // value unless the Owner has local unsaved edits.
+  const [seenAuto, setSeenAuto] = useState(project.instructionsAuto);
+  if (project.instructionsAuto !== seenAuto) {
+    setSeenAuto(project.instructionsAuto);
+    if (auto === seenAuto) setAuto(project.instructionsAuto);
+  }
+
+  async function save(input: { manual?: string; auto?: string }) {
+    setError(null);
+    setSaving(input.manual !== undefined ? "manual" : "auto");
+    try {
+      const updated = await updateProjectInstructions(project.id, input);
+      onUpdate(updated);
+      if (input.manual !== undefined) setManual(updated.instructionsManual);
+      if (input.auto !== undefined) {
+        setAuto(updated.instructionsAuto);
+        setSeenAuto(updated.instructionsAuto);
+      }
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Instructions could not be saved.",
+      );
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <details className="project-instructions">
+      <summary>
+        <span>Instructions</span>
+        <small>
+          {(project.instructionsManual ? 1 : 0) +
+            (project.instructionsAuto ? 1 : 0)}
+        </small>
+      </summary>
+
+      <label>
+        Your instructions
+        <textarea
+          maxLength={4000}
+          onChange={(event) => setManual(event.target.value)}
+          placeholder="Standing instructions for this project — e.g. reply in Chinese, amounts in AUD."
+          rows={3}
+          value={manual}
+        />
+      </label>
+      <div className="card-actions">
+        <button
+          className="primary-button"
+          disabled={saving !== null || manual === project.instructionsManual}
+          onClick={() => void save({ manual })}
+          type="button"
+        >
+          {saving === "manual" ? "Saving..." : "Save Instructions"}
+        </button>
+      </div>
+
+      <label>
+        Vaenyx's summary
+        <textarea
+          maxLength={8000}
+          onChange={(event) => setAuto(event.target.value)}
+          placeholder="Vaenyx hasn't written a summary yet — it builds one as you chat in this project."
+          rows={4}
+          value={auto}
+        />
+      </label>
+      <p className="legal-note">{t("legal.notice.project.autoSummary")}</p>
+      {project.instructionsAutoUpdatedAt ? (
+        <p className="panel-description">
+          Updated {new Date(project.instructionsAutoUpdatedAt).toLocaleString()}
+        </p>
+      ) : null}
+      <div className="card-actions">
+        <button
+          className="primary-button"
+          disabled={saving !== null || auto === project.instructionsAuto}
+          onClick={() => void save({ auto })}
+          type="button"
+        >
+          {saving === "auto" ? "Saving..." : "Save Summary"}
+        </button>
+        {project.instructionsAuto ? (
+          <button
+            className="text-button"
+            disabled={saving !== null}
+            onClick={() => void save({ auto: "" })}
+            type="button"
+          >
+            Delete Summary
+          </button>
+        ) : null}
+      </div>
+
+      {error ? <p className="form-error">{error}</p> : null}
+    </details>
+  );
+}
+
 function ProjectMemorySection({
   project,
   memories,
@@ -2061,6 +2182,10 @@ function ProjectsPanel({
                       <dd>{project.taskCount}</dd>
                     </div>
                   </dl>
+                  <ProjectInstructionsSection
+                    onUpdate={onUpdate}
+                    project={project}
+                  />
                   <ProjectMemorySection
                     memories={memories}
                     onCreate={onCreateMemory}

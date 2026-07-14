@@ -1,4 +1,4 @@
-﻿export { SystemStatusSchema, type SystemStatus } from "./system-status.js";
+export { SystemStatusSchema, type SystemStatus } from "./system-status.js";
 export {
   BootstrapStatusSchema,
   AgentProfileSchema,
@@ -94,6 +94,7 @@ export {
   UpdateAgentProfileNameRequestSchema,
   UpdateProjectMemoryRequestSchema,
   UpdateProjectRequestSchema,
+  UpdateProjectInstructionsRequestSchema,
   UpdateVaenyxThreadProjectRequestSchema,
   UpdateVaenyxThreadStatusRequestSchema,
   UpdateVaenyxThreadTitleRequestSchema,
@@ -198,6 +199,7 @@ export {
   type UpdateAgentProfileNameRequest,
   type UpdateProjectMemoryRequest,
   type UpdateProjectRequest,
+  type UpdateProjectInstructionsRequest,
   type UpdateVaenyxThreadProjectRequest,
   type UpdateVaenyxThreadStatusRequest,
   type UpdateVaenyxThreadTitleRequest,

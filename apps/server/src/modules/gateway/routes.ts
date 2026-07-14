@@ -76,6 +76,7 @@ import {
   UpdateProjectMemoryRequestSchema,
   UpdateAgentProfileNameRequestSchema,
   UpdateInstanceSettingsRequestSchema,
+  UpdateProjectInstructionsRequestSchema,
   UpdateProjectRequestSchema,
   UpdateVaenyxThreadProjectRequestSchema,
   UpdateVaenyxThreadStatusRequestSchema,
@@ -123,6 +124,7 @@ import {
   type UpdateAgentProfileNameRequest,
   type ConnectModelProviderRequest,
   type UpdateInstanceSettingsRequest,
+  type UpdateProjectInstructionsRequest,
   type UpdateProjectRequest,
   type UpdateVaenyxThreadProjectRequest,
   type UpdateVaenyxThreadStatusRequest,
@@ -270,6 +272,7 @@ import {
   createProject,
   listProjects,
   updateProject,
+  updateProjectInstructions,
 } from "../core/projects.js";
 import {
   approveVaenyxMeCandidate,
@@ -3004,6 +3007,64 @@ export async function registerGatewayRoutes(
       } catch (error) {
         if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
           return reply.code(404).send({ error: "Project not found." });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // Dual instruction windows (spec §7): the Owner saves the manual window, or
+  // edits / deletes ("" clears) the automatic summary Document.
+  app.put<{ Body: UpdateProjectInstructionsRequest; Params: { id: string } }>(
+    "/v1/projects/:id/instructions",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        body: UpdateProjectInstructionsRequestSchema,
+        response: {
+          200: ProjectSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+
+      try {
+        const project = updateProjectInstructions(
+          context.database,
+          request.params.id,
+          request.body,
+        );
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "project.instructions.update",
+          decision: "allowed",
+          reason: "Owner updated the project's instruction windows.",
+          projectId: project.id,
+          resourceType: "project",
+          resourceId: project.id,
+        });
+        return project;
+      } catch (error) {
+        if (error instanceof Error && error.message === "PROJECT_NOT_FOUND") {
+          return reply.code(404).send({ error: "Project not found." });
+        }
+        if (
+          error instanceof Error &&
+          error.message === "PROJECT_INSTRUCTIONS_NOT_SUPPORTED"
+        ) {
+          return reply
+            .code(400)
+            .send({ error: "Unsorted does not take project instructions." });
         }
         throw error;
       }

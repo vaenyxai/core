@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   CreateProjectRequest,
   Project,
+  UpdateProjectInstructionsRequest,
   UpdateProjectRequest,
 } from "@vaenyx/contracts";
 
@@ -19,6 +20,9 @@ interface ProjectRow {
   thread_count: number;
   chat_thread_count: number;
   task_thread_count: number;
+  instructions_manual: string;
+  instructions_auto: string;
+  instructions_auto_updated_at: string | null;
 }
 
 function toProject(row: ProjectRow): Project {
@@ -31,11 +35,16 @@ function toProject(row: ProjectRow): Project {
     threadCount: row.thread_count,
     chatThreadCount: row.chat_thread_count,
     taskThreadCount: row.task_thread_count,
+    instructionsManual: row.instructions_manual,
+    instructionsAuto: row.instructions_auto,
+    instructionsAutoUpdatedAt: row.instructions_auto_updated_at,
   };
 }
 
 const projectSelect = `
   SELECT projects.id, projects.name, projects.description,
+    projects.instructions_manual, projects.instructions_auto,
+    projects.instructions_auto_updated_at,
     (SELECT COUNT(*) FROM tasks WHERE tasks.project_id = projects.id) AS task_count,
     (SELECT COUNT(*) FROM project_memories WHERE project_memories.project_id = projects.id) AS memory_count,
     (SELECT COUNT(*) FROM vaenyx_threads WHERE vaenyx_threads.project_id = projects.id AND vaenyx_threads.status != 'archived') AS thread_count,
@@ -84,4 +93,45 @@ export function updateProject(
   }
 
   return listProjects(database).find((project) => project.id === projectId)!;
+}
+
+// Dual instruction windows (spec §7): either window may be updated on its own;
+// "" clears a window. The automatic window's timestamp moves on ANY write to
+// it — the Owner editing it is as current as Vaenyx rewriting it. Unsorted
+// (the general project) deliberately has no instructions, matching its
+// no-shared-memory rule.
+export function updateProjectInstructions(
+  database: DatabaseHandle,
+  projectId: string,
+  input: UpdateProjectInstructionsRequest,
+): Project {
+  if (projectId === GENERAL_PROJECT_ID) {
+    throw new Error("PROJECT_INSTRUCTIONS_NOT_SUPPORTED");
+  }
+
+  if (input.manual !== undefined) {
+    const result = database.sqlite
+      .prepare("UPDATE projects SET instructions_manual = ? WHERE id = ?")
+      .run(input.manual.trim(), projectId);
+    if (result.changes === 0) throw new Error("PROJECT_NOT_FOUND");
+  }
+
+  if (input.auto !== undefined) {
+    const auto = input.auto.trim();
+    const result = database.sqlite
+      .prepare(
+        `UPDATE projects
+         SET instructions_auto = ?,
+             instructions_auto_updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(auto, auto === "" ? null : new Date().toISOString(), projectId);
+    if (result.changes === 0) throw new Error("PROJECT_NOT_FOUND");
+  }
+
+  const project = listProjects(database).find(
+    (candidate) => candidate.id === projectId,
+  );
+  if (!project) throw new Error("PROJECT_NOT_FOUND");
+  return project;
 }
