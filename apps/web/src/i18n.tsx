@@ -25,6 +25,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "title.ask-vaenyx": "Vaenyx Portal",
     "title.projects": "Projects",
     "title.library": "Library",
+    "title.community": "Community",
+    "community.intro":
+      "Community is the shared catalogue — Methods and Routines published by people everywhere. Your Library is your own private collection on this device; installing something here copies it into your Library. A Routine is ready to use; a Method is a building block for Routines you compose yourself.",
     "library.tierCommunity": "Community",
     "title.modes": "Modes",
     "title.settings": "General",
@@ -213,6 +216,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "title.ask-vaenyx": "Vaenyx 门户",
     "title.projects": "项目",
     "title.library": "资源库",
+    "title.community": "社区",
+    "community.intro":
+      "社区(Community)是共享目录——大家发布的 Method 和 Routine 都在这里。资源库(Library)是你自己设备上的私人收藏;在这里安装,就是把它复制进你的资源库。Routine 拿来即用;Method 是零件,供你自己组 Routine 时复用。",
     "library.tierCommunity": "社区",
     "title.modes": "模式",
     "title.settings": "通用",

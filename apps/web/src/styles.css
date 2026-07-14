@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   /* Default theme = Mono Smoke (calm warm grey). Other themes override via
      [data-theme="…"] below; the Settings → Appearance picker sets it. */
   --bg: #1a1917;
@@ -2696,8 +2696,11 @@ select {
 }
 
 .method-rename-input {
-  flex: 1 1 200px;
+  /* flex-basis must stay auto: a pixel basis becomes HEIGHT inside column
+     flex containers and blew inputs up to 200px+ tall. */
+  flex: 1 1 auto;
   min-width: 160px;
+  min-height: 0;
   padding: 9px 11px;
   border: 1px solid var(--border);
   border-radius: 9px;

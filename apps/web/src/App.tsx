@@ -146,6 +146,7 @@ type Screen =
   | "ask-vaenyx"
   | "projects"
   | "library"
+  | "community"
   | "modes"
   | "settings"
   | "vaenyx-me"
@@ -7481,14 +7482,74 @@ function CommunityIdentityBar() {
   );
 }
 
-function CataloguePanel({
-  installedIds,
-  onBack,
+// Community — the shared catalogue, a top-level peer of the Library. Same
+// look-and-feel as the Library (intro + subtabs + cards); the intro's first
+// paragraph states the Community-vs-Library difference.
+function CommunityArea({
+  methods,
+  routines,
   onMethodsRefresh,
   onRoutinesRefresh,
 }: {
+  methods: LibraryMethodSummary[];
+  routines: LibraryRoutineSummary[];
+  onMethodsRefresh: () => void;
+  onRoutinesRefresh: () => void;
+}) {
+  const { t } = useI18n();
+  const [tab, setTab] = useState<"routines" | "methods">("routines");
+  return (
+    <div className="library-area">
+      <section className="library-intro">
+        <div className="library-intro-head">
+          <div>
+            <p className="eyebrow">{t("title.community")}</p>
+            <h2>{t("title.community")}</h2>
+          </div>
+        </div>
+        <p>{t("community.intro")}</p>
+        <p className="context-disclaimer">
+          {t("legal.disclaimer.community.browse")}
+        </p>
+      </section>
+      <CommunityIdentityBar />
+      <nav aria-label="Community sections" className="library-subtabs">
+        <button
+          className={tab === "routines" ? "active" : ""}
+          onClick={() => setTab("routines")}
+          type="button"
+        >
+          Routines
+        </button>
+        <button
+          className={tab === "methods" ? "active" : ""}
+          onClick={() => setTab("methods")}
+          type="button"
+        >
+          Methods
+        </button>
+      </nav>
+      <CataloguePanel
+        installedIds={[
+          ...methods.map((method) => method.id),
+          ...routines.map((routine) => routine.id),
+        ]}
+        kind={tab}
+        onMethodsRefresh={onMethodsRefresh}
+        onRoutinesRefresh={onRoutinesRefresh}
+      />
+    </div>
+  );
+}
+
+function CataloguePanel({
+  kind,
+  installedIds,
+  onMethodsRefresh,
+  onRoutinesRefresh,
+}: {
+  kind: "routines" | "methods";
   installedIds: string[];
-  onBack?: () => void;
   onMethodsRefresh: () => void;
   onRoutinesRefresh: () => void;
 }) {
@@ -7496,7 +7557,6 @@ function CataloguePanel({
   const [catalogue, setCatalogue] = useState<CatalogueIndex | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "routines" | "methods">("all");
   const [installing, setInstalling] = useState<string | null>(null);
   const [installed, setInstalled] = useState<string[]>(installedIds);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -7562,74 +7622,22 @@ function CataloguePanel({
     item.description.toLowerCase().includes(q) ||
     item.tags.some((tag) => tag.toLowerCase().includes(q));
 
-  // Routines first (the ready-to-use products), then Methods (building blocks).
   const routineHits =
-    filter === "methods" ? [] : (catalogue?.routines ?? []).filter(matches);
+    kind === "routines" ? (catalogue?.routines ?? []).filter(matches) : [];
   const methodHits =
-    filter === "routines" ? [] : (catalogue?.methods ?? []).filter(matches);
+    kind === "methods" ? (catalogue?.methods ?? []).filter(matches) : [];
   const total = routineHits.length + methodHits.length;
 
   return (
     <div className="library-layout">
-      {onBack ? (
-        <button
-          className="text-button library-back"
-          onClick={onBack}
-          type="button"
-        >
-          ← All routines
-        </button>
-      ) : null}
-      <CommunityIdentityBar />
-      <section className="library-intro">
-        <div className="library-intro-head">
-          <div>
-            <p className="eyebrow">{t("library.tierCommunity")}</p>
-            <h2>Browse the Community</h2>
-          </div>
-        </div>
-        <p>
-          Methods and Routines shared by the community. Install one and it runs on
-          your own machine — its files are copied locally. A <strong>Routine</strong>{" "}
-          is ready to use; a <strong>Method</strong> is a building block you can
-          reuse as a step when you build your own Routine.
-        </p>
-        <p className="context-disclaimer">
-          {t("legal.disclaimer.community.browse")}
-        </p>
-        <input
-          className="method-rename-input"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search Methods and Routines by name, description or #tag"
-          style={{ width: "100%" }}
-          type="search"
-          value={query}
-        />
-        <div
-          aria-label="Filter by type"
-          className="catalogue-filter"
-          role="tablist"
-        >
-          {(
-            [
-              ["all", "All"],
-              ["routines", "Routines"],
-              ["methods", "Methods"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              aria-selected={filter === value}
-              className={filter === value ? "active" : ""}
-              key={value}
-              onClick={() => setFilter(value)}
-              role="tab"
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </section>
+      <input
+        className="method-rename-input"
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Search by name, description or #tag"
+        style={{ width: "100%" }}
+        type="search"
+        value={query}
+      />
       {loadError ? <p className="form-error">{loadError}</p> : null}
       {actionError ? <p className="form-error">{actionError}</p> : null}
       {catalogue === null && !loadError ? (
@@ -8046,7 +8054,7 @@ function LibraryArea({
   onUseRoutine: (routineId: string) => void;
 }) {
   const [tab, setTab] = useState<
-    "methods" | "routines" | "token" | "community" | "skills"
+    "methods" | "routines" | "token" | "skills"
   >("routines");
 
   return (
@@ -8073,14 +8081,8 @@ function LibraryArea({
         >
           Token
         </button>
-        <button
-          className={tab === "community" ? "active" : ""}
-          onClick={() => setTab("community")}
-          type="button"
-        >
-          Community
-        </button>
       </nav>
+
       {tab === "methods" ? (
         <LibraryPanel methods={methods} onMethodsRefresh={onMethodsRefresh} />
       ) : tab === "routines" ? (
@@ -8100,16 +8102,8 @@ function LibraryArea({
           profiles={appProfiles}
           routines={routines}
         />
-      ) : tab === "community" ? (
-        <CataloguePanel
-          installedIds={[
-            ...methods.map((method) => method.id),
-            ...routines.map((routine) => routine.id),
-          ]}
-          onMethodsRefresh={onMethodsRefresh}
-          onRoutinesRefresh={onRoutinesRefresh}
-        />
       ) : (
+
         <SkillsLibrary skills={skills} />
       )}
     </div>
@@ -9225,6 +9219,18 @@ function VaenyxWorkspace({
     setScreen("library");
   }
 
+  async function openCommunity() {
+    setSelectedThreadId(null);
+    setMobileSidebarOpen(false);
+    const [methods, routines] = await Promise.all([
+      fetchLibraryMethods(),
+      fetchLibraryRoutines(),
+    ]);
+    setLibraryMethods(methods);
+    setLibraryRoutines(routines);
+    setScreen("community");
+  }
+
   function openScreen(nextScreen: Screen) {
     setSelectedThreadId(null);
     setFocusedTaskId(null);
@@ -9600,6 +9606,13 @@ function VaenyxWorkspace({
                 {t("title.library")}
               </button>
               <button
+                className={screen === "community" ? "active" : ""}
+                onClick={() => void openCommunity()}
+                type="button"
+              >
+                {t("title.community")}
+              </button>
+              <button
                 className={screen === "vaenyx-me" ? "active" : ""}
                 onClick={() => openScreen("vaenyx-me")}
                 type="button"
@@ -9731,6 +9744,17 @@ function VaenyxWorkspace({
               void fetchLibraryRoutines().then(setLibraryRoutines);
             }}
             skills={workspace.skills}
+          />
+        ) : screen === "community" ? (
+          <CommunityArea
+            methods={libraryMethods}
+            routines={libraryRoutines}
+            onMethodsRefresh={() => {
+              void fetchLibraryMethods().then(setLibraryMethods);
+            }}
+            onRoutinesRefresh={() => {
+              void fetchLibraryRoutines().then(setLibraryRoutines);
+            }}
           />
         ) : screen === "modes" ? (
           <ModesPanel />
