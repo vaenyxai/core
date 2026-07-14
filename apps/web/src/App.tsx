@@ -120,6 +120,7 @@ import {
   testChatConnection,
   testForgeConnection,
   fetchPublishState,
+  disconnectPublishService,
   publishMethodToCommunity,
   publishRoutineToCommunity,
   type PublishAcceptance,
@@ -7449,17 +7450,32 @@ function CommunityIdentityBar() {
           <PublishSignIn state={state} />
         </>
       ) : (
-        <PublishNicknameEditor
-          signedInAs={state.signedInAs}
-          autoOpen={
-            state.mode === "service" &&
-            new URLSearchParams(window.location.search).get("publish") ===
-              "linked"
-          }
-          onSaved={() => {
-            void fetchPublishState().then(setState);
-          }}
-        />
+        <>
+          <PublishNicknameEditor
+            signedInAs={state.signedInAs}
+            autoOpen={
+              state.mode === "service" &&
+              new URLSearchParams(window.location.search).get("publish") ===
+                "linked"
+            }
+            onSaved={() => {
+              void fetchPublishState().then(setState);
+            }}
+          />
+          <button
+            className="text-button"
+            onClick={() => {
+              void disconnectPublishService()
+                .then(() => fetchPublishState())
+                .then(setState)
+                .catch(() => {});
+            }}
+            style={{ alignSelf: "flex-start", fontSize: "var(--fs-sm)" }}
+            type="button"
+          >
+            Sign out
+          </button>
+        </>
       )}
     </section>
   );

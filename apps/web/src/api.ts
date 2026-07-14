@@ -107,6 +107,14 @@ export function fetchBackups(): Promise<BackupListResponse> {
   return requestJson<BackupListResponse>("/v1/system/backups");
 }
 
+// Disconnect the community publishing session (local token cleared; the
+// account itself is untouched — signing in again relinks it).
+export function disconnectPublishService(): Promise<{ message: string }> {
+  return requestJson<{ message: string }>("/v1/publish-auth", {
+    method: "DELETE",
+  });
+}
+
 export function fetchBackupConfig(): Promise<BackupConfigView> {
   return requestJson<BackupConfigView>("/v1/system/backup-config");
 }
