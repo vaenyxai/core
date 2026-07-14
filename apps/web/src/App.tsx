@@ -7772,9 +7772,15 @@ function CataloguePanel({
         <div className="empty-state">
           <strong>Nothing to show</strong>
           <p>
-            {catalogue.routines.length === 0 && catalogue.methods.length === 0
-              ? "The Community is empty for now."
-              : "No items match your search."}
+            {query.trim() !== ""
+              ? "No items match your search — try fewer or different words, or clear the search."
+              : kind === "routines"
+                ? catalogue.methods.length > 0
+                  ? "No Routines in the Community yet — check the Methods tab, or publish one of your own from your Library."
+                  : "The Community is empty for now — be the first: publish a Routine from your Library."
+                : catalogue.routines.length > 0
+                  ? "No Methods in the Community yet — check the Routines tab, or publish one of your own from your Library."
+                  : "The Community is empty for now — be the first: publish a Method from your Library."}
           </p>
         </div>
       ) : null}
