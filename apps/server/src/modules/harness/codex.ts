@@ -1,8 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+
+import { loadConfig } from "../../config.js";
 
 export interface CodexStatus {
   installed: boolean;
@@ -84,11 +87,46 @@ function findCodexCommand(): CodexExecutable {
   };
 }
 
+// Vaenyx's own Codex home (userdata/codex-home, VAENYX_CODEX_HOME overrides):
+// every codex spawn gets CODEX_HOME pointing here so Vaenyx never shares
+// ~/.codex with the ChatGPT desktop app — the desktop app writes config values
+// (e.g. model_reasoning_effort = "ultra") the npm CLI rejects, which used to
+// kill every Vaenyx codex call at config load. Also makes the login survive a
+// SYSTEM-watchdog relaunch, since the home rides with userdata, not the user
+// profile. On first use, an existing ~/.codex/auth.json is copied over so the
+// Owner does not have to sign in again.
+let codexHomeDirectory: string | null = null;
+function getCodexHomeDirectory(): string {
+  if (codexHomeDirectory) return codexHomeDirectory;
+  const home = process.env.VAENYX_CODEX_HOME
+    ? resolve(process.env.VAENYX_CODEX_HOME)
+    : resolve(loadConfig().dataDirectory, "..", "codex-home");
+  try {
+    mkdirSync(home, { recursive: true });
+    const auth = resolve(home, "auth.json");
+    const legacyAuth = resolve(homedir(), ".codex", "auth.json");
+    if (!existsSync(auth) && existsSync(legacyAuth)) {
+      copyFileSync(legacyAuth, auth);
+    }
+  } catch {
+    // Best-effort: codex itself reports clearly when the home is unusable.
+  }
+  codexHomeDirectory = home;
+  return home;
+}
+
+function codexEnvironment(
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return { ...base, CODEX_HOME: getCodexHomeDirectory() };
+}
+
 function runCodexCommand(args: string[]): ReturnType<typeof spawnSync> {
   const executable = findCodexCommand();
 
   return spawnSync(executable.command, [...executable.args, ...args], {
     encoding: "utf8",
+    env: codexEnvironment(),
     shell: executable.shell,
     windowsHide: true,
     timeout: 10_000,
@@ -96,7 +134,7 @@ function runCodexCommand(args: string[]): ReturnType<typeof spawnSync> {
 }
 
 function createForgeEnvironment(): NodeJS.ProcessEnv {
-  const environment = { ...process.env };
+  const environment = codexEnvironment();
   if (process.platform !== "win32") return environment;
 
   const pathKey =
@@ -155,12 +193,16 @@ export function getCodexStatus(): CodexStatus {
 // OAuth callback), so it is left running and unref'd — this call only waits
 // briefly for the URL. Vaenyx never sees the password or the tokens; the
 // official CLI stores its own credentials, exactly as a manual login does.
-export function startCodexLogin(): Promise<{ url: string | null }> {
+export function startCodexLogin(): Promise<{
+  url: string | null;
+  detail: string | null;
+}> {
   if (process.env.NODE_ENV === "test" && !process.env.VAENYX_CODEX_COMMAND) {
-    return Promise.resolve({ url: null });
+    return Promise.resolve({ url: null, detail: null });
   }
   const executable = findCodexCommand();
   const child = spawn(executable.command, [...executable.args, "login"], {
+    env: codexEnvironment(),
     shell: executable.shell,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -168,10 +210,10 @@ export function startCodexLogin(): Promise<{ url: string | null }> {
   return new Promise((resolveLogin) => {
     let output = "";
     let settled = false;
-    const settle = (url: string | null) => {
+    const settle = (url: string | null, detail: string | null = null) => {
       if (settled) return;
       settled = true;
-      resolveLogin({ url });
+      resolveLogin({ url, detail });
     };
     const timer = setTimeout(() => settle(null), 8000);
     timer.unref();
@@ -185,14 +227,25 @@ export function startCodexLogin(): Promise<{ url: string | null }> {
     };
     child.stdout?.on("data", scan);
     child.stderr?.on("data", scan);
-    child.once("error", () => {
+    child.once("error", (error) => {
       clearTimeout(timer);
-      settle(null);
+      settle(null, error.message.slice(0, 200));
     });
-    child.once("exit", () => {
+    child.once("exit", (code) => {
       clearTimeout(timer);
-      // Already signed in (or the flow finished instantly): no URL needed.
-      settle(null);
+      if (code === 0) {
+        // Already signed in (or the flow finished instantly): no URL needed.
+        settle(null);
+        return;
+      }
+      // The CLI died before the browser flow started — surface its first
+      // error line so the card can say WHY instead of waiting forever.
+      const firstLine =
+        output
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)[0] ?? "Codex CLI could not start the sign-in.";
+      settle(null, firstLine.slice(0, 200));
     });
     child.unref();
   });

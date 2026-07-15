@@ -815,7 +815,10 @@ export async function registerGatewayRoutes(
       schema: {
         response: {
           200: Type.Object(
-            { url: Type.Union([Type.String(), Type.Null()]) },
+            {
+              url: Type.Union([Type.String(), Type.Null()]),
+              detail: Type.Union([Type.String(), Type.Null()]),
+            },
             { additionalProperties: false },
           ),
           401: ErrorResponseSchema,

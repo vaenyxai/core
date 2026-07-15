@@ -4414,18 +4414,32 @@ function ModelsPanel() {
   // One-click Codex sign-in: kick off the official `codex login` browser flow
   // on the machine Vaenyx runs on, then poll until the CLI reports signed-in
   // (or give up quietly after ~2 minutes — the card just stays as it was).
+  // The CLI's own error line surfaces immediately instead of a blind wait,
+  // and the sign-in URL is kept as a clickable fallback link.
   const [codexWaiting, setCodexWaiting] = useState(false);
+  const [codexLoginUrl, setCodexLoginUrl] = useState<string | null>(null);
   async function signInCodex() {
     setCodexWaiting(true);
     setError(null);
+    setCodexLoginUrl(null);
     try {
-      const { url } = await startCodexLogin();
-      if (url) window.open(url, "_blank", "noreferrer");
+      const { url, detail } = await startCodexLogin();
+      if (detail) {
+        setError(detail);
+        return;
+      }
+      if (url) {
+        setCodexLoginUrl(url);
+        window.open(url, "_blank", "noreferrer");
+      }
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await new Promise((resolveWait) => setTimeout(resolveWait, 3000));
         const result = await fetchModelProviders();
         setProviders(result.providers);
-        if (result.providers.find((p) => p.id === "codex")?.healthy) break;
+        if (result.providers.find((p) => p.id === "codex")?.healthy) {
+          setCodexLoginUrl(null);
+          break;
+        }
       }
     } catch {
       setError("Could not start the ChatGPT sign-in.");
@@ -4514,6 +4528,16 @@ function ModelsPanel() {
                         : "Sign In With ChatGPT"}
                     </button>
                   </div>
+                ) : null}
+                {codexWaiting && codexLoginUrl ? (
+                  <a
+                    className="model-key-link"
+                    href={codexLoginUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    No window? Open the sign-in page ↗
+                  </a>
                 ) : null}
                 <p className="library-note">
                   {codexWaiting

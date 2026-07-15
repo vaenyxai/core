@@ -346,11 +346,16 @@ export function fetchModelProviders(): Promise<{
 }
 
 // Starts the official `codex login` flow on the machine Vaenyx runs on;
-// returns the sign-in URL when the CLI printed one before opening the browser.
-export function startCodexLogin(): Promise<{ url: string | null }> {
-  return requestJson<{ url: string | null }>("/v1/models/codex/login", {
-    method: "POST",
-  });
+// returns the sign-in URL when the CLI printed one before opening the browser,
+// or `detail` (the CLI's first error line) when the flow could not start.
+export function startCodexLogin(): Promise<{
+  url: string | null;
+  detail: string | null;
+}> {
+  return requestJson<{ url: string | null; detail: string | null }>(
+    "/v1/models/codex/login",
+    { method: "POST" },
+  );
 }
 
 export function connectModelProvider(
