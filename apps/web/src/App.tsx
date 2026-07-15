@@ -2256,6 +2256,7 @@ function AskVaenyxPanel({
   onConversationsChange,
   onCreateTask,
   onDraftConversationStarted,
+  onOpenLibrary,
   onRequestedConversationHandled,
   onWorkspaceRefresh,
   requestedConversationId,
@@ -2274,6 +2275,7 @@ function AskVaenyxPanel({
     projectId?: string | null,
   ) => Promise<Task>;
   onDraftConversationStarted: (conversationId: string) => void;
+  onOpenLibrary: () => void;
   onRequestedConversationHandled: () => void;
   onWorkspaceRefresh: () => Promise<void>;
   requestedConversationId: string | null;
@@ -2290,9 +2292,18 @@ function AskVaenyxPanel({
       localStorage.getItem(`vaenyx-health-ack-${LEGAL_COPY_VERSION}`) === "1",
   );
   const [healthGateDismissed, setHealthGateDismissed] = useState(false);
+  // create-*: the offer card under the reply that opens the Library creation
+  // flow pre-filled. Cleared on send, dismiss, click, or switching chats.
+  const [createOffer, setCreateOffer] = useState<{
+    kind: "method" | "routine";
+    description: string;
+  } | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(conversations[0]?.id ?? null);
+  useEffect(() => {
+    setCreateOffer(null);
+  }, [activeConversationId]);
   const [messages, setMessages] = useState<AskVaenyxMessage[]>([]);
   const [routineJournal, setRoutineJournal] = useState<RoutineJournalEntry[]>(
     [],
@@ -2674,6 +2685,8 @@ function AskVaenyxPanel({
     // normally but briefly offer it; none → plain reply. Conservative, best-effort.
     let suggestRoutineId: string | undefined;
     let suggestTask = false;
+    let suggestCreate: "method" | "routine" | undefined;
+    let createDescription: string | null = null;
     if (
       activeConversationId &&
       messageMaybeIntent(content, messages, libraryRoutines)
@@ -2722,10 +2735,19 @@ function AskVaenyxPanel({
       if (verdict?.decision === "suggest-task") {
         suggestTask = true;
       }
+      if (
+        verdict?.decision === "create-method" ||
+        verdict?.decision === "create-routine"
+      ) {
+        suggestCreate =
+          verdict.decision === "create-method" ? "method" : "routine";
+        createDescription = verdict.createDescription ?? content;
+      }
     }
 
     setSending(true);
     setError(null);
+    setCreateOffer(null);
     let createdConversationId: string | null = null;
     const controller = new AbortController();
     streamControllerRef.current = controller;
@@ -2808,7 +2830,16 @@ function AskVaenyxPanel({
         },
         suggestRoutineId,
         suggestTask,
+        suggestCreate,
       );
+
+      // The reply landed: surface the creation offer card under it.
+      if (suggestCreate) {
+        setCreateOffer({
+          kind: suggestCreate,
+          description: createDescription ?? content,
+        });
+      }
 
       onConversationsChange(
         upsertConversation(nextConversations, response.conversation),
@@ -3603,6 +3634,34 @@ function AskVaenyxPanel({
           )}
           <div ref={chatEndRef} />
         </div>
+
+        {createOffer && !isRoutine ? (
+          <div className="chat-create-offer">
+            <span>
+              {createOffer.kind === "method"
+                ? "Build this as a Method in your Library?"
+                : "Build this as a Routine in your Library?"}
+            </span>
+            <button
+              className="primary-button"
+              onClick={() => {
+                localStorage.setItem(CREATE_INTENT, JSON.stringify(createOffer));
+                setCreateOffer(null);
+                onOpenLibrary();
+              }}
+              type="button"
+            >
+              {createOffer.kind === "method" ? "Create Method" : "Create Routine"}
+            </button>
+            <button
+              className="text-button"
+              onClick={() => setCreateOffer(null)}
+              type="button"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
 
         <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
           <div className="ask-vaenyx-composer-box">
@@ -7111,7 +7170,15 @@ function CreateRoutinePanel({
   onDone: () => void;
 }) {
   const [phase, setPhase] = useState<"describe" | "review">("describe");
-  const [description, setDescription] = useState("");
+  // Consume a chat create-offer: pre-fill the description and clear the intent.
+  const [description, setDescription] = useState(() => {
+    const intent = peekCreateIntent();
+    if (intent?.kind === "routine") {
+      localStorage.removeItem(CREATE_INTENT);
+      return intent.description;
+    }
+    return "";
+  });
   const [planning, setPlanning] = useState(false);
   const [plan, setPlan] = useState<RoutinePlan | null>(null);
   const [saving, setSaving] = useState(false);
@@ -7302,6 +7369,31 @@ const LEGAL_COPY_VERSION = "2.2";
 // logins — API-key providers have no third-party OAuth for local apps.
 const CONNECT_MODEL_INTENT = "vaenyx-connect-model";
 
+// Chat → Library creation hand-off: the offer card under a create-* reply
+// parks what to build here; the Library consumes it (picks the tab, opens the
+// create panel, pre-fills the description) and clears it.
+const CREATE_INTENT = "vaenyx-create-intent";
+
+function peekCreateIntent(): {
+  kind: "method" | "routine";
+  description: string;
+} | null {
+  try {
+    const raw = localStorage.getItem(CREATE_INTENT);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { kind?: unknown; description?: unknown };
+    if (
+      (parsed.kind === "method" || parsed.kind === "routine") &&
+      typeof parsed.description === "string"
+    ) {
+      return { kind: parsed.kind, description: parsed.description };
+    }
+  } catch {
+    // Unreadable intent: treat as absent.
+  }
+  return null;
+}
+
 // The sign-in page's quick-connect row and the Models panel's "get a key"
 // links share this list. Codex is the ChatGPT login; `local` needs no key.
 const CONNECTABLE_MODELS: Array<{
@@ -7407,6 +7499,16 @@ function messageMaybeIntent(
   // An offer just made ("want me to…") must always classify — a bare "yes/ok"
   // accept carries no keyword of its own.
   if (lastAssistant && /(want me to|要不要|要我)/i.test(lastAssistant.content)) {
+    return true;
+  }
+  // A creation ask classifies WITHOUT needing overlap with installed Routines —
+  // the whole point is to build something that does not exist yet.
+  if (
+    /(建|新建|创建|創建|做一?个|做一?個|帮我做|幫我做|create|build|make)/i.test(
+      content,
+    ) &&
+    /(method|routine|方法|流程|工具)/i.test(content)
+  ) {
     return true;
   }
   // Strong-intent keywords only (dropped broad everyday words — help me / record
@@ -8280,7 +8382,10 @@ function RoutinesPanel({
   onRoutinesRefresh: () => void;
   onUseRoutine: (routineId: string) => void;
 }) {
-  const [creating, setCreating] = useState(false);
+  // A chat create-offer opens the create flow directly, description pre-filled.
+  const [creating, setCreating] = useState(
+    () => peekCreateIntent()?.kind === "routine",
+  );
   const [publishState, setPublishState] = useState<PublishState | null>(null);
 
   useEffect(() => {
@@ -8424,7 +8529,10 @@ function LibraryArea({
 }) {
   const [tab, setTab] = useState<
     "methods" | "routines" | "token" | "skills"
-  >("routines");
+  >(() =>
+    // A chat create-offer landed here: open on the tab it wants to create in.
+    peekCreateIntent()?.kind === "method" ? "methods" : "routines",
+  );
 
   return (
     <div className="library-area">
@@ -8491,7 +8599,15 @@ function CreateMethodPanel({
   onDone: () => void;
 }) {
   const [phase, setPhase] = useState<"describe" | "review">("describe");
-  const [description, setDescription] = useState("");
+  // Consume a chat create-offer: pre-fill the description and clear the intent.
+  const [description, setDescription] = useState(() => {
+    const intent = peekCreateIntent();
+    if (intent?.kind === "method") {
+      localStorage.removeItem(CREATE_INTENT);
+      return intent.description;
+    }
+    return "";
+  });
   const [drafting, setDrafting] = useState(false);
   const [draftDescription, setDraftDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -8762,7 +8878,10 @@ function LibraryPanel({
   const [selected, setSelected] = useState<LibraryMethod | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  // A chat create-offer opens the create flow directly, description pre-filled.
+  const [creating, setCreating] = useState(
+    () => peekCreateIntent()?.kind === "method",
+  );
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameFrom, setRenameFrom] = useState("");
@@ -10011,6 +10130,7 @@ function VaenyxWorkspace({
             onConversationsChange={setAskVaenyxConversations}
             onCreateTask={createTaskFromPortal}
             onDraftConversationStarted={openDraftConversation}
+            onOpenLibrary={() => void openLibrary()}
             onRequestedConversationHandled={() =>
               setRequestedConversationId(null)
             }

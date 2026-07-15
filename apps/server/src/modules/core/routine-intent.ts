@@ -47,6 +47,7 @@ export async function classifyRoutineIntent(
     decision: "none",
     routineId: null,
     taskRequest: null,
+    createDescription: null,
     note: "",
   };
 
@@ -92,17 +93,26 @@ export async function classifyRoutineIntent(
     "  something scheduled) and no Routine fits — offer to run it as a task.",
     '- "use-task": the Owner just AGREED to a previous offer to make a background',
     "  task (replied yes/ok to it) — set taskRequest to the thing to do.",
+    '- "create-method": wants to BUILD a new single capability (one reusable',
+    "  skill/step — e.g. 建一个/create/make a method, a converter, an extractor)",
+    "  that no installed Routine covers — set createDescription.",
+    '- "create-routine": wants to BUILD a new multi-step helper (a repeatable',
+    "  workflow with several steps) that nothing installed covers — set",
+    "  createDescription.",
     '- "none": ordinary conversation, or a question to answer directly here.',
     "",
     "Be conservative: prefer suggest over use; prefer none unless it genuinely",
     "fits. A background task is for work that takes time or repeats — never a quick",
-    "answer you can just give now.",
+    "answer you can just give now. create-* is only for an explicit ask to build /",
+    "create / 建 / 做一个 something reusable — never for a one-off question.",
     "",
     "Output ONE JSON object and nothing else:",
     '{ "decision": "none" | "use-routine" | "suggest-routine" | "suggest-task" |',
-    '    "use-task",',
+    '    "use-task" | "create-method" | "create-routine",',
     '  "routineId": "<routine id or null>",',
     '  "taskRequest": "<for use-task, the thing to do, else null>",',
+    '  "createDescription": "<for create-*, one clean paragraph describing what',
+    '    to build, in the Owner\'s language, else null>",',
     '  "note": "<one short sentence, or empty>" }',
   ].join("\n");
 
@@ -126,6 +136,8 @@ export async function classifyRoutineIntent(
     "suggest-routine",
     "suggest-task",
     "use-task",
+    "create-method",
+    "create-routine",
   ].includes(parsed.decision as string)
     ? (parsed.decision as ClassifyRoutineResponse["decision"])
     : "none";
@@ -138,20 +150,55 @@ export async function classifyRoutineIntent(
     typeof parsed.taskRequest === "string" && parsed.taskRequest.trim()
       ? parsed.taskRequest.trim()
       : null;
+  const createDescription =
+    typeof parsed.createDescription === "string" &&
+    parsed.createDescription.trim()
+      ? parsed.createDescription.trim().slice(0, 2000)
+      : null;
 
   if (decision === "use-routine" || decision === "suggest-routine") {
     // The model must pick a real installed Routine; otherwise treat as none.
     if (!routineId || !routines.some((routine) => routine.id === routineId)) {
       return none;
     }
-    return { decision, routineId, taskRequest: null, note };
+    return {
+      decision,
+      routineId,
+      taskRequest: null,
+      createDescription: null,
+      note,
+    };
   }
 
   if (decision === "use-task") {
     if (!taskRequest) return none;
-    return { decision, routineId: null, taskRequest, note };
+    return {
+      decision,
+      routineId: null,
+      taskRequest,
+      createDescription: null,
+      note,
+    };
+  }
+
+  if (decision === "create-method" || decision === "create-routine") {
+    // Fall back to the Owner's own words if the model skipped the distilled
+    // description — the offer is still worth showing.
+    return {
+      decision,
+      routineId: null,
+      taskRequest: null,
+      createDescription: createDescription ?? content.trim().slice(0, 2000),
+      note,
+    };
   }
 
   // suggest-task
-  return { decision, routineId: null, taskRequest: null, note };
+  return {
+    decision,
+    routineId: null,
+    taskRequest: null,
+    createDescription: null,
+    note,
+  };
 }

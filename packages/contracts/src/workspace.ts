@@ -268,6 +268,12 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     suggestRoutineId: Type.Optional(Type.String({ minLength: 1 })),
     // suggest-task: the reply may briefly offer to run it as a background task.
     suggestTask: Type.Optional(Type.Boolean()),
+    // create-*: the Owner asked Vaenyx to BUILD a new Method/Routine. The reply
+    // must point at the creation flow (an offer card appears under it) and must
+    // never claim to have created anything itself.
+    suggestCreate: Type.Optional(
+      Type.Union([Type.Literal("method"), Type.Literal("routine")]),
+    ),
   },
   { additionalProperties: false },
 );
@@ -283,10 +289,18 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       Type.Literal("suggest-routine"),
       Type.Literal("suggest-task"),
       Type.Literal("use-task"),
+      // The Owner asked Vaenyx to BUILD something new: a single capability
+      // (Method) or a multi-step helper (Routine). The chat offers to open the
+      // creation flow with the description pre-filled — it never builds inline.
+      Type.Literal("create-method"),
+      Type.Literal("create-routine"),
     ]),
     routineId: Type.Union([Type.String(), Type.Null()]),
     // For use-task: the thing to do, extracted from the conversation.
     taskRequest: Type.Union([Type.String(), Type.Null()]),
+    // For create-*: a clean one-paragraph description of what to build,
+    // distilled from the conversation, used to pre-fill the creation flow.
+    createDescription: Type.Union([Type.String(), Type.Null()]),
     note: Type.String(),
   },
   { additionalProperties: false },

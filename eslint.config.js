@@ -9,6 +9,9 @@ export default tseslint.config(
       "apps/server/drizzle/**",
       "coverage/**",
       "data/**",
+      // Personal data — includes codex-home, where the Codex CLI caches its
+      // own plugin code. Never lint the Owner's data directory.
+      "userdata/**",
     ],
   },
   js.configs.recommended,

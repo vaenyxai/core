@@ -423,6 +423,10 @@ export interface CreateAskVaenyxMessageOptions {
   suggestRoutine?: { name: string; description: string };
   // suggest-task: the reply may briefly offer to run it as a background task.
   suggestTask?: boolean;
+  // create-*: the Owner asked Vaenyx to BUILD a new Method/Routine. An offer
+  // card under the reply opens the real creation flow — the model must point
+  // there and never claim to have created anything itself.
+  suggestCreate?: "method" | "routine";
 }
 
 export async function createAskVaenyxMessage(
@@ -499,6 +503,10 @@ export async function createAskVaenyxMessage(
   }
   if (options?.suggestTask) {
     projectContext = `${projectContext ? `${projectContext}\n\n` : ""}This may be a job better run in the background (it takes time, or could repeat). If so, briefly offer at the very end to run it as a background task (for example: "Want me to run this as a background task?") and stop there. If not, ignore this note.`;
+  }
+  if (options?.suggestCreate) {
+    const kind = options.suggestCreate === "method" ? "Method" : "Routine";
+    projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner appears to be asking Vaenyx to CREATE a new ${kind}. Vaenyx has a built-in creation flow, and a button that opens it (with the description pre-filled) is shown right under your reply. Briefly tell the Owner to tap that button to review and save the ${kind}. You cannot create it from inside this chat: do NOT claim to have created anything, do NOT output configuration JSON, and do NOT invent admin tools or extra steps.`;
   }
 
   try {

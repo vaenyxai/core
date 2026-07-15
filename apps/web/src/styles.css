@@ -2076,6 +2076,26 @@ select {
   cursor: default;
 }
 
+/* Chat create-offer: the card under a reply that opens the Library creation
+   flow with the described Method/Routine pre-filled */
+.chat-create-offer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  font-size: 12px;
+}
+
+.chat-create-offer span {
+  flex: 1 1 auto;
+  min-width: 160px;
+}
+
 .composer-disclaimer {
   margin: 0;
   padding: 0 2px;
