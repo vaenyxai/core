@@ -287,7 +287,11 @@ import {
   getInstanceSettings,
   updateInstanceSettings,
 } from "../core/settings.js";
-import { runCodexChatTest, runForgeReadOnly } from "../harness/codex.js";
+import {
+  runCodexChatTest,
+  runForgeReadOnly,
+  startCodexLogin,
+} from "../harness/codex.js";
 import {
   authenticateOwner,
   clearSession,
@@ -755,6 +759,40 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       return { providers: listModelProviders(context.config.secretsDirectory) };
+    },
+  );
+
+  // One-click Codex sign-in: spawns the official `codex login` flow on the
+  // machine Vaenyx runs on and returns the sign-in URL (null when the CLI is
+  // already signed in, opened the browser itself, or printed nothing in time).
+  app.post(
+    "/v1/models/codex/login",
+    {
+      schema: {
+        response: {
+          200: Type.Object(
+            { url: Type.Union([Type.String(), Type.Null()]) },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "model.codex.login",
+        decision: "allowed",
+        reason: "Owner started the official Codex ChatGPT sign-in flow.",
+        resourceType: "system",
+      });
+      return startCodexLogin();
     },
   );
 

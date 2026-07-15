@@ -149,6 +149,55 @@ export function getCodexStatus(): CodexStatus {
   };
 }
 
+// Starts the official `codex login` browser flow ON THIS MACHINE and captures
+// the sign-in URL it prints, so the web UI can offer a one-click button. The
+// child keeps running until the browser flow completes (it hosts the local
+// OAuth callback), so it is left running and unref'd — this call only waits
+// briefly for the URL. Vaenyx never sees the password or the tokens; the
+// official CLI stores its own credentials, exactly as a manual login does.
+export function startCodexLogin(): Promise<{ url: string | null }> {
+  if (process.env.NODE_ENV === "test" && !process.env.VAENYX_CODEX_COMMAND) {
+    return Promise.resolve({ url: null });
+  }
+  const executable = findCodexCommand();
+  const child = spawn(executable.command, [...executable.args, "login"], {
+    shell: executable.shell,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  return new Promise((resolveLogin) => {
+    let output = "";
+    let settled = false;
+    const settle = (url: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolveLogin({ url });
+    };
+    const timer = setTimeout(() => settle(null), 8000);
+    timer.unref();
+    const scan = (chunk: unknown) => {
+      output += String(chunk);
+      const match = output.match(/https:\/\/[^\s"']+/);
+      if (match) {
+        clearTimeout(timer);
+        settle(match[0].replace(/[).,]+$/, ""));
+      }
+    };
+    child.stdout?.on("data", scan);
+    child.stderr?.on("data", scan);
+    child.once("error", () => {
+      clearTimeout(timer);
+      settle(null);
+    });
+    child.once("exit", () => {
+      clearTimeout(timer);
+      // Already signed in (or the flow finished instantly): no URL needed.
+      settle(null);
+    });
+    child.unref();
+  });
+}
+
 export async function runForgeReadOnly(
   request: string,
   signal?: AbortSignal,

@@ -90,6 +90,7 @@ import {
   fetchModelProviders,
   connectModelProvider,
   disconnectModelProvider,
+  startCodexLogin,
   setDefaultModelProvider,
   setReasoningEffort,
   setChatProvider,
@@ -4409,6 +4410,29 @@ function ModelsPanel() {
     }
   }
 
+  // One-click Codex sign-in: kick off the official `codex login` browser flow
+  // on the machine Vaenyx runs on, then poll until the CLI reports signed-in
+  // (or give up quietly after ~2 minutes — the card just stays as it was).
+  const [codexWaiting, setCodexWaiting] = useState(false);
+  async function signInCodex() {
+    setCodexWaiting(true);
+    setError(null);
+    try {
+      const { url } = await startCodexLogin();
+      if (url) window.open(url, "_blank", "noreferrer");
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await new Promise((resolveWait) => setTimeout(resolveWait, 3000));
+        const result = await fetchModelProviders();
+        setProviders(result.providers);
+        if (result.providers.find((p) => p.id === "codex")?.healthy) break;
+      }
+    } catch {
+      setError("Could not start the ChatGPT sign-in.");
+    } finally {
+      setCodexWaiting(false);
+    }
+  }
+
   return (
     <section className="settings-card">
       <p className="eyebrow">Models</p>
@@ -4468,7 +4492,34 @@ function ModelsPanel() {
               ) : null;
             })()}
             {provider.kind === "cli-login" ? (
-              <p className="library-note">Managed in the Connection tab.</p>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
+                  marginTop: "0.5rem",
+                }}
+              >
+                {!provider.healthy ? (
+                  <div>
+                    <button
+                      className="primary-button"
+                      disabled={codexWaiting}
+                      onClick={() => void signInCodex()}
+                      type="button"
+                    >
+                      {codexWaiting
+                        ? "Waiting For Sign-In..."
+                        : "Sign In With ChatGPT"}
+                    </button>
+                  </div>
+                ) : null}
+                <p className="library-note">
+                  {codexWaiting
+                    ? "Finish the ChatGPT login in the browser window that just opened — this card updates by itself."
+                    : "Opens the official ChatGPT login in a browser on the computer Vaenyx runs on. Vaenyx never sees your password or tokens. Also manageable in the Connection tab."}
+                </p>
+              </div>
             ) : (
               <div
                 style={{
