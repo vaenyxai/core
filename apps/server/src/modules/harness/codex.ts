@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
@@ -51,6 +51,37 @@ function isInsideVaenyxRepository(path: string): boolean {
   );
 }
 
+// Locate the npm-global Codex CLI script. The autostart watchdog runs Vaenyx
+// as SYSTEM, whose own profile has no npm globals and whose PATH has no npm
+// bin — so after checking this process's APPDATA, look through the machine's
+// user profiles for the standard npm global install location. Cached once
+// found (revalidated in case the CLI was uninstalled).
+let cachedCodexScript: string | null = null;
+function findNpmGlobalCodexScript(): string | null {
+  if (cachedCodexScript && existsSync(cachedCodexScript)) {
+    return cachedCodexScript;
+  }
+  cachedCodexScript = null;
+  const npmSuffix = ["npm", "node_modules", "@openai", "codex", "bin", "codex.js"];
+  const candidates: string[] = [];
+  if (process.env.APPDATA) {
+    candidates.push(resolve(process.env.APPDATA, ...npmSuffix));
+  }
+  const usersRoot = resolve(`${process.env.SystemDrive ?? "C:"}\\Users`);
+  try {
+    for (const profile of readdirSync(usersRoot)) {
+      candidates.push(
+        resolve(usersRoot, profile, "AppData", "Roaming", ...npmSuffix),
+      );
+    }
+  } catch {
+    // No readable Users directory: fall through to the PATH lookup.
+  }
+  cachedCodexScript =
+    candidates.find((candidate) => existsSync(candidate)) ?? null;
+  return cachedCodexScript;
+}
+
 function findCodexCommand(): CodexExecutable {
   if (process.env.VAENYX_CODEX_COMMAND) {
     const command = resolve(process.env.VAENYX_CODEX_COMMAND);
@@ -61,17 +92,9 @@ function findCodexCommand(): CodexExecutable {
     };
   }
 
-  if (process.platform === "win32" && process.env.APPDATA) {
-    const npmCodexScript = resolve(
-      process.env.APPDATA,
-      "npm",
-      "node_modules",
-      "@openai",
-      "codex",
-      "bin",
-      "codex.js",
-    );
-    if (existsSync(npmCodexScript)) {
+  if (process.platform === "win32") {
+    const npmCodexScript = findNpmGlobalCodexScript();
+    if (npmCodexScript) {
       return {
         args: [npmCodexScript],
         command: process.execPath,
