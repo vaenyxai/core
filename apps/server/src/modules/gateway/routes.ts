@@ -595,6 +595,50 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // Restart: exit WITHOUT the autostart-paused sentinel so the watchdog brings
+  // Vaenyx straight back — on whatever build is on disk. This is how a new
+  // build goes live without an elevated kill or a manual stop/start.
+  app.post(
+    "/v1/system/restart",
+    {
+      schema: {
+        response: {
+          200: MessageResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "system.restart",
+        decision: "allowed",
+        reason: "Owner requested a Vaenyx restart from Settings.",
+        resourceType: "system",
+      });
+
+      if (context.config.mode !== "test") {
+        setTimeout(() => {
+          void app.close().finally(() => {
+            process.exit(0);
+          });
+        }, 250).unref();
+      }
+
+      return {
+        message: "Vaenyx is restarting — back in a few seconds.",
+      };
+    },
+  );
+
   app.get(
     "/v1/system/backups",
     {

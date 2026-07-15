@@ -117,6 +117,7 @@ import {
   retryTask,
   setTaskSchedule,
   setupOwner,
+  restartVaenyx,
   shutdownVaenyx,
   testChatConnection,
   testForgeConnection,
@@ -5147,6 +5148,42 @@ function SettingsPanel({
     }
   }
 
+  // Restart: the server exits, the watchdog relaunches whatever build is on
+  // disk, and this page reloads itself once the instance answers again.
+  const [restartingVaenyx, setRestartingVaenyx] = useState(false);
+  async function restartVaenyxNow() {
+    setRestartingVaenyx(true);
+    setShutdownMessage(null);
+    setShutdownError(null);
+    try {
+      const response = await restartVaenyx();
+      setShutdownMessage(response.message);
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await new Promise((resolveWait) => setTimeout(resolveWait, 3000));
+        try {
+          const status = await fetch("/health");
+          if (status.ok) {
+            window.location.reload();
+            return;
+          }
+        } catch {
+          // Still restarting.
+        }
+      }
+      setShutdownError(
+        "Vaenyx did not come back by itself — start it with Vaenyx-Start.cmd.",
+      );
+    } catch (nextError) {
+      setShutdownError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Vaenyx could not restart from the browser.",
+      );
+    } finally {
+      setRestartingVaenyx(false);
+    }
+  }
+
   return (
     <div className="settings-layout">
       <nav aria-label="Settings sections" className="library-subtabs">
@@ -5290,6 +5327,20 @@ function SettingsPanel({
           {loggingOutAll ? "Signing out..." : "Sign out all devices"}
         </button>
         <div className="settings-card-divider" />
+        <h3 className="settings-subhead">Restart Vaenyx</h3>
+        <p className="settings-card-copy">
+          Restarts the local server and reloads this page when it is back —
+          also how an updated build goes live.
+        </p>
+        <button
+          className="secondary-button"
+          disabled={restartingVaenyx || stoppingVaenyx}
+          onClick={() => void restartVaenyxNow()}
+          type="button"
+        >
+          {restartingVaenyx ? "Restarting..." : "Restart Vaenyx"}
+        </button>
+        <div className="settings-card-divider" />
         <h3 className="settings-subhead">Stop Vaenyx</h3>
         <p className="settings-card-copy">
           Use this when you want Vaenyx fully off. Closing the browser alone does
@@ -5297,7 +5348,7 @@ function SettingsPanel({
         </p>
         <button
           className="danger-button"
-          disabled={stoppingVaenyx}
+          disabled={stoppingVaenyx || restartingVaenyx}
           onClick={() => void stopVaenyx()}
           type="button"
         >

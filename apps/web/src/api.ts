@@ -104,6 +104,13 @@ export function shutdownVaenyx(): Promise<{ message: string }> {
   });
 }
 
+export function restartVaenyx(): Promise<{ message: string }> {
+  return requestJson<{ message: string }>("/v1/system/restart", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export function fetchBackups(): Promise<BackupListResponse> {
   return requestJson<BackupListResponse>("/v1/system/backups");
 }

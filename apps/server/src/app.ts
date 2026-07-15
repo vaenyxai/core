@@ -1,4 +1,5 @@
-﻿import { existsSync } from "node:fs";
+﻿import { existsSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
 
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
@@ -85,10 +86,37 @@ export async function buildApp(
   );
   vaenyxMeWarmup.unref();
 
+  // Restart flag: a deploy (or any local tool) touches
+  // userdata/config/restart-requested.flag and Vaenyx exits cleanly; the
+  // watchdog (Vaenyx-Service-Run.cmd) brings it back on the NEW build within
+  // seconds — no elevated kill, no manual stop/start. Local-file trigger is
+  // fine under the local-first threat model: whoever can write this file can
+  // already read the database next to it.
+  const restartFlag = resolve(
+    config.dataDirectory,
+    "..",
+    "config",
+    "restart-requested.flag",
+  );
+  const restartTick = setInterval(() => {
+    if (config.mode === "test" || !existsSync(restartFlag)) return;
+    try {
+      rmSync(restartFlag, { force: true });
+    } catch {
+      return; // Try again next tick rather than boot-looping on a stuck file.
+    }
+    app.log.info("Restart flag detected; exiting for the watchdog to restart.");
+    void app.close().finally(() => {
+      process.exit(0);
+    });
+  }, 5_000);
+  restartTick.unref();
+
   app.addHook("onClose", async () => {
     clearInterval(schedulerTick);
     clearInterval(vaenyxMeScanTick);
     clearTimeout(vaenyxMeWarmup);
+    clearInterval(restartTick);
     database.close();
   });
 
