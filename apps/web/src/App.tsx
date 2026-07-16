@@ -91,6 +91,7 @@ import {
   connectModelProvider,
   disconnectModelProvider,
   startCodexLogin,
+  appendConversationNote,
   setDefaultModelProvider,
   setReasoningEffort,
   setChatProvider,
@@ -2256,7 +2257,7 @@ function AskVaenyxPanel({
   onConversationsChange,
   onCreateTask,
   onDraftConversationStarted,
-  onOpenLibrary,
+  onLibraryRefresh,
   onRequestedConversationHandled,
   onWorkspaceRefresh,
   requestedConversationId,
@@ -2275,7 +2276,7 @@ function AskVaenyxPanel({
     projectId?: string | null,
   ) => Promise<Task>;
   onDraftConversationStarted: (conversationId: string) => void;
-  onOpenLibrary: () => void;
+  onLibraryRefresh: () => void;
   onRequestedConversationHandled: () => void;
   onWorkspaceRefresh: () => Promise<void>;
   requestedConversationId: string | null;
@@ -2292,18 +2293,16 @@ function AskVaenyxPanel({
       localStorage.getItem(`vaenyx-health-ack-${LEGAL_COPY_VERSION}`) === "1",
   );
   const [healthGateDismissed, setHealthGateDismissed] = useState(false);
-  // create-*: the offer card under the reply that opens the Library creation
-  // flow pre-filled. Cleared on send, dismiss, click, or switching chats.
-  const [createOffer, setCreateOffer] = useState<{
+  // In-chat background creation (spec §2a): while the drafted Method/Routine is
+  // being built and saved, the chat shows a Building… banner; completion posts
+  // a confirmation note into the conversation.
+  const [building, setBuilding] = useState<{
+    conversationId: string;
     kind: "method" | "routine";
-    description: string;
   } | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(conversations[0]?.id ?? null);
-  useEffect(() => {
-    setCreateOffer(null);
-  }, [activeConversationId]);
   const [messages, setMessages] = useState<AskVaenyxMessage[]>([]);
   const [routineJournal, setRoutineJournal] = useState<RoutineJournalEntry[]>(
     [],
@@ -2669,6 +2668,59 @@ function AskVaenyxPanel({
     );
   }
 
+  // In-chat background creation (spec §2a): draft with the existing pipeline,
+  // save to the Library (a Routine plan drafts and saves its Methods too), then
+  // post a confirmation note into the conversation — the Owner sees it in
+  // place, and the model sees it in history on every later turn. Failures post
+  // a note too, so the chat never goes silently quiet about a build.
+  async function buildFromChat(
+    conversationId: string,
+    kind: "method" | "routine",
+    description: string,
+  ): Promise<void> {
+    setBuilding({ conversationId, kind });
+    let note: string;
+    try {
+      let builtName: string;
+      if (kind === "method") {
+        const draft = await draftMethod(description);
+        const created = await createMethod(draft);
+        builtName = created.name;
+      } else {
+        const plan = await planRoutine(description);
+        const created = await createRoutine(plan);
+        builtName = created.name;
+      }
+      note =
+        lang === "zh"
+          ? `✔ ${kind === "method" ? "Method" : "Routine"}「${builtName}」已建好,已存入你的资源库。直接说"用它"就可以开始用;想细调,去 Settings → Library 打开它。`
+          : `✔ The ${kind === "method" ? "Method" : "Routine"} "${builtName}" is built and saved to your Library. Just ask to use it; to fine-tune it, open it under Settings → Library.`;
+    } catch (buildError) {
+      const reason =
+        buildError instanceof Error ? buildError.message : "unknown error";
+      note =
+        lang === "zh"
+          ? `⚠ 这次没建成(${reason})。把需求再说一遍,我重新建。`
+          : `⚠ The build failed (${reason}). Describe it again and I'll retry.`;
+    }
+    try {
+      const message = await appendConversationNote(conversationId, note);
+      setMessages((current) =>
+        activeConversationId === conversationId
+          ? [...current, message]
+          : current,
+      );
+    } catch {
+      // The note could not be stored; the Library still has the result.
+    } finally {
+      setBuilding((current) =>
+        current?.conversationId === conversationId ? null : current,
+      );
+      void onWorkspaceRefresh();
+      onLibraryRefresh();
+    }
+  }
+
   async function sendChatContent(content: string): Promise<void> {
     if (activeThread?.routineId && activeConversationId) {
       await runRoutineMessage(
@@ -2747,7 +2799,6 @@ function AskVaenyxPanel({
 
     setSending(true);
     setError(null);
-    setCreateOffer(null);
     let createdConversationId: string | null = null;
     const controller = new AbortController();
     streamControllerRef.current = controller;
@@ -2833,12 +2884,14 @@ function AskVaenyxPanel({
         suggestCreate,
       );
 
-      // The reply landed: surface the creation offer card under it.
+      // The reply landed: build the described Method/Routine in the background
+      // and post the confirmation note when it is saved (spec §2a).
       if (suggestCreate) {
-        setCreateOffer({
-          kind: suggestCreate,
-          description: createDescription ?? content,
-        });
+        void buildFromChat(
+          conversationId,
+          suggestCreate,
+          createDescription ?? content,
+        );
       }
 
       onConversationsChange(
@@ -3635,31 +3688,13 @@ function AskVaenyxPanel({
           <div ref={chatEndRef} />
         </div>
 
-        {createOffer && !isRoutine ? (
+        {building && building.conversationId === activeConversationId ? (
           <div className="chat-create-offer">
             <span>
-              {createOffer.kind === "method"
-                ? "Build this as a Method in your Library?"
-                : "Build this as a Routine in your Library?"}
+              {building.kind === "method"
+                ? "⏳ Building the Method in the background — the confirmation will appear here."
+                : "⏳ Building the Routine in the background — the confirmation will appear here."}
             </span>
-            <button
-              className="primary-button"
-              onClick={() => {
-                localStorage.setItem(CREATE_INTENT, JSON.stringify(createOffer));
-                setCreateOffer(null);
-                onOpenLibrary();
-              }}
-              type="button"
-            >
-              {createOffer.kind === "method" ? "Create Method" : "Create Routine"}
-            </button>
-            <button
-              className="text-button"
-              onClick={() => setCreateOffer(null)}
-              type="button"
-            >
-              Dismiss
-            </button>
           </div>
         ) : null}
 
@@ -10130,7 +10165,10 @@ function VaenyxWorkspace({
             onConversationsChange={setAskVaenyxConversations}
             onCreateTask={createTaskFromPortal}
             onDraftConversationStarted={openDraftConversation}
-            onOpenLibrary={() => void openLibrary()}
+            onLibraryRefresh={() => {
+              void fetchLibraryMethods().then(setLibraryMethods);
+              void fetchLibraryRoutines().then(setLibraryRoutines);
+            }}
             onRequestedConversationHandled={() =>
               setRequestedConversationId(null)
             }

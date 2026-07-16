@@ -429,6 +429,42 @@ export interface CreateAskVaenyxMessageOptions {
   suggestCreate?: "method" | "routine";
 }
 
+// Insert a Vaenyx-authored status note into a conversation (e.g. "✔ Routine X
+// is built"). It is a normal assistant message: the Owner sees it in place and
+// the model sees it in history on later turns — the chat "knows" what happened.
+export function appendAssistantNote(
+  database: DatabaseHandle,
+  conversationId: string,
+  ownerId: string,
+  content: string,
+): AskVaenyxMessage {
+  getConversationRow(database, conversationId, ownerId);
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  database.sqlite
+    .prepare(
+      `INSERT INTO ask_vaenyx_messages (
+        id, conversation_id, role, content, status, web_search_used, created_at
+      ) VALUES (?, ?, 'assistant', ?, 'completed', 0, ?)`,
+    )
+    .run(id, conversationId, content.trim(), now);
+  database.sqlite
+    .prepare(
+      `UPDATE ask_vaenyx_conversations SET updated_at = ? WHERE id = ?`,
+    )
+    .run(now, conversationId);
+  touchChatThread(database, conversationId, now);
+  return {
+    id,
+    conversationId,
+    role: "assistant",
+    content: content.trim(),
+    status: "completed",
+    webSearchUsed: false,
+    createdAt: now,
+  };
+}
+
 export async function createAskVaenyxMessage(
   database: DatabaseHandle,
   conversationId: string,
@@ -506,7 +542,7 @@ export async function createAskVaenyxMessage(
   }
   if (options?.suggestCreate) {
     const kind = options.suggestCreate === "method" ? "Method" : "Routine";
-    projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner appears to be asking Vaenyx to CREATE a new ${kind}. Vaenyx has a built-in creation flow, and a button that opens it (with the description pre-filled) is shown right under your reply. Briefly tell the Owner to tap that button to review and save the ${kind}. You cannot create it from inside this chat: do NOT claim to have created anything, do NOT output configuration JSON, and do NOT invent admin tools or extra steps.`;
+    projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner asked Vaenyx to CREATE a new ${kind}, and Vaenyx has ALREADY STARTED building it in the background — a confirmation message will appear in this chat when it is saved to the Library. Briefly tell the Owner it is being built now and the confirmation will show up here shortly. Do NOT claim it is already finished, do NOT output configuration JSON, and do NOT invent admin tools or extra steps.`;
   }
 
   try {

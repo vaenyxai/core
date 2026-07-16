@@ -238,6 +238,7 @@ import {
   updateProjectMemory,
 } from "../core/memory.js";
 import {
+  appendAssistantNote,
   createAskVaenyxConversation,
   createAskVaenyxMessage,
   deleteAskVaenyxConversation,
@@ -2270,6 +2271,55 @@ export async function registerGatewayRoutes(
           });
         },
       );
+    },
+  );
+
+  // In-chat background creation (spec §2a): after the client finishes building
+  // a Method/Routine, it posts the confirmation note here. The note is a normal
+  // assistant message, so the Owner sees it in place and the model knows about
+  // the creation on every later turn.
+  app.post<{ Body: { content: string }; Params: { id: string } }>(
+    "/v1/ask-vaenyx/conversations/:id/notes",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: Type.Object(
+          { content: Type.String({ minLength: 1, maxLength: 4000 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: AskVaenyxMessageSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return appendAssistantNote(
+          context.database,
+          request.params.id,
+          owner.id,
+          request.body.content,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
+        ) {
+          return reply
+            .code(404)
+            .send({ error: "Vaenyx Chat conversation not found." });
+        }
+        throw error;
+      }
     },
   );
 

@@ -345,6 +345,18 @@ export function fetchModelProviders(): Promise<{
   );
 }
 
+// In-chat background creation (spec §2a): post the "✔ built" confirmation into
+// the conversation as a normal assistant message.
+export function appendConversationNote(
+  conversationId: string,
+  content: string,
+): Promise<AskVaenyxMessage> {
+  return requestJson<AskVaenyxMessage>(
+    `/v1/ask-vaenyx/conversations/${conversationId}/notes`,
+    { method: "POST", body: JSON.stringify({ content }) },
+  );
+}
+
 // Starts the official `codex login` flow on the machine Vaenyx runs on;
 // returns the sign-in URL when the CLI printed one before opening the browser,
 // or `detail` (the CLI's first error line) when the flow could not start.
