@@ -1064,7 +1064,7 @@ function AppsPanel({
 
         <form className="app-profile-form" onSubmit={submit}>
           <label>
-            App name
+            Token Name
             <input
               maxLength={80}
               onChange={(event) => setName(event.target.value)}
