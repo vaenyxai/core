@@ -47,6 +47,7 @@ export async function classifyRoutineIntent(
     decision: "none",
     routineId: null,
     taskRequest: null,
+    taskSchedule: null,
     createDescription: null,
     note: "",
   };
@@ -91,8 +92,11 @@ export async function classifyRoutineIntent(
     '- "suggest-routine": a Routine could plausibly help — pick its id.',
     '- "suggest-task": wants Vaenyx to go do a piece of work (research / summary /',
     "  something scheduled) and no Routine fits — offer to run it as a task.",
-    '- "use-task": the Owner just AGREED to a previous offer to make a background',
-    "  task (replied yes/ok to it) — set taskRequest to the thing to do.",
+    '- "use-task": the Owner wants Vaenyx to go do a piece of work AND either',
+    "  (a) asked for it on a repeating schedule (\"every morning at 7\", 每天/每周),",
+    "  or (b) just AGREED to a previous offer to make a background task. Set",
+    "  taskRequest to the thing to do. A clear recurring request needs no prior",
+    "  offer — take it directly.",
     '- "create-method": wants to BUILD a new single capability (one reusable',
     "  skill/step — e.g. 建一个/create/make a method, a converter, an extractor)",
     "  that no installed Routine covers — set createDescription.",
@@ -106,11 +110,21 @@ export async function classifyRoutineIntent(
     "answer you can just give now. create-* is only for an explicit ask to build /",
     "create / 建 / 做一个 something reusable — never for a one-off question.",
     "",
+    "If the Owner asked for something REPEATING (every morning / 每天 / weekly /",
+    "每周 / at 7am / 定时), also fill taskSchedule so the task is scheduled in the",
+    "same step. Read the time they said: \"早上7点\" and \"7am\" are time \"07:00\";",
+    "a bare \"每天早上\" with no hour is time \"07:00\" as a sensible default. Use",
+    "cadence hourly/daily/weekly/monthly; for weekly set dayOfWeek (0=Sunday), for",
+    "monthly set dayOfMonth. If nothing repeating was asked for, taskSchedule null.",
+    "",
     "Output ONE JSON object and nothing else:",
     '{ "decision": "none" | "use-routine" | "suggest-routine" | "suggest-task" |',
     '    "use-task" | "create-method" | "create-routine",',
     '  "routineId": "<routine id or null>",',
     '  "taskRequest": "<for use-task, the thing to do, else null>",',
+    '  "taskSchedule": { "cadence": "hourly"|"daily"|"weekly"|"monthly",',
+    '      "time": "HH:MM" or null, "dayOfWeek": 0-6 or null,',
+    '      "dayOfMonth": 1-31 or null } or null,',
     '  "createDescription": "<for create-*, one clean paragraph describing what',
     '    to build, in the Owner\'s language, else null>",',
     '  "note": "<one short sentence, or empty>" }',
@@ -156,6 +170,46 @@ export async function classifyRoutineIntent(
       ? parsed.createDescription.trim().slice(0, 2000)
       : null;
 
+  // Schedule: validated strictly. A malformed time would otherwise become a
+  // task that fires at the wrong hour (or never), so anything that does not
+  // parse cleanly degrades to "no schedule" — the task is still created, just
+  // unscheduled, which the Owner can see and fix.
+  const rawSchedule = parsed.taskSchedule as
+    | { cadence?: unknown; time?: unknown; dayOfWeek?: unknown; dayOfMonth?: unknown }
+    | null
+    | undefined;
+  let taskSchedule: ClassifyRoutineResponse["taskSchedule"] = null;
+  if (
+    rawSchedule &&
+    ["hourly", "daily", "weekly", "monthly"].includes(
+      rawSchedule.cadence as string,
+    )
+  ) {
+    const time =
+      typeof rawSchedule.time === "string" &&
+      /^([01]\d|2[0-3]):[0-5]\d$/.test(rawSchedule.time.trim())
+        ? rawSchedule.time.trim()
+        : null;
+    const dayOfWeek =
+      Number.isInteger(rawSchedule.dayOfWeek) &&
+      (rawSchedule.dayOfWeek as number) >= 0 &&
+      (rawSchedule.dayOfWeek as number) <= 6
+        ? (rawSchedule.dayOfWeek as number)
+        : null;
+    const dayOfMonth =
+      Number.isInteger(rawSchedule.dayOfMonth) &&
+      (rawSchedule.dayOfMonth as number) >= 1 &&
+      (rawSchedule.dayOfMonth as number) <= 31
+        ? (rawSchedule.dayOfMonth as number)
+        : null;
+    taskSchedule = {
+      cadence: rawSchedule.cadence as "hourly" | "daily" | "weekly" | "monthly",
+      time,
+      dayOfWeek,
+      dayOfMonth,
+    };
+  }
+
   if (decision === "use-routine" || decision === "suggest-routine") {
     // The model must pick a real installed Routine; otherwise treat as none.
     if (!routineId || !routines.some((routine) => routine.id === routineId)) {
@@ -165,6 +219,7 @@ export async function classifyRoutineIntent(
       decision,
       routineId,
       taskRequest: null,
+      taskSchedule: null,
       createDescription: null,
       note,
     };
@@ -176,6 +231,7 @@ export async function classifyRoutineIntent(
       decision,
       routineId: null,
       taskRequest,
+      taskSchedule,
       createDescription: null,
       note,
     };
@@ -188,6 +244,7 @@ export async function classifyRoutineIntent(
       decision,
       routineId: null,
       taskRequest: null,
+      taskSchedule: null,
       createDescription: createDescription ?? content.trim().slice(0, 2000),
       note,
     };
@@ -198,6 +255,7 @@ export async function classifyRoutineIntent(
     decision,
     routineId: null,
     taskRequest: null,
+    taskSchedule,
     createDescription: null,
     note,
   };

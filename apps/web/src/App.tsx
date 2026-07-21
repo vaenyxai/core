@@ -2739,24 +2739,43 @@ function AskVaenyxPanel({
     let suggestTask = false;
     let suggestCreate: "method" | "routine" | undefined;
     let createDescription: string | null = null;
+    // The FIRST message of a brand-new chat is exactly where people state what
+    // they want ("daily AI news at 7am"), so it must be classified too. The
+    // classifier needs a conversation to read history from, so create it first
+    // and reuse it for the reply below — no extra chat is left behind.
+    let preCreatedConversationId: string | null = null;
+    if (!activeConversationId && messageMaybeIntent(content, messages, libraryRoutines)) {
+      try {
+        const conversation = await createAskVaenyxConversation({
+          projectId: composeProjectId || generalProjectId,
+        });
+        preCreatedConversationId = conversation.id;
+        onConversationsChange(upsertConversation(conversations, conversation));
+        setActiveConversationId(conversation.id);
+      } catch {
+        // Could not pre-create: fall through to the normal (unclassified) path.
+      }
+    }
+    const classifyConversationId =
+      activeConversationId ?? preCreatedConversationId;
     if (
-      activeConversationId &&
+      classifyConversationId &&
       messageMaybeIntent(content, messages, libraryRoutines)
     ) {
       setSending(true);
       let verdict: Awaited<ReturnType<typeof classifyMessage>> | null = null;
       try {
-        verdict = await classifyMessage(activeConversationId, content);
+        verdict = await classifyMessage(classifyConversationId, content);
       } catch {
         // Best-effort: leave verdict null and fall through to a plain reply.
       }
       if (verdict?.decision === "use-routine" && verdict.routineId) {
         try {
-          await attachRoutineToChat(activeConversationId, verdict.routineId);
+          await attachRoutineToChat(classifyConversationId, verdict.routineId);
           await onWorkspaceRefresh();
           setSending(false);
           await runRoutineMessage(
-            activeConversationId,
+            classifyConversationId,
             verdict.routineId,
             content,
           );
@@ -2769,11 +2788,45 @@ function AskVaenyxPanel({
         try {
           // onCreateTask creates the task and opens its detail view, so the
           // Owner lands straight on the new task — no hunting in the list.
-          await onCreateTask(
+          const task = await onCreateTask(
             verdict.taskRequest,
-            activeConversationId,
+            classifyConversationId,
             activeThread?.projectId ?? null,
           );
+          // Recurring ask ("every morning at 7"): schedule it in the same step
+          // and tell the Owner in the chat, so it never silently stays one-off.
+          if (verdict.taskSchedule) {
+            const schedule = verdict.taskSchedule;
+            try {
+              await setTaskSchedule(task.id, {
+                cadence: schedule.cadence,
+                enabled: true,
+                ...(schedule.time ? { time: schedule.time } : {}),
+                ...(schedule.dayOfWeek !== null
+                  ? { dayOfWeek: schedule.dayOfWeek }
+                  : {}),
+                ...(schedule.dayOfMonth !== null
+                  ? { dayOfMonth: schedule.dayOfMonth }
+                  : {}),
+              });
+              await appendConversationNote(
+                classifyConversationId,
+                lang === "zh"
+                  ? `✔ 已建好定时任务并开启:${describeIntentSchedule(schedule, "zh")}。结果会在每次运行后出现在这个任务里。`
+                  : `✔ Scheduled task created and switched on: ${describeIntentSchedule(schedule, "en")}. Each run's result lands in this task.`,
+              ).catch(() => {});
+              await onWorkspaceRefresh();
+            } catch {
+              // The task exists but could not be scheduled; say so rather than
+              // letting the Owner believe it repeats.
+              await appendConversationNote(
+                classifyConversationId,
+                lang === "zh"
+                  ? "⚠ 任务已建好,但定时没设成功。可在 Scheduled 页面手动设定。"
+                  : "⚠ The task was created but could not be scheduled. Set it on the Scheduled screen.",
+              ).catch(() => {});
+            }
+          }
           setPrompt("");
           setSending(false);
           return;
@@ -2806,8 +2859,13 @@ function AskVaenyxPanel({
     const tempAssistantId = `pending-assistant-${crypto.randomUUID()}`;
 
     try {
-      let conversationId = activeConversationId;
+      // Reuse the chat the classifier pass may have created, so a classified
+      // first message never leaves an extra empty chat behind.
+      let conversationId = activeConversationId ?? preCreatedConversationId;
       let nextConversations = conversations;
+      if (preCreatedConversationId) {
+        createdConversationId = preCreatedConversationId;
+      }
 
       if (!conversationId) {
         const conversation = await createAskVaenyxConversation({
@@ -7500,6 +7558,45 @@ function routineDomain(
 // or description? A cheap local check so everyday chatter never reaches the
 // (blocking, serialized) model classify. CJK has no word boundaries, so a CJK
 // run is matched on any 2-char shingle; latin tokens must be >= 3 chars.
+// Plain-language rendering of a schedule the classifier extracted, for the
+// confirmation note in chat ("every day at 07:00"). Separate from
+// describeSchedule (which renders a saved Task's own fields, English-only).
+function describeIntentSchedule(
+  schedule: {
+    cadence: "hourly" | "daily" | "weekly" | "monthly";
+    time: string | null;
+    dayOfWeek: number | null;
+    dayOfMonth: number | null;
+  },
+  lang: "zh" | "en",
+): string {
+  const time = schedule.time ?? "07:00";
+  const zhDays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  const enDays = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+  if (lang === "zh") {
+    if (schedule.cadence === "hourly") return "每小时";
+    if (schedule.cadence === "daily") return `每天 ${time}`;
+    if (schedule.cadence === "weekly") {
+      return `每${zhDays[schedule.dayOfWeek ?? 1]} ${time}`;
+    }
+    return `每月 ${schedule.dayOfMonth ?? 1} 号 ${time}`;
+  }
+  if (schedule.cadence === "hourly") return "every hour";
+  if (schedule.cadence === "daily") return `every day at ${time}`;
+  if (schedule.cadence === "weekly") {
+    return `every ${enDays[schedule.dayOfWeek ?? 1]} at ${time}`;
+  }
+  return `on day ${schedule.dayOfMonth ?? 1} of each month at ${time}`;
+}
+
 function messageMentionsRoutine(
   content: string,
   routines: LibraryRoutineSummary[],
@@ -7543,6 +7640,16 @@ function messageMaybeIntent(
       content,
     ) &&
     /(method|routine|方法|流程|工具)/i.test(content)
+  ) {
+    return true;
+  }
+  // A recurring ask ("every morning at 7", 每天早上七点) is a scheduled-task
+  // intent by itself — it describes something that does not exist yet, so it
+  // must classify without needing to match an installed Routine.
+  if (
+    /(每天|每日|每周|每週|每月|每小时|每小時|天天|定时|定時|每.{0,3}早上|每.{0,3}晚上|every ?(day|morning|week|month|hour)|daily|weekly|monthly|hourly)/i.test(
+      content,
+    )
   ) {
     return true;
   }

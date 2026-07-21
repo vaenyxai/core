@@ -298,6 +298,27 @@ export const ClassifyRoutineResponseSchema = Type.Object(
     routineId: Type.Union([Type.String(), Type.Null()]),
     // For use-task: the thing to do, extracted from the conversation.
     taskRequest: Type.Union([Type.String(), Type.Null()]),
+    // The recurring schedule the Owner asked for ("every morning at 7"), when
+    // the message implies one. The task is created AND scheduled in one step,
+    // so "daily AI news at 7am" needs no second trip to the Scheduled screen.
+    taskSchedule: Type.Union([
+      Type.Object(
+        {
+          cadence: Type.Union([
+            Type.Literal("hourly"),
+            Type.Literal("daily"),
+            Type.Literal("weekly"),
+            Type.Literal("monthly"),
+          ]),
+          // "HH:MM", local time.
+          time: Type.Union([Type.String(), Type.Null()]),
+          dayOfWeek: Type.Union([Type.Integer(), Type.Null()]),
+          dayOfMonth: Type.Union([Type.Integer(), Type.Null()]),
+        },
+        { additionalProperties: false },
+      ),
+      Type.Null(),
+    ]),
     // For create-*: a clean one-paragraph description of what to build,
     // distilled from the conversation, used to pre-fill the creation flow.
     createDescription: Type.Union([Type.String(), Type.Null()]),
