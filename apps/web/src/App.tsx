@@ -3761,6 +3761,24 @@ function AskVaenyxPanel({
             <textarea
               maxLength={10_000}
               onChange={(event) => setPrompt(event.target.value)}
+              // Enter sends, Shift+Enter makes a new line — the convention every
+              // chat app uses. IME composition (Chinese/Japanese input) must be
+              // ignored: mid-composition Enter picks a candidate word and would
+              // otherwise fire off a half-typed message.
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  if (!sending && prompt.trim()) {
+                    void sendMessage(
+                      event as unknown as FormEvent<HTMLFormElement>,
+                    );
+                  }
+                }
+              }}
               placeholder={isRoutine ? "Type or paste a note…" : "Ask anything"}
               required
               rows={2}
