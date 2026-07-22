@@ -2603,6 +2603,27 @@ function AskVaenyxPanel({
     return () => window.clearInterval(timer);
   }, [focusedTaskId, focusedTaskStatus, onWorkspaceRefresh]);
 
+  // When a run settles, pull the conversation once more: the fresh result is a
+  // NEW message in the task thread, and that thread is otherwise fetched only
+  // when the task is opened — without this, "Run again" visibly did nothing.
+  const previousTaskStatusRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = previousTaskStatusRef.current;
+    previousTaskStatusRef.current = focusedTaskStatus;
+    if (!focusedTaskId || view !== "task") return;
+    if (
+      previous === "running" &&
+      (focusedTaskStatus === "completed" || focusedTaskStatus === "failed")
+    ) {
+      void fetchTaskMessages(focusedTaskId)
+        .then(setTaskMessages)
+        .catch(() => undefined);
+      void fetchTaskRuns(focusedTaskId)
+        .then(setTaskRuns)
+        .catch(() => undefined);
+    }
+  }, [focusedTaskId, focusedTaskStatus, view]);
+
   useEffect(() => {
     if (view !== "chat") return;
     chatEndRef.current?.scrollIntoView({ block: "end" });
@@ -4199,6 +4220,11 @@ function AskVaenyxPanel({
                         ))}
                       </ul>
                     </details>
+                  ) : null}
+                  {focusedTask.completedAt ? (
+                    <span className="task-next">
+                      Last run {formatTime(focusedTask.completedAt)}
+                    </span>
                   ) : null}
                   {focusedTask.scheduleEnabled && focusedTask.nextRunAt ? (
                     <span className="task-next">
