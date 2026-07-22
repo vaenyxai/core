@@ -216,6 +216,9 @@ export const AskVaenyxConversationSchema = Type.Object(
     reasoningEffort: ReasoningEffortSchema,
     // NULL = use the Owner's default provider; a string pins a provider by id.
     modelProviderId: Type.Union([Type.String(), Type.Null()]),
+    // NULL = the provider's configured model; a string picks a specific model
+    // of that provider for this conversation ("model within the model").
+    modelName: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -230,6 +233,13 @@ export const SetReasoningEffortRequestSchema = Type.Object(
 export const SetChatProviderRequestSchema = Type.Object(
   {
     providerId: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const SetChatModelRequestSchema = Type.Object(
+  {
+    model: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -1473,6 +1483,7 @@ export type SetReasoningEffortRequest = Static<
 export type SetChatProviderRequest = Static<
   typeof SetChatProviderRequestSchema
 >;
+export type SetChatModelRequest = Static<typeof SetChatModelRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;
 export type AgentProfile = Static<typeof AgentProfileSchema>;

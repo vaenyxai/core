@@ -136,6 +136,7 @@ describe("M1 contracts", () => {
         updatedAt: "2026-06-08T00:00:01.000Z",
         reasoningEffort: "medium",
         modelProviderId: null,
+        modelName: null,
       }),
     ).toBe(true);
     expect(

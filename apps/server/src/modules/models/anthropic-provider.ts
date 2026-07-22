@@ -49,7 +49,7 @@ export class AnthropicProvider implements ModelProvider {
     options?: ModelChatOptions,
   ): Promise<ModelChatResult> {
     const body: Record<string, unknown> = {
-      model: this.#model,
+      model: options?.model?.trim() || this.#model,
       max_tokens: this.#maxTokens,
       messages: messages.map((message) => ({
         role: message.role === "owner" ? "user" : "assistant",

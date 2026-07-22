@@ -78,6 +78,28 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     needsBaseUrl: false,
   },
   {
+    id: "zhipu",
+    name: "Zhipu BigModel",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: false,
+  },
+  {
+    id: "mistral",
+    name: "Mistral",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: false,
+  },
+  // Workers AI: key-based cloud, but its endpoint embeds the account id.
+  {
+    id: "workersai",
+    name: "Workers AI (Cloudflare)",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: true,
+  },
+  {
     id: "local",
     name: "Local model",
     kind: "openai-compatible",

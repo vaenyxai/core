@@ -95,6 +95,7 @@ import {
   setDefaultModelProvider,
   setReasoningEffort,
   setChatProvider,
+  setChatModel,
   planRoutine,
   fetchMemories,
   fetchSettings,
@@ -3936,11 +3937,14 @@ function AskVaenyxPanel({
                   onConversationsChange(
                     conversations.map((conversation) =>
                       conversation.id === activeConversationId
-                        ? { ...conversation, modelProviderId: next }
+                        ? // A provider switch also clears the pinned model —
+                          // model ids don't transfer between providers.
+                          { ...conversation, modelProviderId: next, modelName: null }
                         : conversation,
                     ),
                   );
                   void setChatProvider(activeConversationId, next);
+                  void setChatModel(activeConversationId, null);
                 }}
                 title={t("legal.notice.modelPicker")}
                 value={activeConversation?.modelProviderId ?? ""}
@@ -3958,8 +3962,64 @@ function AskVaenyxPanel({
                 ))}
               </select>
             ) : (
-              <span className="composer-model">ChatGPT</span>
+              <span className="composer-model">
+                {chatProviders[0]?.name ?? "ChatGPT"}
+              </span>
             )}
+            {(() => {
+              // "Model within the provider": a second picker with a curated
+              // shortlist for the conversation's effective (pinned or default)
+              // provider. Codex has no picker — it is a single-login backend.
+              const effective =
+                chatProviders.find(
+                  (provider) =>
+                    provider.id === activeConversation?.modelProviderId,
+                ) ??
+                chatProviders.find((provider) => provider.isDefault) ??
+                null;
+              const choices = effective
+                ? MODEL_CHOICES[effective.id] ?? []
+                : [];
+              if (!effective || effective.kind === "cli-login" || choices.length === 0) {
+                return null;
+              }
+              return (
+                <>
+                  <span aria-hidden="true" className="composer-sep">
+                    ·
+                  </span>
+                  <select
+                    aria-label="Model version"
+                    className="composer-level-select"
+                    disabled={!activeConversationId}
+                    onChange={(event) => {
+                      const next = event.target.value || null;
+                      if (!activeConversationId) return;
+                      onConversationsChange(
+                        conversations.map((conversation) =>
+                          conversation.id === activeConversationId
+                            ? { ...conversation, modelName: next }
+                            : conversation,
+                        ),
+                      );
+                      void setChatModel(activeConversationId, next);
+                    }}
+                    value={activeConversation?.modelName ?? ""}
+                  >
+                    <option value="">
+                      Default ({effective.model ?? "provider default"})
+                    </option>
+                    {choices
+                      .filter((choice) => choice !== effective.model)
+                      .map((choice) => (
+                        <option key={choice} value={choice}>
+                          {choice}
+                        </option>
+                      ))}
+                  </select>
+                </>
+              );
+            })()}
             <span aria-hidden="true" className="composer-sep">
               ·
             </span>
@@ -4955,7 +5015,11 @@ function ModelsPanel() {
         {provider.needsBaseUrl ? (
           <input
             className="method-rename-input"
-            placeholder="Base URL (e.g. http://127.0.0.1:11434/v1)"
+            placeholder={
+              provider.id === "workersai"
+                ? "https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1"
+                : "Base URL (e.g. http://127.0.0.1:11434/v1)"
+            }
             value={draftFor(provider.id).baseUrl}
             onChange={(event) =>
               patchDraft(provider.id, { baseUrl: event.target.value })
@@ -4975,7 +5039,7 @@ function ModelsPanel() {
           }
         />
         <p className="context-disclaimer">
-          {provider.needsBaseUrl
+          {provider.kind === "openai-compatible"
             ? t(localBackendNoticeKey(draftFor(provider.id).baseUrl))
             : t("legal.notice.modelConnect.cloud")}
         </p>
@@ -7952,6 +8016,21 @@ const CONNECTABLE_MODELS: Array<{
     label: "OpenRouter",
     keyUrl: "https://openrouter.ai/settings/keys",
   },
+  {
+    id: "zhipu",
+    label: "Zhipu BigModel",
+    keyUrl: "https://open.bigmodel.cn/usercenter/apikeys",
+  },
+  {
+    id: "mistral",
+    label: "Mistral",
+    keyUrl: "https://console.mistral.ai/api-keys",
+  },
+  {
+    id: "workersai",
+    label: "Workers AI",
+    keyUrl: "https://dash.cloudflare.com/profile/api-tokens",
+  },
   { id: "local", label: "Local", keyUrl: null },
 ];
 
@@ -7964,6 +8043,39 @@ const MODEL_FREE_TIER_NOTES: Record<string, string> = {
   cerebras: "Free tier: ~1M tokens/day, fastest responses. No card needed.",
   openrouter:
     "Free tier: one key unlocks 30+ free community models (rate-limited). Pick a model id ending in :free.",
+  zhipu:
+    "GLM Flash models are free (rate allocated per account). Strong Chinese; image/PDF understanding.",
+  mistral:
+    "Free tier requires OPTING IN to your data being used for training — read the terms before connecting. The paid tier keeps data private.",
+  workersai:
+    "Free: 10,000 Neurons/day. Base URL needs your account id: https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1",
+};
+
+// Per-provider model shortlists for the in-chat picker (curated 2026-07-22;
+// the provider's own configured model always remains the Default option, and
+// Settings → Models → Edit accepts any model id these lists miss).
+const MODEL_CHOICES: Record<string, string[]> = {
+  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o4-mini"],
+  anthropic: ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"],
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+  grok: ["grok-4", "grok-3-mini"],
+  groq: [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-120b",
+  ],
+  cerebras: ["llama-3.3-70b", "llama3.1-8b", "qwen-3-32b"],
+  openrouter: [
+    "deepseek/deepseek-chat-v3-0324:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen3-235b-a22b:free",
+  ],
+  zhipu: ["glm-4.7-flash", "glm-4.6v-flash", "glm-4-flash"],
+  mistral: ["mistral-small-latest", "mistral-medium-latest"],
+  workersai: [
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "@cf/qwen/qwen2.5-coder-32b-instruct",
+  ],
 };
 
 function routineDomain(

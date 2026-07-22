@@ -16,6 +16,8 @@ import {
   type SetReasoningEffortRequest,
   SetChatProviderRequestSchema,
   type SetChatProviderRequest,
+  SetChatModelRequestSchema,
+  type SetChatModelRequest,
   AskVaenyxMessageSchema,
   CreateAppProfileRequestSchema,
   CreateAppProfileResponseSchema,
@@ -246,6 +248,7 @@ import {
   listAskVaenyxMessages,
   setAskVaenyxReasoningEffort,
   setAskVaenyxChatProvider,
+  setAskVaenyxChatModel,
   type CreateAskVaenyxMessageOptions,
 } from "../core/ask-vaenyx.js";
 import {
@@ -2014,6 +2017,51 @@ export async function registerGatewayRoutes(
           request.params.id,
           owner.id,
           request.body.providerId,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
+        ) {
+          return reply.code(404).send({
+            error: "Vaenyx Chat conversation not found.",
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.put<{
+    Body: SetChatModelRequest;
+    Params: { id: string };
+  }>(
+    "/v1/ask-vaenyx/conversations/:id/model",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: SetChatModelRequestSchema,
+        response: {
+          200: AskVaenyxConversationSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return setAskVaenyxChatModel(
+          context.database,
+          request.params.id,
+          owner.id,
+          request.body.model,
         );
       } catch (error) {
         if (

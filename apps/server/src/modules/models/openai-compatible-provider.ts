@@ -64,7 +64,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
         "content-type": "application/json",
         ...(this.#apiKey ? { authorization: `Bearer ${this.#apiKey}` } : {}),
       },
-      body: JSON.stringify({ model: this.#model, messages: chatMessages }),
+      body: JSON.stringify({
+        model: options?.model?.trim() || this.#model,
+        messages: chatMessages,
+      }),
       signal: options?.signal,
     });
 

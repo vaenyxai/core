@@ -52,6 +52,18 @@ export const OPENAI_COMPATIBLE_PRESETS = [
     baseUrl: "https://openrouter.ai/api/v1",
     model: "deepseek/deepseek-chat-v3-0324:free",
   },
+  {
+    id: "zhipu",
+    name: "Zhipu BigModel",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4.7-flash",
+  },
+  {
+    id: "mistral",
+    name: "Mistral",
+    baseUrl: "https://api.mistral.ai/v1",
+    model: "mistral-small-latest",
+  },
 ] as const;
 
 class ModelRegistry {
@@ -115,6 +127,21 @@ export function initModelRegistry(config: {
         baseUrl: connection.baseUrl ?? preset.baseUrl,
         apiKey: connection.apiKey,
         model: connection.model ?? preset.model,
+        requiresKey: true,
+      }),
+    );
+  }
+  // Cloudflare Workers AI is OpenAI-compatible but its endpoint embeds the
+  // Owner's own account id, so the base URL comes from the connection.
+  const workersai = connections.workersai;
+  if (workersai?.apiKey && workersai.baseUrl) {
+    next.register(
+      new OpenAICompatibleProvider({
+        id: "workersai",
+        name: "Workers AI",
+        baseUrl: workersai.baseUrl,
+        apiKey: workersai.apiKey,
+        model: workersai.model ?? "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
         requiresKey: true,
       }),
     );

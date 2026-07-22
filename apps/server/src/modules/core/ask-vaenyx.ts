@@ -26,6 +26,7 @@ interface AskVaenyxConversationRow {
   updated_at: string;
   reasoning_effort: string | null;
   model_provider_id: string | null;
+  model_name: string | null;
 }
 
 interface AskVaenyxMessageRow {
@@ -67,6 +68,7 @@ function toConversation(row: AskVaenyxConversationRow): AskVaenyxConversation {
     reasoningEffort:
       (row.reasoning_effort as "low" | "medium" | "high" | null) ?? "medium",
     modelProviderId: row.model_provider_id ?? null,
+    modelName: row.model_name ?? null,
   };
 }
 
@@ -119,6 +121,7 @@ function getConversationRow(
               ask_vaenyx_conversations.created_at, ask_vaenyx_conversations.updated_at,
               ask_vaenyx_conversations.reasoning_effort,
               ask_vaenyx_conversations.model_provider_id,
+              ask_vaenyx_conversations.model_name,
               COUNT(ask_vaenyx_messages.id) AS message_count
        FROM ask_vaenyx_conversations
        LEFT JOIN ask_vaenyx_messages
@@ -263,6 +266,7 @@ export function listAskVaenyxConversations(
               ask_vaenyx_conversations.created_at, ask_vaenyx_conversations.updated_at,
               ask_vaenyx_conversations.reasoning_effort,
               ask_vaenyx_conversations.model_provider_id,
+              ask_vaenyx_conversations.model_name,
               COUNT(ask_vaenyx_messages.id) AS message_count
        FROM ask_vaenyx_conversations
        LEFT JOIN ask_vaenyx_messages
@@ -330,6 +334,7 @@ export function createAskVaenyxConversation(
     updatedAt: now,
     reasoningEffort: "medium",
     modelProviderId: null,
+    modelName: null,
   };
 }
 
@@ -367,6 +372,27 @@ export function setAskVaenyxChatProvider(
        WHERE id = ? AND owner_id = ?`,
     )
     .run(providerId, conversationId, ownerId);
+
+  if (result.changes === 0) {
+    throw new Error("ASK_VAENYX_CONVERSATION_NOT_FOUND");
+  }
+
+  return toConversation(getConversationRow(database, conversationId, ownerId));
+}
+
+export function setAskVaenyxChatModel(
+  database: DatabaseHandle,
+  conversationId: string,
+  ownerId: string,
+  model: string | null,
+): AskVaenyxConversation {
+  const result = database.sqlite
+    .prepare(
+      `UPDATE ask_vaenyx_conversations
+       SET model_name = ?
+       WHERE id = ? AND owner_id = ?`,
+    )
+    .run(model, conversationId, ownerId);
 
   if (result.changes === 0) {
     throw new Error("ASK_VAENYX_CONVERSATION_NOT_FOUND");
@@ -555,10 +581,14 @@ export async function createAskVaenyxMessage(
   try {
     const settingsRow = database.sqlite
       .prepare(
-        `SELECT reasoning_effort, model_provider_id FROM ask_vaenyx_conversations WHERE id = ?`,
+        `SELECT reasoning_effort, model_provider_id, model_name FROM ask_vaenyx_conversations WHERE id = ?`,
       )
       .get(conversationId) as
-      | { reasoning_effort: string | null; model_provider_id: string | null }
+      | {
+          reasoning_effort: string | null;
+          model_provider_id: string | null;
+          model_name: string | null;
+        }
       | undefined;
     const result = await resolveProvider(
       settingsRow?.model_provider_id,
@@ -571,6 +601,7 @@ export async function createAskVaenyxMessage(
         : undefined,
       signal: options?.signal,
       reasoningEffort: settingsRow?.reasoning_effort ?? "medium",
+      ...(settingsRow?.model_name ? { model: settingsRow.model_name } : {}),
     });
     assistantContent = result.answer;
     assistantStatus = "completed";

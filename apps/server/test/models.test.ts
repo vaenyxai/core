@@ -204,8 +204,11 @@ describe("provider-settings", () => {
       "grok",
       "groq",
       "local",
+      "mistral",
       "openai",
       "openrouter",
+      "workersai",
+      "zhipu",
     ]);
     expect(list.find((provider) => provider.id === "codex")?.connected).toBe(
       true,

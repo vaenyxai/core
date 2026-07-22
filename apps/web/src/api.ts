@@ -272,6 +272,16 @@ export function setChatProvider(
   );
 }
 
+export function setChatModel(
+  conversationId: string,
+  model: string | null,
+): Promise<AskVaenyxConversation> {
+  return requestJson<AskVaenyxConversation>(
+    `/v1/ask-vaenyx/conversations/${conversationId}/model`,
+    { method: "PUT", body: JSON.stringify({ model }) },
+  );
+}
+
 export async function deleteAskVaenyxConversation(
   conversationId: string,
 ): Promise<void> {

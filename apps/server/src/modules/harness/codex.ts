@@ -1165,6 +1165,9 @@ export interface RunAskVaenyxOptions {
   onDelta?: (text: string) => void;
   signal?: AbortSignal;
   reasoningEffort?: string;
+  // Per-conversation model override ("model within the provider"). Key-based
+  // providers use it in place of their configured model; Codex ignores it.
+  model?: string;
 }
 
 export async function runAskVaenyxChat(
