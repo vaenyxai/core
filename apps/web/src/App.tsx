@@ -390,6 +390,58 @@ function chatLightLabel(light: ChatLight): string {
   }
 }
 
+// Status chips pinned on a chat (spec §2a): a thread can carry several states at
+// once (a Routine chat that is also Scheduled), so these render as a row, not a
+// single light. Always derived from real state — never set decoratively.
+type ThreadChip = {
+  key: string;
+  label: string;
+  tone: "routine" | "scheduled" | "working" | "done" | "failed" | "building";
+  title?: string;
+};
+
+function threadStatusChips(thread: VaenyxThread, tasks: Task[]): ThreadChip[] {
+  const chips: ThreadChip[] = [];
+  if (thread.routineId) {
+    chips.push({ key: "routine", label: "Routine", tone: "routine" });
+  }
+  const task = thread.taskId
+    ? tasks.find((candidate) => candidate.id === thread.taskId)
+    : undefined;
+  if (task?.scheduleEnabled && task.scheduleCadence) {
+    chips.push({
+      key: "scheduled",
+      label: "Scheduled",
+      tone: "scheduled",
+      title: describeSchedule(task),
+    });
+  }
+  return chips;
+}
+
+function ThreadChipRow({
+  chips,
+  className,
+}: {
+  chips: ThreadChip[];
+  className?: string;
+}) {
+  if (chips.length === 0) return null;
+  return (
+    <span className={className ?? "thread-chips"}>
+      {chips.map((chip) => (
+        <span
+          className={`thread-chip thread-chip--${chip.tone}`}
+          key={chip.key}
+          title={chip.title}
+        >
+          {chip.label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function SidebarDetails({
   children,
   className,
@@ -3376,6 +3428,19 @@ function AskVaenyxPanel({
           (routine) => routine.id === activeThread.routineId,
         ) ?? null
       : null;
+    // Header chips (spec §2a): same real-state chips as the sidebar, but the
+    // Routine chip shows the Routine's actual name, and an in-flight build adds
+    // a Building chip alongside the in-conversation banner.
+    const chatChips: ThreadChip[] = activeThread
+      ? threadStatusChips(activeThread, workspace.tasks).map((chip) =>
+          chip.tone === "routine" && activeRoutine
+            ? { ...chip, label: activeRoutine.name }
+            : chip,
+        )
+      : [];
+    if (building && building.conversationId === activeConversationId) {
+      chatChips.push({ key: "building", label: "Building…", tone: "building" });
+    }
     const chatDomain = activeRoutine ? routineDomain(activeRoutine.tags) : null;
     const domainDisclaimer =
       chatDomain === "health"
@@ -3430,6 +3495,7 @@ function AskVaenyxPanel({
               {renderThreadHeaderMenu(activeThread)}
             </div>
           </div>
+          <ThreadChipRow chips={chatChips} className="chat-chips" />
           {isRoutine ? (
             <div className="capability-bar">
               {(["chat", "journal", "gallery"] as const).map((tab) => (
@@ -3923,6 +3989,29 @@ function AskVaenyxPanel({
             },
           ];
 
+    // Task-view chips (spec §2a): run state + Scheduled, read from the Task
+    // itself. The sidebar light collapses waiting/running into one "working"
+    // hue; here the label distinguishes them.
+    const taskChips: ThreadChip[] = [
+      focusedTask.status === "completed"
+        ? { key: "state", label: "Done", tone: "done" as const }
+        : focusedTask.status === "failed"
+          ? { key: "state", label: "Failed", tone: "failed" as const }
+          : {
+              key: "state",
+              label: focusedTask.status === "running" ? "Working" : "Waiting",
+              tone: "working" as const,
+            },
+    ];
+    if (focusedTask.scheduleEnabled && focusedTask.scheduleCadence) {
+      taskChips.push({
+        key: "scheduled",
+        label: "Scheduled",
+        tone: "scheduled",
+        title: describeSchedule(focusedTask),
+      });
+    }
+
     return (
       <div className="focused-workspace">
         <section className="ask-vaenyx-chat focused-task-panel">
@@ -3932,6 +4021,7 @@ function AskVaenyxPanel({
                 <h2>{focusedTask.title}</h2>
                 {renderThreadHeaderMenu(focusedTaskThread)}
               </div>
+              <ThreadChipRow chips={taskChips} className="chat-chips" />
               {focusedTask.harness === "codex-harness" ? (
                 <div className="task-toolbar">
                   <select
@@ -9554,6 +9644,7 @@ function ThreadList({
                 className={`status-light status-light--${light}`}
               />
               <strong>{thread.title.trim() || "New chat"}</strong>
+              <ThreadChipRow chips={threadStatusChips(thread, tasks)} />
               {thread.status === "pinned" ? (
                 <span aria-label="Pinned" className="thread-pin">
                   ★

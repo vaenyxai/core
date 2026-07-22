@@ -816,6 +816,80 @@ textarea::placeholder {
   }
 }
 
+/* Status chips (spec §2a): one chat can carry several states at once
+   (Routine + Scheduled + Building), so they render as a row of small pills —
+   sidebar tiny, chat/task header slightly larger. Hues are fixed across themes,
+   matching the status lights and Library chips. */
+.thread-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.thread-chip {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  color: var(--text-muted);
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.chat-chips .thread-chip {
+  padding: 3px 9px;
+  font-size: var(--fs-label);
+}
+
+/* The header Routine chip shows the Routine's real name — keep its casing and
+   clamp runaway lengths. */
+.chat-chips .thread-chip--routine {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 600;
+}
+
+.thread-chip--routine {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.thread-chip--scheduled {
+  background: rgba(93, 160, 235, 0.16);
+  color: #8fc0f0;
+}
+
+.thread-chip--working,
+.thread-chip--building {
+  background: rgba(217, 164, 65, 0.15);
+  color: #dcb877;
+}
+
+.thread-chip--done {
+  background: rgba(106, 166, 127, 0.16);
+  color: #8cc4a2;
+}
+
+.thread-chip--failed {
+  background: rgba(207, 128, 121, 0.16);
+  color: #dfa49e;
+}
+
 .compose-work-toggle {
   display: flex;
   align-items: center;
@@ -846,7 +920,7 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
-.sidebar nav .thread-item span {
+.sidebar nav .thread-item span:not(.thread-chip):not(.thread-chips) {
   color: var(--text-faint);
   font-size: var(--fs-eyebrow);
   font-weight: 600;
