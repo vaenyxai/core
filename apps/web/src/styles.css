@@ -1573,12 +1573,12 @@ select {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 5px;
 }
 
 .task-select {
   width: auto;
-  min-height: 30px;
+  min-height: 28px;
   padding: 0 8px;
   border: 0.5px solid var(--border);
   border-radius: var(--r-sm);
@@ -1589,7 +1589,7 @@ select {
 }
 
 .task-toolbar-action {
-  min-height: 30px;
+  min-height: 28px;
   padding: 0 12px;
   border: 0.5px solid var(--border);
   border-radius: var(--r-sm);
@@ -1684,9 +1684,11 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 54px;
+  /* Kept deliberately shallow — every pixel here is stolen from the messages
+     below (Oskar, dev.122). */
+  min-height: 44px;
   /* Right floor leaves room for the fixed Hard Refresh button in the corner. */
-  padding: 8px max(56px, calc((100% - 820px) / 2)) 10px;
+  padding: 5px max(56px, calc((100% - 820px) / 2)) 7px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.055);
   background: rgba(38, 38, 36, 0.85);
   backdrop-filter: blur(18px);
@@ -4955,12 +4957,12 @@ select {
      the task toolbar and must stay content-sized so the row keeps to one line. */
   width: auto;
   height: auto;
-  min-height: 30px;
+  min-height: 28px;
   background: var(--bg-raised);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 4px 8px;
+  padding: 3px 8px;
   font-size: 13px;
 }
 .schedule-monthday {
