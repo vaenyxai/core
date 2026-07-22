@@ -1616,6 +1616,7 @@ select {
 }
 
 .task-runs {
+  position: relative;
   font-size: 12px;
 }
 
@@ -1625,12 +1626,26 @@ select {
   font-weight: 600;
 }
 
-.task-runs ul {
+/* History opens as a floating panel: each run is expandable to its full result,
+   which can be long — expanding in-flow would balloon the sticky header over
+   the content below. */
+.task-runs > ul {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 8;
   display: grid;
   gap: 4px;
-  margin: 6px 0 0;
-  padding: 0;
+  width: min(560px, 82vw);
+  max-height: 60vh;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
   list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
 }
 
 .task-run {
@@ -1638,6 +1653,26 @@ select {
   align-items: center;
   gap: 8px;
   color: #b7b4aa;
+}
+
+.task-run > .task-run-detail {
+  width: 100%;
+}
+
+.task-run-detail > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b7b4aa;
+  font-weight: 500;
+}
+
+.task-run-result {
+  margin-top: 6px;
+  padding: 8px 4px 4px 18px;
+  border-top: 0.5px solid var(--border);
+  color: var(--text);
+  font-size: var(--fs-base);
 }
 
 .task-run-trigger {

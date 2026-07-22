@@ -4199,23 +4199,52 @@ function AskVaenyxPanel({
                       <ul>
                         {taskRuns.map((run) => (
                           <li className="task-run" key={run.id}>
-                            <span
-                              className={`status-light status-light--${
-                                run.status === "completed"
-                                  ? "done"
-                                  : run.status === "failed"
-                                    ? "failed"
-                                    : "working"
-                              }`}
-                            />
-                            <span className="task-run-when">
-                              {formatTime(run.finishedAt ?? run.startedAt)}
-                            </span>
-                            <span className="task-run-trigger">
-                              {run.trigger === "schedule"
-                                ? "Scheduled"
-                                : "Manual"}
-                            </span>
+                            {run.result.trim() ? (
+                              <details className="task-run-detail">
+                                <summary>
+                                  <span
+                                    className={`status-light status-light--${
+                                      run.status === "completed"
+                                        ? "done"
+                                        : run.status === "failed"
+                                          ? "failed"
+                                          : "working"
+                                    }`}
+                                  />
+                                  <span className="task-run-when">
+                                    {formatTime(run.finishedAt ?? run.startedAt)}
+                                  </span>
+                                  <span className="task-run-trigger">
+                                    {run.trigger === "schedule"
+                                      ? "Scheduled"
+                                      : "Manual"}
+                                  </span>
+                                </summary>
+                                <div className="task-run-result">
+                                  <MarkdownMessage content={run.result} />
+                                </div>
+                              </details>
+                            ) : (
+                              <>
+                                <span
+                                  className={`status-light status-light--${
+                                    run.status === "completed"
+                                      ? "done"
+                                      : run.status === "failed"
+                                        ? "failed"
+                                        : "working"
+                                  }`}
+                                />
+                                <span className="task-run-when">
+                                  {formatTime(run.finishedAt ?? run.startedAt)}
+                                </span>
+                                <span className="task-run-trigger">
+                                  {run.trigger === "schedule"
+                                    ? "Scheduled"
+                                    : "Manual"}
+                                </span>
+                              </>
+                            )}
                           </li>
                         ))}
                       </ul>

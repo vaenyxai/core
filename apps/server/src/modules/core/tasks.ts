@@ -609,7 +609,9 @@ export function createResearchTask(
     updatedAt: now,
   });
 
-  const context = buildResearchContext(memories);
+  const context = [buildResearchContext(memories), RUN_RESULT_INSTRUCTION]
+    .filter(Boolean)
+    .join("\n\n");
   void executeTaskRun(database, id, "manual", (signal) =>
     getDefaultProvider().sendChat([{ content: request, role: "owner" }], context, {
       signal,
@@ -669,6 +671,50 @@ const TASK_ERROR_COPY: Record<string, string> = {
     "Forge attempted to inspect outside the Vaenyx repository, so Vaenyx stopped the task.",
 };
 
+// Every run's result also lands in the task's conversation as a new assistant
+// message (Owner decision 2026-07-22): the task page reads like received
+// deliveries — newest at the bottom — while History keeps the per-run copies.
+// Only an already-seeded conversation is appended to; an unopened task seeds
+// lazily with the latest result anyway, so nothing is shown twice.
+function appendRunResultToConversation(
+  database: DatabaseHandle,
+  taskId: string,
+  result: string,
+  status: "completed" | "failed",
+  finishedAt: string,
+): void {
+  if (!result.trim()) return;
+  try {
+    const row = database.sqlite
+      .prepare(
+        `SELECT conversation_id FROM vaenyx_threads
+         WHERE task_id = ? AND kind = 'task' AND conversation_id IS NOT NULL`,
+      )
+      .get(taskId) as { conversation_id: string } | undefined;
+    if (!row) return;
+    database.sqlite
+      .prepare(
+        `INSERT INTO ask_vaenyx_messages (
+          id, conversation_id, role, content, status, web_search_used, created_at
+        ) VALUES (?, ?, 'assistant', ?, ?, 0, ?)`,
+      )
+      .run(randomUUID(), row.conversation_id, result, status, finishedAt);
+    database.sqlite
+      .prepare(
+        `UPDATE ask_vaenyx_conversations SET updated_at = ? WHERE id = ?`,
+      )
+      .run(finishedAt, row.conversation_id);
+    database.sqlite
+      .prepare(
+        `UPDATE vaenyx_threads SET updated_at = ?
+         WHERE task_id = ? AND kind = 'task'`,
+      )
+      .run(finishedAt, taskId);
+  } catch {
+    // Best-effort: a missed append never fails the run itself.
+  }
+}
+
 // Detached Forge run. Writes the final result/status when done. Errors become a
 // "failed" task instead of a stuck "running" one. A DB-closed error (server
 // stopping) is swallowed; reconcileInterruptedTasks() cleans up on next start.
@@ -721,6 +767,7 @@ async function executeTaskRun(
         `UPDATE tasks SET result = ?, status = ?, completed_at = ? WHERE id = ?`,
       )
       .run(result, status, finishedAt, id);
+    appendRunResultToConversation(database, id, result, status, finishedAt);
   } catch {
     // Server shutting down (database closed); reconcile handles it next start.
   }
@@ -902,6 +949,44 @@ function buildResearchContext(
     .join("\n\n");
 }
 
+// A run must hand back the finished, ready-to-read deliverable — without this
+// the model tends to return a thin recap (~300 chars) instead of the thing the
+// Owner actually wants to read.
+const RUN_RESULT_INSTRUCTION =
+  "This is a background run of a saved task. Produce the complete, ready-to-read result now — organized for reading, with source links where relevant — not a plan, and not a recap of what you would do.";
+
+// Any format, scope or preference the Owner tuned in the task's conversation
+// carries into every later run — chatting with the task IS how it is tuned.
+function buildTaskConversationContext(
+  database: DatabaseHandle,
+  taskId: string,
+): string | undefined {
+  const row = database.sqlite
+    .prepare(
+      `SELECT conversation_id FROM vaenyx_threads
+       WHERE task_id = ? AND kind = 'task' AND conversation_id IS NOT NULL`,
+    )
+    .get(taskId) as { conversation_id: string } | undefined;
+  if (!row) return undefined;
+  const messages = database.sqlite
+    .prepare(
+      `SELECT role, content FROM ask_vaenyx_messages
+       WHERE conversation_id = ? AND status != 'failed'
+       ORDER BY created_at DESC
+       LIMIT 10`,
+    )
+    .all(row.conversation_id) as { role: string; content: string }[];
+  if (messages.length === 0) return undefined;
+  const transcript = messages
+    .reverse()
+    .map(
+      (message) =>
+        `${message.role === "owner" ? "Owner" : "Vaenyx"}: ${message.content.slice(0, 1500)}`,
+    )
+    .join("\n");
+  return `The Owner and Vaenyx have discussed this task before. Honor any format, scope or preference agreed in that discussion:\n${transcript}`;
+}
+
 // Re-run a codex-harness task by id: Forge (read-only repo) or Vaenyx research
 // (web-search chat). Rebuilds inputs from the stored request, marks it running,
 // and executes in the background. Shared by the scheduler and manual retry.
@@ -941,7 +1026,13 @@ function runTaskById(
     });
     run = (signal) => runForgeReadOnly(prompt, signal);
   } else {
-    const context = buildResearchContext(memories);
+    const context = [
+      buildResearchContext(memories),
+      buildTaskConversationContext(database, task.id),
+      RUN_RESULT_INSTRUCTION,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     run = (signal) =>
       getDefaultProvider().sendChat([{ content: task.request, role: "owner" }], context, {
         signal,
