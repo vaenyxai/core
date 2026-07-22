@@ -4794,8 +4794,12 @@ function ModelsPanel() {
   >({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // A sign-in-page model button parked a connect intent: highlight that
-  // provider's card once, then clear the intent so later visits open normally.
+  // Compact layout (Oskar, dev.127): connected backends are small cards; the
+  // rest live behind one "Add a Model" dropdown whose pick expands its form.
+  const [addTargetId, setAddTargetId] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // A sign-in-page model button parked a connect intent: open that provider's
+  // add form once, then clear the intent so later visits open normally.
   const [connectTarget] = useState<string | null>(() =>
     localStorage.getItem(CONNECT_MODEL_INTENT),
   );
@@ -4804,10 +4808,14 @@ function ModelsPanel() {
   }, []);
   useEffect(() => {
     if (!connectTarget || providers.length === 0) return;
+    const target = providers.find(
+      (provider) => provider.id === connectTarget && !provider.connected,
+    );
+    if (target) setAddTargetId(target.id);
     document
       .getElementById(`model-card-${connectTarget}`)
       ?.scrollIntoView({ block: "center" });
-  }, [connectTarget, providers.length]);
+  }, [connectTarget, providers]);
 
   function reload() {
     fetchModelProviders()
@@ -4843,6 +4851,8 @@ function ModelsPanel() {
       });
       setProviders(result.providers);
       patchDraft(provider.id, { apiKey: "" });
+      setAddTargetId("");
+      setEditingId(null);
     } catch {
       setError(`Could not connect ${provider.name}.`);
     } finally {
@@ -4913,6 +4923,93 @@ function ModelsPanel() {
     }
   }
 
+  function renderConnectForm(provider: ModelProviderInfo) {
+    const keyUrl = CONNECTABLE_MODELS.find(
+      (model) => model.id === provider.id,
+    )?.keyUrl;
+    const freeNote = MODEL_FREE_TIER_NOTES[provider.id];
+    return (
+      <div className="model-connect-form">
+        {freeNote ? <p className="library-note">{freeNote}</p> : null}
+        {keyUrl ? (
+          <a
+            className="model-key-link"
+            href={keyUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Get an API key ↗
+          </a>
+        ) : null}
+        {provider.needsKey ? (
+          <input
+            className="method-rename-input"
+            type="password"
+            placeholder="API key"
+            value={draftFor(provider.id).apiKey}
+            onChange={(event) =>
+              patchDraft(provider.id, { apiKey: event.target.value })
+            }
+          />
+        ) : null}
+        {provider.needsBaseUrl ? (
+          <input
+            className="method-rename-input"
+            placeholder="Base URL (e.g. http://127.0.0.1:11434/v1)"
+            value={draftFor(provider.id).baseUrl}
+            onChange={(event) =>
+              patchDraft(provider.id, { baseUrl: event.target.value })
+            }
+          />
+        ) : null}
+        <input
+          className="method-rename-input"
+          placeholder={
+            provider.model
+              ? `Model (optional, current: ${provider.model})`
+              : "Model (optional)"
+          }
+          value={draftFor(provider.id).model}
+          onChange={(event) =>
+            patchDraft(provider.id, { model: event.target.value })
+          }
+        />
+        <p className="context-disclaimer">
+          {provider.needsBaseUrl
+            ? t(localBackendNoticeKey(draftFor(provider.id).baseUrl))
+            : t("legal.notice.modelConnect.cloud")}
+        </p>
+        <div className="model-card-actions">
+          <button
+            className="primary-button"
+            disabled={busy === provider.id}
+            onClick={() => void connect(provider)}
+            type="button"
+          >
+            {provider.connected ? "Update" : "Connect"}
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setAddTargetId("");
+              setEditingId(null);
+            }}
+            type="button"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const connectedProviders = providers.filter((provider) => provider.connected);
+  const availableProviders = providers.filter(
+    (provider) => !provider.connected,
+  );
+  const addTarget =
+    availableProviders.find((provider) => provider.id === addTargetId) ?? null;
+
   return (
     <section className="settings-card">
       <p className="eyebrow">Models</p>
@@ -4922,66 +5019,42 @@ function ModelsPanel() {
         tab).
       </p>
       {error ? <p className="form-error">{error}</p> : null}
-      <div className="library-list">
-        {providers.map((provider) => (
+      <div className="model-cards">
+        {connectedProviders.map((provider) => (
           <div
             className={
               connectTarget === provider.id
-                ? "settings-card connect-target"
-                : "settings-card"
+                ? "model-card connect-target"
+                : "model-card"
             }
             id={`model-card-${provider.id}`}
             key={provider.id}
           >
-            <div className="library-card-head">
+            <div className="model-card-head">
               <strong>{provider.name}</strong>
-              <span className="library-chip">
-                {provider.connected
-                  ? provider.healthy
-                    ? "Connected"
-                    : "Needs attention"
-                  : "Not connected"}
+              <span
+                className={
+                  provider.healthy
+                    ? "library-chip chip-published"
+                    : "library-chip"
+                }
+              >
+                {provider.healthy ? "Connected" : "Needs Attention"}
               </span>
               {provider.isDefault ? (
-                <span className="library-chip">Default</span>
-              ) : provider.connected ? (
-                <button
-                  className="secondary-button"
-                  disabled={busy === provider.id}
-                  onClick={() => void makeDefault(provider)}
-                  type="button"
-                >
-                  Set as default
-                </button>
+                <span className="library-chip chip-installed">Default</span>
               ) : null}
             </div>
-            <small>{provider.detail}</small>
-            {(() => {
-              const keyUrl = CONNECTABLE_MODELS.find(
-                (model) => model.id === provider.id,
-              )?.keyUrl;
-              return keyUrl ? (
-                <a
-                  className="model-key-link"
-                  href={keyUrl}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  Get an API key ↗
-                </a>
-              ) : null;
-            })()}
+            {provider.model ? (
+              <small className="model-card-model">{provider.model}</small>
+            ) : null}
+            {!provider.healthy ? (
+              <small className="model-card-model">{provider.detail}</small>
+            ) : null}
             {provider.kind === "cli-login" ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.5rem",
-                  marginTop: "0.5rem",
-                }}
-              >
+              <>
                 {!provider.healthy ? (
-                  <div>
+                  <div className="model-card-actions">
                     <button
                       className="primary-button"
                       disabled={codexWaiting}
@@ -5004,86 +5077,89 @@ function ModelsPanel() {
                     No window? Open the sign-in page ↗
                   </a>
                 ) : null}
-                <p className="library-note">
-                  {codexWaiting
-                    ? "Finish the ChatGPT login in the browser window that just opened — this card updates by itself."
-                    : "Opens the official ChatGPT login in a browser on the computer Vaenyx runs on. Vaenyx never sees your password or tokens. Also manageable in the Connection tab."}
-                </p>
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.5rem",
-                  marginTop: "0.5rem",
-                }}
-              >
-                {provider.needsKey ? (
-                  <input
-                    className="method-rename-input"
-                    type="password"
-                    placeholder="API key"
-                    value={draftFor(provider.id).apiKey}
-                    onChange={(event) =>
-                      patchDraft(provider.id, { apiKey: event.target.value })
-                    }
-                  />
+                {codexWaiting ? (
+                  <p className="library-note">
+                    Finish the ChatGPT login in the browser window that just
+                    opened — this card updates by itself.
+                  </p>
                 ) : null}
-                {provider.needsBaseUrl ? (
-                  <input
-                    className="method-rename-input"
-                    placeholder="Base URL (e.g. http://127.0.0.1:11434/v1)"
-                    value={draftFor(provider.id).baseUrl}
-                    onChange={(event) =>
-                      patchDraft(provider.id, { baseUrl: event.target.value })
-                    }
-                  />
-                ) : null}
-                <input
-                  className="method-rename-input"
-                  placeholder={
-                    provider.model
-                      ? `Model (optional, current: ${provider.model})`
-                      : "Model (optional)"
-                  }
-                  value={draftFor(provider.id).model}
-                  onChange={(event) =>
-                    patchDraft(provider.id, { model: event.target.value })
-                  }
-                />
-                <p className="context-disclaimer">
-                  {provider.needsBaseUrl
-                    ? t(localBackendNoticeKey(draftFor(provider.id).baseUrl))
-                    : t("legal.notice.modelConnect.cloud")}
-                </p>
-                <div
-                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+              </>
+            ) : null}
+            <div className="model-card-actions">
+              {!provider.isDefault ? (
+                <button
+                  className="secondary-button"
+                  disabled={busy === provider.id}
+                  onClick={() => void makeDefault(provider)}
+                  type="button"
                 >
+                  Set As Default
+                </button>
+              ) : null}
+              {provider.kind !== "cli-login" ? (
+                <>
                   <button
-                    className="primary-button"
-                    disabled={busy === provider.id}
-                    onClick={() => void connect(provider)}
+                    className="secondary-button"
+                    onClick={() =>
+                      setEditingId((current) =>
+                        current === provider.id ? null : provider.id,
+                      )
+                    }
                     type="button"
                   >
-                    {provider.connected ? "Update" : "Connect"}
+                    {editingId === provider.id ? "Close" : "Edit"}
                   </button>
-                  {provider.connected ? (
-                    <button
-                      className="secondary-button"
-                      disabled={busy === provider.id}
-                      onClick={() => void disconnect(provider)}
-                      type="button"
-                    >
-                      Disconnect
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            )}
+                  <button
+                    className="text-button"
+                    disabled={busy === provider.id}
+                    onClick={() => void disconnect(provider)}
+                    type="button"
+                  >
+                    Disconnect
+                  </button>
+                </>
+              ) : null}
+            </div>
+            {editingId === provider.id ? renderConnectForm(provider) : null}
           </div>
         ))}
       </div>
+      {availableProviders.length > 0 ? (
+        <>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Add a Model</h3>
+          <select
+            aria-label="Add a model"
+            className="task-select"
+            onChange={(event) => setAddTargetId(event.target.value)}
+            value={addTargetId}
+          >
+            <option value="">Choose a provider…</option>
+            {availableProviders.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.name}
+                {MODEL_FREE_TIER_NOTES[provider.id] ? " — Free Tier" : ""}
+              </option>
+            ))}
+          </select>
+          {addTarget ? (
+            <div
+              className={
+                connectTarget === addTarget.id
+                  ? "model-card connect-target"
+                  : "model-card"
+              }
+              id={`model-card-${addTarget.id}`}
+            >
+              <div className="model-card-head">
+                <strong>{addTarget.name}</strong>
+                <span className="library-chip">Not Connected</span>
+              </div>
+              {renderConnectForm(addTarget)}
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </section>
   );
 }
@@ -7865,8 +7941,30 @@ const CONNECTABLE_MODELS: Array<{
   },
   { id: "gemini", label: "Gemini", keyUrl: "https://aistudio.google.com/apikey" },
   { id: "grok", label: "Grok", keyUrl: "https://console.x.ai" },
+  { id: "groq", label: "Groq", keyUrl: "https://console.groq.com/keys" },
+  {
+    id: "cerebras",
+    label: "Cerebras",
+    keyUrl: "https://cloud.cerebras.ai",
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    keyUrl: "https://openrouter.ai/settings/keys",
+  },
   { id: "local", label: "Local", keyUrl: null },
 ];
+
+// Free-tier notes shown on the connect form (researched 2026-07-22). Free
+// almost always means the provider may use your data under its own terms —
+// the standard third-party notice still gates every connect.
+const MODEL_FREE_TIER_NOTES: Record<string, string> = {
+  gemini: "Free tier: ~1,500 requests/day via Google AI Studio, no card needed.",
+  groq: "Free tier: ~1,000 requests/day, very fast responses. No card needed.",
+  cerebras: "Free tier: ~1M tokens/day, fastest responses. No card needed.",
+  openrouter:
+    "Free tier: one key unlocks 30+ free community models (rate-limited). Pick a model id ending in :free.",
+};
 
 function routineDomain(
   tags: string[],

@@ -54,6 +54,29 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     needsKey: true,
     needsBaseUrl: false,
   },
+  // Free-tier presets (2026-07-22): generous free quotas, no credit card.
+  // Same OpenAI-compatible pathway; ids must match OPENAI_COMPATIBLE_PRESETS.
+  {
+    id: "groq",
+    name: "Groq",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: false,
+  },
+  {
+    id: "cerebras",
+    name: "Cerebras",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: false,
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: false,
+  },
   {
     id: "local",
     name: "Local model",

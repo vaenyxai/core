@@ -12,6 +12,48 @@ import {
 import { OpenAICompatibleProvider } from "./openai-compatible-provider.js";
 import type { ModelProvider } from "./provider.js";
 
+// Key-based OpenAI-compatible backends: id ↔ endpoint ↔ sensible default model.
+// provider-settings.ts KNOWN_PROVIDERS must list the same ids to make them
+// connectable in Settings → Models.
+export const OPENAI_COMPATIBLE_PRESETS = [
+  {
+    id: "openai",
+    name: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4o",
+  },
+  {
+    id: "gemini",
+    name: "Gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-2.0-flash",
+  },
+  {
+    id: "grok",
+    name: "Grok",
+    baseUrl: "https://api.x.ai/v1",
+    model: "grok-4",
+  },
+  {
+    id: "groq",
+    name: "Groq",
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "llama-3.3-70b-versatile",
+  },
+  {
+    id: "cerebras",
+    name: "Cerebras",
+    baseUrl: "https://api.cerebras.ai/v1",
+    model: "llama-3.3-70b",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    model: "deepseek/deepseek-chat-v3-0324:free",
+  },
+] as const;
+
 class ModelRegistry {
   private readonly providers = new Map<string, ModelProvider>();
   private defaultId: string | null = null;
@@ -60,15 +102,19 @@ export function initModelRegistry(config: {
   next.register(new CodexProvider(), true);
 
   const connections = readProviderConnections(config.secretsDirectory);
-  const openai = connections.openai;
-  if (openai?.apiKey) {
+  // Every key-based OpenAI-compatible backend registers the same way — one
+  // table, not one hand-rolled block per provider. Groq / Cerebras / OpenRouter
+  // are the free-tier presets (2026-07-22): generous free quotas, no card.
+  for (const preset of OPENAI_COMPATIBLE_PRESETS) {
+    const connection = connections[preset.id];
+    if (!connection?.apiKey) continue;
     next.register(
       new OpenAICompatibleProvider({
-        id: "openai",
-        name: "OpenAI",
-        baseUrl: openai.baseUrl ?? "https://api.openai.com/v1",
-        apiKey: openai.apiKey,
-        model: openai.model ?? "gpt-4o",
+        id: preset.id,
+        name: preset.name,
+        baseUrl: connection.baseUrl ?? preset.baseUrl,
+        apiKey: connection.apiKey,
+        model: connection.model ?? preset.model,
         requiresKey: true,
       }),
     );
@@ -95,34 +141,6 @@ export function initModelRegistry(config: {
         baseUrl: anthropic.baseUrl ?? "https://api.anthropic.com/v1",
         apiKey: anthropic.apiKey,
         model: anthropic.model ?? "claude-sonnet-5",
-      }),
-    );
-  }
-  const gemini = connections.gemini;
-  if (gemini?.apiKey) {
-    next.register(
-      new OpenAICompatibleProvider({
-        id: "gemini",
-        name: "Gemini",
-        baseUrl:
-          gemini.baseUrl ??
-          "https://generativelanguage.googleapis.com/v1beta/openai",
-        apiKey: gemini.apiKey,
-        model: gemini.model ?? "gemini-2.0-flash",
-        requiresKey: true,
-      }),
-    );
-  }
-  const grok = connections.grok;
-  if (grok?.apiKey) {
-    next.register(
-      new OpenAICompatibleProvider({
-        id: "grok",
-        name: "Grok",
-        baseUrl: grok.baseUrl ?? "https://api.x.ai/v1",
-        apiKey: grok.apiKey,
-        model: grok.model ?? "grok-4",
-        requiresKey: true,
       }),
     );
   }

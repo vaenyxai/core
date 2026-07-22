@@ -198,11 +198,14 @@ describe("provider-settings", () => {
     const list = listModelProviders(dir);
     expect(list.map((provider) => provider.id).sort()).toEqual([
       "anthropic",
+      "cerebras",
       "codex",
       "gemini",
       "grok",
+      "groq",
       "local",
       "openai",
+      "openrouter",
     ]);
     expect(list.find((provider) => provider.id === "codex")?.connected).toBe(
       true,

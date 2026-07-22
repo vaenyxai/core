@@ -392,9 +392,63 @@ textarea::placeholder {
 }
 
 /* The connect card a sign-in-page model button points at */
-.settings-card.connect-target {
+.settings-card.connect-target,
+.model-card.connect-target {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Settings → Models, compact layout (dev.127): connected backends are small
+   cards; everything else hides behind one Add a Model dropdown. */
+.model-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.model-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
+.model-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-card-head strong {
+  font-size: var(--fs-md);
+}
+
+.model-card-model {
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.model-connect-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .model-key-link {
