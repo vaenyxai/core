@@ -299,7 +299,9 @@ const THINKING_PHASES = [
   "Nearly done",
 ];
 
-function ThinkingIndicator({ seconds }: { seconds: number }): ReactNode {
+// No elapsed counter on purpose (Oskar, dev.125): a ticking number reads like a
+// deadline and adds nothing — the moving dots already say "working".
+function ThinkingIndicator(): ReactNode {
   // Start on a random phase so repeated sends don't always open with the same
   // word.
   const [phase, setPhase] = useState(() =>
@@ -321,7 +323,6 @@ function ThinkingIndicator({ seconds }: { seconds: number }): ReactNode {
         <span />
       </span>
       <span className="thinking-label">{THINKING_PHASES[phase]}…</span>
-      <span className="thinking-elapsed">{seconds}s</span>
     </p>
   );
 }
@@ -2458,19 +2459,6 @@ function AskVaenyxPanel({
   // Controls the in-flight streaming request so a Stop button can abort it.
   const streamControllerRef = useRef<AbortController | null>(null);
   // Live "Thinking… Ns" counter while the model is reasoning before its reply.
-  const [thinkingSeconds, setThinkingSeconds] = useState(0);
-
-  useEffect(() => {
-    if (!sending && !sendingTaskMessage) {
-      return;
-    }
-    setThinkingSeconds(0);
-    const startedAt = Date.now();
-    const timer = setInterval(() => {
-      setThinkingSeconds(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [sending, sendingTaskMessage]);
 
   function upsertConversation(
     current: AskVaenyxConversation[],
@@ -3804,7 +3792,7 @@ function AskVaenyxPanel({
                     <div className="ask-vaenyx-message-head">
                       <strong>Vaenyx</strong>
                     </div>
-                    <ThinkingIndicator seconds={thinkingSeconds} />
+                    <ThinkingIndicator />
                   </article>
                 ) : null}
               </>
@@ -3834,7 +3822,7 @@ function AskVaenyxPanel({
                 ) : message.content ? (
                   <MarkdownMessage content={message.content} />
                 ) : (
-                  <ThinkingIndicator seconds={thinkingSeconds} />
+                  <ThinkingIndicator />
                 )}
                 {message.webSearchUsed ? (
                   <span className="web-search-chip">Web search used</span>
@@ -4184,15 +4172,27 @@ function AskVaenyxPanel({
                     >
                       Cancel
                     </button>
-                  ) : (
+                  ) : focusedTask.status === "failed" ? (
+                    // Failed → Retry; scheduled → Run Now (run without waiting
+                    // for the schedule). A completed unscheduled task gets no
+                    // button at all — re-running it just repeats the same
+                    // answer (Oskar decision, dev.125).
                     <button
                       className="task-toolbar-action"
                       onClick={() => void retryFocusedTask(focusedTask.id)}
                       type="button"
                     >
-                      Run again
+                      Retry
                     </button>
-                  )}
+                  ) : focusedTask.scheduleEnabled ? (
+                    <button
+                      className="task-toolbar-action"
+                      onClick={() => void retryFocusedTask(focusedTask.id)}
+                      type="button"
+                    >
+                      Run Now
+                    </button>
+                  ) : null}
                   {taskRuns.length > 0 ? (
                     <details className="task-runs">
                       <summary>History ({taskRuns.length})</summary>
@@ -4290,7 +4290,7 @@ function AskVaenyxPanel({
                   ) : message.content ? (
                     <MarkdownMessage content={message.content} />
                   ) : (
-                    <ThinkingIndicator seconds={thinkingSeconds} />
+                    <ThinkingIndicator />
                   )}
                   {message.webSearchUsed ? (
                     <span className="web-search-chip">Web search used</span>
@@ -4317,6 +4317,14 @@ function AskVaenyxPanel({
                 </article>
               ))
             )}
+            {focusedTask.status === "running" ? (
+              <article className="ask-vaenyx-message assistant completed">
+                <div className="ask-vaenyx-message-head">
+                  <strong>{agentName}</strong>
+                </div>
+                <ThinkingIndicator />
+              </article>
+            ) : null}
             <div ref={taskEndRef} />
           </div>
 
@@ -4398,6 +4406,82 @@ function applyTheme(themeId: string): void {
     // Persisting the choice is best-effort; the theme still applies this session.
   }
 }
+
+// Chat text preferences (Owner request, dev.125): font family + size for the
+// main conversation body only — chrome (headers, chips, sidebar) keeps the
+// design scale. Stored on this device like the theme; applied as root CSS
+// variables that the message styles read.
+const CHAT_FONT_SIZE_KEY = "vaenyx.chatFontSize";
+const CHAT_FONT_FAMILY_KEY = "vaenyx.chatFontFamily";
+const CHAT_FONT_SIZES = [
+  { id: "small", label: "Small (Default)", value: "" },
+  { id: "medium", label: "Medium", value: "0.9375rem" },
+  { id: "large", label: "Large", value: "1.0625rem" },
+] as const;
+const CHAT_FONT_FAMILIES = [
+  { id: "system", label: "System (Default)", value: "" },
+  { id: "serif", label: "Serif", value: 'Georgia, "Times New Roman", serif' },
+  {
+    id: "mono",
+    label: "Monospace",
+    value: 'ui-monospace, Consolas, "Cascadia Mono", monospace',
+  },
+] as const;
+
+function readStoredChatFontChoice(
+  key: string,
+  ids: readonly string[],
+  fallback: string,
+): string {
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (stored && ids.includes(stored)) return stored;
+  } catch {
+    // localStorage may be unavailable; fall through to the default.
+  }
+  return fallback;
+}
+
+function applyChatFont(sizeId: string, familyId: string): void {
+  const root = document.documentElement;
+  const size = CHAT_FONT_SIZES.find((option) => option.id === sizeId);
+  const family = CHAT_FONT_FAMILIES.find((option) => option.id === familyId);
+  if (size?.value) {
+    root.style.setProperty("--chat-font-size", size.value);
+  } else {
+    root.style.removeProperty("--chat-font-size");
+  }
+  if (family?.value) {
+    root.style.setProperty("--chat-font-family", family.value);
+  } else {
+    root.style.removeProperty("--chat-font-family");
+  }
+  try {
+    window.localStorage.setItem(CHAT_FONT_SIZE_KEY, sizeId);
+    window.localStorage.setItem(CHAT_FONT_FAMILY_KEY, familyId);
+  } catch {
+    // Best-effort; the choice still applies this session.
+  }
+}
+
+function readStoredChatFontSize(): string {
+  return readStoredChatFontChoice(
+    CHAT_FONT_SIZE_KEY,
+    CHAT_FONT_SIZES.map((option) => option.id),
+    "small",
+  );
+}
+
+function readStoredChatFontFamily(): string {
+  return readStoredChatFontChoice(
+    CHAT_FONT_FAMILY_KEY,
+    CHAT_FONT_FAMILIES.map((option) => option.id),
+    "system",
+  );
+}
+
+// Apply the saved chat font at boot — Settings only applies it on change.
+applyChatFont(readStoredChatFontSize(), readStoredChatFontFamily());
 
 // Stack of open modals so Escape only closes the TOP one — with nested modals
 // (e.g. the Contributor Agreement reader inside the publish dialog) every
@@ -5359,6 +5443,10 @@ function SettingsPanel({
   const [instanceName, setInstanceName] = useState(settings.instanceName);
   const [saved, setSaved] = useState(false);
   const [theme, setTheme] = useState(readStoredTheme);
+  const [chatFontSize, setChatFontSize] = useState(readStoredChatFontSize);
+  const [chatFontFamily, setChatFontFamily] = useState(
+    readStoredChatFontFamily,
+  );
   const [testingForge, setTestingForge] = useState(false);
   const [forgeTestResult, setForgeTestResult] =
     useState<ForgeConnectionTestResult | null>(null);
@@ -5649,6 +5737,47 @@ function SettingsPanel({
           }}
           value={theme}
         />
+        <div className="settings-card-divider" />
+        <h3 className="settings-subhead">Chat Text</h3>
+        <p className="settings-card-copy">
+          Font and size for the conversation area. Saved on this device.
+        </p>
+        <div className="chat-font-controls">
+          <label className="chat-font-field">
+            Size
+            <select
+              className="task-select"
+              onChange={(event) => {
+                setChatFontSize(event.target.value);
+                applyChatFont(event.target.value, chatFontFamily);
+              }}
+              value={chatFontSize}
+            >
+              {CHAT_FONT_SIZES.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="chat-font-field">
+            Font
+            <select
+              className="task-select"
+              onChange={(event) => {
+                setChatFontFamily(event.target.value);
+                applyChatFont(chatFontSize, event.target.value);
+              }}
+              value={chatFontFamily}
+            >
+              {CHAT_FONT_FAMILIES.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="settings-card-divider" />
         <h3 className="settings-subhead">{t("settings.language.title")}</h3>
         <p className="settings-card-copy">{t("settings.language.copy")}</p>

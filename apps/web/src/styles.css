@@ -835,6 +835,20 @@ textarea::placeholder {
   margin-top: 6px;
 }
 
+/* Settings → Appearance → Chat Text: the two pickers side by side. */
+.chat-font-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.chat-font-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
 /* Inline variant: chips sit on the title line, right of the title. */
 .chat-chips--inline {
   min-width: 0;
@@ -1770,6 +1784,9 @@ select {
   padding: 0;
   border: 0;
   border-radius: 0;
+  /* Owner-tunable chat text (Settings → Appearance → Chat Text). Unset = the
+     design defaults; the name/time header keeps its own fixed sizes below. */
+  font-family: var(--chat-font-family, inherit);
   background: transparent;
 }
 
@@ -1815,9 +1832,16 @@ select {
 .ask-vaenyx-message p {
   margin: 0;
   color: #dedbd1;
-  font-size: var(--fs-base);
+  font-size: var(--chat-font-size, var(--fs-base));
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+/* Markdown answers (lists, headings scale off the body size too). */
+.ask-vaenyx-message li,
+.ask-vaenyx-message td,
+.ask-vaenyx-message blockquote {
+  font-size: var(--chat-font-size, var(--fs-base));
 }
 
 .ask-vaenyx-messages .empty-state {
@@ -2019,11 +2043,6 @@ select {
 .thinking-label {
   font-weight: 500;
   color: #cfccc3;
-}
-
-.thinking-elapsed {
-  color: #6b685f;
-  font-size: 12px;
 }
 
 /* End-of-output marker under each finished Vaenyx reply, so the Owner can tell
