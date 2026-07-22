@@ -3407,6 +3407,22 @@ function AskVaenyxPanel({
               autoFocus
               maxLength={10_000}
               onChange={(event) => setStartWorkPrompt(event.target.value)}
+              // Enter sends, Shift+Enter makes a new line — same convention as
+              // the chat composer; IME composition Enter never sends.
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  if (!sending && startWorkPrompt.trim()) {
+                    void startWork(
+                      event as unknown as FormEvent<HTMLFormElement>,
+                    );
+                  }
+                }
+              }}
               placeholder="Ask anything"
               required
               rows={2}
@@ -4336,6 +4352,22 @@ function AskVaenyxPanel({
               <textarea
                 maxLength={10_000}
                 onChange={(event) => setTaskPrompt(event.target.value)}
+                // Enter sends, Shift+Enter makes a new line — same convention
+                // as the chat composer; IME composition Enter never sends.
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    if (!sendingTaskMessage && taskPrompt.trim()) {
+                      void sendFocusedTaskMessage(
+                        event as unknown as FormEvent<HTMLFormElement>,
+                      );
+                    }
+                  }
+                }}
                 placeholder="Ask about this task"
                 required
                 rows={2}
