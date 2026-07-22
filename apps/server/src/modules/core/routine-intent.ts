@@ -49,6 +49,7 @@ export async function classifyRoutineIntent(
     taskRequest: null,
     taskSchedule: null,
     createDescription: null,
+    clarifyQuestion: null,
     note: "",
   };
 
@@ -103,12 +104,27 @@ export async function classifyRoutineIntent(
     '- "create-routine": wants to BUILD a new multi-step helper (a repeatable',
     "  workflow with several steps) that nothing installed covers — set",
     "  createDescription.",
+    '- "clarify-create": the Owner clearly wants something BUILT (create-method /',
+    "  create-routine territory) but the description is too vague to build from —",
+    "  the essentials are missing (what goes in, what should come out, or what the",
+    "  steps roughly are). Set clarifyQuestion to ONE short question, in the",
+    "  Owner's language, that would make it buildable. Ask at most once: if the",
+    "  recent conversation already shows Vaenyx asking a clarifying question about",
+    "  this build, never pick this again — pick create-* with your best combined",
+    "  understanding instead.",
     '- "none": ordinary conversation, or a question to answer directly here.',
+    "",
+    "If the recent conversation shows Vaenyx asked a clarifying question about",
+    "something to build and the latest message answers it, choose create-method or",
+    "create-routine now, with createDescription combining the original ask and the",
+    "answers.",
     "",
     "Be conservative: prefer suggest over use; prefer none unless it genuinely",
     "fits. A background task is for work that takes time or repeats — never a quick",
     "answer you can just give now. create-* is only for an explicit ask to build /",
     "create / 建 / 做一个 something reusable — never for a one-off question.",
+    "Prefer create-* over clarify-create when a reasonable build is possible —",
+    "clarify only when building would mean guessing at the core of what they want.",
     "",
     "If the Owner asked for something REPEATING (every morning / 每天 / weekly /",
     "每周 / at 7am / 定时), also fill taskSchedule so the task is scheduled in the",
@@ -119,7 +135,7 @@ export async function classifyRoutineIntent(
     "",
     "Output ONE JSON object and nothing else:",
     '{ "decision": "none" | "use-routine" | "suggest-routine" | "suggest-task" |',
-    '    "use-task" | "create-method" | "create-routine",',
+    '    "use-task" | "create-method" | "create-routine" | "clarify-create",',
     '  "routineId": "<routine id or null>",',
     '  "taskRequest": "<for use-task, the thing to do, else null>",',
     '  "taskSchedule": { "cadence": "hourly"|"daily"|"weekly"|"monthly",',
@@ -127,6 +143,8 @@ export async function classifyRoutineIntent(
     '      "dayOfMonth": 1-31 or null } or null,',
     '  "createDescription": "<for create-*, one clean paragraph describing what',
     '    to build, in the Owner\'s language, else null>",',
+    '  "clarifyQuestion": "<for clarify-create, the one question to ask, in the',
+    '    Owner\'s language, else null>",',
     '  "note": "<one short sentence, or empty>" }',
   ].join("\n");
 
@@ -152,6 +170,7 @@ export async function classifyRoutineIntent(
     "use-task",
     "create-method",
     "create-routine",
+    "clarify-create",
   ].includes(parsed.decision as string)
     ? (parsed.decision as ClassifyRoutineResponse["decision"])
     : "none";
@@ -168,6 +187,10 @@ export async function classifyRoutineIntent(
     typeof parsed.createDescription === "string" &&
     parsed.createDescription.trim()
       ? parsed.createDescription.trim().slice(0, 2000)
+      : null;
+  const clarifyQuestion =
+    typeof parsed.clarifyQuestion === "string" && parsed.clarifyQuestion.trim()
+      ? parsed.clarifyQuestion.trim().slice(0, 500)
       : null;
 
   // Schedule: validated strictly. A malformed time would otherwise become a
@@ -221,6 +244,7 @@ export async function classifyRoutineIntent(
       taskRequest: null,
       taskSchedule: null,
       createDescription: null,
+      clarifyQuestion: null,
       note,
     };
   }
@@ -233,6 +257,7 @@ export async function classifyRoutineIntent(
       taskRequest,
       taskSchedule,
       createDescription: null,
+      clarifyQuestion: null,
       note,
     };
   }
@@ -246,6 +271,22 @@ export async function classifyRoutineIntent(
       taskRequest: null,
       taskSchedule: null,
       createDescription: createDescription ?? content.trim().slice(0, 2000),
+      clarifyQuestion: null,
+      note,
+    };
+  }
+
+  if (decision === "clarify-create") {
+    // A clarify verdict is only actionable with the actual question; without it
+    // there is nothing safe to do, so degrade to plain chat.
+    if (!clarifyQuestion) return none;
+    return {
+      decision,
+      routineId: null,
+      taskRequest: null,
+      taskSchedule: null,
+      createDescription: null,
+      clarifyQuestion,
       note,
     };
   }
@@ -257,6 +298,7 @@ export async function classifyRoutineIntent(
     taskRequest: null,
     taskSchedule,
     createDescription: null,
+    clarifyQuestion: null,
     note,
   };
 }

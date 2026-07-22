@@ -2583,6 +2583,26 @@ function AskVaenyxPanel({
     };
   }, [focusedTaskId, view]);
 
+  // A run finishes server-side without the UI knowing (no push channel), so
+  // "Working" used to stick until a manual refresh. Poll while the open task is
+  // waiting/running; the interval dissolves as soon as the status settles.
+  const focusedTaskStatus = focusedTaskId
+    ? workspace.tasks.find((task) => task.id === focusedTaskId)?.status ?? null
+    : null;
+  useEffect(() => {
+    if (!focusedTaskId) return undefined;
+    if (focusedTaskStatus !== "running" && focusedTaskStatus !== "waiting") {
+      return undefined;
+    }
+    const timer = window.setInterval(() => {
+      void onWorkspaceRefresh();
+      void fetchTaskRuns(focusedTaskId)
+        .then(setTaskRuns)
+        .catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [focusedTaskId, focusedTaskStatus, onWorkspaceRefresh]);
+
   useEffect(() => {
     if (view !== "chat") return;
     chatEndRef.current?.scrollIntoView({ block: "end" });
@@ -2791,6 +2811,7 @@ function AskVaenyxPanel({
     let suggestTask = false;
     let suggestCreate: "method" | "routine" | undefined;
     let createDescription: string | null = null;
+    let clarifyCreateQuestion: string | undefined;
     // The FIRST message of a brand-new chat is exactly where people state what
     // they want ("daily AI news at 7am"), so it must be classified too. The
     // classifier needs a conversation to read history from, so create it first
@@ -2900,6 +2921,12 @@ function AskVaenyxPanel({
           verdict.decision === "create-method" ? "method" : "routine";
         createDescription = verdict.createDescription ?? content;
       }
+      // clarify-create (spec §2a phase 2): too vague to build — this reply asks
+      // ONE clarifying question instead, and nothing is built this turn. The
+      // answered follow-up classifies as create-* and builds as usual.
+      if (verdict?.decision === "clarify-create" && verdict.clarifyQuestion) {
+        clarifyCreateQuestion = verdict.clarifyQuestion;
+      }
     }
 
     setSending(true);
@@ -2992,6 +3019,7 @@ function AskVaenyxPanel({
         suggestRoutineId,
         suggestTask,
         suggestCreate,
+        clarifyCreateQuestion,
       );
 
       // The reply landed: build the described Method/Routine in the background
@@ -3491,11 +3519,14 @@ function AskVaenyxPanel({
         <header className="ask-vaenyx-chat-header">
           <div className="focused-title-line">
             <h2>{activeConversation?.title?.trim() || "Vaenyx Chat"}</h2>
+            <ThreadChipRow
+              chips={chatChips}
+              className="chat-chips chat-chips--inline"
+            />
             <div className="chat-header-actions">
               {renderThreadHeaderMenu(activeThread)}
             </div>
           </div>
-          <ThreadChipRow chips={chatChips} className="chat-chips" />
           {isRoutine ? (
             <div className="capability-bar">
               {(["chat", "journal", "gallery"] as const).map((tab) => (
@@ -4019,9 +4050,12 @@ function AskVaenyxPanel({
             <div className="focused-task-title">
               <div className="focused-title-line">
                 <h2>{focusedTask.title}</h2>
+                <ThreadChipRow
+                  chips={taskChips}
+                  className="chat-chips chat-chips--inline"
+                />
                 {renderThreadHeaderMenu(focusedTaskThread)}
               </div>
-              <ThreadChipRow chips={taskChips} className="chat-chips" />
               {focusedTask.harness === "codex-harness" ? (
                 <div className="task-toolbar">
                   <select
@@ -7728,6 +7762,14 @@ function messageMentionsRoutine(
   return false;
 }
 
+function messageIsCreationAsk(content: string): boolean {
+  return (
+    /(建|新建|创建|創建|做一?个|做一?個|帮我做|幫我做|create|build|make)/i.test(
+      content,
+    ) && /(method|routine|方法|流程|工具)/i.test(content)
+  );
+}
+
 function messageMaybeIntent(
   content: string,
   messages: AskVaenyxMessage[],
@@ -7743,11 +7785,21 @@ function messageMaybeIntent(
   }
   // A creation ask classifies WITHOUT needing overlap with installed Routines —
   // the whole point is to build something that does not exist yet.
+  if (messageIsCreationAsk(content)) {
+    return true;
+  }
+  // A clarify round in flight (spec §2a phase 2): Vaenyx just asked a question
+  // and a recent Owner message was a creation ask — the answer must classify
+  // even though it usually carries no keyword of its own ("PDF 发票,输出 Excel").
   if (
-    /(建|新建|创建|創建|做一?个|做一?個|帮我做|幫我做|create|build|make)/i.test(
-      content,
-    ) &&
-    /(method|routine|方法|流程|工具)/i.test(content)
+    lastAssistant &&
+    /[??]/.test(lastAssistant.content) &&
+    messages
+      .slice(-6)
+      .some(
+        (message) =>
+          message.role === "owner" && messageIsCreationAsk(message.content),
+      )
   ) {
     return true;
   }

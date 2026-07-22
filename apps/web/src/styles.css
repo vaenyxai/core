@@ -835,6 +835,22 @@ textarea::placeholder {
   margin-top: 6px;
 }
 
+/* Inline variant: chips sit on the title line, right of the title. */
+.chat-chips--inline {
+  min-width: 0;
+  flex-wrap: nowrap;
+  margin-top: 0;
+  overflow: hidden;
+}
+
+/* Sidebar rows are dense — chips there go one notch smaller than the base. */
+.thread-chips .thread-chip {
+  padding: 1px 5px;
+  font-size: 0.5625rem; /* 9px — below --fs-eyebrow on purpose; it's a badge */
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
 .thread-chip {
   flex: 0 0 auto;
   padding: 2px 7px;
@@ -4935,6 +4951,11 @@ select {
 /* Scheduled tasks: time / weekday / month-day inputs in the task toolbar. */
 .schedule-time-input,
 .schedule-monthday-input {
+  /* Beat the global input { width: 100%; height: 46px } — these live inline in
+     the task toolbar and must stay content-sized so the row keeps to one line. */
+  width: auto;
+  height: auto;
+  min-height: 30px;
   background: var(--bg-raised);
   color: var(--text);
   border: 1px solid var(--border);

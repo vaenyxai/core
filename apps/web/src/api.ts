@@ -411,6 +411,7 @@ async function streamMessageRequest(
   suggestRoutineId?: string,
   suggestTask?: boolean,
   suggestCreate?: "method" | "routine",
+  clarifyCreate?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -424,6 +425,7 @@ async function streamMessageRequest(
       ...(suggestRoutineId ? { suggestRoutineId } : {}),
       ...(suggestTask ? { suggestTask: true } : {}),
       ...(suggestCreate ? { suggestCreate } : {}),
+      ...(clarifyCreate ? { clarifyCreate } : {}),
     }),
     signal: callbacks.signal,
   });
@@ -491,6 +493,7 @@ export function streamAskVaenyxMessage(
   suggestRoutineId?: string,
   suggestTask?: boolean,
   suggestCreate?: "method" | "routine",
+  clarifyCreate?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -499,6 +502,7 @@ export function streamAskVaenyxMessage(
     suggestRoutineId,
     suggestTask,
     suggestCreate,
+    clarifyCreate,
   );
 }
 

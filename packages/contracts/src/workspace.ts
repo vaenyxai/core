@@ -274,6 +274,10 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     suggestCreate: Type.Optional(
       Type.Union([Type.Literal("method"), Type.Literal("routine")]),
     ),
+    // clarify-create (spec §2a phase 2): the Owner wants something built but the
+    // description is not enough to build from yet. The reply must only ask this
+    // clarifying question — nothing is built on this turn.
+    clarifyCreate: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
   },
   { additionalProperties: false },
 );
@@ -294,6 +298,10 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       // creation flow with the description pre-filled — it never builds inline.
       Type.Literal("create-method"),
       Type.Literal("create-routine"),
+      // The Owner wants something built, but the description is too vague to
+      // build from. The reply asks ONE clarifying question first; the answered
+      // follow-up classifies as create-* and builds (spec §2a phase 2).
+      Type.Literal("clarify-create"),
     ]),
     routineId: Type.Union([Type.String(), Type.Null()]),
     // For use-task: the thing to do, extracted from the conversation.
@@ -322,6 +330,8 @@ export const ClassifyRoutineResponseSchema = Type.Object(
     // For create-*: a clean one-paragraph description of what to build,
     // distilled from the conversation, used to pre-fill the creation flow.
     createDescription: Type.Union([Type.String(), Type.Null()]),
+    // For clarify-create: the one question to ask, in the Owner's language.
+    clarifyQuestion: Type.Union([Type.String(), Type.Null()]),
     note: Type.String(),
   },
   { additionalProperties: false },

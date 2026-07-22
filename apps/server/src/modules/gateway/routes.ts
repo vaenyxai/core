@@ -2249,6 +2249,9 @@ export async function registerGatewayRoutes(
               ...(request.body.suggestCreate
                 ? { suggestCreate: request.body.suggestCreate }
                 : {}),
+              ...(request.body.clarifyCreate
+                ? { clarifyCreate: request.body.clarifyCreate }
+                : {}),
             },
           ),
         (response) => {
