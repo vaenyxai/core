@@ -944,7 +944,7 @@ textarea::placeholder {
 .voice-bubble p {
   margin: 0;
   color: #dedbd1;
-  font-size: var(--chat-font-size, var(--fs-base));
+  font-size: var(--chat-font-size, 0.9375rem);
   line-height: 1.55;
   white-space: pre-wrap;
 }
@@ -975,7 +975,7 @@ textarea::placeholder {
    only while the newest message is well out of view. */
 .jump-latest {
   position: fixed;
-  top: 118px;
+  bottom: 172px;
   left: 50%;
   z-index: 7;
   display: flex;
@@ -1000,7 +1000,7 @@ textarea::placeholder {
 
 @media (max-width: 720px) {
   .jump-latest {
-    top: 96px;
+    bottom: 205px;
   }
 }
 
@@ -2116,7 +2116,7 @@ select {
 .ask-vaenyx-message p {
   margin: 0;
   color: #dedbd1;
-  font-size: var(--chat-font-size, var(--fs-base));
+  font-size: var(--chat-font-size, 0.9375rem);
   line-height: 1.55;
   white-space: pre-wrap;
 }
@@ -2125,7 +2125,7 @@ select {
 .ask-vaenyx-message li,
 .ask-vaenyx-message td,
 .ask-vaenyx-message blockquote {
-  font-size: var(--chat-font-size, var(--fs-base));
+  font-size: var(--chat-font-size, 0.9375rem);
 }
 
 .ask-vaenyx-messages .empty-state {

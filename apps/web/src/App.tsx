@@ -4866,7 +4866,9 @@ function AskVaenyxPanel({
 
           <div className="simple-compose-box">
             <textarea
-              autoFocus
+              // Never on touch devices: auto-focus pops the keyboard over the
+              // whole screen the moment the app opens (Oskar, dev.148).
+              autoFocus={!window.matchMedia("(pointer: coarse)").matches}
               maxLength={10_000}
               onChange={(event) => setStartWorkPrompt(event.target.value)}
               // Enter sends, Shift+Enter makes a new line — same convention as
@@ -6006,11 +6008,14 @@ function applyTheme(themeId: string): void {
 // main conversation body only — chrome (headers, chips, sidebar) keeps the
 // design scale. Stored on this device like the theme; applied as root CSS
 // variables that the message styles read.
-const CHAT_FONT_SIZE_KEY = "vaenyx.chatFontSize";
+// Key versioned to .v2 (dev.148): the old default was Small/13px and the boot
+// apply wrote it into everyone's storage — bumping the default to Medium/15px
+// needs a fresh key so the old sticky value doesn't pin the small size.
+const CHAT_FONT_SIZE_KEY = "vaenyx.chatFontSize.v2";
 const CHAT_FONT_FAMILY_KEY = "vaenyx.chatFontFamily";
 const CHAT_FONT_SIZES = [
-  { id: "small", label: "Small (Default)", value: "" },
-  { id: "medium", label: "Medium", value: "0.9375rem" },
+  { id: "small", label: "Small", value: "0.8125rem" },
+  { id: "medium", label: "Medium (Default)", value: "" },
   { id: "large", label: "Large", value: "1.0625rem" },
 ] as const;
 const CHAT_FONT_FAMILIES = [
@@ -6063,7 +6068,7 @@ function readStoredChatFontSize(): string {
   return readStoredChatFontChoice(
     CHAT_FONT_SIZE_KEY,
     CHAT_FONT_SIZES.map((option) => option.id),
-    "small",
+    "medium",
   );
 }
 
