@@ -124,6 +124,7 @@ import {
   type PushDiagnostics,
   fetchVisionStatus,
   describePhoto,
+  type VisionStatus,
   fetchVoiceOutput,
   connectVoiceOutput,
   synthesizeSpeech,
@@ -1600,6 +1601,7 @@ function VoicePanel() {
   const { t } = useI18n();
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
+  const [vision, setVision] = useState<VisionStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [outputKey, setOutputKey] = useState("");
   const [outputEngine, setOutputEngine] = useState<"browser" | "gemini">(
@@ -1620,6 +1622,9 @@ function VoicePanel() {
         setOutputEngine(current.engine);
         if (current.voice) setOutputVoice(current.voice);
       })
+      .catch(() => undefined);
+    void fetchVisionStatus()
+      .then(setVision)
       .catch(() => undefined);
   }, []);
 
@@ -1686,8 +1691,10 @@ function VoicePanel() {
 
       <h3 className="settings-subhead">Voice Input (Speech To Text)</h3>
       <p className="settings-card-copy">
-        Turns what you say into text — the mic button in chat. Engines can be
-        swapped as more arrive.
+        Turns what you say into text — the mic button in chat. A Groq model
+        connected under Models powers this automatically; connecting a key
+        here overrides it. Other chat models don't do speech recognition —
+        the engine stays Whisper.
       </p>
       <label className="chat-font-field">
         Engine
@@ -1879,6 +1886,34 @@ function VoicePanel() {
         </div>
       )}
       {outputError ? <p className="form-error">{outputError}</p> : null}
+
+      <div className="settings-card-divider" />
+
+      <h3 className="settings-subhead">Vision (Photos)</h3>
+      <p className="settings-card-copy">
+        The camera button turns photos into text (a fridge shot becomes an
+        ingredient list). Auto-powered by your first vision-capable
+        connection — Gemini, Zhipu BigModel or OpenAI. Models without vision
+        (Groq, Cerebras…) are skipped automatically.
+      </p>
+      {vision?.connected ? (
+        <div className="model-card-head">
+          <span className="library-chip chip-published">Connected</span>
+          <small className="model-card-model">
+            Powered by {vision.provider === "gemini"
+              ? "Gemini"
+              : vision.provider === "zhipu"
+                ? "Zhipu BigModel"
+                : "OpenAI"}{" "}
+            (Auto)
+          </small>
+        </div>
+      ) : (
+        <p className="settings-card-copy">
+          Not available yet — connect Gemini or Zhipu BigModel under Models
+          (a free key works) and the camera appears by itself.
+        </p>
+      )}
     </section>
   );
 }

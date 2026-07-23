@@ -15,12 +15,28 @@ import { writeConnections } from "../models/provider-settings.js";
 const VOICE_BASE_URL = "https://api.groq.com/openai/v1";
 const DEFAULT_VOICE_MODEL = "whisper-large-v3-turbo";
 
+// The dedicated voice entry wins; without one, a Groq CHAT connection powers
+// speech-to-text automatically — connecting the main model wires voice up
+// with zero extra setup (Oskar, dev.153). Manual connect still overrides.
+function resolveVoiceConnection(
+  secretsDirectory: string,
+): { apiKey: string; model?: string } | null {
+  const connections = readProviderConnections(secretsDirectory);
+  if (connections.voice?.apiKey) {
+    return { apiKey: connections.voice.apiKey, model: connections.voice.model };
+  }
+  if (connections.groq?.apiKey) {
+    return { apiKey: connections.groq.apiKey };
+  }
+  return null;
+}
+
 export function getVoiceStatus(secretsDirectory: string): {
   connected: boolean;
   model: string | null;
 } {
-  const voice = readProviderConnections(secretsDirectory).voice;
-  if (!voice?.apiKey) return { connected: false, model: null };
+  const voice = resolveVoiceConnection(secretsDirectory);
+  if (!voice) return { connected: false, model: null };
   return { connected: true, model: voice.model ?? DEFAULT_VOICE_MODEL };
 }
 
@@ -232,8 +248,8 @@ export async function transcribeVoice(
   audio: Buffer,
   mimeType: string,
 ): Promise<string> {
-  const voice = readProviderConnections(secretsDirectory).voice;
-  if (!voice?.apiKey) {
+  const voice = resolveVoiceConnection(secretsDirectory);
+  if (!voice) {
     throw new Error("VOICE_NOT_CONNECTED");
   }
   const form = new FormData();
