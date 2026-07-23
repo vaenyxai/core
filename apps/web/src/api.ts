@@ -805,6 +805,13 @@ export function synthesizeSpeech(text: string): Promise<{ audioId: string }> {
   });
 }
 
+export function postPresenceHeartbeat(): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/v1/presence", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export async function transcribeAudio(
   blob: Blob,
 ): Promise<{ text: string; audioId: string }> {

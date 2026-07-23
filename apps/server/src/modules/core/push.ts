@@ -15,6 +15,22 @@ const VAPID_SUBJECT = "mailto:hello@vaenyx.ai";
 
 let secretsDirectory: string | null = null;
 
+// Presence (Owner request 2026-07-22): pages heartbeat while visible, and a
+// scheduled run skips the phone push when someone is actively looking at the
+// app — the result is already on their screen. In-memory is enough: the
+// scheduler lives in this same process, and after a restart "no heartbeat yet"
+// correctly means "nobody is looking".
+const PRESENCE_WINDOW_MS = 90_000;
+let lastPresenceAt = 0;
+
+export function notePresence(): void {
+  lastPresenceAt = Date.now();
+}
+
+export function isOwnerActivelyViewing(): boolean {
+  return Date.now() - lastPresenceAt < PRESENCE_WINDOW_MS;
+}
+
 export function initPushService(config: { secretsDirectory: string }): void {
   secretsDirectory = config.secretsDirectory;
 }

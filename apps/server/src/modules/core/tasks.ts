@@ -20,7 +20,7 @@ import {
   type CreateAskVaenyxMessageOptions,
 } from "./ask-vaenyx.js";
 import { listProjectMemories } from "./memory.js";
-import { sendPushToAllDevices } from "./push.js";
+import { isOwnerActivelyViewing, sendPushToAllDevices } from "./push.js";
 import { ensureTaskThread } from "./threads.js";
 
 const GENERAL_PROJECT_ID = "general";
@@ -772,7 +772,9 @@ async function executeTaskRun(
     // Scheduled runs notify subscribed devices (the Owner is not watching a
     // page at 7am — that is the whole point of the schedule). Manual runs
     // skip it: the Owner just pressed the button and is looking at the task.
-    if (trigger === "schedule") {
+    // And if any device is actively viewing the app right now, the push is
+    // skipped too — the result is already on their screen.
+    if (trigger === "schedule" && !isOwnerActivelyViewing()) {
       const titleRow = database.sqlite
         .prepare("SELECT title FROM tasks WHERE id = ?")
         .get(id) as { title: string } | undefined;

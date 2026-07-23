@@ -181,6 +181,7 @@ import {
 } from "../core/app-profiles.js";
 import {
   getPushPublicKey,
+  notePresence,
   removePushSubscription,
   savePushSubscription,
 } from "../core/push.js";
@@ -3857,6 +3858,25 @@ export async function registerGatewayRoutes(
         return reply.code(404).send({ error: "Recording not found." });
       }
       return reply.type(found.mimeType).send(found.audio);
+    },
+  );
+
+  // Presence heartbeat: a visible page pings every ~30s. A scheduled run
+  // skips the phone push while any device is actively viewing the app.
+  app.post(
+    "/v1/presence",
+    {
+      schema: {
+        response: { 200: PushAckResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      notePresence();
+      return { ok: true };
     },
   );
 

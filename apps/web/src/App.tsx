@@ -121,6 +121,7 @@ import {
   fetchVoiceOutput,
   connectVoiceOutput,
   synthesizeSpeech,
+  postPresenceHeartbeat,
   type VoiceOutputStatus,
   type VoiceStatus,
   rejectVaenyxMeCandidate,
@@ -11375,6 +11376,24 @@ function VaenyxWorkspace({
         .catch(() => undefined);
     }, 10_000);
     return () => window.clearInterval(id);
+  }, []);
+
+  // Presence heartbeat (Owner request): while this page is visible, tell the
+  // server someone is looking — a scheduled run then skips the phone push,
+  // since the result is already on screen. Hidden/closed pages age out in 90s.
+  useEffect(() => {
+    const beat = () => {
+      if (document.visibilityState === "visible") {
+        void postPresenceHeartbeat().catch(() => undefined);
+      }
+    };
+    beat();
+    const id = window.setInterval(beat, 30_000);
+    document.addEventListener("visibilitychange", beat);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", beat);
+    };
   }, []);
 
   useEffect(() => {
