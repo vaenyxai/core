@@ -835,6 +835,35 @@ export function sendTestPush(): Promise<PushDiagnostics> {
   });
 }
 
+export interface VisionStatus {
+  connected: boolean;
+  provider: string | null;
+}
+
+export function fetchVisionStatus(): Promise<VisionStatus> {
+  return requestJson<VisionStatus>("/v1/vision/status");
+}
+
+export async function describePhoto(
+  blob: Blob,
+  lang: string,
+): Promise<string> {
+  const response = await fetch(`/v1/vision/describe?lang=${lang}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": blob.type || "image/jpeg" },
+    body: blob,
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    text?: string;
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(body.error ?? "Photo analysis failed.");
+  }
+  return body.text ?? "";
+}
+
 export async function transcribeAudio(
   blob: Blob,
 ): Promise<{ text: string; audioId: string }> {

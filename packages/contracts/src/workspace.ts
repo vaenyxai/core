@@ -872,6 +872,23 @@ export const StopTurnRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Vision: a photo in, useful text out (fridge shot → ingredient list). The
+// engine is auto-picked from the Owner's connected vision-capable models.
+export const VisionStatusSchema = Type.Object(
+  {
+    connected: Type.Boolean(),
+    provider: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const VisionDescribeResponseSchema = Type.Object(
+  {
+    text: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 // Edit an existing App Profile's capability scope. The token (identity) never
 // changes; only the Methods it may use and its Mode B / memory permissions do.
 // Re-granting Methods re-pins each one's current content hash.

@@ -122,6 +122,8 @@ import {
   fetchPushStatus,
   sendTestPush,
   type PushDiagnostics,
+  fetchVisionStatus,
+  describePhoto,
   fetchVoiceOutput,
   connectVoiceOutput,
   synthesizeSpeech,
@@ -858,6 +860,101 @@ function IconArrowUp() {
       <path d="M12 20V6" />
       <path d="m6 12 6-6 6 6" />
     </LineIcon>
+  );
+}
+
+function IconCamera() {
+  return (
+    <LineIcon>
+      <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </LineIcon>
+  );
+}
+
+// Downscale a picked/taken photo before upload: phone originals are 5-15MB;
+// 1280px JPEG keeps every fridge item recognisable at a fraction of the size.
+async function downscalePhoto(file: File): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size < 1_500_000) return file;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob>((resolvePhoto) =>
+      canvas.toBlob(
+        (blob) => resolvePhoto(blob ?? file),
+        "image/jpeg",
+        0.85,
+      ),
+    );
+  } catch {
+    return file;
+  }
+}
+
+// Take/pick a photo → the vision engine turns it into useful text → the text
+// lands in the composer for the Owner to top up and send (so Routines like
+// Dinner Planner receive a ready ingredient list). Mirrors the voice flow.
+function CameraButton({
+  disabled,
+  lang,
+  onText,
+}: {
+  disabled?: boolean;
+  lang: string;
+  onText: (text: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  async function handleFile(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const blob = await downscalePhoto(file);
+      const text = await describePhoto(blob, lang);
+      if (text) onText(text);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Photo analysis failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <input
+        accept="image/*"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void handleFile(file);
+        }}
+        ref={inputRef}
+        type="file"
+      />
+      <button
+        aria-label="Add a photo"
+        className={`mic-button${busy ? " mic-button--busy" : ""}`}
+        disabled={disabled || busy}
+        onClick={() => inputRef.current?.click()}
+        title={error ?? "Add a photo"}
+        type="button"
+      >
+        {busy ? <IconSpinner /> : <IconCamera />}
+      </button>
+    </>
   );
 }
 
@@ -3725,6 +3822,7 @@ function AskVaenyxPanel({
   // Voice (dev.133): the mic shows once a voice connection exists; the speaker
   // toggle reads finished replies aloud (persisted per device).
   const [voiceReady, setVoiceReady] = useState(false);
+  const [visionReady, setVisionReady] = useState(false);
   const [voiceReplies, setVoiceReplies] = useState(voiceRepliesEnabled);
   const [voiceOutput, setVoiceOutput] = useState<VoiceOutputStatus | null>(
     null,
@@ -3735,6 +3833,9 @@ function AskVaenyxPanel({
       .catch(() => undefined);
     void fetchVoiceOutput()
       .then(setVoiceOutput)
+      .catch(() => undefined);
+    void fetchVisionStatus()
+      .then((status) => setVisionReady(status.connected))
       .catch(() => undefined);
   }, []);
   // Read a reply aloud with the best available voice: Gemini TTS when the
@@ -4990,6 +5091,17 @@ function AskVaenyxPanel({
               rows={2}
               value={startWorkPrompt}
             />
+            {visionReady ? (
+              <CameraButton
+                disabled={sending}
+                lang={lang}
+                onText={(text) =>
+                  setStartWorkPrompt((current) =>
+                    current ? `${current}\n${text}` : text,
+                  )
+                }
+              />
+            ) : null}
             {voiceReady ? (
               <MicButton
                 disabled={sending}
@@ -5490,6 +5602,17 @@ function AskVaenyxPanel({
               rows={2}
               value={prompt}
             />
+            {visionReady ? (
+              <CameraButton
+                disabled={sending}
+                lang={lang}
+                onText={(text) =>
+                  setPrompt((current) =>
+                    current ? `${current}\n${text}` : text,
+                  )
+                }
+              />
+            ) : null}
             {voiceReady ? (
               <MicButton
                 disabled={sending}

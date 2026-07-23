@@ -35,6 +35,8 @@ export {
   SpeakRequestSchema,
   SpeakResponseSchema,
   StopTurnRequestSchema,
+  VisionStatusSchema,
+  VisionDescribeResponseSchema,
   UpdateAppProfileRequestSchema,
   UpdateAppProfileResponseSchema,
   RenameMethodRequestSchema,

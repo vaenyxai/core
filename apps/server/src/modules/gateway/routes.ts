@@ -35,6 +35,8 @@ import {
   SpeakRequestSchema,
   SpeakResponseSchema,
   StopTurnRequestSchema,
+  VisionStatusSchema,
+  VisionDescribeResponseSchema,
   type SubscribePushRequest,
   type UnsubscribePushRequest,
   type ConnectVoiceRequest,
@@ -201,6 +203,7 @@ import {
   synthesizeSpeech,
   transcribeVoice,
 } from "../core/voice.js";
+import { describeImage, getVisionStatus } from "../core/vision.js";
 import {
   createMethod,
   draftMethodSpec,
@@ -3651,11 +3654,79 @@ export async function registerGatewayRoutes(
   );
 
   // ── Voice (speech-to-text via the separate voice connection) ──────────────
-  // Recorded audio arrives as a raw binary body (no multipart dependency).
+  // Recorded audio/photos arrive as raw binary bodies (no multipart dependency).
   app.addContentTypeParser(
-    ["audio/webm", "audio/mp4", "audio/ogg", "application/octet-stream"],
+    [
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/octet-stream",
+    ],
     { parseAs: "buffer" },
     (_request, body, done) => done(null, body),
+  );
+
+  // ── Vision: photo → useful text (mirrors the voice transcribe flow) ───────
+  app.get(
+    "/v1/vision/status",
+    {
+      schema: {
+        response: { 200: VisionStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return getVisionStatus(context.config.secretsDirectory);
+    },
+  );
+
+  app.post<{ Querystring: { lang?: string } }>(
+    "/v1/vision/describe",
+    {
+      bodyLimit: 12_000_000,
+      schema: {
+        response: {
+          200: VisionDescribeResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const image = request.body as Buffer | undefined;
+      if (!image || !Buffer.isBuffer(image) || image.length === 0) {
+        return reply.code(400).send({ error: "No image received." });
+      }
+      try {
+        const text = await describeImage(
+          context.config.secretsDirectory,
+          image,
+          request.headers["content-type"] ?? "image/jpeg",
+          request.query.lang === "zh" ? "zh" : "en",
+        );
+        return { text };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message === "VISION_NOT_CONNECTED") {
+          return reply.code(400).send({
+            error:
+              "No vision-capable model connected — connect Gemini or Zhipu BigModel under Models first.",
+          });
+        }
+        return reply.code(502).send({ error: "Photo analysis failed." });
+      }
+    },
   );
 
   app.get(
