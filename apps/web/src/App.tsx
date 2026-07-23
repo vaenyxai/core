@@ -3640,23 +3640,45 @@ function AskVaenyxPanel({
   // Coming back to a suspended page (phone unlock, tab switch): the reply may
   // have finished server-side while the stream connection was dead — refetch
   // the open conversation so the real answer replaces any stale error bubble.
+  // Runs once immediately and once after 2.5s: on resume, the dead stream's
+  // rejection may not have settled yet (sending still true on the first pass).
+  const activeConversationIdRef = useRef(activeConversationId);
+  const sendingRef = useRef(sending);
+  const sendingTaskRef = useRef(sendingTaskMessage);
   useEffect(() => {
-    const reconcile = () => {
-      if (document.visibilityState !== "visible") return;
-      if (view === "chat" && activeConversationId && !sending) {
+    activeConversationIdRef.current = activeConversationId;
+    sendingRef.current = sending;
+    sendingTaskRef.current = sendingTaskMessage;
+  });
+  useEffect(() => {
+    const run = () => {
+      if (view === "chat" && activeConversationId && !sendingRef.current) {
         void fetchAskVaenyxMessages(activeConversationId)
-          .then(setMessages)
+          .then((fresh) => {
+            if (activeConversationIdRef.current === activeConversationId) {
+              setMessages(fresh);
+              setError(null);
+            }
+          })
+          .catch(() => undefined);
+        void fetchAskVaenyxConversations()
+          .then(onConversationsChange)
           .catch(() => undefined);
       }
-      if (view === "task" && focusedTaskId && !sendingTaskMessage) {
+      if (view === "task" && focusedTaskId && !sendingTaskRef.current) {
         void fetchTaskMessages(focusedTaskId)
           .then(setTaskMessages)
           .catch(() => undefined);
       }
     };
+    const reconcile = () => {
+      if (document.visibilityState !== "visible") return;
+      run();
+      window.setTimeout(run, 2_500);
+    };
     document.addEventListener("visibilitychange", reconcile);
     return () => document.removeEventListener("visibilitychange", reconcile);
-  }, [view, activeConversationId, focusedTaskId, sending, sendingTaskMessage]);
+  }, [view, activeConversationId, focusedTaskId, onConversationsChange]);
 
   // A run finishes server-side without the UI knowing (no push channel), so
   // "Working" used to stick until a manual refresh. Poll while the open task is
@@ -4187,6 +4209,34 @@ function AskVaenyxPanel({
               message.id !== tempOwnerId && message.id !== tempAssistantId,
           ),
         );
+        // The turn usually FINISHED server-side (turns survive dropped
+        // connections — a locked phone kills only the stream). Keep pulling
+        // until the network is back, then swap the real reply in and clear
+        // the error. Backs off; gives up quietly after ~15s.
+        const reconcileId =
+          createdConversationId ?? activeConversationId ?? preCreatedConversationId;
+        if (reconcileId) {
+          void (async () => {
+            for (let attempt = 0; attempt < 4; attempt += 1) {
+              await new Promise((resolveWait) =>
+                window.setTimeout(resolveWait, 1500 * (attempt + 1)),
+              );
+              try {
+                const fresh = await fetchAskVaenyxMessages(reconcileId);
+                if (activeConversationIdRef.current === reconcileId) {
+                  setMessages(fresh);
+                  setError(null);
+                }
+                void fetchAskVaenyxConversations()
+                  .then(onConversationsChange)
+                  .catch(() => undefined);
+                return;
+              } catch {
+                // Network still down; try again.
+              }
+            }
+          })();
+        }
       }
     } finally {
       streamControllerRef.current = null;
@@ -11499,21 +11549,48 @@ function VaenyxWorkspace({
     return () => window.clearInterval(id);
   }, []);
 
-  // Presence heartbeat (Owner request): while this page is visible, tell the
-  // server someone is looking — a scheduled run then skips the phone push,
-  // since the result is already on screen. Hidden/closed pages age out in 90s.
+  // Presence heartbeat (Owner request): "someone is looking" = the page is
+  // visible AND the Owner actually interacted in the last minute. A monitor
+  // left on with the tab open no longer counts as seen — the phone still gets
+  // its push (Oskar, dev.143).
   useEffect(() => {
+    let lastInteractionAt = Date.now();
+    const noteInteraction = () => {
+      lastInteractionAt = Date.now();
+    };
     const beat = () => {
-      if (document.visibilityState === "visible") {
+      if (
+        document.visibilityState === "visible" &&
+        Date.now() - lastInteractionAt < 60_000
+      ) {
         void postPresenceHeartbeat().catch(() => undefined);
       }
     };
+    const interactionEvents = [
+      "pointerdown",
+      "pointermove",
+      "keydown",
+      "touchstart",
+      "wheel",
+    ] as const;
+    for (const eventName of interactionEvents) {
+      window.addEventListener(eventName, noteInteraction, { passive: true });
+    }
     beat();
     const id = window.setInterval(beat, 30_000);
-    document.addEventListener("visibilitychange", beat);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        noteInteraction();
+        beat();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.clearInterval(id);
-      document.removeEventListener("visibilitychange", beat);
+      document.removeEventListener("visibilitychange", onVisible);
+      for (const eventName of interactionEvents) {
+        window.removeEventListener(eventName, noteInteraction);
+      }
     };
   }, []);
 

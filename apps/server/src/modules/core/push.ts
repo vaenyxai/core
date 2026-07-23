@@ -39,7 +39,11 @@ export function schedulePresenceAwarePush(
 ): void {
   const completedAt = Date.now();
   setTimeout(() => {
-    if (lastPresenceAt >= completedAt) return; // someone saw it — stay quiet
+    if (lastPresenceAt >= completedAt) {
+      // Someone saw it — stay quiet, but leave a diagnosable trace.
+      lastSendResult = `${new Date().toISOString()} — suppressed: a device was actively viewing within 30s of the result.`;
+      return;
+    }
     void sendPushToAllDevices(database, payload).catch(() => undefined);
   }, UNSEEN_WAIT_MS).unref?.();
 }
