@@ -821,6 +821,15 @@ function IconPlay() {
   );
 }
 
+function IconPause() {
+  return (
+    <LineIcon>
+      <line x1="9" x2="9" y1="6" y2="18" />
+      <line x1="15" x2="15" y1="6" y2="18" />
+    </LineIcon>
+  );
+}
+
 function IconSpinner() {
   return (
     <svg
@@ -870,60 +879,186 @@ function IconCheck() {
   );
 }
 
-// A WeChat-style voice bubble: tap to hear it. Owner bubbles replay the
-// original recording; assistant bubbles are read aloud on-device.
+// A WeChat-style voice bubble: play ↔ pause on the main control (pause keeps
+// the position), with a stop button alongside while anything is in flight
+// (stop rewinds and folds back to a single play button). Owner bubbles replay
+// the original recording; assistant bubbles speak through the chosen voice
+// engine (Gemini TTS audio, else the device voice). One voice at a time —
+// starting any playback silences whatever else is talking.
 function VoiceBubble({
   audioId,
+  engine = "browser",
   text,
-  onSpeak,
 }: {
   audioId?: string | null;
+  engine?: "browser" | "gemini";
   text: string;
-  // Assistant bubbles: how to voice the text (defaults to the device TTS).
-  onSpeak?: (text: string) => void;
 }) {
-  const [playing, setPlaying] = useState(false);
+  const [state, setState] = useState<
+    "idle" | "loading" | "playing" | "paused"
+  >("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(
     () => () => {
       audioRef.current?.pause();
+      if (utteranceRef.current) {
+        try {
+          window.speechSynthesis?.cancel();
+        } catch {
+          // No TTS.
+        }
+      }
     },
     [],
   );
 
-  function toggle() {
-    if (!audioId) {
-      // Assistant bubble: read the short reply aloud.
-      (onSpeak ?? speakText)(text);
-      return;
+  async function ensureAudio(): Promise<HTMLAudioElement | null> {
+    if (audioRef.current) return audioRef.current;
+    let id = audioId ?? null;
+    if (!id && engine === "gemini") {
+      const clean = cleanSpeechText(text).slice(0, 4000);
+      if (!clean) return null;
+      setState("loading");
+      id = (await synthesizeSpeech(clean)).audioId;
     }
-    if (playing) {
-      audioRef.current?.pause();
-      setPlaying(false);
-      return;
-    }
-    const audio =
-      audioRef.current ?? new Audio(`/v1/voice/audio/${audioId}`);
+    if (!id) return null;
+    const audio = new Audio(`/v1/voice/audio/${id}`);
+    audio.onended = () => setState("idle");
+    // A global stop (another playback starting) pauses us mid-flight — show
+    // that as paused so Resume works naturally.
+    audio.onpause = () => {
+      if (!audio.ended) {
+        setState((current) => (current === "playing" ? "paused" : current));
+      }
+    };
     audioRef.current = audio;
-    audio.currentTime = 0;
-    audio.onended = () => setPlaying(false);
-    void audio
-      .play()
-      .then(() => setPlaying(true))
-      .catch(() => setPlaying(false));
+    return audio;
+  }
+
+  async function play() {
+    stopReplySpeech();
+    try {
+      if (!audioId && engine !== "gemini") {
+        // Device TTS path, with pause/resume support.
+        if (!("speechSynthesis" in window)) return;
+        const clean = cleanSpeechText(text);
+        if (!clean) return;
+        const utterance = new SpeechSynthesisUtterance(clean.slice(0, 4000));
+        utterance.lang = /[一-鿿]/.test(clean) ? "zh-CN" : "en-US";
+        utterance.onend = () => {
+          utteranceRef.current = null;
+          setState("idle");
+        };
+        utteranceRef.current = utterance;
+        window.speechSynthesis.speak(utterance);
+        setState("playing");
+        return;
+      }
+      const audio = await ensureAudio();
+      if (!audio) {
+        setState("idle");
+        return;
+      }
+      currentReplyAudio = audio;
+      audio.currentTime = 0;
+      await audio.play();
+      setState("playing");
+    } catch {
+      setState("idle");
+    }
+  }
+
+  function pause() {
+    if (utteranceRef.current) {
+      try {
+        window.speechSynthesis?.pause();
+      } catch {
+        // No TTS.
+      }
+      setState("paused");
+      return;
+    }
+    audioRef.current?.pause();
+    setState("paused");
+  }
+
+  async function resume() {
+    if (utteranceRef.current) {
+      try {
+        window.speechSynthesis?.resume();
+      } catch {
+        // No TTS.
+      }
+      setState("playing");
+      return;
+    }
+    try {
+      const audio = audioRef.current;
+      if (!audio) return;
+      currentReplyAudio = audio;
+      await audio.play();
+      setState("playing");
+    } catch {
+      setState("idle");
+    }
+  }
+
+  function stop() {
+    if (utteranceRef.current) {
+      try {
+        window.speechSynthesis?.cancel();
+      } catch {
+        // No TTS.
+      }
+      utteranceRef.current = null;
+    }
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    setState("idle");
   }
 
   return (
     <div className="voice-bubble">
       <button
-        aria-label="Play voice message"
+        aria-label={
+          state === "playing"
+            ? "Pause"
+            : state === "paused"
+              ? "Resume"
+              : "Play voice message"
+        }
         className="voice-bubble-play"
-        onClick={toggle}
+        disabled={state === "loading"}
+        onClick={() => {
+          if (state === "playing") pause();
+          else if (state === "paused") void resume();
+          else void play();
+        }}
         type="button"
       >
-        {playing ? <IconStop /> : <IconPlay />}
+        {state === "loading" ? (
+          <IconSpinner />
+        ) : state === "playing" ? (
+          <IconPause />
+        ) : (
+          <IconPlay />
+        )}
       </button>
+      {state === "playing" || state === "paused" ? (
+        <button
+          aria-label="Stop"
+          className="voice-bubble-play voice-bubble-stop"
+          onClick={stop}
+          type="button"
+        >
+          <IconStop />
+        </button>
+      ) : null}
       <p>{text}</p>
     </div>
   );
@@ -5115,7 +5250,7 @@ function AskVaenyxPanel({
                   message.content &&
                   message.status === "completed" ? (
                   <VoiceBubble
-                    onSpeak={(value) => void playReplyAloud(value)}
+                    engine={voiceOutput?.engine ?? "browser"}
                     text={message.content}
                   />
                 ) : message.content ? (

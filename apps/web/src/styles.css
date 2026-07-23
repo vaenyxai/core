@@ -937,6 +937,10 @@ textarea::placeholder {
   cursor: pointer;
 }
 
+.voice-bubble-stop {
+  color: var(--text-muted);
+}
+
 .voice-bubble p {
   margin: 0;
   color: #dedbd1;
