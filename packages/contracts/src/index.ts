@@ -21,6 +21,7 @@ export {
   ClassifyRoutineResponseSchema,
   CreateAppProfileRequestSchema,
   CreateAppProfileResponseSchema,
+  RevealAppTokenResponseSchema,
   UpdateAppProfileRequestSchema,
   UpdateAppProfileResponseSchema,
   RenameMethodRequestSchema,

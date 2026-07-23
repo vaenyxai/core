@@ -723,6 +723,12 @@ export function regenerateAppProfileToken(
   );
 }
 
+export function fetchAppProfileToken(
+  profileId: string,
+): Promise<{ token: string }> {
+  return requestJson<{ token: string }>(`/v1/app-profiles/${profileId}/token`);
+}
+
 export function disableAppProfile(profileId: string): Promise<AppProfile> {
   return requestJson<AppProfile>(`/v1/app-profiles/${profileId}/disable`, {
     method: "POST",

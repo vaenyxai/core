@@ -734,6 +734,14 @@ export const CreateAppProfileResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Re-viewing an existing token (Owner-only; decrypted from the at-rest cipher).
+export const RevealAppTokenResponseSchema = Type.Object(
+  {
+    token: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 // Edit an existing App Profile's capability scope. The token (identity) never
 // changes; only the Methods it may use and its Mode B / memory permissions do.
 // Re-granting Methods re-pins each one's current content hash.

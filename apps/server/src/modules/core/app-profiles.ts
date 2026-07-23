@@ -13,6 +13,7 @@ import type { DatabaseHandle } from "../../db/database.js";
 
 import { loadMethod } from "./methods.js";
 import { loadRoutine } from "./routines.js";
+import { decryptAppToken, encryptAppToken } from "./token-vault.js";
 
 // Where Methods and Routines live on disk; both create/update need them to
 // validate grants and pin version hashes.
@@ -40,6 +41,8 @@ interface AppProfileRow {
 function hashAppToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
+
+// Reversible display copy (see token-vault.ts): the key never enters backups.
 
 function allowedSkillIds(database: DatabaseHandle, profileId: string): string[] {
   return (
@@ -138,11 +141,13 @@ export function createAppProfile(
   database: DatabaseHandle,
   input: CreateAppProfileRequest,
   dirs: LibraryDirs,
+  secretsDirectory: string,
 ): CreateAppProfileResponse {
   const kind: AppProfileKind = input.kind ?? "method";
 
   const token = `vaenyx_app_${randomBytes(32).toString("base64url")}`;
   const tokenPrefix = `${token.slice(0, 18)}...`;
+  const tokenCipher = encryptAppToken(secretsDirectory, token);
   const id = randomUUID();
 
   // ── Routine Token: references exactly one Routine; pin its version. ──────────
@@ -165,14 +170,15 @@ export function createAppProfile(
     database.sqlite
       .prepare(
         `INSERT INTO app_profiles (
-          id, name, token_hash, token_prefix, kind, routine_id, routine_content_hash
-        ) VALUES (?, ?, ?, ?, 'routine', ?, ?)`,
+          id, name, token_hash, token_prefix, token_cipher, kind, routine_id, routine_content_hash
+        ) VALUES (?, ?, ?, ?, ?, 'routine', ?, ?)`,
       )
       .run(
         id,
         input.name.trim(),
         hashAppToken(token),
         tokenPrefix,
+        tokenCipher,
         routine.id,
         routine.contentHash,
       );
@@ -223,14 +229,15 @@ export function createAppProfile(
     database.sqlite
       .prepare(
         `INSERT INTO app_profiles (
-          id, name, token_hash, token_prefix, fetch_recipe, send_feedback
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
+          id, name, token_hash, token_prefix, token_cipher, fetch_recipe, send_feedback
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
         input.name.trim(),
         hashAppToken(token),
         tokenPrefix,
+        tokenCipher,
         input.fetchRecipe ? 1 : 0,
         input.sendFeedback ? 1 : 0,
       );
@@ -375,15 +382,21 @@ export function updateAppProfile(
 export function regenerateAppProfileToken(
   database: DatabaseHandle,
   profileId: string,
+  secretsDirectory: string,
 ): CreateAppProfileResponse {
   const token = `vaenyx_app_${randomBytes(32).toString("base64url")}`;
   const tokenPrefix = `${token.slice(0, 18)}...`;
 
   const result = database.sqlite
     .prepare(
-      "UPDATE app_profiles SET token_hash = ?, token_prefix = ? WHERE id = ?",
+      "UPDATE app_profiles SET token_hash = ?, token_prefix = ?, token_cipher = ? WHERE id = ?",
     )
-    .run(hashAppToken(token), tokenPrefix, profileId);
+    .run(
+      hashAppToken(token),
+      tokenPrefix,
+      encryptAppToken(secretsDirectory, token),
+      profileId,
+    );
 
   if (result.changes === 0) {
     throw new Error("APP_PROFILE_NOT_FOUND");
@@ -396,6 +409,25 @@ export function regenerateAppProfileToken(
   }
 
   return { profile, token };
+}
+
+// Re-view an existing Token (Owner-only, display purposes). Null when the
+// profile predates the cipher column or the ciphertext cannot be decrypted —
+// those tokens are unrecoverable by design (only hash + prefix exist); a
+// reset issues a fresh, recoverable one.
+export function revealAppProfileToken(
+  database: DatabaseHandle,
+  profileId: string,
+  secretsDirectory: string,
+): string | null {
+  const row = database.sqlite
+    .prepare("SELECT token_cipher FROM app_profiles WHERE id = ?")
+    .get(profileId) as { token_cipher: string | null } | undefined;
+  if (!row) {
+    throw new Error("APP_PROFILE_NOT_FOUND");
+  }
+  if (!row.token_cipher) return null;
+  return decryptAppToken(secretsDirectory, row.token_cipher);
 }
 
 export function disableAppProfile(

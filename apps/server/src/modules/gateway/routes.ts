@@ -21,6 +21,7 @@ import {
   AskVaenyxMessageSchema,
   CreateAppProfileRequestSchema,
   CreateAppProfileResponseSchema,
+  RevealAppTokenResponseSchema,
   CreateAskVaenyxConversationRequestSchema,
   CreateAskVaenyxMessageRequestSchema,
   CreateAskVaenyxMessageResponseSchema,
@@ -159,6 +160,7 @@ import {
   getAppProfileRoutineLock,
   listAppProfiles,
   regenerateAppProfileToken,
+  revealAppProfileToken,
   updateAppProfile,
 } from "../core/app-profiles.js";
 import {
@@ -3311,10 +3313,15 @@ export async function registerGatewayRoutes(
       }
 
       try {
-        const created = createAppProfile(context.database, request.body, {
-          libraryDirectory: context.config.libraryDirectory,
-          routinesDirectory: context.config.routinesDirectory,
-        });
+        const created = createAppProfile(
+          context.database,
+          request.body,
+          {
+            libraryDirectory: context.config.libraryDirectory,
+            routinesDirectory: context.config.routinesDirectory,
+          },
+          context.config.secretsDirectory,
+        );
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
@@ -3588,6 +3595,62 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // Re-view an existing token (Owner-only): decrypted from the at-rest cipher
+  // whose key lives in the secrets directory (outside every backup). Profiles
+  // created before the cipher existed return 404 — a reset issues a fresh,
+  // recoverable token.
+  app.get<{ Params: { id: string } }>(
+    "/v1/app-profiles/:id/token",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: RevealAppTokenResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        const token = revealAppProfileToken(
+          context.database,
+          request.params.id,
+          context.config.secretsDirectory,
+        );
+        if (!token) {
+          return reply.code(404).send({
+            error:
+              "This token predates re-viewing and cannot be recovered. Reset it to get one you can view again.",
+          });
+        }
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "app_profile.reveal_token",
+          decision: "allowed",
+          reason: "Owner viewed an App Profile token in Settings.",
+          resourceType: "app_profile",
+          resourceId: request.params.id,
+        });
+        return { token };
+      } catch (error) {
+        if (error instanceof Error && error.message === "APP_PROFILE_NOT_FOUND") {
+          return reply.code(404).send({ error: "App Profile not found." });
+        }
+        throw error;
+      }
+    },
+  );
+
   // Issue a fresh token for an existing profile. The original is stored only as a
   // hash and can never be shown again, so this is how the Owner recovers access:
   // it rotates to a new token (returned once) and the old one stops working.
@@ -3616,6 +3679,7 @@ export async function registerGatewayRoutes(
         const result = regenerateAppProfileToken(
           context.database,
           request.params.id,
+          context.config.secretsDirectory,
         );
         recordAudit(context.database, {
           actorType: "owner",

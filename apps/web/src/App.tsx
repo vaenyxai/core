@@ -110,6 +110,7 @@ import {
   logoutAllDevices,
   changeOwnerPassword,
   regenerateAppProfileToken,
+  fetchAppProfileToken,
   rejectVaenyxMeCandidate,
   renameMethod,
   renameMethodTag,
@@ -688,6 +689,81 @@ function TokenField({ token }: { token: string }) {
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// An existing Token's masked row: Show / Copy fetch the real value on demand
+// from the at-rest cipher (Owner-only endpoint). Tokens created before the
+// cipher existed cannot be recovered — the row says so and points at Reset.
+function StoredTokenField({ prefix, profileId }: { prefix: string; profileId: string }) {
+  const [revealed, setRevealed] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [unrecoverable, setUnrecoverable] = useState(false);
+
+  const masked = `${prefix.replace(/\.\.\.$/, "")}${"•".repeat(24)}`;
+
+  async function load(): Promise<string | null> {
+    if (token) return token;
+    try {
+      const result = await fetchAppProfileToken(profileId);
+      setToken(result.token);
+      return result.token;
+    } catch {
+      setUnrecoverable(true);
+      return null;
+    }
+  }
+
+  async function toggleReveal() {
+    if (revealed) {
+      setRevealed(false);
+      return;
+    }
+    const value = await load();
+    if (value) setRevealed(true);
+  }
+
+  async function copy() {
+    const value = await load();
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setRevealed(true);
+    }
+  }
+
+  return (
+    <div className="token-field">
+      <code className="token-value">
+        {revealed && token ? token : masked}
+      </code>
+      <div className="token-field-actions">
+        <button
+          className="secondary-button"
+          onClick={() => void toggleReveal()}
+          type="button"
+        >
+          {revealed ? "Hide" : "Show"}
+        </button>
+        <button
+          className="secondary-button"
+          onClick={() => void copy()}
+          type="button"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      {unrecoverable ? (
+        <p className="library-note">
+          Created before tokens became re-viewable — press Reset Token to get
+          one you can view and copy any time.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1330,11 +1406,14 @@ function AppsPanel({
                     {profile.enabled ? "" : " · Disabled"}
                   </span>
                   <strong>{profile.name}</strong>
-                  <small>
-                    Token {profile.tokenPrefix} · Created{" "}
-                    {formatTime(profile.createdAt)}
-                  </small>
+                  <small>Created {formatTime(profile.createdAt)}</small>
                 </div>
+                {createdToken?.profileId !== profile.id ? (
+                  <StoredTokenField
+                    prefix={profile.tokenPrefix}
+                    profileId={profile.id}
+                  />
+                ) : null}
                 <dl>
                   {profile.kind === "routine" ? (
                     <div>
@@ -1356,11 +1435,11 @@ function AppsPanel({
                 </dl>
                 {createdToken?.profileId === profile.id ? (
                   <div className="token-once">
-                    <strong>Save this token now. It is shown only once.</strong>
+                    <strong>Your new token is ready.</strong>
                     <TokenField token={createdToken.token} />
                     <p>
-                      Vaenyx stores only an irreversible fingerprint, so this full
-                      token cannot be shown again after you leave this page.
+                      You can view or copy it again any time with the Show and
+                      Copy buttons on this Token.
                     </p>
                   </div>
                 ) : null}
