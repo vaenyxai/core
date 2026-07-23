@@ -967,6 +967,21 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
+/* Composer controls anchor to the RIGHT edge (Oskar, dev.142): the first
+   button after the textarea (mic when connected, else Send) takes the auto
+   margin; anything after it sits flush beside it. */
+.ask-vaenyx-composer-box > textarea ~ button,
+.simple-compose-box > textarea ~ button {
+  margin-left: auto;
+}
+
+.ask-vaenyx-composer-box > .mic-button ~ button,
+.simple-compose-box > .mic-button ~ button,
+.ask-vaenyx-composer-box > .mic-record-group ~ button,
+.simple-compose-box > .mic-record-group ~ button {
+  margin-left: 0;
+}
+
 /* Recording (ChatGPT-style): cancel × | live volume bars | send ✓.
    While recording, the group takes over the whole composer row — the textarea
    and Send button step aside so the two controls can be big. */
