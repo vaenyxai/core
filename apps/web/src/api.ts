@@ -812,6 +812,13 @@ export function postPresenceHeartbeat(): Promise<{ ok: boolean }> {
   });
 }
 
+export function stopTurn(key: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/v1/turns/stop", {
+    method: "POST",
+    body: JSON.stringify({ key }),
+  });
+}
+
 export async function transcribeAudio(
   blob: Blob,
 ): Promise<{ text: string; audioId: string }> {

@@ -122,6 +122,7 @@ import {
   connectVoiceOutput,
   synthesizeSpeech,
   postPresenceHeartbeat,
+  stopTurn,
   type VoiceOutputStatus,
   type VoiceStatus,
   rejectVaenyxMeCandidate,
@@ -3552,6 +3553,27 @@ function AskVaenyxPanel({
     };
   }, [focusedTaskId, view]);
 
+  // Coming back to a suspended page (phone unlock, tab switch): the reply may
+  // have finished server-side while the stream connection was dead — refetch
+  // the open conversation so the real answer replaces any stale error bubble.
+  useEffect(() => {
+    const reconcile = () => {
+      if (document.visibilityState !== "visible") return;
+      if (view === "chat" && activeConversationId && !sending) {
+        void fetchAskVaenyxMessages(activeConversationId)
+          .then(setMessages)
+          .catch(() => undefined);
+      }
+      if (view === "task" && focusedTaskId && !sendingTaskMessage) {
+        void fetchTaskMessages(focusedTaskId)
+          .then(setTaskMessages)
+          .catch(() => undefined);
+      }
+    };
+    document.addEventListener("visibilitychange", reconcile);
+    return () => document.removeEventListener("visibilitychange", reconcile);
+  }, [view, activeConversationId, focusedTaskId, sending, sendingTaskMessage]);
+
   // A run finishes server-side without the UI knowing (no push channel), so
   // "Working" used to stick until a manual refresh. Poll while the open task is
   // waiting/running; the interval dissolves as soon as the status settles.
@@ -4230,9 +4252,15 @@ function AskVaenyxPanel({
     }
   }
 
-  // Stop the in-flight streaming reply. Aborting closes the connection, which
-  // the server sees and uses to cancel the model turn.
+  // Stop the in-flight streaming reply. A dropped connection no longer stops
+  // generation (a locked phone must still get its reply), so Stop tells the
+  // server explicitly, then closes the local stream.
   function stopStreaming() {
+    const key =
+      sendingTaskMessage && focusedTaskId
+        ? `task:${focusedTaskId}`
+        : activeConversationId;
+    if (key) void stopTurn(key).catch(() => undefined);
     streamControllerRef.current?.abort();
   }
 

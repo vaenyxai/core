@@ -33,11 +33,13 @@ import {
   ConnectVoiceOutputRequestSchema,
   SpeakRequestSchema,
   SpeakResponseSchema,
+  StopTurnRequestSchema,
   type SubscribePushRequest,
   type UnsubscribePushRequest,
   type ConnectVoiceRequest,
   type ConnectVoiceOutputRequest,
   type SpeakRequest,
+  type StopTurnRequest,
   CreateAskVaenyxConversationRequestSchema,
   CreateAskVaenyxMessageRequestSchema,
   CreateAskVaenyxMessageResponseSchema,
@@ -495,8 +497,14 @@ export async function registerGatewayRoutes(
   // because Fastify's serializer/onSend cannot describe an event stream. That
   // means we must write the security headers and the rolling-session cookie
   // (set by the onRequest hook) onto the raw response ourselves.
+  // In-flight turns by key (chat conversation id / task:<id>): the Stop button
+  // aborts through here. A dropped socket must NOT kill a turn — a locked
+  // phone still gets its reply generated, stored and presence-pushed.
+  const inFlightTurns = new Map<string, AbortController>();
+
   async function streamAskVaenyxReply(
     reply: FastifyReply,
+    turnKey: string,
     run: (
       options: CreateAskVaenyxMessageOptions,
     ) => ReturnType<typeof createAskVaenyxMessage>,
@@ -525,12 +533,15 @@ export async function registerGatewayRoutes(
       try {
         raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       } catch {
-        // Client went away mid-write; the close handler aborts the turn.
+        // Client went away mid-write; generation continues regardless.
       }
     };
 
     const controller = new AbortController();
-    raw.on("close", () => controller.abort());
+    // One live turn per conversation: a resend after a dropped socket takes
+    // over from the orphaned turn instead of racing it.
+    inFlightTurns.get(turnKey)?.abort();
+    inFlightTurns.set(turnKey, controller);
 
     try {
       const response = await run({
@@ -550,6 +561,9 @@ export async function registerGatewayRoutes(
             : "Vaenyx could not complete this reply.";
       send("error", { error: message });
     } finally {
+      if (inFlightTurns.get(turnKey) === controller) {
+        inFlightTurns.delete(turnKey);
+      }
       try {
         raw.end();
       } catch {
@@ -2312,6 +2326,7 @@ export async function registerGatewayRoutes(
 
       await streamAskVaenyxReply(
         reply,
+        request.params.id,
         (options) =>
           createAskVaenyxMessage(
             context.database,
@@ -2841,6 +2856,7 @@ export async function registerGatewayRoutes(
 
       await streamAskVaenyxReply(
         reply,
+        `task:${request.params.id}`,
         (options) =>
           createTaskMessage(
             context.database,
@@ -3858,6 +3874,26 @@ export async function registerGatewayRoutes(
         return reply.code(404).send({ error: "Recording not found." });
       }
       return reply.type(found.mimeType).send(found.audio);
+    },
+  );
+
+  // Stop an in-flight reply turn (the Stop button). Explicit because a mere
+  // connection drop no longer cancels generation.
+  app.post<{ Body: StopTurnRequest }>(
+    "/v1/turns/stop",
+    {
+      schema: {
+        body: StopTurnRequestSchema,
+        response: { 200: PushAckResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      inFlightTurns.get(request.body.key)?.abort();
+      return { ok: true };
     },
   );
 

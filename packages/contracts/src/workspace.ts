@@ -852,6 +852,16 @@ export const SpeakResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Explicitly stop an in-flight reply turn. key = the chat conversation id, or
+// "task:<taskId>" for a task-conversation turn. (A dropped connection no
+// longer stops a turn — a locked phone still gets its reply.)
+export const StopTurnRequestSchema = Type.Object(
+  {
+    key: Type.String({ minLength: 1, maxLength: 120 }),
+  },
+  { additionalProperties: false },
+);
+
 // Edit an existing App Profile's capability scope. The token (identity) never
 // changes; only the Methods it may use and its Mode B / memory permissions do.
 // Re-granting Methods re-pins each one's current content hash.
@@ -1611,6 +1621,7 @@ export type ConnectVoiceOutputRequest = Static<
   typeof ConnectVoiceOutputRequestSchema
 >;
 export type SpeakRequest = Static<typeof SpeakRequestSchema>;
+export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;
 export type AgentProfile = Static<typeof AgentProfileSchema>;
