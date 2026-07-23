@@ -1500,6 +1500,49 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return output;
 }
 
+// The Owner's standing choice: "1" once notifications were turned on anywhere
+// on this device — the self-heal below re-subscribes whenever the browser
+// drops the subscription on its own (Android does, from time to time).
+const PUSH_WANTED_KEY = "vaenyx.pushWanted";
+
+async function healPushSubscription(): Promise<boolean> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return false;
+  }
+  try {
+    if (window.localStorage.getItem(PUSH_WANTED_KEY) !== "1") return false;
+  } catch {
+    return false;
+  }
+  if (Notification.permission !== "granted") return false;
+  try {
+    const registration = await pushWorkerReady();
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      const { key } = await fetchPushPublicKey();
+      if (!key) return false;
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key),
+      });
+    }
+    const json = subscription.toJSON() as {
+      endpoint?: string;
+      keys?: { p256dh?: string; auth?: string };
+    };
+    if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) return false;
+    // Always re-sync to the server: this also repairs a server-side prune
+    // while the browser still held a valid subscription.
+    await subscribePush({
+      endpoint: json.endpoint,
+      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Wait for a controlling service worker, but never forever: an unready worker
 // used to leave the enable button spinning with no message at all.
 async function pushWorkerReady(): Promise<ServiceWorkerRegistration> {
@@ -1537,9 +1580,13 @@ function NotificationsPanel() {
   useEffect(() => {
     reloadDiagnostics();
     if (!supported) return;
-    void pushWorkerReady()
+    // Repair first (the browser may have silently dropped the subscription),
+    // then show the true state.
+    void healPushSubscription()
+      .then(() => pushWorkerReady())
       .then((registration) => registration.pushManager.getSubscription())
       .then((subscription) => setEnabled(Boolean(subscription)))
+      .then(() => reloadDiagnostics())
       .catch(() => undefined);
   }, [supported]);
 
@@ -1579,6 +1626,11 @@ function NotificationsPanel() {
         endpoint: json.endpoint,
         keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
       });
+      try {
+        window.localStorage.setItem(PUSH_WANTED_KEY, "1");
+      } catch {
+        // Best-effort; self-heal just won't run without it.
+      }
       setEnabled(true);
       reloadDiagnostics();
     } catch (nextError) {
@@ -1601,6 +1653,11 @@ function NotificationsPanel() {
       if (subscription) {
         await unsubscribePush(subscription.endpoint).catch(() => undefined);
         await subscription.unsubscribe();
+      }
+      try {
+        window.localStorage.setItem(PUSH_WANTED_KEY, "0");
+      } catch {
+        // Best-effort.
       }
       setEnabled(false);
       reloadDiagnostics();
@@ -11592,6 +11649,13 @@ function VaenyxWorkspace({
         window.removeEventListener(eventName, noteInteraction);
       }
     };
+  }, []);
+
+  // Self-healing push (dev.144): if the Owner enabled notifications on this
+  // device and the browser dropped the subscription on its own, quietly
+  // re-subscribe on every app open — no setting flips itself off anymore.
+  useEffect(() => {
+    void healPushSubscription();
   }, []);
 
   useEffect(() => {

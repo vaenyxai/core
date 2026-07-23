@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v3";
+const CACHE_NAME = "vaenyx-shell-v4";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -51,6 +51,49 @@ self.addEventListener("push", (event) => {
       badge: "/vaenyx-mark.svg",
       data: { url: data.url || "/" },
     }),
+  );
+});
+
+// Browsers occasionally rotate or drop a push subscription on their own.
+// Re-subscribe with the server's key and hand the new subscription back, so
+// notifications keep working without the Owner touching anything.
+function base64ToUint8(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
+  return output;
+}
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const response = await fetch("/v1/push/public-key", {
+          credentials: "include",
+        });
+        const { key } = await response.json();
+        if (!key) return;
+        const subscription = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: base64ToUint8(key),
+        });
+        const json = subscription.toJSON();
+        if (!json.endpoint || !json.keys) return;
+        await fetch("/v1/push/subscriptions", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            endpoint: json.endpoint,
+            keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+          }),
+        });
+      } catch {
+        // Best-effort — the in-page self-heal covers the rest.
+      }
+    })(),
   );
 });
 

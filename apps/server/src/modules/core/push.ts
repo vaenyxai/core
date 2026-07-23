@@ -12,8 +12,10 @@ import type { DatabaseHandle } from "../../db/database.js";
 
 const VAPID_FILENAME = "push-vapid.json";
 const VAPID_SUBJECT = "mailto:hello@vaenyx.ai";
+const LAST_SEND_FILENAME = "push-last-send.txt";
 
 let secretsDirectory: string | null = null;
+let dataDirectory: string | null = null;
 
 // Presence (Owner request 2026-07-22): pages heartbeat while visible, and a
 // scheduled run skips the phone push when someone is actively looking at the
@@ -41,15 +43,46 @@ export function schedulePresenceAwarePush(
   setTimeout(() => {
     if (lastPresenceAt >= completedAt) {
       // Someone saw it — stay quiet, but leave a diagnosable trace.
-      lastSendResult = `${new Date().toISOString()} — suppressed: a device was actively viewing within 30s of the result.`;
+      recordLastSend(
+        `${new Date().toISOString()} — suppressed: a device was actively viewing within 30s of the result.`,
+      );
       return;
     }
     void sendPushToAllDevices(database, payload).catch(() => undefined);
   }, UNSEEN_WAIT_MS).unref?.();
 }
 
-export function initPushService(config: { secretsDirectory: string }): void {
+export function initPushService(config: {
+  secretsDirectory: string;
+  dataDirectory: string;
+}): void {
   secretsDirectory = config.secretsDirectory;
+  dataDirectory = config.dataDirectory;
+}
+
+// The last send's outcome is written to disk: the server restarts on every
+// deploy, and an in-memory-only record made push silences undiagnosable.
+function recordLastSend(result: string): void {
+  lastSendResult = result;
+  if (!dataDirectory) return;
+  try {
+    writeFileSync(resolve(dataDirectory, LAST_SEND_FILENAME), `${result}\n`);
+  } catch {
+    // Best-effort.
+  }
+}
+
+function readLastSend(): string | null {
+  if (lastSendResult) return lastSendResult;
+  if (!dataDirectory) return null;
+  try {
+    return (
+      readFileSync(resolve(dataDirectory, LAST_SEND_FILENAME), "utf8").trim() ||
+      null
+    );
+  } catch {
+    return null;
+  }
 }
 
 interface VapidKeys {
@@ -121,7 +154,7 @@ export function getPushDiagnostics(database: DatabaseHandle): {
   } catch {
     // Table unavailable; report zero.
   }
-  return { subscriptions, lastResult: lastSendResult };
+  return { subscriptions, lastResult: readLastSend() };
 }
 
 // Best-effort broadcast to every subscribed device. Dead subscriptions
@@ -133,8 +166,8 @@ export async function sendPushToAllDevices(
 ): Promise<string> {
   const keys = loadOrCreateVapidKeys();
   if (!keys) {
-    lastSendResult = "No VAPID keys (secrets directory unavailable).";
-    return lastSendResult;
+    recordLastSend("No VAPID keys (secrets directory unavailable).");
+    return lastSendResult ?? "";
   }
   let rows: { endpoint: string; p256dh: string; auth: string }[];
   try {
@@ -142,12 +175,12 @@ export async function sendPushToAllDevices(
       .prepare("SELECT endpoint, p256dh, auth FROM push_subscriptions")
       .all() as { endpoint: string; p256dh: string; auth: string }[];
   } catch {
-    lastSendResult = "Could not read subscriptions.";
-    return lastSendResult;
+    recordLastSend("Could not read subscriptions.");
+    return lastSendResult ?? "";
   }
   if (rows.length === 0) {
-    lastSendResult = "No devices subscribed.";
-    return lastSendResult;
+    recordLastSend(`${new Date().toISOString()} — nothing sent: no devices subscribed.`);
+    return lastSendResult ?? "";
   }
 
   const body = JSON.stringify(payload);
@@ -190,8 +223,10 @@ export async function sendPushToAllDevices(
       }
     }),
   );
-  lastSendResult = `${new Date().toISOString()} — sent ${sent}/${rows.length}${
-    pruned ? `, removed ${pruned} expired` : ""
-  }${failures.length ? `, failed: ${failures.join("; ").slice(0, 200)}` : ""}`;
-  return lastSendResult;
+  recordLastSend(
+    `${new Date().toISOString()} — sent ${sent}/${rows.length}${
+      pruned ? `, removed ${pruned} expired (device must re-enable or self-heal)` : ""
+    }${failures.length ? `, failed: ${failures.join("; ").slice(0, 200)}` : ""}`,
+  );
+  return lastSendResult ?? "";
 }
