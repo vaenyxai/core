@@ -971,6 +971,39 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
+/* Floating jump-to-latest (Oskar, dev.147): top-centre of the conversation,
+   only while the newest message is well out of view. */
+.jump-latest {
+  position: fixed;
+  top: 118px;
+  left: 50%;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+
+.jump-latest .line-icon {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 720px) {
+  .jump-latest {
+    top: 96px;
+  }
+}
+
 /* Composer controls anchor to the RIGHT edge (Oskar, dev.142): the first
    button after the textarea (mic when connected, else Send) takes the auto
    margin; anything after it sits flush beside it. */
@@ -1781,7 +1814,12 @@ select {
 
 .ask-vaenyx-chat {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* Rows pack to the top (Oskar, dev.147): with short content the composer
+     sits right after the last message instead of pinning to the screen bottom
+     with a void between. Long content scrolls normally — the sticky composer
+     still pins to the viewport while scrolling. */
+  grid-template-rows: auto auto auto;
+  align-content: start;
   overflow: visible;
   border: 0;
   border-radius: 0;
@@ -2005,14 +2043,13 @@ select {
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 34px;
-  min-height: 360px;
+  min-height: 0;
   max-height: none;
   overflow: visible;
-  padding: 44px max(18px, calc((100% - 820px) / 2)) 126px;
-}
-
-.ask-vaenyx-chat.focused-chat .ask-vaenyx-messages {
-  min-height: calc(100vh - 220px);
+  /* Small end padding only — the composer follows the content now; the
+     chat-end-anchor's scroll-margin keeps auto-scroll clear of the sticky
+     composer while long content streams. */
+  padding: 44px max(18px, calc((100% - 820px) / 2)) 28px;
 }
 
 /* Scroll target after a send: land the newest message clear of the sticky
@@ -4818,9 +4855,7 @@ select {
   .ask-vaenyx-messages {
     max-height: none;
     padding-top: 28px;
-    /* The phone composer stack (box + status row + disclaimer) is tall —
-       reserve real room so messages never sit under its translucent top. */
-    padding-bottom: 220px;
+    padding-bottom: 28px;
   }
 
   .chat-end-anchor {

@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type ReactNode,
+  type RefObject,
   useEffect,
   useRef,
   useState,
@@ -827,6 +828,58 @@ function IconPause() {
       <line x1="9" x2="9" y1="6" y2="18" />
       <line x1="15" x2="15" y1="6" y2="18" />
     </LineIcon>
+  );
+}
+
+function IconArrowDown() {
+  return (
+    <LineIcon>
+      <path d="M12 4v14" />
+      <path d="m6 12 6 6 6-6" />
+    </LineIcon>
+  );
+}
+
+// Floating jump control (Oskar design, dev.147): appears top-centre of the
+// conversation only when the newest message is well out of view; tap scrolls
+// smoothly to the bottom. Hidden the rest of the time.
+function JumpToLatest({
+  targetRef,
+}: {
+  targetRef: RefObject<HTMLDivElement | null>;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const doc = document.documentElement;
+      const fromBottom =
+        doc.scrollHeight - (window.scrollY + window.innerHeight);
+      setVisible(fromBottom > 400);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <button
+      aria-label="Jump to latest"
+      className="jump-latest"
+      onClick={() =>
+        targetRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+      }
+      type="button"
+    >
+      <IconArrowDown />
+      Latest
+    </button>
   );
 }
 
@@ -3880,6 +3933,9 @@ function AskVaenyxPanel({
         void fetchTaskMessages(focusedTaskId)
           .then(setTaskMessages)
           .catch(() => undefined);
+        // The header (Last run / Next / chips) reads the workspace — a PWA
+        // waking from the background otherwise shows yesterday's values.
+        void onWorkspaceRefresh();
       }
     };
     const reconcile = () => {
@@ -3889,7 +3945,13 @@ function AskVaenyxPanel({
     };
     document.addEventListener("visibilitychange", reconcile);
     return () => document.removeEventListener("visibilitychange", reconcile);
-  }, [view, activeConversationId, focusedTaskId, onConversationsChange]);
+  }, [
+    view,
+    activeConversationId,
+    focusedTaskId,
+    onConversationsChange,
+    onWorkspaceRefresh,
+  ]);
 
   // A run finishes server-side without the UI knowing (no push channel), so
   // "Working" used to stick until a manual refresh. Poll while the open task is
@@ -5285,6 +5347,7 @@ function AskVaenyxPanel({
           )}
           <div className="chat-end-anchor" ref={chatEndRef} />
         </div>
+        <JumpToLatest targetRef={chatEndRef} />
 
         {building && building.conversationId === activeConversationId ? (
           <div className="chat-create-offer">
@@ -5842,6 +5905,7 @@ function AskVaenyxPanel({
             ) : null}
             <div className="chat-end-anchor" ref={taskEndRef} />
           </div>
+          <JumpToLatest targetRef={taskEndRef} />
 
           <form
             className="ask-vaenyx-composer"
@@ -11832,11 +11896,23 @@ function VaenyxWorkspace({
     };
   }, []);
 
-  // Self-healing push (dev.144): if the Owner enabled notifications on this
-  // device and the browser dropped the subscription on its own, quietly
-  // re-subscribe on every app open — no setting flips itself off anymore.
+  // Self-healing push (dev.144, hardened dev.147): browsers drop subscriptions
+  // on their own, and an installed PWA can live in the background for DAYS —
+  // mount-once healing never re-ran. Heal on every return to the foreground
+  // too (throttled), so an expired subscription repairs before it matters.
   useEffect(() => {
-    void healPushSubscription();
+    let lastHealAt = 0;
+    const heal = () => {
+      if (Date.now() - lastHealAt < 300_000) return;
+      lastHealAt = Date.now();
+      void healPushSubscription();
+    };
+    heal();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") heal();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   useEffect(() => {
