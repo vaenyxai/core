@@ -124,6 +124,7 @@ import {
   type PushDiagnostics,
   fetchVisionStatus,
   describePhoto,
+  uploadPhoto,
   type VisionStatus,
   fetchVoiceOutput,
   connectVoiceOutput,
@@ -904,10 +905,15 @@ async function downscalePhoto(file: File): Promise<Blob> {
 function CameraButton({
   disabled,
   lang,
+  onAttach,
   onText,
 }: {
   disabled?: boolean;
   lang: string;
+  // Phase B direct mode: the photo attaches to the message itself (the main
+  // model sees the original). When absent, the describe fallback fills the
+  // composer with extracted text instead.
+  onAttach?: (imageId: string) => void;
   onText: (text: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -919,8 +925,13 @@ function CameraButton({
     setError(null);
     try {
       const blob = await downscalePhoto(file);
-      const text = await describePhoto(blob, lang);
-      if (text) onText(text);
+      if (onAttach) {
+        const { imageId } = await uploadPhoto(blob);
+        onAttach(imageId);
+      } else {
+        const text = await describePhoto(blob, lang);
+        if (text) onText(text);
+      }
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -3904,6 +3915,9 @@ function AskVaenyxPanel({
   // toggle reads finished replies aloud (persisted per device).
   const [voiceReady, setVoiceReady] = useState(false);
   const [visionReady, setVisionReady] = useState(false);
+  // Phase B: an uploaded photo waiting to ride on the next message (direct
+  // vision mode); null = no attachment pending.
+  const [pendingImageId, setPendingImageId] = useState<string | null>(null);
   const [voiceReplies, setVoiceReplies] = useState(voiceRepliesEnabled);
   const [voiceOutput, setVoiceOutput] = useState<VoiceOutputStatus | null>(
     null,
@@ -4468,6 +4482,14 @@ function AskVaenyxPanel({
     content: string,
     voiceAudioId?: string,
   ): Promise<void> {
+    // Phase B: a pending photo rides on this message; a photo alone is a
+    // valid message too.
+    const imageId = pendingImageId ?? undefined;
+    if (!content.trim()) {
+      if (!imageId) return;
+      content = "(Photo)";
+    }
+    setPendingImageId(null);
     if (activeThread?.routineId && activeConversationId) {
       await runRoutineMessage(
         activeConversationId,
@@ -4648,6 +4670,7 @@ function AskVaenyxPanel({
           webSearchUsed: false,
           createdAt: startedAt,
           ...(voiceAudioId ? { voice: true, audioId: voiceAudioId } : {}),
+          ...(imageId ? { imageId } : {}),
         },
         {
           id: tempAssistantId,
@@ -4723,6 +4746,7 @@ function AskVaenyxPanel({
         suggestCreate,
         clarifyCreateQuestion,
         voiceAudioId,
+        imageId,
       );
 
       // Voice replies: a voice turn always answers aloud (it is a spoken
@@ -4827,7 +4851,7 @@ function AskVaenyxPanel({
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = prompt.trim();
-    if (!content) return;
+    if (!content && !pendingImageId) return;
 
     await sendChatContent(content);
   }
@@ -4981,7 +5005,7 @@ function AskVaenyxPanel({
   async function startWork(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = startWorkPrompt.trim();
-    if (!content) return;
+    if (!content && !pendingImageId) return;
     // Compose always opens a Chat now; new chats default to Unsorted. Work is
     // activated later from inside the chat ("Run as task"). See spec.md §2.
     await sendChatContent(content);
@@ -5137,12 +5161,29 @@ function AskVaenyxPanel({
   }
 
   function renderSimpleCompose() {
+    const defaultCanAttach = VISION_DIRECT_IDS.includes(
+      chatProviders.find((candidate) => candidate.isDefault)?.id ?? "",
+    );
     return (
       <div className="simple-compose-shell">
         <form className="simple-compose-panel" onSubmit={startWork}>
           <div className="simple-compose-header">
             <h2>Where should we begin?</h2>
           </div>
+
+          {pendingImageId ? (
+            <div className="composer-attachment">
+              <img alt="" src={`/v1/vision/image/${pendingImageId}`} />
+              <button
+                aria-label="Remove photo"
+                className="composer-attachment-remove"
+                onClick={() => setPendingImageId(null)}
+                type="button"
+              >
+                <IconX />
+              </button>
+            </div>
+          ) : null}
 
           <div className="simple-compose-box">
             <textarea
@@ -5176,6 +5217,9 @@ function AskVaenyxPanel({
               <CameraButton
                 disabled={sending}
                 lang={lang}
+                onAttach={
+                  defaultCanAttach ? (id) => setPendingImageId(id) : undefined
+                }
                 onText={(text) =>
                   setStartWorkPrompt((current) =>
                     current ? `${current}\n${text}` : text,
@@ -5191,7 +5235,9 @@ function AskVaenyxPanel({
             ) : null}
             <button
               className="primary-button"
-              disabled={sending || !startWorkPrompt.trim()}
+              disabled={
+                sending || (!startWorkPrompt.trim() && !pendingImageId)
+              }
               type="submit"
             >
               {sending ? "Sending" : "Send"}
@@ -5242,6 +5288,16 @@ function AskVaenyxPanel({
           (routine) => routine.id === activeThread.routineId,
         ) ?? null
       : null;
+    // Phase B: photos attach to the message itself when the conversation's
+    // effective model reads images (and the chat isn't a Routine — Routines
+    // consume text, so they keep the describe fallback).
+    const effectiveChatProviderId = (
+      chatProviders.find(
+        (candidate) => candidate.id === activeConversation?.modelProviderId,
+      ) ?? chatProviders.find((candidate) => candidate.isDefault)
+    )?.id;
+    const canAttachPhoto =
+      !isRoutine && VISION_DIRECT_IDS.includes(effectiveChatProviderId ?? "");
     // Header chips (spec §2a): same real-state chips as the sidebar, but the
     // Routine chip shows the Routine's actual name, and an in-flight build adds
     // a Building chip alongside the in-conversation banner.
@@ -5594,6 +5650,13 @@ function AskVaenyxPanel({
                   <strong>{message.role === "owner" ? "You" : agentName}</strong>
                   <small>{formatTime(message.createdAt)}</small>
                 </div>
+                {message.imageId ? (
+                  <img
+                    alt=""
+                    className="message-photo"
+                    src={`/v1/vision/image/${message.imageId}`}
+                  />
+                ) : null}
                 {message.voice && message.role === "owner" ? (
                   <VoiceBubble
                     audioId={message.audioId}
@@ -5656,6 +5719,19 @@ function AskVaenyxPanel({
         ) : null}
 
         <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
+          {pendingImageId ? (
+            <div className="composer-attachment">
+              <img alt="" src={`/v1/vision/image/${pendingImageId}`} />
+              <button
+                aria-label="Remove photo"
+                className="composer-attachment-remove"
+                onClick={() => setPendingImageId(null)}
+                type="button"
+              >
+                <IconX />
+              </button>
+            </div>
+          ) : null}
           <div className="ask-vaenyx-composer-box">
             <textarea
               maxLength={10_000}
@@ -5687,6 +5763,9 @@ function AskVaenyxPanel({
               <CameraButton
                 disabled={sending}
                 lang={lang}
+                onAttach={
+                  canAttachPhoto ? (id) => setPendingImageId(id) : undefined
+                }
                 onText={(text) =>
                   setPrompt((current) =>
                     current ? `${current}\n${text}` : text,
@@ -5711,7 +5790,7 @@ function AskVaenyxPanel({
             ) : (
               <button
                 className="primary-button"
-                disabled={!prompt.trim()}
+                disabled={!prompt.trim() && !pendingImageId}
                 type="submit"
               >
                 {isRoutine ? "Run" : "Send"}
@@ -9873,6 +9952,10 @@ const MODEL_FREE_TIER_NOTES: Record<string, string> = {
   workersai:
     "Free: 10,000 Neurons/day. Base URL needs your account id: https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1",
 };
+
+// Backends whose chat endpoint reads images directly (Phase B) — must mirror
+// the server's VISION_DIRECT_PROVIDER_IDS.
+const VISION_DIRECT_IDS = ["gemini", "zhipu", "openai"];
 
 // Per-provider model shortlists for the in-chat picker (curated 2026-07-22;
 // the provider's own configured model always remains the Default option, and

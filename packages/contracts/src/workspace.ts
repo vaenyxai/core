@@ -261,6 +261,9 @@ export const AskVaenyxMessageSchema = Type.Object(
     // original recording (assistant bubbles replay via on-device TTS).
     voice: Type.Optional(Type.Boolean()),
     audioId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // Phase B: a photo attached to the message (shown as a thumbnail; a
+    // vision-capable main model sees the original directly).
+    imageId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -299,6 +302,9 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     // Voice turn: the saved recording's id. Marks both sides as voice bubbles
     // and asks the model for a short spoken-style reply.
     voiceAudioId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    // Phase B: an uploaded photo's id — attached to the Owner message and
+    // handed to the main model directly when it reads images.
+    imageId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   },
   { additionalProperties: false },
 );
@@ -885,6 +891,13 @@ export const VisionStatusSchema = Type.Object(
 export const VisionDescribeResponseSchema = Type.Object(
   {
     text: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const VisionUploadResponseSchema = Type.Object(
+  {
+    imageId: Type.String(),
   },
   { additionalProperties: false },
 );

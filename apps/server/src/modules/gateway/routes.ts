@@ -37,6 +37,7 @@ import {
   StopTurnRequestSchema,
   VisionStatusSchema,
   VisionDescribeResponseSchema,
+  VisionUploadResponseSchema,
   type SubscribePushRequest,
   type UnsubscribePushRequest,
   type ConnectVoiceRequest,
@@ -203,7 +204,12 @@ import {
   synthesizeSpeech,
   transcribeVoice,
 } from "../core/voice.js";
-import { describeImage, getVisionStatus } from "../core/vision.js";
+import {
+  describeImage,
+  getVisionStatus,
+  readImage,
+  saveImage,
+} from "../core/vision.js";
 import {
   createMethod,
   draftMethodSpec,
@@ -2359,6 +2365,10 @@ export async function registerGatewayRoutes(
               ...(request.body.voiceAudioId
                 ? { voiceAudioId: request.body.voiceAudioId }
                 : {}),
+              ...(request.body.imageId
+                ? { imageId: request.body.imageId }
+                : {}),
+              dataDirectory: context.config.dataDirectory,
             },
           ),
         (response) => {
@@ -4027,6 +4037,53 @@ export async function registerGatewayRoutes(
         url: "/",
       });
       return getPushDiagnostics(context.database);
+    },
+  );
+
+  // Phase B: store a conversation photo; the id rides on the next message.
+  app.post(
+    "/v1/vision/upload",
+    {
+      bodyLimit: 12_000_000,
+      schema: {
+        response: {
+          200: VisionUploadResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const image = request.body as Buffer | undefined;
+      if (!image || !Buffer.isBuffer(image) || image.length === 0) {
+        return reply.code(400).send({ error: "No image received." });
+      }
+      const imageId = saveImage(
+        context.config.dataDirectory,
+        image,
+        request.headers["content-type"] ?? "image/jpeg",
+      );
+      return { imageId };
+    },
+  );
+
+  // Serve a stored conversation photo (Owner-only; id strictly validated).
+  app.get<{ Params: { id: string } }>(
+    "/v1/vision/image/:id",
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const found = readImage(context.config.dataDirectory, request.params.id);
+      if (!found) {
+        return reply.code(404).send({ error: "Image not found." });
+      }
+      return reply.type(found.mimeType).send(found.image);
     },
   );
 

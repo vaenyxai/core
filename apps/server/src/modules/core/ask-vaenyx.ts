@@ -13,6 +13,7 @@ import { resolveProvider } from "../models/registry.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
+import { imageDataUrl, VISION_DIRECT_PROVIDER_IDS } from "./vision.js";
 import {
   ensureChatThread,
   touchChatThread,
@@ -40,6 +41,7 @@ interface AskVaenyxMessageRow {
   created_at: string;
   voice: 0 | 1;
   audio_id: string | null;
+  image_id: string | null;
 }
 
 interface ConversationThreadContextRow {
@@ -86,6 +88,7 @@ function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
     createdAt: row.created_at,
     voice: row.voice === 1,
     audioId: row.audio_id ?? null,
+    imageId: row.image_id ?? null,
   };
 }
 
@@ -435,7 +438,7 @@ export function listAskVaenyxMessages(
 
   const rows = database.sqlite
     .prepare(
-      `SELECT id, conversation_id, role, content, status, web_search_used, created_at, voice, audio_id
+      `SELECT id, conversation_id, role, content, status, web_search_used, created_at, voice, audio_id, image_id
        FROM ask_vaenyx_messages
        WHERE conversation_id = ?
        ORDER BY created_at ASC`,
@@ -465,6 +468,11 @@ export interface CreateAskVaenyxMessageOptions {
   // Voice turn: the saved recording's id. Marks both sides as voice bubbles
   // and asks the model for a short spoken-style reply.
   voiceAudioId?: string;
+  // Phase B: an uploaded photo's id attached to this owner message; handed to
+  // the main model directly when it reads images.
+  imageId?: string;
+  // Where stored photos live (needed to build the data URL for the model).
+  dataDirectory?: string;
 }
 
 // Insert a Vaenyx-authored status note into a conversation (e.g. "✔ Routine X
@@ -518,8 +526,8 @@ export async function createAskVaenyxMessage(
   database.sqlite
     .prepare(
       `INSERT INTO ask_vaenyx_messages (
-        id, conversation_id, role, content, status, web_search_used, created_at, voice, audio_id
-      ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?)`,
+        id, conversation_id, role, content, status, web_search_used, created_at, voice, audio_id, image_id
+      ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?)`,
     )
     .run(
       ownerMessageId,
@@ -528,6 +536,7 @@ export async function createAskVaenyxMessage(
       now,
       options?.voiceAudioId ? 1 : 0,
       options?.voiceAudioId ?? null,
+      options?.imageId ?? null,
     );
 
   if (
@@ -557,6 +566,7 @@ export async function createAskVaenyxMessage(
     createdAt: now,
     voice: Boolean(options?.voiceAudioId),
     audioId: options?.voiceAudioId ?? null,
+    imageId: options?.imageId ?? null,
   });
 
   const MAX_HISTORY_MESSAGES = 30;
@@ -610,9 +620,41 @@ export async function createAskVaenyxMessage(
           model_name: string | null;
         }
       | undefined;
-    const result = await resolveProvider(
-      settingsRow?.model_provider_id,
-    ).sendChat(history, projectContext, {
+    const provider = resolveProvider(settingsRow?.model_provider_id);
+    // Phase B: a vision-direct backend sees the photo first-hand. The most
+    // recent photo in the last few messages rides along too, so follow-up
+    // questions about it ("what's the jar on the left?") keep working.
+    let imageAttachment: string | undefined;
+    if (
+      options?.dataDirectory &&
+      VISION_DIRECT_PROVIDER_IDS.includes(provider.id)
+    ) {
+      const effectiveImageId =
+        options.imageId ??
+        (
+          database.sqlite
+            .prepare(
+              `SELECT image_id FROM ask_vaenyx_messages
+               WHERE conversation_id = ? AND image_id IS NOT NULL
+               ORDER BY created_at DESC LIMIT 1`,
+            )
+            .get(conversationId) as { image_id: string } | undefined
+        )?.image_id;
+      if (effectiveImageId) {
+        const recentWithImage = listAskVaenyxMessages(
+          database,
+          conversationId,
+          ownerId,
+        )
+          .slice(-10)
+          .some((message) => message.imageId === effectiveImageId);
+        if (recentWithImage) {
+          imageAttachment =
+            imageDataUrl(options.dataDirectory, effectiveImageId) ?? undefined;
+        }
+      }
+    }
+    const result = await provider.sendChat(history, projectContext, {
       onDelta: options?.onDelta
         ? (delta) => {
             streamed += delta;
@@ -622,6 +664,7 @@ export async function createAskVaenyxMessage(
       signal: options?.signal,
       reasoningEffort: settingsRow?.reasoning_effort ?? "medium",
       ...(settingsRow?.model_name ? { model: settingsRow.model_name } : {}),
+      ...(imageAttachment ? { imageDataUrl: imageAttachment } : {}),
     });
     assistantContent = result.answer;
     assistantStatus = "completed";
@@ -717,6 +760,7 @@ export async function createAskVaenyxMessage(
         createdAt: now,
         voice: Boolean(options?.voiceAudioId),
         audioId: options?.voiceAudioId ?? null,
+        imageId: options?.imageId ?? null,
       },
       {
         id: assistantMessageId,

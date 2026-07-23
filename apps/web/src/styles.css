@@ -974,6 +974,50 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
+/* Phase B: message photos + the pending-attachment chip in the composer. */
+.message-photo {
+  display: block;
+  max-width: min(280px, 80%);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+}
+
+.composer-attachment {
+  position: relative;
+  display: inline-flex;
+  width: fit-content;
+}
+
+.composer-attachment img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+}
+
+.composer-attachment-remove {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.composer-attachment-remove .line-icon {
+  width: 12px;
+  height: 12px;
+}
+
 /* Source pill (Oskar, dev.150): a bare URL in a reply renders as a small
    domain chip at the end of the sentence, GPT-style. */
 .source-pill {

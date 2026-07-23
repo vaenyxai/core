@@ -37,6 +37,7 @@ export {
   StopTurnRequestSchema,
   VisionStatusSchema,
   VisionDescribeResponseSchema,
+  VisionUploadResponseSchema,
   UpdateAppProfileRequestSchema,
   UpdateAppProfileResponseSchema,
   RenameMethodRequestSchema,

@@ -3,7 +3,68 @@
 // any typed message. Mirrors the voice pipeline: attachment in, text out.
 // The image goes browser → this local server → a vision-capable connected
 // provider (auto-picked); the key never reaches the browser.
+import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { readProviderConnections } from "../models/connections.js";
+
+// Stored conversation photos (Phase B): originals kept under
+// <dataDirectory>/images so a vision-capable main model can keep seeing them
+// on follow-up turns. Ids embed the extension and are strictly validated.
+const IMAGE_ID_PATTERN = /^[0-9a-f-]{36}\.(jpg|png|webp)$/;
+
+function imageExtension(mimeType: string): "jpg" | "png" | "webp" {
+  if (mimeType.includes("png")) return "png";
+  if (mimeType.includes("webp")) return "webp";
+  return "jpg";
+}
+
+export function imageMimeType(imageId: string): string {
+  if (imageId.endsWith(".png")) return "image/png";
+  if (imageId.endsWith(".webp")) return "image/webp";
+  return "image/jpeg";
+}
+
+export function saveImage(
+  dataDirectory: string,
+  image: Buffer,
+  mimeType: string,
+): string {
+  const id = `${randomUUID()}.${imageExtension(mimeType)}`;
+  const directory = resolve(dataDirectory, "images");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(resolve(directory, id), image);
+  return id;
+}
+
+export function readImage(
+  dataDirectory: string,
+  imageId: string,
+): { image: Buffer; mimeType: string } | null {
+  if (!IMAGE_ID_PATTERN.test(imageId)) return null;
+  try {
+    return {
+      image: readFileSync(resolve(dataDirectory, "images", imageId)),
+      mimeType: imageMimeType(imageId),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function imageDataUrl(
+  dataDirectory: string,
+  imageId: string,
+): string | null {
+  const found = readImage(dataDirectory, imageId);
+  if (!found) return null;
+  return `data:${found.mimeType};base64,${found.image.toString("base64")}`;
+}
+
+// Backends whose chat endpoint accepts image parts directly — the Phase B
+// "first-hand" path. Everything else falls back to the describe layer.
+export const VISION_DIRECT_PROVIDER_IDS = ["gemini", "zhipu", "openai"];
 
 // Order of preference among the Owner's existing Models connections — all
 // free-tier friendly, no separate vision setup needed.

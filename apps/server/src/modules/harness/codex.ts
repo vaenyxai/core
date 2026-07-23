@@ -1168,6 +1168,10 @@ export interface RunAskVaenyxOptions {
   // Per-conversation model override ("model within the provider"). Key-based
   // providers use it in place of their configured model; Codex ignores it.
   model?: string;
+  // Phase B: a photo as a data URL, attached to the latest owner message for
+  // backends whose chat endpoint reads images. Codex ignores it (the caller
+  // falls back to the describe layer for such backends).
+  imageDataUrl?: string;
 }
 
 export async function runAskVaenyxChat(

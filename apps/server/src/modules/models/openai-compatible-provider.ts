@@ -47,7 +47,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     projectContext?: string,
     options?: ModelChatOptions,
   ): Promise<ModelChatResult> {
-    const chatMessages: { role: string; content: string }[] = [];
+    const chatMessages: { role: string; content: unknown }[] = [];
     if (projectContext && projectContext.trim()) {
       chatMessages.push({ role: "system", content: projectContext });
     }
@@ -56,6 +56,20 @@ export class OpenAICompatibleProvider implements ModelProvider {
         role: message.role === "owner" ? "user" : "assistant",
         content: message.content,
       });
+    }
+    // Phase B: attach the photo to the LAST user message as content parts —
+    // the model sees the original image first-hand.
+    if (options?.imageDataUrl) {
+      for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
+        const entry = chatMessages[index];
+        if (entry && entry.role === "user") {
+          entry.content = [
+            { type: "text", text: String(entry.content) },
+            { type: "image_url", image_url: { url: options.imageDataUrl } },
+          ];
+          break;
+        }
+      }
     }
 
     const response = await fetch(`${this.#baseUrl}/chat/completions`, {

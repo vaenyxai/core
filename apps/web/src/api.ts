@@ -423,6 +423,7 @@ async function streamMessageRequest(
   suggestCreate?: "method" | "routine",
   clarifyCreate?: string,
   voiceAudioId?: string,
+  imageId?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -438,6 +439,7 @@ async function streamMessageRequest(
       ...(suggestCreate ? { suggestCreate } : {}),
       ...(clarifyCreate ? { clarifyCreate } : {}),
       ...(voiceAudioId ? { voiceAudioId } : {}),
+      ...(imageId ? { imageId } : {}),
     }),
     signal: callbacks.signal,
   });
@@ -507,6 +509,7 @@ export function streamAskVaenyxMessage(
   suggestCreate?: "method" | "routine",
   clarifyCreate?: string,
   voiceAudioId?: string,
+  imageId?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -517,6 +520,7 @@ export function streamAskVaenyxMessage(
     suggestCreate,
     clarifyCreate,
     voiceAudioId,
+    imageId,
   );
 }
 
@@ -842,6 +846,23 @@ export interface VisionStatus {
 
 export function fetchVisionStatus(): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/vision/status");
+}
+
+export async function uploadPhoto(blob: Blob): Promise<{ imageId: string }> {
+  const response = await fetch("/v1/vision/upload", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": blob.type || "image/jpeg" },
+    body: blob,
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    imageId?: string;
+    error?: string;
+  };
+  if (!response.ok || !body.imageId) {
+    throw new Error(body.error ?? "Photo upload failed.");
+  }
+  return { imageId: body.imageId };
 }
 
 export async function describePhoto(
