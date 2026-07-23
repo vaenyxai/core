@@ -848,6 +848,23 @@ function IconSpeakerOff() {
   );
 }
 
+function IconX() {
+  return (
+    <LineIcon>
+      <line x1="6" x2="18" y1="6" y2="18" />
+      <line x1="18" x2="6" y1="6" y2="18" />
+    </LineIcon>
+  );
+}
+
+function IconCheck() {
+  return (
+    <LineIcon>
+      <path d="m5 12.5 4.5 4.5L19 7" />
+    </LineIcon>
+  );
+}
+
 // A WeChat-style voice bubble: tap to hear it. Owner bubbles replay the
 // original recording; assistant bubbles are read aloud on-device.
 function VoiceBubble({
@@ -919,23 +936,76 @@ function voiceRepliesEnabled(): boolean {
   }
 }
 
+function cleanSpeechText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[*_#>`~|]/g, "")
+    .trim();
+}
+
+// One reply speaks at a time: starting a new playback (or flipping the toggle
+// off) silences whatever is still talking — TTS audio and device speech both.
+// The token invalidates an in-flight sentence chain when a new one takes over.
+let currentReplyAudio: HTMLAudioElement | null = null;
+let currentReplyToken: object | null = null;
+
+function stopReplySpeech(): void {
+  currentReplyToken = null;
+  currentReplyAudio?.pause();
+  currentReplyAudio = null;
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {
+    // No TTS on this device.
+  }
+}
+
 function speakText(text: string): void {
   try {
     if (!("speechSynthesis" in window)) return;
-    const clean = text
-      .replace(/```[\s\S]*?```/g, " ")
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/https?:\/\/\S+/g, "")
-      .replace(/[*_#>`~|]/g, "")
-      .trim();
+    const clean = cleanSpeechText(text);
     if (!clean) return;
-    window.speechSynthesis.cancel();
+    stopReplySpeech();
     const utterance = new SpeechSynthesisUtterance(clean.slice(0, 4000));
     utterance.lang = /[一-鿿]/.test(clean) ? "zh-CN" : "en-US";
     window.speechSynthesis.speak(utterance);
   } catch {
     // No TTS on this device — silently skip.
   }
+}
+
+// Split for sentence-first playback: the opening sentence is generated (and
+// starts playing) on its own while the rest generates in parallel — first
+// sound in about a second instead of waiting for the whole reply.
+function splitForSpeech(text: string): string[] {
+  if (text.length <= 80) return [text];
+  const boundary = /[。!?.!?;;\n]/g;
+  let match: RegExpExecArray | null = boundary.exec(text);
+  while (match) {
+    if (match.index >= 12) {
+      const first = text.slice(0, match.index + 1).trim();
+      const rest = text.slice(match.index + 1).trim();
+      return rest ? [first, rest] : [first];
+    }
+    match = boundary.exec(text);
+  }
+  return [text];
+}
+
+function playReplyAudio(audioId: string): Promise<void> {
+  return new Promise((resolvePlayback) => {
+    const audio = new Audio(`/v1/voice/audio/${audioId}`);
+    currentReplyAudio = audio;
+    audio.onended = () => resolvePlayback();
+    audio.onerror = () => resolvePlayback();
+    audio.onpause = () => {
+      // Pause = someone else took over (stopReplySpeech); end this chain.
+      if (currentReplyAudio !== audio) resolvePlayback();
+    };
+    void audio.play().catch(() => resolvePlayback());
+  });
 }
 
 // Push-to-talk mic: tap to record, tap again to stop; the utterance goes to the
@@ -952,6 +1022,8 @@ function MicButton({
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Cancel throws the take away: onstop sees the flag and transcribes nothing.
+  const discardRef = useRef(false);
   // Live volume meter (ChatGPT-style): an analyser drives the bar heights
   // directly via refs — no re-render per animation frame.
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
@@ -1018,6 +1090,12 @@ function MicButton({
       recorder.onstop = () => {
         stopMeter();
         stream.getTracks().forEach((track) => track.stop());
+        if (discardRef.current) {
+          discardRef.current = false;
+          chunksRef.current = [];
+          setState("idle");
+          return;
+        }
         const blob = new Blob(chunksRef.current, {
           type: recorder.mimeType || "audio/webm",
         });
@@ -1037,6 +1115,7 @@ function MicButton({
           });
       };
       recorderRef.current = recorder;
+      discardRef.current = false;
       recorder.start();
       startMeter(stream);
       setState("recording");
@@ -1046,21 +1125,24 @@ function MicButton({
     }
   }
 
-  function stop() {
+  function stop(discard: boolean) {
+    discardRef.current = discard;
     recorderRef.current?.stop();
     recorderRef.current = null;
   }
 
   if (state === "recording") {
     return (
-      <button
-        aria-label="Stop recording"
-        className="mic-button mic-button--recording mic-button--wide"
-        onClick={stop}
-        title="Tap to stop"
-        type="button"
-      >
-        <IconStop />
+      <span className="mic-record-group">
+        <button
+          aria-label="Cancel recording"
+          className="mic-button mic-button--cancel"
+          onClick={() => stop(true)}
+          title="Cancel"
+          type="button"
+        >
+          <IconX />
+        </button>
         <span aria-hidden="true" className="mic-bars">
           {[0, 1, 2, 3, 4].map((index) => (
             <span
@@ -1071,7 +1153,16 @@ function MicButton({
             />
           ))}
         </span>
-      </button>
+        <button
+          aria-label="Send recording"
+          className="mic-button mic-button--recording"
+          onClick={() => stop(false)}
+          title="Send"
+          type="button"
+        >
+          <IconCheck />
+        </button>
+      </span>
     );
   }
 
@@ -3204,14 +3295,27 @@ function AskVaenyxPanel({
   }, []);
   // Read a reply aloud with the best available voice: Gemini TTS when the
   // Owner picked it (server-generated audio, cached), else the device TTS.
+  // Sentence-first: the opening sentence generates and starts playing while
+  // the rest generates in parallel, so sound starts in about a second.
   async function playReplyAloud(text: string) {
+    stopReplySpeech();
+    const token = {};
+    currentReplyToken = token;
     if (voiceOutput?.engine === "gemini") {
       try {
-        const { audioId } = await synthesizeSpeech(text);
-        const audio = new Audio(`/v1/voice/audio/${audioId}`);
-        await audio.play();
+        const clean = cleanSpeechText(text).slice(0, 4000);
+        if (!clean) return;
+        const chunks = splitForSpeech(clean);
+        const pending = chunks.map((chunk) => synthesizeSpeech(chunk));
+        for (const request of pending) {
+          const { audioId } = await request;
+          if (currentReplyToken !== token) return; // superseded/stopped
+          await playReplyAudio(audioId);
+          if (currentReplyToken !== token) return;
+        }
         return;
       } catch {
+        if (currentReplyToken !== token) return;
         // Fall back to the device voice below.
       }
     }
@@ -3225,7 +3329,7 @@ function AskVaenyxPanel({
       } catch {
         // Persisting is best-effort.
       }
-      if (!next) window.speechSynthesis?.cancel();
+      if (!next) stopReplySpeech();
       return next;
     });
   }

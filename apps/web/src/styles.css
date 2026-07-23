@@ -967,13 +967,25 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
-/* Recording: the button widens into a stop control + live volume bars that
-   track the mic level (ChatGPT-style). */
-.mic-button--wide {
+/* Recording (ChatGPT-style): cancel × | live volume bars | send ✓. */
+.mic-record-group {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
+  gap: 6px;
+  padding: 0 6px;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+}
+
+.mic-record-group .mic-button {
+  border: 0;
+  background: transparent;
+}
+
+.mic-button--cancel {
+  color: var(--text-muted);
 }
 
 .mic-bars {
