@@ -15,18 +15,35 @@ import { writeConnections } from "../models/provider-settings.js";
 const VOICE_BASE_URL = "https://api.groq.com/openai/v1";
 const DEFAULT_VOICE_MODEL = "whisper-large-v3-turbo";
 
-// The dedicated voice entry wins; without one, a Groq CHAT connection powers
-// speech-to-text automatically — connecting the main model wires voice up
-// with zero extra setup (Oskar, dev.153). Manual connect still overrides.
-function resolveVoiceConnection(
-  secretsDirectory: string,
-): { apiKey: string; model?: string } | null {
+// The dedicated voice entry wins; without one, a main-model connection that
+// CAN do speech powers it automatically (Oskar's rule, dev.153/154): Groq →
+// Whisper large, OpenAI → whisper-1. Manual connect still overrides.
+function resolveVoiceConnection(secretsDirectory: string): {
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+} | null {
   const connections = readProviderConnections(secretsDirectory);
   if (connections.voice?.apiKey) {
-    return { apiKey: connections.voice.apiKey, model: connections.voice.model };
+    return {
+      apiKey: connections.voice.apiKey,
+      model: connections.voice.model ?? DEFAULT_VOICE_MODEL,
+      baseUrl: VOICE_BASE_URL,
+    };
   }
   if (connections.groq?.apiKey) {
-    return { apiKey: connections.groq.apiKey };
+    return {
+      apiKey: connections.groq.apiKey,
+      model: DEFAULT_VOICE_MODEL,
+      baseUrl: VOICE_BASE_URL,
+    };
+  }
+  if (connections.openai?.apiKey) {
+    return {
+      apiKey: connections.openai.apiKey,
+      model: "whisper-1",
+      baseUrl: "https://api.openai.com/v1",
+    };
   }
   return null;
 }
@@ -37,7 +54,7 @@ export function getVoiceStatus(secretsDirectory: string): {
 } {
   const voice = resolveVoiceConnection(secretsDirectory);
   if (!voice) return { connected: false, model: null };
-  return { connected: true, model: voice.model ?? DEFAULT_VOICE_MODEL };
+  return { connected: true, model: voice.model };
 }
 
 // ── Voice output (TTS engine) ────────────────────────────────────────────────
@@ -47,18 +64,41 @@ export function getVoiceStatus(secretsDirectory: string): {
 const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const DEFAULT_GEMINI_VOICE = "Kore";
 
+// Resolution order (Oskar's rule, dev.154): an explicit choice sticks (gemini
+// with a key, or browser chosen on purpose); with no choice at all, a
+// connected Gemini main model powers speech automatically.
+function resolveVoiceOutput(secretsDirectory: string): {
+  engine: "browser" | "gemini";
+  apiKey: string | null;
+  voice: string;
+} {
+  const connections = readProviderConnections(secretsDirectory);
+  const output = connections.voiceOutput;
+  if (output?.engine === "gemini" && output.apiKey) {
+    return {
+      engine: "gemini",
+      apiKey: output.apiKey,
+      voice: output.voice ?? DEFAULT_GEMINI_VOICE,
+    };
+  }
+  if (output?.engine === "browser") {
+    return { engine: "browser", apiKey: null, voice: DEFAULT_GEMINI_VOICE };
+  }
+  const geminiKey = connections.gemini?.apiKey;
+  if (geminiKey) {
+    return { engine: "gemini", apiKey: geminiKey, voice: DEFAULT_GEMINI_VOICE };
+  }
+  return { engine: "browser", apiKey: null, voice: DEFAULT_GEMINI_VOICE };
+}
+
 export function getVoiceOutput(secretsDirectory: string): {
   engine: "browser" | "gemini";
   connected: boolean;
   voice: string | null;
 } {
-  const output = readProviderConnections(secretsDirectory).voiceOutput;
-  if (output?.engine === "gemini" && output.apiKey) {
-    return {
-      engine: "gemini",
-      connected: true,
-      voice: output.voice ?? DEFAULT_GEMINI_VOICE,
-    };
+  const resolved = resolveVoiceOutput(secretsDirectory);
+  if (resolved.engine === "gemini") {
+    return { engine: "gemini", connected: true, voice: resolved.voice };
   }
   return { engine: "browser", connected: true, voice: null };
 }
@@ -69,7 +109,8 @@ export function connectVoiceOutput(
 ): ReturnType<typeof getVoiceOutput> {
   const connections = readProviderConnections(secretsDirectory);
   if (input.engine === "browser") {
-    delete connections.voiceOutput;
+    // Explicit browser choice sticks — it must beat the Gemini auto-follow.
+    connections.voiceOutput = { engine: "browser" };
     writeConnections(secretsDirectory, connections);
     return getVoiceOutput(secretsDirectory);
   }
@@ -118,11 +159,11 @@ export async function synthesizeSpeech(
   dataDirectory: string,
   text: string,
 ): Promise<string> {
-  const output = readProviderConnections(secretsDirectory).voiceOutput;
-  if (output?.engine !== "gemini" || !output.apiKey) {
+  const resolved = resolveVoiceOutput(secretsDirectory);
+  if (resolved.engine !== "gemini" || !resolved.apiKey) {
     throw new Error("VOICE_OUTPUT_NOT_CONNECTED");
   }
-  const voice = output.voice ?? DEFAULT_GEMINI_VOICE;
+  const voice = resolved.voice;
   const hash = createHash("sha256")
     .update(`${voice}\n${text}`)
     .digest("hex")
@@ -133,7 +174,7 @@ export async function synthesizeSpeech(
   if (existsSync(path)) return audioId;
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${output.apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${resolved.apiKey}`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -252,6 +293,7 @@ export async function transcribeVoice(
   if (!voice) {
     throw new Error("VOICE_NOT_CONNECTED");
   }
+  const transcribeBaseUrl = voice.baseUrl;
   const form = new FormData();
   const extension = mimeType.includes("mp4")
     ? "m4a"
@@ -263,10 +305,10 @@ export async function transcribeVoice(
     new Blob([new Uint8Array(audio)], { type: mimeType }),
     `voice.${extension}`,
   );
-  form.append("model", voice.model ?? DEFAULT_VOICE_MODEL);
+  form.append("model", voice.model);
   form.append("response_format", "json");
 
-  const response = await fetch(`${VOICE_BASE_URL}/audio/transcriptions`, {
+  const response = await fetch(`${transcribeBaseUrl}/audio/transcriptions`, {
     method: "POST",
     headers: { authorization: `Bearer ${voice.apiKey}` },
     body: form,

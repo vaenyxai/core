@@ -1598,7 +1598,7 @@ const GEMINI_TTS_VOICES = [
 ];
 
 function VoicePanel() {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [vision, setVision] = useState<VisionStatus | null>(null);
@@ -1655,6 +1655,29 @@ function VoicePanel() {
       setStatus(await disconnectVoice());
     } catch {
       setError("Could not disconnect voice.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Hear the current voice before living with it (Oskar, dev.154).
+  async function testVoice() {
+    setBusy(true);
+    setOutputError(null);
+    try {
+      const sample =
+        lang === "zh"
+          ? "你好,我是 Vaenyx。这是当前音色的试听。"
+          : "Hi, I'm Vaenyx — this is how the current voice sounds.";
+      if (outputEngine === "gemini") {
+        const { audioId } = await synthesizeSpeech(sample);
+        const audio = new Audio(`/v1/voice/audio/${audioId}`);
+        await audio.play();
+      } else {
+        speakText(sample);
+      }
+    } catch {
+      setOutputError("Could not play the test — is the engine connected?");
     } finally {
       setBusy(false);
     }
@@ -1769,7 +1792,8 @@ function VoicePanel() {
       <h3 className="settings-subhead">Voice Output (Replies Read Aloud)</h3>
       <p className="settings-card-copy">
         The voice that reads replies — voice bubbles and the speaker toggle in
-        chat both use it.
+        chat both use it. A Gemini connection under Models powers this
+        automatically; choosing Browser here overrides that.
       </p>
       <label className="chat-font-field">
         Engine
@@ -1791,10 +1815,22 @@ function VoicePanel() {
         </select>
       </label>
       {outputEngine === "browser" ? (
-        <p className="settings-card-copy">
-          Using the device's built-in voice. Pick Gemini TTS above for a much
-          more natural one.
-        </p>
+        <>
+          <p className="settings-card-copy">
+            Using the device's built-in voice. Pick Gemini TTS above for a
+            much more natural one.
+          </p>
+          <div className="model-card-actions">
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => void testVoice()}
+              type="button"
+            >
+              Test Voice
+            </button>
+          </div>
+        </>
       ) : output?.engine === "gemini" ? (
         <>
           <div className="model-card-head">
@@ -1821,6 +1857,16 @@ function VoicePanel() {
               ))}
             </select>
           </label>
+          <div className="model-card-actions">
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => void testVoice()}
+              type="button"
+            >
+              Test Voice
+            </button>
+          </div>
         </>
       ) : (
         <div className="model-connect-form">
