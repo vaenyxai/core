@@ -20,15 +20,28 @@ let secretsDirectory: string | null = null;
 // app — the result is already on their screen. In-memory is enough: the
 // scheduler lives in this same process, and after a restart "no heartbeat yet"
 // correctly means "nobody is looking".
-const PRESENCE_WINDOW_MS = 90_000;
 let lastPresenceAt = 0;
 
 export function notePresence(): void {
   lastPresenceAt = Date.now();
 }
 
-export function isOwnerActivelyViewing(): boolean {
-  return Date.now() - lastPresenceAt < PRESENCE_WINDOW_MS;
+// Owner rule (2026-07-23): push only if the result stays UNSEEN for ~30s.
+// Wait a beat longer than the 30s heartbeat interval, then push unless any
+// visible page heartbeat landed after the run completed — a page that stayed
+// open through the wait always produces one; a page closed before or right at
+// completion never does, so the phone buzzes.
+const UNSEEN_WAIT_MS = 35_000;
+
+export function schedulePresenceAwarePush(
+  database: DatabaseHandle,
+  payload: { title: string; body: string; url: string },
+): void {
+  const completedAt = Date.now();
+  setTimeout(() => {
+    if (lastPresenceAt >= completedAt) return; // someone saw it — stay quiet
+    void sendPushToAllDevices(database, payload).catch(() => undefined);
+  }, UNSEEN_WAIT_MS).unref?.();
 }
 
 export function initPushService(config: { secretsDirectory: string }): void {

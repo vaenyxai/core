@@ -20,7 +20,7 @@ import {
   type CreateAskVaenyxMessageOptions,
 } from "./ask-vaenyx.js";
 import { listProjectMemories } from "./memory.js";
-import { isOwnerActivelyViewing, sendPushToAllDevices } from "./push.js";
+import { schedulePresenceAwarePush } from "./push.js";
 import { ensureTaskThread } from "./threads.js";
 
 const GENERAL_PROJECT_ID = "general";
@@ -769,23 +769,22 @@ async function executeTaskRun(
       )
       .run(result, status, finishedAt, id);
     appendRunResultToConversation(database, id, result, status, finishedAt);
-    // Scheduled runs notify subscribed devices (the Owner is not watching a
-    // page at 7am — that is the whole point of the schedule). Manual runs
-    // skip it: the Owner just pressed the button and is looking at the task.
-    // And if any device is actively viewing the app right now, the push is
-    // skipped too — the result is already on their screen.
-    if (trigger === "schedule" && !isOwnerActivelyViewing()) {
+    // Scheduled runs notify subscribed devices — but only if the result stays
+    // unseen for ~30s (a device viewing the app counts as seen; see
+    // schedulePresenceAwarePush). Manual runs never push: the Owner just
+    // pressed the button and is looking at the task.
+    if (trigger === "schedule") {
       const titleRow = database.sqlite
         .prepare("SELECT title FROM tasks WHERE id = ?")
         .get(id) as { title: string } | undefined;
-      void sendPushToAllDevices(database, {
+      schedulePresenceAwarePush(database, {
         title: titleRow?.title ?? "Vaenyx task",
         body:
           status === "completed"
             ? "New result is ready."
             : "The scheduled run failed.",
         url: "/",
-      }).catch(() => undefined);
+      });
     }
   } catch {
     // Server shutting down (database closed); reconcile handles it next start.

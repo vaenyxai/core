@@ -967,21 +967,53 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
-/* Recording (ChatGPT-style): cancel × | live volume bars | send ✓. */
+/* Recording (ChatGPT-style): cancel × | live volume bars | send ✓.
+   While recording, the group takes over the whole composer row — the textarea
+   and Send button step aside so the two controls can be big. */
 .mic-record-group {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1;
   align-items: center;
-  gap: 6px;
-  padding: 0 6px;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 8px;
   border: 0.5px solid var(--border);
   border-radius: 999px;
   background: var(--bg-raised);
 }
 
+.ask-vaenyx-composer-box:has(.mic-record-group) textarea,
+.simple-compose-box:has(.mic-record-group) textarea,
+.ask-vaenyx-composer-box:has(.mic-record-group) > button,
+.simple-compose-box:has(.mic-record-group) > button {
+  display: none;
+}
+
 .mic-record-group .mic-button {
+  min-width: 52px;
+  min-height: 44px;
   border: 0;
   background: transparent;
+}
+
+.mic-record-group .mic-button .line-icon {
+  width: 22px;
+  height: 22px;
+  margin: 0 auto;
+}
+
+.mic-record-group .mic-bars {
+  flex: 1;
+  justify-content: center;
+  max-width: 340px;
+  height: 26px;
+  gap: 4px;
+  margin: 0 auto;
+}
+
+.mic-record-group .mic-bars span {
+  width: 4px;
 }
 
 .mic-button--cancel {
@@ -1964,6 +1996,13 @@ select {
   min-height: calc(100vh - 220px);
 }
 
+/* Scroll target after a send: land the newest message clear of the sticky
+   composer instead of underneath it. */
+.chat-end-anchor {
+  height: 1px;
+  scroll-margin-bottom: 150px;
+}
+
 .ask-vaenyx-message {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2472,8 +2511,8 @@ select {
   background: linear-gradient(
     180deg,
     rgba(38, 38, 36, 0),
-    rgba(38, 38, 36, 0.92) 26%,
-    rgba(38, 38, 36, 0.98)
+    rgba(38, 38, 36, 0.96) 14%,
+    rgba(38, 38, 36, 1)
   );
 }
 
@@ -4760,7 +4799,13 @@ select {
   .ask-vaenyx-messages {
     max-height: none;
     padding-top: 28px;
-    padding-bottom: 110px;
+    /* The phone composer stack (box + status row + disclaimer) is tall —
+       reserve real room so messages never sit under its translucent top. */
+    padding-bottom: 220px;
+  }
+
+  .chat-end-anchor {
+    scroll-margin-bottom: 230px;
   }
 
   .focused-workspace,

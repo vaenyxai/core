@@ -4883,7 +4883,7 @@ function AskVaenyxPanel({
               </article>
             ))
           )}
-          <div ref={chatEndRef} />
+          <div className="chat-end-anchor" ref={chatEndRef} />
         </div>
 
         {building && building.conversationId === activeConversationId ? (
@@ -5440,7 +5440,7 @@ function AskVaenyxPanel({
                 <ThinkingIndicator />
               </article>
             ) : null}
-            <div ref={taskEndRef} />
+            <div className="chat-end-anchor" ref={taskEndRef} />
           </div>
 
           <form
