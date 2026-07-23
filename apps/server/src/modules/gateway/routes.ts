@@ -26,8 +26,12 @@ import {
   SubscribePushRequestSchema,
   UnsubscribePushRequestSchema,
   PushAckResponseSchema,
+  VoiceStatusSchema,
+  ConnectVoiceRequestSchema,
+  TranscribeVoiceResponseSchema,
   type SubscribePushRequest,
   type UnsubscribePushRequest,
+  type ConnectVoiceRequest,
   CreateAskVaenyxConversationRequestSchema,
   CreateAskVaenyxMessageRequestSchema,
   CreateAskVaenyxMessageResponseSchema,
@@ -174,6 +178,12 @@ import {
   removePushSubscription,
   savePushSubscription,
 } from "../core/push.js";
+import {
+  connectVoice,
+  disconnectVoice,
+  getVoiceStatus,
+  transcribeVoice,
+} from "../core/voice.js";
 import {
   createMethod,
   draftMethodSpec,
@@ -3602,6 +3612,120 @@ export async function registerGatewayRoutes(
           return reply.code(404).send({ error: "App Profile not found." });
         }
         throw error;
+      }
+    },
+  );
+
+  // ── Voice (speech-to-text via the separate voice connection) ──────────────
+  // Recorded audio arrives as a raw binary body (no multipart dependency).
+  app.addContentTypeParser(
+    ["audio/webm", "audio/mp4", "audio/ogg", "application/octet-stream"],
+    { parseAs: "buffer" },
+    (_request, body, done) => done(null, body),
+  );
+
+  app.get(
+    "/v1/voice/status",
+    {
+      schema: {
+        response: { 200: VoiceStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return getVoiceStatus(context.config.secretsDirectory);
+    },
+  );
+
+  app.post<{ Body: ConnectVoiceRequest }>(
+    "/v1/voice/connect",
+    {
+      schema: {
+        body: ConnectVoiceRequestSchema,
+        response: {
+          200: VoiceStatusSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return connectVoice(context.config.secretsDirectory, request.body);
+      } catch (error) {
+        if (error instanceof Error && error.message === "VOICE_NO_KEY") {
+          return reply.code(400).send({
+            error:
+              "No key: paste a Groq API key, or connect Groq under Models first to reuse its key.",
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.delete(
+    "/v1/voice/connect",
+    {
+      schema: {
+        response: { 200: VoiceStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return disconnectVoice(context.config.secretsDirectory);
+    },
+  );
+
+  app.post(
+    "/v1/voice/transcribe",
+    {
+      bodyLimit: 15_000_000,
+      schema: {
+        response: {
+          200: TranscribeVoiceResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const audio = request.body as Buffer | undefined;
+      if (!audio || !Buffer.isBuffer(audio) || audio.length === 0) {
+        return reply.code(400).send({ error: "No audio received." });
+      }
+      try {
+        const text = await transcribeVoice(
+          context.config.secretsDirectory,
+          audio,
+          request.headers["content-type"] ?? "audio/webm",
+        );
+        return { text };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message === "VOICE_NOT_CONNECTED") {
+          return reply.code(400).send({
+            error: "Voice is not connected — set it up in AI Settings first.",
+          });
+        }
+        return reply.code(502).send({
+          error: "Transcription failed — try again.",
+        });
       }
     },
   );

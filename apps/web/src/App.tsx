@@ -114,6 +114,11 @@ import {
   fetchPushPublicKey,
   subscribePush,
   unsubscribePush,
+  fetchVoiceStatus,
+  connectVoice,
+  disconnectVoice,
+  transcribeAudio,
+  type VoiceStatus,
   rejectVaenyxMeCandidate,
   renameMethod,
   renameMethodTag,
@@ -768,6 +773,247 @@ function StoredTokenField({ prefix, profileId }: { prefix: string; profileId: st
         </p>
       ) : null}
     </div>
+  );
+}
+
+// Read a finished reply aloud (Voice replies, dev.133). Markdown chrome is
+// stripped first — nobody wants to hear "asterisk asterisk".
+const VOICE_REPLIES_KEY = "vaenyx.voiceReplies";
+
+function voiceRepliesEnabled(): boolean {
+  try {
+    return window.localStorage.getItem(VOICE_REPLIES_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function speakText(text: string): void {
+  try {
+    if (!("speechSynthesis" in window)) return;
+    const clean = text
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/[*_#>`~|]/g, "")
+      .trim();
+    if (!clean) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(clean.slice(0, 4000));
+    utterance.lang = /[一-鿿]/.test(clean) ? "zh-CN" : "en-US";
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // No TTS on this device — silently skip.
+  }
+}
+
+// Push-to-talk mic: tap to record, tap again to stop; the utterance goes to the
+// local server, which forwards it to the connected voice engine (Groq Whisper)
+// and hands back text. Rendered only when a voice connection exists.
+function MicButton({
+  disabled,
+  onText,
+}: {
+  disabled?: boolean;
+  onText: (text: string) => void;
+}) {
+  const [state, setState] = useState<"idle" | "recording" | "busy">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+
+  const supported =
+    typeof MediaRecorder !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia);
+  if (!supported) return null;
+
+  async function start() {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ["audio/webm", "audio/mp4", "audio/ogg"].find((type) =>
+        MediaRecorder.isTypeSupported(type),
+      );
+      const recorder = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined,
+      );
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(chunksRef.current, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        setState("busy");
+        void transcribeAudio(blob)
+          .then((text) => {
+            if (text) onText(text);
+            setState("idle");
+          })
+          .catch((nextError) => {
+            setError(
+              nextError instanceof Error
+                ? nextError.message
+                : "Transcription failed.",
+            );
+            setState("idle");
+          });
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setState("recording");
+    } catch {
+      setError("Microphone blocked — allow it in the browser settings.");
+      setState("idle");
+    }
+  }
+
+  function stop() {
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+  }
+
+  return (
+    <button
+      aria-label="Voice input"
+      className={`mic-button mic-button--${state}`}
+      disabled={disabled || state === "busy"}
+      onClick={() => {
+        if (state === "recording") stop();
+        else void start();
+      }}
+      title={error ?? (state === "recording" ? "Tap to stop" : "Voice input")}
+      type="button"
+    >
+      {state === "recording" ? "◼" : state === "busy" ? "…" : "🎤"}
+    </button>
+  );
+}
+
+// AI Settings → Voice: the speech-to-text connection, separate from the chat
+// models (it never appears in the chat model picker). Groq Whisper = the
+// accuracy-benchmark model on the fastest chips; transcription sits inside
+// Groq's free tier. One click reuses an already-connected Groq chat key.
+function VoicePanel() {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<VoiceStatus | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchVoiceStatus()
+      .then(setStatus)
+      .catch(() => undefined);
+  }, []);
+
+  async function connect(reuseGroqKey: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await connectVoice(
+        reuseGroqKey ? {} : { apiKey: apiKey.trim() },
+      );
+      setStatus(next);
+      setApiKey("");
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not connect voice.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await disconnectVoice());
+    } catch {
+      setError("Could not disconnect voice.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="settings-card">
+      <p className="eyebrow">Voice</p>
+      <h2>Voice Input</h2>
+      <p className="settings-card-copy">
+        Speak instead of typing: the mic button records, and Groq's Whisper
+        turns it into text — fast, accurate, Chinese and English alike, inside
+        Groq's free tier. Replies can be read aloud with the speaker toggle in
+        the chat.
+      </p>
+      {status?.connected ? (
+        <>
+          <div className="model-card-head">
+            <span className="library-chip chip-published">Connected</span>
+            {status.model ? (
+              <small className="model-card-model">{status.model}</small>
+            ) : null}
+          </div>
+          <div className="model-card-actions">
+            <button
+              className="text-button"
+              disabled={busy}
+              onClick={() => void disconnect()}
+              type="button"
+            >
+              Disconnect
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="model-connect-form">
+          <a
+            className="model-key-link"
+            href="https://console.groq.com/keys"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Get a Groq API key ↗
+          </a>
+          <input
+            className="method-rename-input"
+            onChange={(event) => setApiKey(event.target.value)}
+            placeholder="Groq API key"
+            type="password"
+            value={apiKey}
+          />
+          <p className="context-disclaimer">
+            {t("legal.notice.modelConnect.cloud")}
+          </p>
+          <div className="model-card-actions">
+            <button
+              className="primary-button"
+              disabled={busy || !apiKey.trim()}
+              onClick={() => void connect(false)}
+              type="button"
+            >
+              Connect
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => void connect(true)}
+              title="Reuses the key of the Groq model connected under Models."
+              type="button"
+            >
+              Use My Groq Key
+            </button>
+          </div>
+        </div>
+      )}
+      {error ? <p className="form-error">{error}</p> : null}
+    </section>
   );
 }
 
@@ -2569,6 +2815,27 @@ function AskVaenyxPanel({
     conversationId: string;
     kind: "method" | "routine";
   } | null>(null);
+  // Voice (dev.133): the mic shows once a voice connection exists; the speaker
+  // toggle reads finished replies aloud (persisted per device).
+  const [voiceReady, setVoiceReady] = useState(false);
+  const [voiceReplies, setVoiceReplies] = useState(voiceRepliesEnabled);
+  useEffect(() => {
+    void fetchVoiceStatus()
+      .then((status) => setVoiceReady(status.connected))
+      .catch(() => undefined);
+  }, []);
+  function toggleVoiceReplies() {
+    setVoiceReplies((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(VOICE_REPLIES_KEY, next ? "1" : "0");
+      } catch {
+        // Persisting is best-effort.
+      }
+      if (!next) window.speechSynthesis?.cancel();
+      return next;
+    });
+  }
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(conversations[0]?.id ?? null);
@@ -3247,6 +3514,17 @@ function AskVaenyxPanel({
         clarifyCreateQuestion,
       );
 
+      // Voice replies: read the finished answer aloud when the toggle is on.
+      if (voiceReplies) {
+        const assistantReply = [...response.messages]
+          .reverse()
+          .find(
+            (message) =>
+              message.role === "assistant" && message.status === "completed",
+          );
+        if (assistantReply?.content) speakText(assistantReply.content);
+      }
+
       // The reply landed: build the described Method/Routine in the background
       // and post the confirmation note when it is saved (spec §2a).
       if (suggestCreate) {
@@ -3644,6 +3922,12 @@ function AskVaenyxPanel({
               rows={2}
               value={startWorkPrompt}
             />
+            {voiceReady ? (
+              <MicButton
+                disabled={sending}
+                onText={(text) => void sendChatContent(text)}
+              />
+            ) : null}
             <button
               className="primary-button"
               disabled={sending || !startWorkPrompt.trim()}
@@ -4122,6 +4406,12 @@ function AskVaenyxPanel({
               rows={2}
               value={prompt}
             />
+            {voiceReady ? (
+              <MicButton
+                disabled={sending}
+                onText={(text) => void sendChatContent(text)}
+              />
+            ) : null}
             {sending ? (
               <button
                 className="primary-button stop-button"
@@ -4260,6 +4550,22 @@ function AskVaenyxPanel({
               <option value="medium">Balanced</option>
               <option value="high">Deep</option>
             </select>
+            <span aria-hidden="true" className="composer-sep">
+              ·
+            </span>
+            <button
+              aria-label="Voice replies"
+              className="composer-voice-toggle"
+              onClick={toggleVoiceReplies}
+              title={
+                voiceReplies
+                  ? "Voice replies on — finished answers are read aloud"
+                  : "Voice replies off"
+              }
+              type="button"
+            >
+              {voiceReplies ? "🔊" : "🔇"}
+            </button>
           </div>
           <p className="composer-disclaimer">
             {t("legal.disclaimer.aiGeneral.composer")}
@@ -6511,6 +6817,7 @@ function SettingsPanel({
       </section>
       ) : null}
       {settingsTab === "ai" ? <ModelsPanel /> : null}
+      {settingsTab === "ai" ? <VoicePanel /> : null}
       {settingsTab === "backup" ? <BackupPanel /> : null}
       {settingsTab === "sharing" ? <SharingPanel /> : null}
       {settingsTab === "legal" ? (

@@ -889,6 +889,37 @@ textarea::placeholder {
   margin-top: 6px;
 }
 
+/* Voice (dev.133): push-to-talk mic in the composer + the read-aloud toggle. */
+.mic-button {
+  flex: 0 0 auto;
+  min-width: 38px;
+  min-height: 38px;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.mic-button--recording {
+  border-color: #cf8079;
+  background: rgba(207, 128, 121, 0.16);
+  animation: chat-light-pulse 1.6s ease-in-out infinite;
+}
+
+.mic-button--busy {
+  opacity: 0.6;
+}
+
+.composer-voice-toggle {
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* Settings → Appearance → Chat Text: the two pickers side by side. */
 .chat-font-controls {
   display: flex;

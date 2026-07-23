@@ -750,6 +750,46 @@ export function unsubscribePush(endpoint: string): Promise<{ ok: boolean }> {
   });
 }
 
+export interface VoiceStatus {
+  connected: boolean;
+  model: string | null;
+}
+
+export function fetchVoiceStatus(): Promise<VoiceStatus> {
+  return requestJson<VoiceStatus>("/v1/voice/status");
+}
+
+export function connectVoice(input: {
+  apiKey?: string;
+  model?: string;
+}): Promise<VoiceStatus> {
+  return requestJson<VoiceStatus>("/v1/voice/connect", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function disconnectVoice(): Promise<VoiceStatus> {
+  return requestJson<VoiceStatus>("/v1/voice/connect", { method: "DELETE" });
+}
+
+export async function transcribeAudio(blob: Blob): Promise<string> {
+  const response = await fetch("/v1/voice/transcribe", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": blob.type || "application/octet-stream" },
+    body: blob,
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    text?: string;
+    error?: string;
+  };
+  if (!response.ok) {
+    throw new Error(body.error ?? "Transcription failed.");
+  }
+  return body.text ?? "";
+}
+
 export function disableAppProfile(profileId: string): Promise<AppProfile> {
   return requestJson<AppProfile>(`/v1/app-profiles/${profileId}/disable`, {
     method: "POST",

@@ -782,6 +782,31 @@ export const PushAckResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Voice (speech-to-text) connection: separate from the chat models. Connect
+// with a key, or with none to reuse an already-connected Groq chat key.
+export const VoiceStatusSchema = Type.Object(
+  {
+    connected: Type.Boolean(),
+    model: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const ConnectVoiceRequestSchema = Type.Object(
+  {
+    apiKey: Type.Optional(Type.String({ maxLength: 500 })),
+    model: Type.Optional(Type.String({ maxLength: 200 })),
+  },
+  { additionalProperties: false },
+);
+
+export const TranscribeVoiceResponseSchema = Type.Object(
+  {
+    text: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 // Edit an existing App Profile's capability scope. The token (identity) never
 // changes; only the Methods it may use and its Mode B / memory permissions do.
 // Re-granting Methods re-pins each one's current content hash.
@@ -1536,6 +1561,7 @@ export type SubscribePushRequest = Static<typeof SubscribePushRequestSchema>;
 export type UnsubscribePushRequest = Static<
   typeof UnsubscribePushRequestSchema
 >;
+export type ConnectVoiceRequest = Static<typeof ConnectVoiceRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;
 export type AgentProfile = Static<typeof AgentProfileSchema>;

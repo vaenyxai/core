@@ -134,7 +134,7 @@ export function listModelProviders(
   });
 }
 
-function writeConnections(
+export function writeConnections(
   secretsDirectory: string,
   connections: Record<string, unknown>,
 ): void {
