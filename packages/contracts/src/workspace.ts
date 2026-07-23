@@ -81,6 +81,8 @@ export const UpdateProjectInstructionsRequestSchema = Type.Object(
 export const InstanceSettingsSchema = Type.Object(
   {
     instanceName: Type.String(),
+    // What the assistant is called in conversations (default "Vaenyx").
+    agentName: Type.String(),
     version: Type.String(),
     mode: Type.Union([
       Type.Literal("development"),
@@ -121,6 +123,7 @@ export const InstanceSettingsSchema = Type.Object(
 export const UpdateInstanceSettingsRequestSchema = Type.Object(
   {
     instanceName: Type.String({ minLength: 1, maxLength: 100 }),
+    agentName: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   },
   { additionalProperties: false },
 );

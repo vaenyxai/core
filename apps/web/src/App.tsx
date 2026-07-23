@@ -2519,6 +2519,7 @@ function ProjectsPanel({
 
 function AskVaenyxPanel({
   composeKey,
+  agentName,
   conversations,
   libraryRoutines,
   onConversationsChange,
@@ -2533,6 +2534,7 @@ function AskVaenyxPanel({
   focusedTaskId,
   workspace,
 }: {
+  agentName: string;
   conversations: AskVaenyxConversation[];
   libraryRoutines: LibraryRoutineSummary[];
   focusedTaskId: string | null;
@@ -4044,7 +4046,7 @@ function AskVaenyxPanel({
                 key={message.id}
               >
                 <div className="ask-vaenyx-message-head">
-                  <strong>{message.role === "owner" ? "You" : "Vaenyx"}</strong>
+                  <strong>{message.role === "owner" ? "You" : agentName}</strong>
                   <small>{formatTime(message.createdAt)}</small>
                 </div>
                 {message.role === "owner" ? (
@@ -5826,6 +5828,7 @@ function SettingsPanel({
 }) {
   const { lang, setLang, t } = useI18n();
   const [instanceName, setInstanceName] = useState(settings.instanceName);
+  const [agentName, setAgentName] = useState(settings.agentName || "Vaenyx");
   const [saved, setSaved] = useState(false);
   const [theme, setTheme] = useState(readStoredTheme);
   const [chatFontSize, setChatFontSize] = useState(readStoredChatFontSize);
@@ -5845,19 +5848,18 @@ function SettingsPanel({
   const [chatTestError, setChatTestError] = useState<string | null>(null);
   const [chatStartedAt, setChatStartedAt] = useState<number | null>(null);
   const [chatElapsedSeconds, setChatElapsedSeconds] = useState(0);
+  // Regrouped 2026-07-22 (Oskar): User Settings = Appearance + Account;
+  // AI Settings = Identity + Connection + Models; Manual second-to-last.
   const [settingsTab, setSettingsTab] = useState<
-    | "manual"
-    | "appearance"
-    | "account"
-    | "identity"
-    | "provider"
-    | "models"
+    | "user"
+    | "ai"
     | "backup"
     | "sharing"
+    | "manual"
     | "legal"
-    // A sign-in-page model button parked a connect intent: open on Models so
-    // the chosen provider's card is front and centre.
-  >(() => (localStorage.getItem(CONNECT_MODEL_INTENT) ? "models" : "manual"));
+    // A sign-in-page model button parked a connect intent: open on AI Settings
+    // so the chosen provider's card is front and centre.
+  >(() => (localStorage.getItem(CONNECT_MODEL_INTENT) ? "ai" : "user"));
   const [stoppingVaenyx, setStoppingVaenyx] = useState(false);
   const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
   const [shutdownError, setShutdownError] = useState<string | null>(null);
@@ -6034,46 +6036,18 @@ function SettingsPanel({
     <div className="settings-layout">
       <nav aria-label="Settings sections" className="library-subtabs">
         <button
-          className={settingsTab === "manual" ? "active" : ""}
-          onClick={() => setSettingsTab("manual")}
+          className={settingsTab === "user" ? "active" : ""}
+          onClick={() => setSettingsTab("user")}
           type="button"
         >
-          Manual
+          User Settings
         </button>
         <button
-          className={settingsTab === "appearance" ? "active" : ""}
-          onClick={() => setSettingsTab("appearance")}
+          className={settingsTab === "ai" ? "active" : ""}
+          onClick={() => setSettingsTab("ai")}
           type="button"
         >
-          Appearance
-        </button>
-        <button
-          className={settingsTab === "account" ? "active" : ""}
-          onClick={() => setSettingsTab("account")}
-          type="button"
-        >
-          Account
-        </button>
-        <button
-          className={settingsTab === "identity" ? "active" : ""}
-          onClick={() => setSettingsTab("identity")}
-          type="button"
-        >
-          Identity
-        </button>
-        <button
-          className={settingsTab === "provider" ? "active" : ""}
-          onClick={() => setSettingsTab("provider")}
-          type="button"
-        >
-          Connection
-        </button>
-        <button
-          className={settingsTab === "models" ? "active" : ""}
-          onClick={() => setSettingsTab("models")}
-          type="button"
-        >
-          Models
+          AI Settings
         </button>
         <button
           className={settingsTab === "backup" ? "active" : ""}
@@ -6088,6 +6062,13 @@ function SettingsPanel({
           type="button"
         >
           Sharing
+        </button>
+        <button
+          className={settingsTab === "manual" ? "active" : ""}
+          onClick={() => setSettingsTab("manual")}
+          type="button"
+        >
+          Manual
         </button>
         <button
           className={settingsTab === "legal" ? "active" : ""}
@@ -6107,7 +6088,7 @@ function SettingsPanel({
         </button>
       </section>
       ) : null}
-      {settingsTab === "appearance" ? (
+      {settingsTab === "user" ? (
       <section className="settings-card">
         <p className="eyebrow">Appearance</p>
         <h2>Appearance</h2>
@@ -6184,7 +6165,7 @@ function SettingsPanel({
         </div>
       </section>
       ) : null}
-      {settingsTab === "account" ? (
+      {settingsTab === "user" ? (
       <section className="settings-card">
         <p className="eyebrow">Account</p>
         <h2>Account &amp; power</h2>
@@ -6321,22 +6302,22 @@ function SettingsPanel({
         ) : null}
       </section>
       ) : null}
-      {settingsTab === "identity" ? (
+      {settingsTab === "ai" ? (
       <section className="settings-card">
         <p className="eyebrow">Visible identity</p>
-        <h2>Instance name</h2>
+        <h2>Identity</h2>
         <form
           className="memory-form"
           onSubmit={(event) => {
             event.preventDefault();
-            void updateSettings({ instanceName }).then((updated) => {
+            void updateSettings({ instanceName, agentName }).then((updated) => {
               onUpdate(updated);
               setSaved(true);
             });
           }}
         >
           <label>
-            Name shown in Vaenyx
+            Instance Name
             <input
               maxLength={100}
               onChange={(event) => {
@@ -6347,14 +6328,31 @@ function SettingsPanel({
               value={instanceName}
             />
           </label>
+          <label>
+            Agent Name
+            <input
+              maxLength={100}
+              onChange={(event) => {
+                setAgentName(event.target.value);
+                setSaved(false);
+              }}
+              placeholder="Vaenyx"
+              required
+              value={agentName}
+            />
+          </label>
+          <p className="settings-card-copy">
+            Agent Name is what your assistant is called in conversations.
+            Default: Vaenyx.
+          </p>
           <button className="primary-button" type="submit">
-            Save name
+            Save
           </button>
           {saved ? <p className="saved-note">Saved locally.</p> : null}
         </form>
       </section>
       ) : null}
-      {settingsTab === "provider" ? (
+      {settingsTab === "ai" ? (
       <section className="settings-card">
         <p className="eyebrow">Provider Auth</p>
         <h2>OpenAI / Codex connection</h2>
@@ -6512,7 +6510,7 @@ function SettingsPanel({
         </details>
       </section>
       ) : null}
-      {settingsTab === "models" ? <ModelsPanel /> : null}
+      {settingsTab === "ai" ? <ModelsPanel /> : null}
       {settingsTab === "backup" ? <BackupPanel /> : null}
       {settingsTab === "sharing" ? <SharingPanel /> : null}
       {settingsTab === "legal" ? (
@@ -11067,6 +11065,7 @@ function VaenyxWorkspace({
 
         {screen === "ask-vaenyx" ? (
           <AskVaenyxPanel
+            agentName={settings?.agentName?.trim() || "Vaenyx"}
             composeKey={composeKey}
             conversations={askVaenyxConversations}
             libraryRoutines={libraryRoutines}

@@ -24,6 +24,7 @@ export function getInstanceSettings(
 
   return {
     instanceName: getSetting(database, "instance_name", "My Vaenyx"),
+    agentName: getSetting(database, "agent_name", "Vaenyx"),
     version: config.version,
     mode: config.mode,
     bindAddress: `${config.host}:${config.port}`,
@@ -58,6 +59,16 @@ export function updateInstanceSettings(
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
     )
     .run(input.instanceName.trim());
+
+  if (input.agentName?.trim()) {
+    database.sqlite
+      .prepare(
+        `INSERT INTO instance_settings (key, value, updated_at)
+         VALUES ('agent_name', ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+      )
+      .run(input.agentName.trim());
+  }
 
   return getInstanceSettings(config, database);
 }
