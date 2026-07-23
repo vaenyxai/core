@@ -982,21 +982,36 @@ function speakText(text: string): void {
 }
 
 // Split for sentence-first playback: the opening sentence is generated (and
-// starts playing) on its own while the rest generates in parallel — first
-// sound in about a second instead of waiting for the whole reply.
-function splitForSpeech(text: string): string[] {
-  if (text.length <= 80) return [text];
+// starts playing) on its own while the rest generates in parallel. The same
+// helper drives the mid-stream prewarm, so the prewarmed chunk always matches
+// what playback asks for.
+function firstSpeechChunk(
+  text: string,
+): { first: string; rest: string } | null {
   const boundary = /[。!?.!?;;\n]/g;
   let match: RegExpExecArray | null = boundary.exec(text);
   while (match) {
     if (match.index >= 12) {
-      const first = text.slice(0, match.index + 1).trim();
-      const rest = text.slice(match.index + 1).trim();
-      return rest ? [first, rest] : [first];
+      return {
+        first: text.slice(0, match.index + 1).trim(),
+        rest: text.slice(match.index + 1).trim(),
+      };
     }
     match = boundary.exec(text);
   }
-  return [text];
+  return null;
+}
+
+function splitForSpeech(text: string): string[] {
+  const split = firstSpeechChunk(text);
+  if (!split) return [text];
+  return split.rest ? [split.first, split.rest] : [split.first];
+}
+
+// A first-sentence synthesis started while the reply was still streaming.
+interface SpeechPrewarm {
+  text: string;
+  promise: Promise<{ audioId: string }>;
 }
 
 function playReplyAudio(audioId: string): Promise<void> {
@@ -3440,7 +3455,7 @@ function AskVaenyxPanel({
   // Owner picked it (server-generated audio, cached), else the device TTS.
   // Sentence-first: the opening sentence generates and starts playing while
   // the rest generates in parallel, so sound starts in about a second.
-  async function playReplyAloud(text: string) {
+  async function playReplyAloud(text: string, prewarmed?: SpeechPrewarm) {
     stopReplySpeech();
     const token = {};
     currentReplyToken = token;
@@ -3449,7 +3464,11 @@ function AskVaenyxPanel({
         const clean = cleanSpeechText(text).slice(0, 4000);
         if (!clean) return;
         const chunks = splitForSpeech(clean);
-        const pending = chunks.map((chunk) => synthesizeSpeech(chunk));
+        const pending = chunks.map((chunk, index) =>
+          index === 0 && prewarmed && prewarmed.text === chunk
+            ? prewarmed.promise
+            : synthesizeSpeech(chunk),
+        );
         for (const request of pending) {
           const { audioId } = await request;
           if (currentReplyToken !== token) return; // superseded/stopped
@@ -4175,6 +4194,31 @@ function AskVaenyxPanel({
         onDraftConversationStarted(createdConversationId);
       }
 
+      // Voice prewarm: the moment the streaming reply completes its first
+      // sentence, start generating that sentence's audio — by the time the
+      // text finishes, the opening chunk is usually ready to play instantly.
+      let voiceStreamed = "";
+      let voicePrewarm: SpeechPrewarm | null = null;
+      const wantsVoiceReply = Boolean(voiceAudioId) || voiceReplies;
+      const maybePrewarmSpeech = (delta: string) => {
+        if (
+          !wantsVoiceReply ||
+          voicePrewarm ||
+          voiceOutput?.engine !== "gemini"
+        ) {
+          return;
+        }
+        voiceStreamed += delta;
+        const split = firstSpeechChunk(cleanSpeechText(voiceStreamed));
+        if (split) {
+          voicePrewarm = {
+            text: split.first,
+            promise: synthesizeSpeech(split.first),
+          };
+          voicePrewarm.promise.catch(() => undefined);
+        }
+      };
+
       const response = await streamAskVaenyxMessage(
         conversationId,
         content,
@@ -4186,14 +4230,16 @@ function AskVaenyxPanel({
                 message.id === tempOwnerId ? ownerMessage : message,
               ),
             ),
-          onDelta: (text) =>
+          onDelta: (text) => {
+            maybePrewarmSpeech(text);
             setMessages((current) =>
               current.map((message) =>
                 message.id === tempAssistantId
                   ? { ...message, content: message.content + text }
                   : message,
               ),
-            ),
+            );
+          },
         },
         suggestRoutineId,
         suggestTask,
@@ -4212,7 +4258,7 @@ function AskVaenyxPanel({
               message.role === "assistant" && message.status === "completed",
           );
         if (assistantReply?.content) {
-          void playReplyAloud(assistantReply.content);
+          void playReplyAloud(assistantReply.content, voicePrewarm ?? undefined);
         }
       }
 
