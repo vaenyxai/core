@@ -12,6 +12,7 @@ import type { DatabaseHandle } from "../../db/database.js";
 import { resolveProvider } from "../models/registry.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
+import { schedulePresenceAwarePush } from "./push.js";
 import {
   ensureChatThread,
   touchChatThread,
@@ -662,6 +663,21 @@ export async function createAskVaenyxMessage(
     )
     .run(completedAt, conversationId);
   touchChatThread(database, conversationId, completedAt);
+
+  // A finished reply nobody sees within ~30s pushes the phone (Owner rule
+  // 2026-07-23) — the same presence gate as scheduled runs, so watching the
+  // screen stays quiet and walking away buzzes. Failed replies stay silent:
+  // they are visible on return and retryable there.
+  if (assistantStatus === "completed") {
+    const titleRow = database.sqlite
+      .prepare("SELECT title FROM ask_vaenyx_conversations WHERE id = ?")
+      .get(conversationId) as { title: string } | undefined;
+    schedulePresenceAwarePush(database, {
+      title: titleRow?.title?.trim() || "Vaenyx",
+      body: assistantContent.replace(/\s+/g, " ").trim().slice(0, 90),
+      url: "/",
+    });
+  }
 
   // Project auto-summary cadence (spec §7): count this completed round and,
   // when due, rewrite the project's automatic instruction Document in the
