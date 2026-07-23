@@ -790,6 +790,16 @@ export const PushAckResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Settings → Notifications: how many devices are subscribed + the outcome of
+// the last send (including the Send Test button's), for diagnosing pushes.
+export const PushDiagnosticsSchema = Type.Object(
+  {
+    subscriptions: Type.Integer({ minimum: 0 }),
+    lastResult: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 // Voice (speech-to-text) connection: separate from the chat models. Connect
 // with a key, or with none to reuse an already-connected Groq chat key.
 export const VoiceStatusSchema = Type.Object(

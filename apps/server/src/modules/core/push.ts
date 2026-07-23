@@ -99,26 +99,57 @@ export function removePushSubscription(
     .run(endpoint);
 }
 
+// The last send's outcome, surfaced in Settings → Notifications so a failing
+// push is diagnosable instead of silently swallowed.
+let lastSendResult: string | null = null;
+
+export function getPushDiagnostics(database: DatabaseHandle): {
+  subscriptions: number;
+  lastResult: string | null;
+} {
+  let subscriptions = 0;
+  try {
+    subscriptions = (
+      database.sqlite
+        .prepare("SELECT COUNT(*) AS n FROM push_subscriptions")
+        .get() as { n: number }
+    ).n;
+  } catch {
+    // Table unavailable; report zero.
+  }
+  return { subscriptions, lastResult: lastSendResult };
+}
+
 // Best-effort broadcast to every subscribed device. Dead subscriptions
-// (endpoint gone: 404/410) are pruned as they surface; any other failure is
-// swallowed — a notification must never break the run that triggered it.
+// (endpoint gone: 404/410) are pruned as they surface; other failures are
+// recorded for the Notifications screen but never break the caller.
 export async function sendPushToAllDevices(
   database: DatabaseHandle,
   payload: { title: string; body: string; url: string },
-): Promise<void> {
+): Promise<string> {
   const keys = loadOrCreateVapidKeys();
-  if (!keys) return;
+  if (!keys) {
+    lastSendResult = "No VAPID keys (secrets directory unavailable).";
+    return lastSendResult;
+  }
   let rows: { endpoint: string; p256dh: string; auth: string }[];
   try {
     rows = database.sqlite
       .prepare("SELECT endpoint, p256dh, auth FROM push_subscriptions")
       .all() as { endpoint: string; p256dh: string; auth: string }[];
   } catch {
-    return;
+    lastSendResult = "Could not read subscriptions.";
+    return lastSendResult;
   }
-  if (rows.length === 0) return;
+  if (rows.length === 0) {
+    lastSendResult = "No devices subscribed.";
+    return lastSendResult;
+  }
 
   const body = JSON.stringify(payload);
+  let sent = 0;
+  let pruned = 0;
+  const failures: string[] = [];
   await Promise.all(
     rows.map(async (row) => {
       try {
@@ -137,16 +168,26 @@ export async function sendPushToAllDevices(
             TTL: 3600,
           },
         );
+        sent += 1;
       } catch (error) {
         const statusCode = (error as { statusCode?: number }).statusCode;
         if (statusCode === 404 || statusCode === 410) {
+          pruned += 1;
           try {
             removePushSubscription(database, row.endpoint);
           } catch {
             // Pruning is best-effort.
           }
+        } else {
+          failures.push(
+            `${statusCode ?? "?"} ${(error as Error).message ?? ""}`.trim(),
+          );
         }
       }
     }),
   );
+  lastSendResult = `${new Date().toISOString()} — sent ${sent}/${rows.length}${
+    pruned ? `, removed ${pruned} expired` : ""
+  }${failures.length ? `, failed: ${failures.join("; ").slice(0, 200)}` : ""}`;
+  return lastSendResult;
 }

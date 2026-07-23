@@ -26,6 +26,7 @@ import {
   SubscribePushRequestSchema,
   UnsubscribePushRequestSchema,
   PushAckResponseSchema,
+  PushDiagnosticsSchema,
   VoiceStatusSchema,
   ConnectVoiceRequestSchema,
   TranscribeVoiceResponseSchema,
@@ -182,10 +183,12 @@ import {
   updateAppProfile,
 } from "../core/app-profiles.js";
 import {
+  getPushDiagnostics,
   getPushPublicKey,
   notePresence,
   removePushSubscription,
   savePushSubscription,
+  sendPushToAllDevices,
 } from "../core/push.js";
 import {
   connectVoice,
@@ -3913,6 +3916,46 @@ export async function registerGatewayRoutes(
       }
       notePresence();
       return { ok: true };
+    },
+  );
+
+  // Notifications diagnostics: device count + last send outcome.
+  app.get(
+    "/v1/push/status",
+    {
+      schema: {
+        response: { 200: PushDiagnosticsSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return getPushDiagnostics(context.database);
+    },
+  );
+
+  // Send a test notification to every subscribed device, immediately and
+  // without the presence gate — the definitive "does push work" button.
+  app.post(
+    "/v1/push/test",
+    {
+      schema: {
+        response: { 200: PushDiagnosticsSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      await sendPushToAllDevices(context.database, {
+        title: "Vaenyx",
+        body: "Test notification — pushes are working.",
+        url: "/",
+      });
+      return getPushDiagnostics(context.database);
     },
   );
 

@@ -819,6 +819,22 @@ export function stopTurn(key: string): Promise<{ ok: boolean }> {
   });
 }
 
+export interface PushDiagnostics {
+  subscriptions: number;
+  lastResult: string | null;
+}
+
+export function fetchPushStatus(): Promise<PushDiagnostics> {
+  return requestJson<PushDiagnostics>("/v1/push/status");
+}
+
+export function sendTestPush(): Promise<PushDiagnostics> {
+  return requestJson<PushDiagnostics>("/v1/push/test", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export async function transcribeAudio(
   blob: Blob,
 ): Promise<{ text: string; audioId: string }> {

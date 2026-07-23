@@ -118,6 +118,9 @@ import {
   connectVoice,
   disconnectVoice,
   transcribeAudio,
+  fetchPushStatus,
+  sendTestPush,
+  type PushDiagnostics,
   fetchVoiceOutput,
   connectVoiceOutput,
   synthesizeSpeech,
@@ -1497,10 +1500,22 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return output;
 }
 
-// Scheduled-run notifications for THIS device (Web Push). Every device
-// subscribes on its own; iPhone only delivers Web Push to a PWA added to the
-// Home Screen. Hidden entirely where the browser lacks push support.
-function PushNotificationsCard() {
+// Wait for a controlling service worker, but never forever: an unready worker
+// used to leave the enable button spinning with no message at all.
+async function pushWorkerReady(): Promise<ServiceWorkerRegistration> {
+  await navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  return await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<never>((_resolve, reject) => {
+      window.setTimeout(() => reject(new Error("SW_TIMEOUT")), 6000);
+    }),
+  ]);
+}
+
+// Settings → Notifications: per-device on/off, how many devices are
+// subscribed, a Send Test button that bypasses the presence gate, and the
+// last send's outcome — everything needed to SEE why a push did or didn't go.
+function NotificationsPanel() {
   const [supported] = useState(
     () =>
       "serviceWorker" in navigator &&
@@ -1510,10 +1525,19 @@ function PushNotificationsCard() {
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<PushDiagnostics | null>(null);
+  const [testNote, setTestNote] = useState<string | null>(null);
+
+  function reloadDiagnostics() {
+    void fetchPushStatus()
+      .then(setDiagnostics)
+      .catch(() => undefined);
+  }
 
   useEffect(() => {
+    reloadDiagnostics();
     if (!supported) return;
-    void navigator.serviceWorker.ready
+    void pushWorkerReady()
       .then((registration) => registration.pushManager.getSubscription())
       .then((subscription) => setEnabled(Boolean(subscription)))
       .catch(() => undefined);
@@ -1523,11 +1547,15 @@ function PushNotificationsCard() {
     setBusy(true);
     setError(null);
     try {
+      if (Notification.permission === "denied") {
+        setError(
+          "Notifications are blocked for this site in the browser/system settings — allow them there, then try again.",
+        );
+        return;
+      }
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
-        setError(
-          "Notifications are blocked for this site — allow them in the browser settings, then try again.",
-        );
+        setError("Permission was not granted — nothing was enabled.");
         return;
       }
       const { key } = await fetchPushPublicKey();
@@ -1535,7 +1563,7 @@ function PushNotificationsCard() {
         setError("The server has no push key yet — try again in a moment.");
         return;
       }
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await pushWorkerReady();
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(key),
@@ -1552,8 +1580,13 @@ function PushNotificationsCard() {
         keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
       });
       setEnabled(true);
-    } catch {
-      setError("Could not enable notifications on this device.");
+      reloadDiagnostics();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error && nextError.message === "SW_TIMEOUT"
+          ? "The notification worker is not ready. Refresh the page and try again — on iPhone, Vaenyx must be opened from the Home Screen icon."
+          : "Could not enable notifications on this device.",
+      );
     } finally {
       setBusy(false);
     }
@@ -1563,13 +1596,14 @@ function PushNotificationsCard() {
     setBusy(true);
     setError(null);
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await pushWorkerReady();
       const subscription = await registration.pushManager.getSubscription();
       if (subscription) {
         await unsubscribePush(subscription.endpoint).catch(() => undefined);
         await subscription.unsubscribe();
       }
       setEnabled(false);
+      reloadDiagnostics();
     } catch {
       setError("Could not turn notifications off on this device.");
     } finally {
@@ -1577,38 +1611,88 @@ function PushNotificationsCard() {
     }
   }
 
-  if (!supported) return null;
+  async function sendTest() {
+    setBusy(true);
+    setTestNote(null);
+    try {
+      const result = await sendTestPush();
+      setDiagnostics(result);
+      setTestNote(
+        result.subscriptions === 0
+          ? "No devices are subscribed yet — turn notifications on below first."
+          : "Test sent — the notification should arrive within seconds (this device included).",
+      );
+    } catch {
+      setTestNote("Could not send the test.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <section className="settings-card push-card">
-      <div className="library-card-head">
-        <strong>Notifications</strong>
+    <section className="settings-card">
+      <p className="eyebrow">Notifications</p>
+      <h2>Notifications</h2>
+      <p className="settings-card-copy">
+        Vaenyx pushes a notification when a reply or a scheduled result stays
+        unseen for ~30 seconds — while any device is viewing the app, it stays
+        quiet. Each device subscribes separately, on this screen. iPhone: add
+        Vaenyx to the Home Screen first and open it from there.
+      </p>
+
+      <div className="model-card-head">
+        <strong>This Device</strong>
         <span
           className={enabled ? "library-chip chip-published" : "library-chip"}
         >
           {enabled ? "On" : "Off"}
         </span>
       </div>
-      <p className="settings-card-copy">
-        Get a notification on this device when a scheduled task finishes. Each
-        device turns this on separately. iPhone: add Vaenyx to the Home Screen
-        first, then turn it on from there.
-      </p>
+      {!supported ? (
+        <p className="settings-card-copy">
+          This browser does not support push notifications.
+        </p>
+      ) : (
+        <div className="model-card-actions">
+          <button
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => void (enabled ? disable() : enable())}
+            type="button"
+          >
+            {busy
+              ? "Working…"
+              : enabled
+                ? "Turn Off On This Device"
+                : "Turn On For This Device"}
+          </button>
+        </div>
+      )}
       {error ? <p className="form-error">{error}</p> : null}
+
+      <div className="settings-card-divider" />
+
+      <h3 className="settings-subhead">Check It Works</h3>
+      <p className="settings-card-copy">
+        Subscribed devices: <strong>{diagnostics?.subscriptions ?? "…"}</strong>
+        {diagnostics?.lastResult ? (
+          <>
+            <br />
+            Last send: {diagnostics.lastResult}
+          </>
+        ) : null}
+      </p>
       <div className="model-card-actions">
         <button
           className="secondary-button"
           disabled={busy}
-          onClick={() => void (enabled ? disable() : enable())}
+          onClick={() => void sendTest()}
           type="button"
         >
-          {busy
-            ? "Working…"
-            : enabled
-              ? "Turn Off On This Device"
-              : "Turn On For This Device"}
+          Send Test Notification
         </button>
       </div>
+      {testNote ? <p className="settings-card-copy">{testNote}</p> : null}
     </section>
   );
 }
@@ -6704,10 +6788,12 @@ function SettingsPanel({
   const [chatStartedAt, setChatStartedAt] = useState<number | null>(null);
   const [chatElapsedSeconds, setChatElapsedSeconds] = useState(0);
   // Regrouped 2026-07-22 (Oskar): User Settings = Appearance + Account;
-  // AI Settings = Identity + Connection + Models; Manual second-to-last.
+  // AI Settings = Identity + Connection + Models; Notifications its own tab;
+  // Manual second-to-last.
   const [settingsTab, setSettingsTab] = useState<
     | "user"
     | "ai"
+    | "notifications"
     | "backup"
     | "sharing"
     | "manual"
@@ -6903,6 +6989,13 @@ function SettingsPanel({
           type="button"
         >
           AI Settings
+        </button>
+        <button
+          className={settingsTab === "notifications" ? "active" : ""}
+          onClick={() => setSettingsTab("notifications")}
+          type="button"
+        >
+          Notifications
         </button>
         <button
           className={settingsTab === "backup" ? "active" : ""}
@@ -7364,6 +7457,7 @@ function SettingsPanel({
       ) : null}
       {settingsTab === "ai" ? <ModelsPanel /> : null}
       {settingsTab === "ai" ? <VoicePanel /> : null}
+      {settingsTab === "notifications" ? <NotificationsPanel /> : null}
       {settingsTab === "backup" ? <BackupPanel /> : null}
       {settingsTab === "sharing" ? <SharingPanel /> : null}
       {settingsTab === "legal" ? (
@@ -9612,7 +9706,6 @@ function ScheduledPanel({
         </div>
         <p>Tasks Vaenyx runs for you automatically.</p>
       </section>
-      <PushNotificationsCard />
       {scheduled.length === 0 ? (
         <div className="empty-state">
           <strong>Nothing scheduled</strong>

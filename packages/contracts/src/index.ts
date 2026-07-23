@@ -26,6 +26,7 @@ export {
   SubscribePushRequestSchema,
   UnsubscribePushRequestSchema,
   PushAckResponseSchema,
+  PushDiagnosticsSchema,
   VoiceStatusSchema,
   ConnectVoiceRequestSchema,
   TranscribeVoiceResponseSchema,
