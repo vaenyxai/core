@@ -840,22 +840,67 @@ function IconArrowDown() {
   );
 }
 
-// Floating jump control (Oskar design, dev.147): appears top-centre of the
-// conversation only when the newest message is well out of view; tap scrolls
-// smoothly to the bottom. Hidden the rest of the time.
+function IconArrowUp() {
+  return (
+    <LineIcon>
+      <path d="M12 20V6" />
+      <path d="m6 12 6-6 6 6" />
+    </LineIcon>
+  );
+}
+
+// Floating jump pill (Oskar design, dev.149), just above the composer on the
+// right, accent-highlighted:
+// - scrolled away from the bottom → "↓ Latest", stays until you're back down
+// - landing at the bottom (opening a chat / a push / scrolling down yourself)
+//   → "↑ Reply Start" jumps to the top of the last message, and fades by
+//   itself after 3s; not shown when the whole last message already fits.
 function JumpToLatest({
+  resetKey,
   targetRef,
 }: {
+  resetKey: string;
   targetRef: RefObject<HTMLDivElement | null>;
 }) {
-  const [visible, setVisible] = useState(false);
+  const [mode, setMode] = useState<"hidden" | "up" | "down">("hidden");
+  const wasAtBottomRef = useRef(true);
+  const hideTimerRef = useRef(0);
+
+  function lastMessageElement(): Element | null {
+    const all = document.querySelectorAll(
+      ".ask-vaenyx-messages .ask-vaenyx-message",
+    );
+    return all[all.length - 1] ?? null;
+  }
+
+  function showUpIfUseful() {
+    window.clearTimeout(hideTimerRef.current);
+    const last = lastMessageElement();
+    // Only useful when the last message's start is above the viewport.
+    if (!last || last.getBoundingClientRect().top >= 60) {
+      setMode("hidden");
+      return;
+    }
+    setMode("up");
+    hideTimerRef.current = window.setTimeout(() => {
+      setMode((current) => (current === "up" ? "hidden" : current));
+    }, 3000);
+  }
 
   useEffect(() => {
     const onScroll = () => {
       const doc = document.documentElement;
       const fromBottom =
         doc.scrollHeight - (window.scrollY + window.innerHeight);
-      setVisible(fromBottom > 400);
+      const atBottom = fromBottom < 120;
+      if (!atBottom) {
+        window.clearTimeout(hideTimerRef.current);
+        setMode("down");
+      } else if (!wasAtBottomRef.current) {
+        // Just arrived at the bottom — offer the way back up, briefly.
+        showUpIfUseful();
+      }
+      wasAtBottomRef.current = atBottom;
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -863,10 +908,38 @@ function JumpToLatest({
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+      window.clearTimeout(hideTimerRef.current);
     };
   }, []);
 
-  if (!visible) return null;
+  // Opening a conversation lands at the bottom — offer the way up once the
+  // auto-scroll settled.
+  useEffect(() => {
+    const timer = window.setTimeout(showUpIfUseful, 600);
+    return () => window.clearTimeout(timer);
+  }, [resetKey]);
+
+  if (mode === "hidden") return null;
+
+  if (mode === "up") {
+    return (
+      <button
+        aria-label="Jump to the start of the last message"
+        className="jump-latest"
+        onClick={() => {
+          window.clearTimeout(hideTimerRef.current);
+          lastMessageElement()?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }}
+        type="button"
+      >
+        <IconArrowUp />
+        Reply Start
+      </button>
+    );
+  }
 
   return (
     <button
@@ -5349,7 +5422,10 @@ function AskVaenyxPanel({
           )}
           <div className="chat-end-anchor" ref={chatEndRef} />
         </div>
-        <JumpToLatest targetRef={chatEndRef} />
+        <JumpToLatest
+          resetKey={activeConversationId ?? ""}
+          targetRef={chatEndRef}
+        />
 
         {building && building.conversationId === activeConversationId ? (
           <div className="chat-create-offer">
@@ -5907,7 +5983,10 @@ function AskVaenyxPanel({
             ) : null}
             <div className="chat-end-anchor" ref={taskEndRef} />
           </div>
-          <JumpToLatest targetRef={taskEndRef} />
+          <JumpToLatest
+            resetKey={focusedTaskId ?? ""}
+            targetRef={taskEndRef}
+          />
 
           <form
             className="ask-vaenyx-composer"

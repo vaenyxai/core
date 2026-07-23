@@ -971,26 +971,26 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
-/* Floating jump-to-latest (Oskar, dev.147): top-centre of the conversation,
-   only while the newest message is well out of view. */
+/* Floating jump pill (Oskar, dev.149): just above the composer on the right,
+   accent-highlighted. Down = go to latest (persistent while away); up = go to
+   the start of the last message (3s, on arriving at the bottom). */
 .jump-latest {
   position: fixed;
-  bottom: 172px;
-  left: 50%;
+  right: 18px;
+  bottom: 168px;
   z-index: 7;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
-  border: 0.5px solid var(--border);
+  padding: 7px 14px;
+  border: 0;
   border-radius: 999px;
-  background: var(--bg-raised);
-  color: var(--text);
+  background: var(--accent);
+  color: var(--on-accent);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: 700;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   cursor: pointer;
-  transform: translateX(-50%);
 }
 
 .jump-latest .line-icon {
@@ -998,9 +998,14 @@ textarea::placeholder {
   height: 15px;
 }
 
+/* Jumping to a message start must land clear of the sticky header. */
+.ask-vaenyx-message {
+  scroll-margin-top: 110px;
+}
+
 @media (max-width: 720px) {
   .jump-latest {
-    bottom: 205px;
+    bottom: 200px;
   }
 }
 
@@ -1831,9 +1836,11 @@ select {
   min-height: calc(100vh - 74px);
 }
 
+/* Height follows content (Oskar, dev.149): no forced full-viewport panel, so
+   a short conversation ends where it ends — no void under the composer. */
 .ask-vaenyx-chat.focused-chat,
 .focused-task-panel {
-  min-height: calc(100vh - 74px);
+  min-height: auto;
 }
 
 .focused-title-line {
