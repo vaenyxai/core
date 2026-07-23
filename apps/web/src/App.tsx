@@ -4913,7 +4913,9 @@ function ThemeSelect({
 // Help / Glossary page: renders the spec-maintained bilingual markdown for the
 // current language (docs/glossary.md / glossary.zh.md). Pure display; a docs
 // edit shows up on next open with no rebuild.
-function HelpPage() {
+// The full guide/glossary content, shared by the Help screen and the Settings →
+// Manual tab (which shows it inline — no extra click).
+function HelpContent() {
   const { lang, t } = useI18n();
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -4935,18 +4937,21 @@ function HelpPage() {
     };
   }, [lang, t]);
 
+  if (error) return <p className="form-error">{error}</p>;
+  if (markdown === null) {
+    return <p className="settings-card-copy">{t("help.loading")}</p>;
+  }
+  if (markdown.trim() === "") {
+    return <p className="settings-card-copy">{t("help.empty")}</p>;
+  }
+  return <MarkdownMessage content={markdown} />;
+}
+
+function HelpPage() {
   return (
     <div className="settings-layout">
       <section className="settings-card help-page">
-        {error ? (
-          <p className="form-error">{error}</p>
-        ) : markdown === null ? (
-          <p className="settings-card-copy">{t("help.loading")}</p>
-        ) : markdown.trim() === "" ? (
-          <p className="settings-card-copy">{t("help.empty")}</p>
-        ) : (
-          <MarkdownMessage content={markdown} />
-        )}
+        <HelpContent />
       </section>
     </div>
   );
@@ -5818,12 +5823,10 @@ function BackupPanel() {
 
 function SettingsPanel({
   settings,
-  onOpenHelp,
   onUpdate,
 }: {
   settings: InstanceSettings;
   systemStatus: SystemStatus | null;
-  onOpenHelp: () => void;
   onUpdate: (settings: InstanceSettings) => void;
 }) {
   const { lang, setLang, t } = useI18n();
@@ -6082,10 +6085,7 @@ function SettingsPanel({
       <section className="settings-card">
         <p className="eyebrow">{t("settings.manual.eyebrow")}</p>
         <h2>{t("settings.manual.title")}</h2>
-        <p className="settings-card-copy">{t("settings.manual.copy")}</p>
-        <button className="secondary-button" onClick={onOpenHelp} type="button">
-          {t("settings.help.open")}
-        </button>
+        <HelpContent />
       </section>
       ) : null}
       {settingsTab === "user" ? (
@@ -8902,10 +8902,12 @@ function CommunityArea({
   onRoutinesRefresh: () => void;
 }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"routines" | "methods">("routines");
+  const [tab, setTab] = useState<"routines" | "methods" | "account">(
+    "routines",
+  );
   return (
     <div className="library-area">
-      <section className="library-intro">
+      <section className="library-intro community-intro">
         <div className="library-intro-head">
           <div>
             <p className="eyebrow">{t("title.community")}</p>
@@ -8917,7 +8919,6 @@ function CommunityArea({
           {t("legal.disclaimer.community.browse")}
         </p>
       </section>
-      <CommunityIdentityBar />
       <nav aria-label="Community sections" className="library-subtabs">
         <button
           className={tab === "routines" ? "active" : ""}
@@ -8933,16 +8934,27 @@ function CommunityArea({
         >
           Methods
         </button>
+        <button
+          className={tab === "account" ? "active" : ""}
+          onClick={() => setTab("account")}
+          type="button"
+        >
+          Account
+        </button>
       </nav>
-      <CataloguePanel
-        installedIds={[
-          ...methods.map((method) => method.id),
-          ...routines.map((routine) => routine.id),
-        ]}
-        kind={tab}
-        onMethodsRefresh={onMethodsRefresh}
-        onRoutinesRefresh={onRoutinesRefresh}
-      />
+      {tab === "account" ? (
+        <CommunityIdentityBar />
+      ) : (
+        <CataloguePanel
+          installedIds={[
+            ...methods.map((method) => method.id),
+            ...routines.map((routine) => routine.id),
+          ]}
+          kind={tab}
+          onMethodsRefresh={onMethodsRefresh}
+          onRoutinesRefresh={onRoutinesRefresh}
+        />
+      )}
     </div>
   );
 }
@@ -11209,7 +11221,6 @@ function VaenyxWorkspace({
           />
         ) : screen === "settings" && settings ? (
           <SettingsPanel
-            onOpenHelp={() => openScreen("help")}
             onUpdate={setSettings}
             settings={settings}
             systemStatus={systemStatus}

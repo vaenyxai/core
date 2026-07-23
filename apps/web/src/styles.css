@@ -3312,6 +3312,11 @@ select {
   line-height: 1.7;
 }
 
+/* Community intro runs full width (Oskar, dev.132). */
+.community-intro p {
+  max-width: none;
+}
+
 .library-list {
   display: grid;
   gap: 12px;
