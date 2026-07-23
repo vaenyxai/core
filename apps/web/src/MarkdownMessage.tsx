@@ -21,10 +21,45 @@ function isSafeHref(href: string | undefined): boolean {
   );
 }
 
+// A bare pasted/autolinked URL renders as a small source pill showing just the
+// domain (GPT-style citation chips) instead of a long raw address. Links with
+// their own wording stay as normal text links.
+function linkLabel(children: unknown): string {
+  if (Array.isArray(children)) {
+    return children.map((child) => linkLabel(child)).join("");
+  }
+  return typeof children === "string" ? children : "";
+}
+
 const components: Components = {
   a({ href, children }) {
     if (!isSafeHref(href)) {
       return <>{children}</>;
+    }
+
+    const label = linkLabel(children).trim();
+    const isBareUrl =
+      label === href ||
+      label.startsWith("http://") ||
+      label.startsWith("https://");
+    if (isBareUrl && href) {
+      let domain = label;
+      try {
+        domain = new URL(href).hostname.replace(/^www\./, "");
+      } catch {
+        // Unparseable — keep the raw label.
+      }
+      return (
+        <a
+          className="source-pill"
+          href={href}
+          rel="noopener noreferrer nofollow"
+          target="_blank"
+          title={href}
+        >
+          {domain}
+        </a>
+      );
     }
 
     return (

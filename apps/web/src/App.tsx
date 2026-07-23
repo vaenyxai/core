@@ -201,9 +201,21 @@ async function hardRefresh(): Promise<void> {
   window.location.replace(`${window.location.pathname}?r=${Date.now()}`);
 }
 
+// Dates follow the app language, not the device locale (Oskar, dev.150): an
+// English UI shows English dates. Key mirrors i18n.tsx's LANG_STORAGE_KEY.
+function uiLocale(): string {
+  try {
+    return window.localStorage.getItem("vaenyx.lang") === "zh"
+      ? "zh-CN"
+      : "en-AU";
+  } catch {
+    return "en-AU";
+  }
+}
+
 function formatTime(value: string | null): string {
   if (!value) return "In progress";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(uiLocale(), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
@@ -873,11 +885,19 @@ function JumpToLatest({
     return all[all.length - 1] ?? null;
   }
 
+  // The sticky banner's height differs per conversation (task toolbar,
+  // capability bar…) — measure it live so jumps land just below it.
+  function bannerOffset(): number {
+    const header = document.querySelector(".ask-vaenyx-chat-header");
+    return (header?.getBoundingClientRect().height ?? 90) + 12;
+  }
+
   function showUpIfUseful() {
     window.clearTimeout(hideTimerRef.current);
     const last = lastMessageElement();
-    // Only useful when the last message's start is above the viewport.
-    if (!last || last.getBoundingClientRect().top >= 60) {
+    // Only useful when the last message's start is hidden behind/above the
+    // banner.
+    if (!last || last.getBoundingClientRect().top >= bannerOffset()) {
       setMode("hidden");
       return;
     }
@@ -928,9 +948,14 @@ function JumpToLatest({
         className="jump-latest"
         onClick={() => {
           window.clearTimeout(hideTimerRef.current);
-          lastMessageElement()?.scrollIntoView({
+          const last = lastMessageElement();
+          if (!last) return;
+          window.scrollTo({
+            top:
+              window.scrollY +
+              last.getBoundingClientRect().top -
+              bannerOffset(),
             behavior: "smooth",
-            block: "start",
           });
         }}
         type="button"
@@ -6960,7 +6985,7 @@ function BackupPanel() {
     if (!iso) return "—";
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return iso;
-    return date.toLocaleString();
+    return date.toLocaleString(uiLocale());
   }
 
   return (

@@ -1,4 +1,7 @@
 ﻿:root {
+  /* Global type size (Oskar, dev.150): every rem token scales off this — 18px
+     base lifts the whole UI ~12% over the browser default. */
+  font-size: 112.5%;
   /* Default theme = Mono Smoke (calm warm grey). Other themes override via
      [data-theme="…"] below; the Settings → Appearance picker sets it. */
   --bg: #1a1917;
@@ -971,6 +974,29 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
+/* Source pill (Oskar, dev.150): a bare URL in a reply renders as a small
+   domain chip at the end of the sentence, GPT-style. */
+.source-pill {
+  display: inline-block;
+  max-width: 220px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  text-decoration: none;
+  vertical-align: baseline;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-pill:hover {
+  text-decoration: none;
+  filter: brightness(1.15);
+}
+
 /* Floating jump pill (Oskar, dev.149): just above the composer on the right,
    accent-highlighted. Down = go to latest (persistent while away); up = go to
    the start of the last message (3s, on arriving at the bottom). */
@@ -996,11 +1022,6 @@ textarea::placeholder {
 .jump-latest .line-icon {
   width: 15px;
   height: 15px;
-}
-
-/* Jumping to a message start must land clear of the sticky header. */
-.ask-vaenyx-message {
-  scroll-margin-top: 110px;
 }
 
 @media (max-width: 720px) {
