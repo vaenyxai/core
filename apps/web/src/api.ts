@@ -729,6 +729,27 @@ export function fetchAppProfileToken(
   return requestJson<{ token: string }>(`/v1/app-profiles/${profileId}/token`);
 }
 
+export function fetchPushPublicKey(): Promise<{ key: string | null }> {
+  return requestJson<{ key: string | null }>("/v1/push/public-key");
+}
+
+export function subscribePush(subscription: {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/v1/push/subscriptions", {
+    method: "POST",
+    body: JSON.stringify(subscription),
+  });
+}
+
+export function unsubscribePush(endpoint: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/v1/push/subscriptions", {
+    method: "DELETE",
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
 export function disableAppProfile(profileId: string): Promise<AppProfile> {
   return requestJson<AppProfile>(`/v1/app-profiles/${profileId}/disable`, {
     method: "POST",

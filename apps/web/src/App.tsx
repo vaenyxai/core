@@ -111,6 +111,9 @@ import {
   changeOwnerPassword,
   regenerateAppProfileToken,
   fetchAppProfileToken,
+  fetchPushPublicKey,
+  subscribePush,
+  unsubscribePush,
   rejectVaenyxMeCandidate,
   renameMethod,
   renameMethodTag,
@@ -765,6 +768,137 @@ function StoredTokenField({ prefix, profileId }: { prefix: string; profileId: st
         </p>
       ) : null}
     </div>
+  );
+}
+
+// Web Push subscribe helper: the VAPID public key arrives base64url-encoded and
+// PushManager.subscribe wants raw bytes.
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  // Explicit ArrayBuffer (not ArrayBufferLike): PushManager.subscribe rejects
+  // the SharedArrayBuffer-typed generic under current TS DOM typings.
+  const output = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i += 1) {
+    output[i] = raw.charCodeAt(i);
+  }
+  return output;
+}
+
+// Scheduled-run notifications for THIS device (Web Push). Every device
+// subscribes on its own; iPhone only delivers Web Push to a PWA added to the
+// Home Screen. Hidden entirely where the browser lacks push support.
+function PushNotificationsCard() {
+  const [supported] = useState(
+    () =>
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      "Notification" in window,
+  );
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!supported) return;
+    void navigator.serviceWorker.ready
+      .then((registration) => registration.pushManager.getSubscription())
+      .then((subscription) => setEnabled(Boolean(subscription)))
+      .catch(() => undefined);
+  }, [supported]);
+
+  async function enable() {
+    setBusy(true);
+    setError(null);
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setError(
+          "Notifications are blocked for this site — allow them in the browser settings, then try again.",
+        );
+        return;
+      }
+      const { key } = await fetchPushPublicKey();
+      if (!key) {
+        setError("The server has no push key yet — try again in a moment.");
+        return;
+      }
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key),
+      });
+      const json = subscription.toJSON() as {
+        endpoint?: string;
+        keys?: { p256dh?: string; auth?: string };
+      };
+      if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
+        throw new Error("PUSH_SUBSCRIPTION_INCOMPLETE");
+      }
+      await subscribePush({
+        endpoint: json.endpoint,
+        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      });
+      setEnabled(true);
+    } catch {
+      setError("Could not enable notifications on this device.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disable() {
+    setBusy(true);
+    setError(null);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await unsubscribePush(subscription.endpoint).catch(() => undefined);
+        await subscription.unsubscribe();
+      }
+      setEnabled(false);
+    } catch {
+      setError("Could not turn notifications off on this device.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!supported) return null;
+
+  return (
+    <section className="settings-card push-card">
+      <div className="library-card-head">
+        <strong>Notifications</strong>
+        <span
+          className={enabled ? "library-chip chip-published" : "library-chip"}
+        >
+          {enabled ? "On" : "Off"}
+        </span>
+      </div>
+      <p className="settings-card-copy">
+        Get a notification on this device when a scheduled task finishes. Each
+        device turns this on separately. iPhone: add Vaenyx to the Home Screen
+        first, then turn it on from there.
+      </p>
+      {error ? <p className="form-error">{error}</p> : null}
+      <div className="model-card-actions">
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => void (enabled ? disable() : enable())}
+          type="button"
+        >
+          {busy
+            ? "Working…"
+            : enabled
+              ? "Turn Off On This Device"
+              : "Turn On For This Device"}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -8627,6 +8761,7 @@ function ScheduledPanel({
         </div>
         <p>Tasks Vaenyx runs for you automatically.</p>
       </section>
+      <PushNotificationsCard />
       {scheduled.length === 0 ? (
         <div className="empty-state">
           <strong>Nothing scheduled</strong>

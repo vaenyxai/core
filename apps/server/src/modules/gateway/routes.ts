@@ -22,6 +22,12 @@ import {
   CreateAppProfileRequestSchema,
   CreateAppProfileResponseSchema,
   RevealAppTokenResponseSchema,
+  PushPublicKeyResponseSchema,
+  SubscribePushRequestSchema,
+  UnsubscribePushRequestSchema,
+  PushAckResponseSchema,
+  type SubscribePushRequest,
+  type UnsubscribePushRequest,
   CreateAskVaenyxConversationRequestSchema,
   CreateAskVaenyxMessageRequestSchema,
   CreateAskVaenyxMessageResponseSchema,
@@ -163,6 +169,11 @@ import {
   revealAppProfileToken,
   updateAppProfile,
 } from "../core/app-profiles.js";
+import {
+  getPushPublicKey,
+  removePushSubscription,
+  savePushSubscription,
+} from "../core/push.js";
 import {
   createMethod,
   draftMethodSpec,
@@ -3592,6 +3603,68 @@ export async function registerGatewayRoutes(
         }
         throw error;
       }
+    },
+  );
+
+  // ── Web Push (scheduled-run notifications) ────────────────────────────────
+  app.get(
+    "/v1/push/public-key",
+    {
+      schema: {
+        response: {
+          200: PushPublicKeyResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return { key: getPushPublicKey() };
+    },
+  );
+
+  app.post<{ Body: SubscribePushRequest }>(
+    "/v1/push/subscriptions",
+    {
+      schema: {
+        body: SubscribePushRequestSchema,
+        response: {
+          200: PushAckResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      savePushSubscription(context.database, request.body);
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Body: UnsubscribePushRequest }>(
+    "/v1/push/subscriptions",
+    {
+      schema: {
+        body: UnsubscribePushRequestSchema,
+        response: {
+          200: PushAckResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      removePushSubscription(context.database, request.body.endpoint);
+      return { ok: true };
     },
   );
 

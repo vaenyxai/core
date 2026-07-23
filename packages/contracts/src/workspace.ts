@@ -742,6 +742,43 @@ export const RevealAppTokenResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Web Push: the server's VAPID public key (null only if the secrets directory
+// is unusable) + subscribe/unsubscribe bodies, mirroring PushSubscription.
+export const PushPublicKeyResponseSchema = Type.Object(
+  {
+    key: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const SubscribePushRequestSchema = Type.Object(
+  {
+    endpoint: Type.String({ minLength: 1, maxLength: 2000 }),
+    keys: Type.Object(
+      {
+        p256dh: Type.String({ minLength: 1, maxLength: 500 }),
+        auth: Type.String({ minLength: 1, maxLength: 500 }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const UnsubscribePushRequestSchema = Type.Object(
+  {
+    endpoint: Type.String({ minLength: 1, maxLength: 2000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const PushAckResponseSchema = Type.Object(
+  {
+    ok: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
 // Edit an existing App Profile's capability scope. The token (identity) never
 // changes; only the Methods it may use and its Mode B / memory permissions do.
 // Re-granting Methods re-pins each one's current content hash.
@@ -1492,6 +1529,10 @@ export type SetChatProviderRequest = Static<
   typeof SetChatProviderRequestSchema
 >;
 export type SetChatModelRequest = Static<typeof SetChatModelRequestSchema>;
+export type SubscribePushRequest = Static<typeof SubscribePushRequestSchema>;
+export type UnsubscribePushRequest = Static<
+  typeof UnsubscribePushRequestSchema
+>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;
 export type AgentProfile = Static<typeof AgentProfileSchema>;

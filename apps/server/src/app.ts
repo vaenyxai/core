@@ -9,6 +9,7 @@ import { type AppConfig, loadConfig } from "./config.js";
 import { createDatabase } from "./db/database.js";
 import { seedLibraryIfEmpty } from "./modules/core/library-seed.js";
 import { initModelRegistry } from "./modules/models/registry.js";
+import { initPushService } from "./modules/core/push.js";
 import { reconcileInterruptedTasks, runDueTasks } from "./modules/core/tasks.js";
 import { runScheduledBackupIfDue } from "./modules/core/backup-schedule.js";
 import { autoScanVaenyxMe } from "./modules/core/vaenyx-me.js";
@@ -32,6 +33,9 @@ export async function buildApp(
   // backend configured in the local model-providers.json secrets file is added)
   // before the server serves requests.
   initModelRegistry(config);
+  // Web Push: point the push module at the secrets directory (VAPID keypair
+  // lives there, generated on first use).
+  initPushService(config);
 
   const database = createDatabase(config);
 
