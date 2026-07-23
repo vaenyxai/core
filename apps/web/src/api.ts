@@ -422,6 +422,7 @@ async function streamMessageRequest(
   suggestTask?: boolean,
   suggestCreate?: "method" | "routine",
   clarifyCreate?: string,
+  voiceAudioId?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -436,6 +437,7 @@ async function streamMessageRequest(
       ...(suggestTask ? { suggestTask: true } : {}),
       ...(suggestCreate ? { suggestCreate } : {}),
       ...(clarifyCreate ? { clarifyCreate } : {}),
+      ...(voiceAudioId ? { voiceAudioId } : {}),
     }),
     signal: callbacks.signal,
   });
@@ -504,6 +506,7 @@ export function streamAskVaenyxMessage(
   suggestTask?: boolean,
   suggestCreate?: "method" | "routine",
   clarifyCreate?: string,
+  voiceAudioId?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -513,6 +516,7 @@ export function streamAskVaenyxMessage(
     suggestTask,
     suggestCreate,
     clarifyCreate,
+    voiceAudioId,
   );
 }
 
@@ -773,7 +777,9 @@ export function disconnectVoice(): Promise<VoiceStatus> {
   return requestJson<VoiceStatus>("/v1/voice/connect", { method: "DELETE" });
 }
 
-export async function transcribeAudio(blob: Blob): Promise<string> {
+export async function transcribeAudio(
+  blob: Blob,
+): Promise<{ text: string; audioId: string }> {
   const response = await fetch("/v1/voice/transcribe", {
     method: "POST",
     credentials: "same-origin",
@@ -782,12 +788,13 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
   });
   const body = (await response.json().catch(() => ({}))) as {
     text?: string;
+    audioId?: string;
     error?: string;
   };
   if (!response.ok) {
     throw new Error(body.error ?? "Transcription failed.");
   }
-  return body.text ?? "";
+  return { text: body.text ?? "", audioId: body.audioId ?? "" };
 }
 
 export function disableAppProfile(profileId: string): Promise<AppProfile> {

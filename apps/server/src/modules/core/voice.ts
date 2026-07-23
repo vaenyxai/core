@@ -5,6 +5,10 @@
 // model-providers.json under "voice", and connecting can simply reuse an
 // already-connected Groq chat key. Audio flows browser → this local server →
 // Groq (the key never reaches the browser).
+import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { readProviderConnections } from "../models/connections.js";
 import { writeConnections } from "../models/provider-settings.js";
 
@@ -48,6 +52,47 @@ export function disconnectVoice(secretsDirectory: string): {
     writeConnections(secretsDirectory, connections);
   }
   return { connected: false, model: null };
+}
+
+// The Owner's original recordings, kept so a voice bubble can replay them
+// (WeChat-style). Files live under <dataDirectory>/voice; the id embeds the
+// extension and is strictly validated before any read.
+const AUDIO_ID_PATTERN = /^[0-9a-f-]{36}\.(webm|m4a|ogg)$/;
+
+function audioExtension(mimeType: string): "webm" | "m4a" | "ogg" {
+  if (mimeType.includes("mp4")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+export function saveVoiceAudio(
+  dataDirectory: string,
+  audio: Buffer,
+  mimeType: string,
+): string {
+  const id = `${randomUUID()}.${audioExtension(mimeType)}`;
+  const directory = resolve(dataDirectory, "voice");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(resolve(directory, id), audio);
+  return id;
+}
+
+export function readVoiceAudio(
+  dataDirectory: string,
+  audioId: string,
+): { audio: Buffer; mimeType: string } | null {
+  if (!AUDIO_ID_PATTERN.test(audioId)) return null;
+  try {
+    const audio = readFileSync(resolve(dataDirectory, "voice", audioId));
+    const mimeType = audioId.endsWith(".m4a")
+      ? "audio/mp4"
+      : audioId.endsWith(".ogg")
+        ? "audio/ogg"
+        : "audio/webm";
+    return { audio, mimeType };
+  } catch {
+    return null;
+  }
 }
 
 // Forward one recorded utterance to Groq's transcription endpoint and return

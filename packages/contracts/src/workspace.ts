@@ -256,6 +256,11 @@ export const AskVaenyxMessageSchema = Type.Object(
     status: Type.Union([Type.Literal("completed"), Type.Literal("failed")]),
     webSearchUsed: Type.Boolean(),
     createdAt: Type.String(),
+    // Voice turn (WeChat-style bubble): true on a spoken Owner message and on
+    // the assistant's short spoken-style reply. audioId names the Owner's
+    // original recording (assistant bubbles replay via on-device TTS).
+    voice: Type.Optional(Type.Boolean()),
+    audioId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -291,6 +296,9 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     // description is not enough to build from yet. The reply must only ask this
     // clarifying question — nothing is built on this turn.
     clarifyCreate: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+    // Voice turn: the saved recording's id. Marks both sides as voice bubbles
+    // and asks the model for a short spoken-style reply.
+    voiceAudioId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   },
   { additionalProperties: false },
 );
@@ -803,6 +811,9 @@ export const ConnectVoiceRequestSchema = Type.Object(
 export const TranscribeVoiceResponseSchema = Type.Object(
   {
     text: Type.String(),
+    // The saved recording's id — sent along with the message so the voice
+    // bubble can replay the original audio later.
+    audioId: Type.String(),
   },
   { additionalProperties: false },
 );

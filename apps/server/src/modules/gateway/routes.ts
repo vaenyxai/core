@@ -182,6 +182,8 @@ import {
   connectVoice,
   disconnectVoice,
   getVoiceStatus,
+  readVoiceAudio,
+  saveVoiceAudio,
   transcribeVoice,
 } from "../core/voice.js";
 import {
@@ -2323,6 +2325,9 @@ export async function registerGatewayRoutes(
               ...(request.body.clarifyCreate
                 ? { clarifyCreate: request.body.clarifyCreate }
                 : {}),
+              ...(request.body.voiceAudioId
+                ? { voiceAudioId: request.body.voiceAudioId }
+                : {}),
             },
           ),
         (response) => {
@@ -3710,12 +3715,19 @@ export async function registerGatewayRoutes(
         return reply.code(400).send({ error: "No audio received." });
       }
       try {
+        const mimeType = request.headers["content-type"] ?? "audio/webm";
         const text = await transcribeVoice(
           context.config.secretsDirectory,
           audio,
-          request.headers["content-type"] ?? "audio/webm",
+          mimeType,
         );
-        return { text };
+        // Keep the original recording so the voice bubble can replay it.
+        const audioId = saveVoiceAudio(
+          context.config.dataDirectory,
+          audio,
+          mimeType,
+        );
+        return { text, audioId };
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         if (message === "VOICE_NOT_CONNECTED") {
@@ -3727,6 +3739,26 @@ export async function registerGatewayRoutes(
           error: "Transcription failed — try again.",
         });
       }
+    },
+  );
+
+  // Replay a stored voice recording (Owner-only). The id is validated against
+  // a strict pattern before any filesystem access.
+  app.get<{ Params: { id: string } }>(
+    "/v1/voice/audio/:id",
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const found = readVoiceAudio(
+        context.config.dataDirectory,
+        request.params.id,
+      );
+      if (!found) {
+        return reply.code(404).send({ error: "Recording not found." });
+      }
+      return reply.type(found.mimeType).send(found.audio);
     },
   );
 

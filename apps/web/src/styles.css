@@ -889,6 +889,62 @@ textarea::placeholder {
   margin-top: 6px;
 }
 
+/* Line icons (dev.134): stroke-only SVG, currentColor — the app's icon rule. */
+.line-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.line-icon--spin {
+  animation: line-icon-spin 0.9s linear infinite;
+}
+
+@keyframes line-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* WeChat-style voice bubble: play control + the short transcript. */
+.voice-bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 480px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
+.voice-bubble-play {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.voice-bubble p {
+  margin: 0;
+  color: #dedbd1;
+  font-size: var(--chat-font-size, var(--fs-base));
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 /* Voice (dev.133): push-to-talk mic in the composer + the read-aloud toggle. */
 .mic-button {
   flex: 0 0 auto;
@@ -912,12 +968,22 @@ textarea::placeholder {
 }
 
 .composer-voice-toggle {
-  padding: 2px 6px;
+  display: grid;
+  place-items: center;
+  padding: 2px 4px;
   border: 0;
   background: transparent;
-  font-size: 14px;
-  line-height: 1;
+  color: var(--text-muted);
   cursor: pointer;
+}
+
+.composer-voice-toggle .line-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.mic-button .line-icon {
+  margin: 0 auto;
 }
 
 /* Settings → Appearance → Chat Text: the two pickers side by side. */

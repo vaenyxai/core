@@ -776,6 +776,130 @@ function StoredTokenField({ prefix, profileId }: { prefix: string; profileId: st
   );
 }
 
+// Line icons (dev.134): every icon in the app is stroke-only SVG — no emoji.
+// Hand-drawn lucide-style paths, stroke = currentColor.
+function LineIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg aria-hidden="true" className="line-icon" viewBox="0 0 24 24">
+      {children}
+    </svg>
+  );
+}
+
+function IconMic() {
+  return (
+    <LineIcon>
+      <rect height="11" rx="3" width="6" x="9" y="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <line x1="12" x2="12" y1="18" y2="21" />
+    </LineIcon>
+  );
+}
+
+function IconStop() {
+  return (
+    <LineIcon>
+      <rect height="10" rx="2" width="10" x="7" y="7" />
+    </LineIcon>
+  );
+}
+
+function IconPlay() {
+  return (
+    <LineIcon>
+      <path d="M8 5.5v13l11-6.5z" />
+    </LineIcon>
+  );
+}
+
+function IconSpinner() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="line-icon line-icon--spin"
+      viewBox="0 0 24 24"
+    >
+      <path d="M12 3a9 9 0 1 0 9 9" />
+    </svg>
+  );
+}
+
+function IconSpeakerOn() {
+  return (
+    <LineIcon>
+      <path d="M11 5 6 9H3v6h3l5 4z" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M18.5 6a9 9 0 0 1 0 12" />
+    </LineIcon>
+  );
+}
+
+function IconSpeakerOff() {
+  return (
+    <LineIcon>
+      <path d="M11 5 6 9H3v6h3l5 4z" />
+      <line x1="16" x2="21" y1="9" y2="14" />
+      <line x1="21" x2="16" y1="9" y2="14" />
+    </LineIcon>
+  );
+}
+
+// A WeChat-style voice bubble: tap to hear it. Owner bubbles replay the
+// original recording; assistant bubbles are read aloud on-device.
+function VoiceBubble({
+  audioId,
+  text,
+}: {
+  audioId?: string | null;
+  text: string;
+}) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(
+    () => () => {
+      audioRef.current?.pause();
+    },
+    [],
+  );
+
+  function toggle() {
+    if (!audioId) {
+      // Assistant bubble: read the short reply aloud.
+      speakText(text);
+      return;
+    }
+    if (playing) {
+      audioRef.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    const audio =
+      audioRef.current ?? new Audio(`/v1/voice/audio/${audioId}`);
+    audioRef.current = audio;
+    audio.currentTime = 0;
+    audio.onended = () => setPlaying(false);
+    void audio
+      .play()
+      .then(() => setPlaying(true))
+      .catch(() => setPlaying(false));
+  }
+
+  return (
+    <div className="voice-bubble">
+      <button
+        aria-label="Play voice message"
+        className="voice-bubble-play"
+        onClick={toggle}
+        type="button"
+      >
+        {playing ? <IconStop /> : <IconPlay />}
+      </button>
+      <p>{text}</p>
+    </div>
+  );
+}
+
 // Read a finished reply aloud (Voice replies, dev.133). Markdown chrome is
 // stripped first — nobody wants to hear "asterisk asterisk".
 const VOICE_REPLIES_KEY = "vaenyx.voiceReplies";
@@ -815,7 +939,7 @@ function MicButton({
   onText,
 }: {
   disabled?: boolean;
-  onText: (text: string) => void;
+  onText: (text: string, audioId: string) => void;
 }) {
   const [state, setState] = useState<"idle" | "recording" | "busy">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -849,8 +973,8 @@ function MicButton({
         });
         setState("busy");
         void transcribeAudio(blob)
-          .then((text) => {
-            if (text) onText(text);
+          .then(({ text, audioId }) => {
+            if (text) onText(text, audioId);
             setState("idle");
           })
           .catch((nextError) => {
@@ -888,7 +1012,13 @@ function MicButton({
       title={error ?? (state === "recording" ? "Tap to stop" : "Voice input")}
       type="button"
     >
-      {state === "recording" ? "◼" : state === "busy" ? "…" : "🎤"}
+      {state === "recording" ? (
+        <IconStop />
+      ) : state === "busy" ? (
+        <IconSpinner />
+      ) : (
+        <IconMic />
+      )}
     </button>
   );
 }
@@ -3285,7 +3415,10 @@ function AskVaenyxPanel({
     }
   }
 
-  async function sendChatContent(content: string): Promise<void> {
+  async function sendChatContent(
+    content: string,
+    voiceAudioId?: string,
+  ): Promise<void> {
     if (activeThread?.routineId && activeConversationId) {
       await runRoutineMessage(
         activeConversationId,
@@ -3465,6 +3598,7 @@ function AskVaenyxPanel({
           status: "completed",
           webSearchUsed: false,
           createdAt: startedAt,
+          ...(voiceAudioId ? { voice: true, audioId: voiceAudioId } : {}),
         },
         {
           id: tempAssistantId,
@@ -3512,10 +3646,12 @@ function AskVaenyxPanel({
         suggestTask,
         suggestCreate,
         clarifyCreateQuestion,
+        voiceAudioId,
       );
 
-      // Voice replies: read the finished answer aloud when the toggle is on.
-      if (voiceReplies) {
+      // Voice replies: a voice turn always answers aloud (it is a spoken
+      // conversation); text turns answer aloud when the speaker toggle is on.
+      if (voiceAudioId || voiceReplies) {
         const assistantReply = [...response.messages]
           .reverse()
           .find(
@@ -3925,7 +4061,7 @@ function AskVaenyxPanel({
             {voiceReady ? (
               <MicButton
                 disabled={sending}
-                onText={(text) => void sendChatContent(text)}
+                onText={(text, audioId) => void sendChatContent(text, audioId)}
               />
             ) : null}
             <button
@@ -4333,8 +4469,17 @@ function AskVaenyxPanel({
                   <strong>{message.role === "owner" ? "You" : agentName}</strong>
                   <small>{formatTime(message.createdAt)}</small>
                 </div>
-                {message.role === "owner" ? (
+                {message.voice && message.role === "owner" ? (
+                  <VoiceBubble
+                    audioId={message.audioId}
+                    text={message.content}
+                  />
+                ) : message.role === "owner" ? (
                   <p>{message.content}</p>
+                ) : message.voice &&
+                  message.content &&
+                  message.status === "completed" ? (
+                  <VoiceBubble text={message.content} />
                 ) : message.content ? (
                   <MarkdownMessage content={message.content} />
                 ) : (
@@ -4409,7 +4554,7 @@ function AskVaenyxPanel({
             {voiceReady ? (
               <MicButton
                 disabled={sending}
-                onText={(text) => void sendChatContent(text)}
+                onText={(text, audioId) => void sendChatContent(text, audioId)}
               />
             ) : null}
             {sending ? (
@@ -4564,7 +4709,7 @@ function AskVaenyxPanel({
               }
               type="button"
             >
-              {voiceReplies ? "🔊" : "🔇"}
+              {voiceReplies ? <IconSpeakerOn /> : <IconSpeakerOff />}
             </button>
           </div>
           <p className="composer-disclaimer">

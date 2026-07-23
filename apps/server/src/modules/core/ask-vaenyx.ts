@@ -37,6 +37,8 @@ interface AskVaenyxMessageRow {
   status: "completed" | "failed";
   web_search_used: 0 | 1;
   created_at: string;
+  voice: 0 | 1;
+  audio_id: string | null;
 }
 
 interface ConversationThreadContextRow {
@@ -81,6 +83,8 @@ function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
     status: row.status,
     webSearchUsed: row.web_search_used === 1,
     createdAt: row.created_at,
+    voice: row.voice === 1,
+    audioId: row.audio_id ?? null,
   };
 }
 
@@ -430,7 +434,7 @@ export function listAskVaenyxMessages(
 
   const rows = database.sqlite
     .prepare(
-      `SELECT id, conversation_id, role, content, status, web_search_used, created_at
+      `SELECT id, conversation_id, role, content, status, web_search_used, created_at, voice, audio_id
        FROM ask_vaenyx_messages
        WHERE conversation_id = ?
        ORDER BY created_at ASC`,
@@ -457,6 +461,9 @@ export interface CreateAskVaenyxMessageOptions {
   // description is not enough to build from. This reply must only ask the given
   // clarifying question — nothing is built on this turn.
   clarifyCreate?: string;
+  // Voice turn: the saved recording's id. Marks both sides as voice bubbles
+  // and asks the model for a short spoken-style reply.
+  voiceAudioId?: string;
 }
 
 // Insert a Vaenyx-authored status note into a conversation (e.g. "✔ Routine X
@@ -510,10 +517,17 @@ export async function createAskVaenyxMessage(
   database.sqlite
     .prepare(
       `INSERT INTO ask_vaenyx_messages (
-        id, conversation_id, role, content, status, web_search_used, created_at
-      ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?)`,
+        id, conversation_id, role, content, status, web_search_used, created_at, voice, audio_id
+      ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?)`,
     )
-    .run(ownerMessageId, conversationId, trimmedContent, now);
+    .run(
+      ownerMessageId,
+      conversationId,
+      trimmedContent,
+      now,
+      options?.voiceAudioId ? 1 : 0,
+      options?.voiceAudioId ?? null,
+    );
 
   if (
     conversation.message_count === 0 &&
@@ -540,6 +554,8 @@ export async function createAskVaenyxMessage(
     status: "completed",
     webSearchUsed: false,
     createdAt: now,
+    voice: Boolean(options?.voiceAudioId),
+    audioId: options?.voiceAudioId ?? null,
   });
 
   const MAX_HISTORY_MESSAGES = 30;
@@ -576,6 +592,9 @@ export async function createAskVaenyxMessage(
   }
   if (options?.clarifyCreate) {
     projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner asked Vaenyx to BUILD something, but the description is not yet enough to build from. Reply ONLY with one short clarifying question, in the Owner's language, so the build can start from their answer. A good question to ask (use it as-is or sharpen it): "${options.clarifyCreate}". Nothing is being built yet — do NOT claim anything was created or started, do NOT output configuration, and do NOT ask more than one question.`;
+  }
+  if (options?.voiceAudioId) {
+    projectContext = `${projectContext ? `${projectContext}\n\n` : ""}This is a VOICE conversation turn — the Owner spoke this message and your reply will be read aloud. Answer the way you would speak: at most 2–3 short sentences, plain conversational language, no lists, no markdown, no links, no code. If the complete answer is genuinely long, give the one-sentence essence and offer to expand in text.`;
   }
 
   try {
@@ -622,8 +641,8 @@ export async function createAskVaenyxMessage(
   database.sqlite
     .prepare(
       `INSERT INTO ask_vaenyx_messages (
-        id, conversation_id, role, content, status, web_search_used, created_at
-      ) VALUES (?, ?, 'assistant', ?, ?, ?, ?)`,
+        id, conversation_id, role, content, status, web_search_used, created_at, voice
+      ) VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
     )
     .run(
       assistantMessageId,
@@ -632,6 +651,7 @@ export async function createAskVaenyxMessage(
       assistantStatus,
       webSearchUsed ? 1 : 0,
       completedAt,
+      options?.voiceAudioId && assistantStatus === "completed" ? 1 : 0,
     );
 
   database.sqlite
@@ -679,6 +699,8 @@ export async function createAskVaenyxMessage(
         status: "completed",
         webSearchUsed: false,
         createdAt: now,
+        voice: Boolean(options?.voiceAudioId),
+        audioId: options?.voiceAudioId ?? null,
       },
       {
         id: assistantMessageId,
@@ -688,6 +710,10 @@ export async function createAskVaenyxMessage(
         status: assistantStatus,
         webSearchUsed,
         createdAt: completedAt,
+        voice: Boolean(
+          options?.voiceAudioId && assistantStatus === "completed",
+        ),
+        audioId: null,
       },
     ],
   };
