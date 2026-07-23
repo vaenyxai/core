@@ -25,14 +25,27 @@ const VISION_CANDIDATES = [
   },
 ] as const;
 
+// A Google key stored only for Voice Output (Gemini TTS) works for Gemini
+// vision too — reuse it so the camera lights up without a second setup.
+function candidateKey(
+  connections: ReturnType<typeof readProviderConnections>,
+  candidateId: string,
+): string | undefined {
+  const direct = connections[candidateId]?.apiKey;
+  if (direct) return direct;
+  if (candidateId === "gemini" && connections.voiceOutput?.engine === "gemini") {
+    return connections.voiceOutput.apiKey;
+  }
+  return undefined;
+}
+
 export function getVisionStatus(secretsDirectory: string): {
   connected: boolean;
   provider: string | null;
 } {
   const connections = readProviderConnections(secretsDirectory);
   for (const candidate of VISION_CANDIDATES) {
-    const connection = connections[candidate.id];
-    if (connection?.apiKey) {
+    if (candidateKey(connections, candidate.id)) {
       return { connected: true, provider: candidate.id };
     }
   }
@@ -46,12 +59,13 @@ export async function describeImage(
   lang: string,
 ): Promise<string> {
   const connections = readProviderConnections(secretsDirectory);
-  const candidate = VISION_CANDIDATES.find(
-    (entry) => connections[entry.id]?.apiKey,
+  const candidate = VISION_CANDIDATES.find((entry) =>
+    candidateKey(connections, entry.id),
   );
   if (!candidate) {
     throw new Error("VISION_NOT_CONNECTED");
   }
+  const apiKey = candidateKey(connections, candidate.id) ?? "";
   const connection = connections[candidate.id];
   const dataUrl = `data:${mimeType};base64,${image.toString("base64")}`;
   const prompt =
@@ -65,7 +79,7 @@ export async function describeImage(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${connection?.apiKey ?? ""}`,
+        authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: candidate.model,
