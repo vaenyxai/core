@@ -118,6 +118,10 @@ import {
   connectVoice,
   disconnectVoice,
   transcribeAudio,
+  fetchVoiceOutput,
+  connectVoiceOutput,
+  synthesizeSpeech,
+  type VoiceOutputStatus,
   type VoiceStatus,
   rejectVaenyxMeCandidate,
   renameMethod,
@@ -849,9 +853,12 @@ function IconSpeakerOff() {
 function VoiceBubble({
   audioId,
   text,
+  onSpeak,
 }: {
   audioId?: string | null;
   text: string;
+  // Assistant bubbles: how to voice the text (defaults to the device TTS).
+  onSpeak?: (text: string) => void;
 }) {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -866,7 +873,7 @@ function VoiceBubble({
   function toggle() {
     if (!audioId) {
       // Assistant bubble: read the short reply aloud.
-      speakText(text);
+      (onSpeak ?? speakText)(text);
       return;
     }
     if (playing) {
@@ -945,11 +952,53 @@ function MicButton({
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  // Live volume meter (ChatGPT-style): an analyser drives the bar heights
+  // directly via refs — no re-render per animation frame.
+  const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationRef = useRef<number>(0);
 
   const supported =
     typeof MediaRecorder !== "undefined" &&
     Boolean(navigator.mediaDevices?.getUserMedia);
   if (!supported) return null;
+
+  function startMeter(stream: MediaStream) {
+    try {
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+      const samples = new Uint8Array(analyser.fftSize);
+      const tick = () => {
+        analyser.getByteTimeDomainData(samples);
+        let sum = 0;
+        for (const sample of samples) {
+          const deviation = (sample - 128) / 128;
+          sum += deviation * deviation;
+        }
+        const level = Math.min(1, Math.sqrt(sum / samples.length) * 4);
+        barRefs.current.forEach((bar, index) => {
+          if (!bar) return;
+          // Slightly different response per bar so it reads as a waveform.
+          const wobble = 0.65 + 0.35 * Math.sin(Date.now() / 90 + index * 1.7);
+          const height = 0.18 + level * wobble * 0.82;
+          bar.style.transform = `scaleY(${height.toFixed(3)})`;
+        });
+        animationRef.current = requestAnimationFrame(tick);
+      };
+      animationRef.current = requestAnimationFrame(tick);
+    } catch {
+      // No meter — recording still works.
+    }
+  }
+
+  function stopMeter() {
+    cancelAnimationFrame(animationRef.current);
+    void audioContextRef.current?.close().catch(() => undefined);
+    audioContextRef.current = null;
+  }
 
   async function start() {
     setError(null);
@@ -967,6 +1016,7 @@ function MicButton({
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
+        stopMeter();
         stream.getTracks().forEach((track) => track.stop());
         const blob = new Blob(chunksRef.current, {
           type: recorder.mimeType || "audio/webm",
@@ -988,6 +1038,7 @@ function MicButton({
       };
       recorderRef.current = recorder;
       recorder.start();
+      startMeter(stream);
       setState("recording");
     } catch {
       setError("Microphone blocked — allow it in the browser settings.");
@@ -1000,25 +1051,40 @@ function MicButton({
     recorderRef.current = null;
   }
 
+  if (state === "recording") {
+    return (
+      <button
+        aria-label="Stop recording"
+        className="mic-button mic-button--recording mic-button--wide"
+        onClick={stop}
+        title="Tap to stop"
+        type="button"
+      >
+        <IconStop />
+        <span aria-hidden="true" className="mic-bars">
+          {[0, 1, 2, 3, 4].map((index) => (
+            <span
+              key={index}
+              ref={(element) => {
+                barRefs.current[index] = element;
+              }}
+            />
+          ))}
+        </span>
+      </button>
+    );
+  }
+
   return (
     <button
       aria-label="Voice input"
       className={`mic-button mic-button--${state}`}
       disabled={disabled || state === "busy"}
-      onClick={() => {
-        if (state === "recording") stop();
-        else void start();
-      }}
-      title={error ?? (state === "recording" ? "Tap to stop" : "Voice input")}
+      onClick={() => void start()}
+      title={error ?? "Voice input"}
       type="button"
     >
-      {state === "recording" ? (
-        <IconStop />
-      ) : state === "busy" ? (
-        <IconSpinner />
-      ) : (
-        <IconMic />
-      )}
+      {state === "busy" ? <IconSpinner /> : <IconMic />}
     </button>
   );
 }
@@ -1027,16 +1093,39 @@ function MicButton({
 // models (it never appears in the chat model picker). Groq Whisper = the
 // accuracy-benchmark model on the fastest chips; transcription sits inside
 // Groq's free tier. One click reuses an already-connected Groq chat key.
+const GEMINI_TTS_VOICES = [
+  { id: "Kore", label: "Kore (Recommended)" },
+  { id: "Leda", label: "Leda" },
+  { id: "Puck", label: "Puck" },
+  { id: "Zephyr", label: "Zephyr" },
+  { id: "Charon", label: "Charon" },
+  { id: "Aoede", label: "Aoede" },
+];
+
 function VoicePanel() {
   const { t } = useI18n();
   const [status, setStatus] = useState<VoiceStatus | null>(null);
+  const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
+  const [outputKey, setOutputKey] = useState("");
+  const [outputEngine, setOutputEngine] = useState<"browser" | "gemini">(
+    "browser",
+  );
+  const [outputVoice, setOutputVoice] = useState("Kore");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [outputError, setOutputError] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchVoiceStatus()
       .then(setStatus)
+      .catch(() => undefined);
+    void fetchVoiceOutput()
+      .then((current) => {
+        setOutput(current);
+        setOutputEngine(current.engine);
+        if (current.voice) setOutputVoice(current.voice);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -1072,16 +1161,46 @@ function VoicePanel() {
     }
   }
 
+  async function applyOutput(input: {
+    engine: "browser" | "gemini";
+    apiKey?: string;
+    voice?: string;
+  }) {
+    setBusy(true);
+    setOutputError(null);
+    try {
+      const next = await connectVoiceOutput(input);
+      setOutput(next);
+      setOutputEngine(next.engine);
+      if (next.voice) setOutputVoice(next.voice);
+      setOutputKey("");
+    } catch (nextError) {
+      setOutputError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not update voice output.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="settings-card">
       <p className="eyebrow">Voice</p>
-      <h2>Voice Input</h2>
+      <h2>Voice</h2>
+
+      <h3 className="settings-subhead">Voice Input (Speech To Text)</h3>
       <p className="settings-card-copy">
-        Speak instead of typing: the mic button records, and Groq's Whisper
-        turns it into text — fast, accurate, Chinese and English alike, inside
-        Groq's free tier. Replies can be read aloud with the speaker toggle in
-        the chat.
+        Turns what you say into text — the mic button in chat. Engines can be
+        swapped as more arrive.
       </p>
+      <label className="chat-font-field">
+        Engine
+        <select className="task-select" disabled value="groq">
+          <option value="groq">Groq Whisper — Recommended (Fast, Accurate)</option>
+        </select>
+      </label>
       {status?.connected ? (
         <>
           <div className="model-card-head">
@@ -1143,6 +1262,129 @@ function VoicePanel() {
         </div>
       )}
       {error ? <p className="form-error">{error}</p> : null}
+
+      <div className="settings-card-divider" />
+
+      <h3 className="settings-subhead">Voice Output (Replies Read Aloud)</h3>
+      <p className="settings-card-copy">
+        The voice that reads replies — voice bubbles and the speaker toggle in
+        chat both use it.
+      </p>
+      <label className="chat-font-field">
+        Engine
+        <select
+          className="task-select"
+          onChange={(event) => {
+            const next = event.target.value as "browser" | "gemini";
+            setOutputEngine(next);
+            if (next === "browser") {
+              void applyOutput({ engine: "browser" });
+            }
+          }}
+          value={outputEngine}
+        >
+          <option value="gemini">
+            Gemini TTS — Recommended (Natural Voice, Free Key)
+          </option>
+          <option value="browser">Browser — Basic, No Key Needed</option>
+        </select>
+      </label>
+      {outputEngine === "browser" ? (
+        <p className="settings-card-copy">
+          Using the device's built-in voice. Pick Gemini TTS above for a much
+          more natural one.
+        </p>
+      ) : output?.engine === "gemini" ? (
+        <>
+          <div className="model-card-head">
+            <span className="library-chip chip-published">Connected</span>
+          </div>
+          <label className="chat-font-field">
+            Voice
+            <select
+              className="task-select"
+              disabled={busy}
+              onChange={(event) => {
+                setOutputVoice(event.target.value);
+                void applyOutput({
+                  engine: "gemini",
+                  voice: event.target.value,
+                });
+              }}
+              value={outputVoice}
+            >
+              {GEMINI_TTS_VOICES.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      ) : (
+        <div className="model-connect-form">
+          <a
+            className="model-key-link"
+            href="https://aistudio.google.com/apikey"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Get a free Google AI Studio key ↗
+          </a>
+          <input
+            className="method-rename-input"
+            onChange={(event) => setOutputKey(event.target.value)}
+            placeholder="Google AI Studio key"
+            type="password"
+            value={outputKey}
+          />
+          <label className="chat-font-field">
+            Voice
+            <select
+              className="task-select"
+              onChange={(event) => setOutputVoice(event.target.value)}
+              value={outputVoice}
+            >
+              {GEMINI_TTS_VOICES.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="context-disclaimer">
+            {t("legal.notice.modelConnect.cloud")}
+          </p>
+          <div className="model-card-actions">
+            <button
+              className="primary-button"
+              disabled={busy || !outputKey.trim()}
+              onClick={() =>
+                void applyOutput({
+                  engine: "gemini",
+                  apiKey: outputKey.trim(),
+                  voice: outputVoice,
+                })
+              }
+              type="button"
+            >
+              Connect
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() =>
+                void applyOutput({ engine: "gemini", voice: outputVoice })
+              }
+              title="Reuses the key of the Gemini model connected under Models."
+              type="button"
+            >
+              Use My Gemini Key
+            </button>
+          </div>
+        </div>
+      )}
+      {outputError ? <p className="form-error">{outputError}</p> : null}
     </section>
   );
 }
@@ -2949,11 +3191,32 @@ function AskVaenyxPanel({
   // toggle reads finished replies aloud (persisted per device).
   const [voiceReady, setVoiceReady] = useState(false);
   const [voiceReplies, setVoiceReplies] = useState(voiceRepliesEnabled);
+  const [voiceOutput, setVoiceOutput] = useState<VoiceOutputStatus | null>(
+    null,
+  );
   useEffect(() => {
     void fetchVoiceStatus()
       .then((status) => setVoiceReady(status.connected))
       .catch(() => undefined);
+    void fetchVoiceOutput()
+      .then(setVoiceOutput)
+      .catch(() => undefined);
   }, []);
+  // Read a reply aloud with the best available voice: Gemini TTS when the
+  // Owner picked it (server-generated audio, cached), else the device TTS.
+  async function playReplyAloud(text: string) {
+    if (voiceOutput?.engine === "gemini") {
+      try {
+        const { audioId } = await synthesizeSpeech(text);
+        const audio = new Audio(`/v1/voice/audio/${audioId}`);
+        await audio.play();
+        return;
+      } catch {
+        // Fall back to the device voice below.
+      }
+    }
+    speakText(text);
+  }
   function toggleVoiceReplies() {
     setVoiceReplies((current) => {
       const next = !current;
@@ -3658,7 +3921,9 @@ function AskVaenyxPanel({
             (message) =>
               message.role === "assistant" && message.status === "completed",
           );
-        if (assistantReply?.content) speakText(assistantReply.content);
+        if (assistantReply?.content) {
+          void playReplyAloud(assistantReply.content);
+        }
       }
 
       // The reply landed: build the described Method/Routine in the background
@@ -4479,7 +4744,10 @@ function AskVaenyxPanel({
                 ) : message.voice &&
                   message.content &&
                   message.status === "completed" ? (
-                  <VoiceBubble text={message.content} />
+                  <VoiceBubble
+                    onSpeak={(value) => void playReplyAloud(value)}
+                    text={message.content}
+                  />
                 ) : message.content ? (
                   <MarkdownMessage content={message.content} />
                 ) : (

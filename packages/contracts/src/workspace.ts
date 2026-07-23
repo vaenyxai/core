@@ -818,6 +818,40 @@ export const TranscribeVoiceResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Voice output (TTS): which engine reads replies aloud. "browser" = on-device
+// TTS (basic, keyless); "gemini" = server-generated natural voice.
+export const VoiceOutputStatusSchema = Type.Object(
+  {
+    engine: Type.Union([Type.Literal("browser"), Type.Literal("gemini")]),
+    connected: Type.Boolean(),
+    voice: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const ConnectVoiceOutputRequestSchema = Type.Object(
+  {
+    engine: Type.Union([Type.Literal("browser"), Type.Literal("gemini")]),
+    apiKey: Type.Optional(Type.String({ maxLength: 500 })),
+    voice: Type.Optional(Type.String({ maxLength: 100 })),
+  },
+  { additionalProperties: false },
+);
+
+export const SpeakRequestSchema = Type.Object(
+  {
+    text: Type.String({ minLength: 1, maxLength: 4000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const SpeakResponseSchema = Type.Object(
+  {
+    audioId: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 // Edit an existing App Profile's capability scope. The token (identity) never
 // changes; only the Methods it may use and its Mode B / memory permissions do.
 // Re-granting Methods re-pins each one's current content hash.
@@ -1573,6 +1607,10 @@ export type UnsubscribePushRequest = Static<
   typeof UnsubscribePushRequestSchema
 >;
 export type ConnectVoiceRequest = Static<typeof ConnectVoiceRequestSchema>;
+export type ConnectVoiceOutputRequest = Static<
+  typeof ConnectVoiceOutputRequestSchema
+>;
+export type SpeakRequest = Static<typeof SpeakRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;
 export type AgentProfile = Static<typeof AgentProfileSchema>;

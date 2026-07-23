@@ -777,6 +777,34 @@ export function disconnectVoice(): Promise<VoiceStatus> {
   return requestJson<VoiceStatus>("/v1/voice/connect", { method: "DELETE" });
 }
 
+export interface VoiceOutputStatus {
+  engine: "browser" | "gemini";
+  connected: boolean;
+  voice: string | null;
+}
+
+export function fetchVoiceOutput(): Promise<VoiceOutputStatus> {
+  return requestJson<VoiceOutputStatus>("/v1/voice/output");
+}
+
+export function connectVoiceOutput(input: {
+  engine: "browser" | "gemini";
+  apiKey?: string;
+  voice?: string;
+}): Promise<VoiceOutputStatus> {
+  return requestJson<VoiceOutputStatus>("/v1/voice/output", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function synthesizeSpeech(text: string): Promise<{ audioId: string }> {
+  return requestJson<{ audioId: string }>("/v1/voice/speak", {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
 export async function transcribeAudio(
   blob: Blob,
 ): Promise<{ text: string; audioId: string }> {

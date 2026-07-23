@@ -967,6 +967,32 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
+/* Recording: the button widens into a stop control + live volume bars that
+   track the mic level (ChatGPT-style). */
+.mic-button--wide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.mic-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+}
+
+.mic-bars span {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: #cf8079;
+  transform: scaleY(0.2);
+  transform-origin: center;
+  transition: transform 60ms linear;
+}
+
 .composer-voice-toggle {
   display: grid;
   place-items: center;

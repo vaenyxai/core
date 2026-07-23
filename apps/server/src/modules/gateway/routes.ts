@@ -29,9 +29,15 @@ import {
   VoiceStatusSchema,
   ConnectVoiceRequestSchema,
   TranscribeVoiceResponseSchema,
+  VoiceOutputStatusSchema,
+  ConnectVoiceOutputRequestSchema,
+  SpeakRequestSchema,
+  SpeakResponseSchema,
   type SubscribePushRequest,
   type UnsubscribePushRequest,
   type ConnectVoiceRequest,
+  type ConnectVoiceOutputRequest,
+  type SpeakRequest,
   CreateAskVaenyxConversationRequestSchema,
   CreateAskVaenyxMessageRequestSchema,
   CreateAskVaenyxMessageResponseSchema,
@@ -180,10 +186,13 @@ import {
 } from "../core/push.js";
 import {
   connectVoice,
+  connectVoiceOutput,
   disconnectVoice,
+  getVoiceOutput,
   getVoiceStatus,
   readVoiceAudio,
   saveVoiceAudio,
+  synthesizeSpeech,
   transcribeVoice,
 } from "../core/voice.js";
 import {
@@ -3738,6 +3747,95 @@ export async function registerGatewayRoutes(
         return reply.code(502).send({
           error: "Transcription failed — try again.",
         });
+      }
+    },
+  );
+
+  app.get(
+    "/v1/voice/output",
+    {
+      schema: {
+        response: { 200: VoiceOutputStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return getVoiceOutput(context.config.secretsDirectory);
+    },
+  );
+
+  app.post<{ Body: ConnectVoiceOutputRequest }>(
+    "/v1/voice/output",
+    {
+      schema: {
+        body: ConnectVoiceOutputRequestSchema,
+        response: {
+          200: VoiceOutputStatusSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return connectVoiceOutput(
+          context.config.secretsDirectory,
+          request.body,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "VOICE_NO_KEY") {
+          return reply.code(400).send({
+            error:
+              "No key: paste a Google AI Studio key, or connect Gemini under Models first to reuse its key.",
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // Text → generated speech (Gemini TTS), cached by content so replays are
+  // free. Returns the saved audio id for /v1/voice/audio/:id.
+  app.post<{ Body: SpeakRequest }>(
+    "/v1/voice/speak",
+    {
+      schema: {
+        body: SpeakRequestSchema,
+        response: {
+          200: SpeakResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        const audioId = await synthesizeSpeech(
+          context.config.secretsDirectory,
+          context.config.dataDirectory,
+          request.body.text,
+        );
+        return { audioId };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message === "VOICE_OUTPUT_NOT_CONNECTED") {
+          return reply.code(400).send({
+            error: "Voice output is not set to Gemini — pick it in AI Settings.",
+          });
+        }
+        return reply.code(502).send({ error: "Speech generation failed." });
       }
     },
   );

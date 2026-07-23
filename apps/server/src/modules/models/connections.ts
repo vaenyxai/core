@@ -10,6 +10,9 @@ export interface ProviderConnection {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  // Voice output entry only: which TTS engine + which prebuilt voice.
+  engine?: string;
+  voice?: string;
 }
 
 export function readProviderConnections(
