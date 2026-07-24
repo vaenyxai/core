@@ -910,6 +910,25 @@ export const VisionStatusSchema = Type.Object(
   {
     connected: Type.Boolean(),
     provider: Type.Union([Type.String(), Type.Null()]),
+    // The Owner's sticky engine pick; "auto" = first vision-capable model.
+    chosen: Type.Union([
+      Type.Literal("auto"),
+      Type.Literal("gemini"),
+      Type.Literal("zhipu"),
+      Type.Literal("openai"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const ConnectVisionRequestSchema = Type.Object(
+  {
+    provider: Type.Union([
+      Type.Literal("auto"),
+      Type.Literal("gemini"),
+      Type.Literal("zhipu"),
+      Type.Literal("openai"),
+    ]),
   },
   { additionalProperties: false },
 );
@@ -1688,6 +1707,7 @@ export type ConnectVoiceOutputRequest = Static<
 >;
 export type SpeakRequest = Static<typeof SpeakRequestSchema>;
 export type LocalTtsStatus = Static<typeof LocalTtsStatusSchema>;
+export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;

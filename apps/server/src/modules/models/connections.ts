@@ -13,6 +13,8 @@ export interface ProviderConnection {
   // Voice output entry only: which TTS engine + which prebuilt voice.
   engine?: string;
   voice?: string;
+  // Vision entry only: the pinned vision engine ("auto" = entry absent).
+  provider?: string;
 }
 
 export function readProviderConnections(

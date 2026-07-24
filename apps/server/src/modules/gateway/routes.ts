@@ -37,6 +37,8 @@ import {
   LocalTtsStatusSchema,
   StopTurnRequestSchema,
   VisionStatusSchema,
+  ConnectVisionRequestSchema,
+  type ConnectVisionRequest,
   VisionDescribeResponseSchema,
   VisionUploadResponseSchema,
   type SubscribePushRequest,
@@ -216,6 +218,7 @@ import {
   getVisionStatus,
   readImage,
   saveImage,
+  setVisionEngine,
 } from "../core/vision.js";
 import {
   createMethod,
@@ -3703,6 +3706,43 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // Pin the vision engine (or "auto") — same sticky-override pattern as the
+  // voice engines. A pin needs a usable key under Models (or the borrowed
+  // Gemini voice key); otherwise the Owner is pointed there.
+  app.post<{ Body: ConnectVisionRequest }>(
+    "/v1/vision/engine",
+    {
+      schema: {
+        body: ConnectVisionRequestSchema,
+        response: {
+          200: VisionStatusSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return setVisionEngine(
+          context.config.secretsDirectory,
+          request.body.provider,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "VISION_NO_KEY") {
+          return reply.code(400).send({
+            error:
+              "That model has no key yet — connect it under Models first, then pick it here.",
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
   app.post<{ Querystring: { lang?: string } }>(
     "/v1/vision/describe",
     {
@@ -4007,6 +4047,20 @@ export async function registerGatewayRoutes(
           return reply.code(400).send({
             error:
               "Voice output has no speech engine — pick Gemini or Local Voice in AI Settings.",
+          });
+        }
+        // Say what actually happened — a Gemini free-tier limit reads very
+        // differently from "not connected" (Oskar hit exactly this).
+        if (message.startsWith("VOICE_TTS_FAILED:")) {
+          const status = message.split(":")[1];
+          if (status === "429") {
+            return reply.code(502).send({
+              error:
+                "Gemini's free voice quota is used up right now — wait a while, or switch Voice Output to Local Voice (offline, unlimited).",
+            });
+          }
+          return reply.code(502).send({
+            error: `Speech generation failed (Gemini ${status}).`,
           });
         }
         return reply.code(502).send({ error: "Speech generation failed." });

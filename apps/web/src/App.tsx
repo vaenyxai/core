@@ -132,6 +132,7 @@ import {
   fetchLocalTts,
   installLocalTts,
   removeLocalTtsDownload,
+  setVisionEngine,
   type LocalTtsStatus,
   postPresenceHeartbeat,
   stopTurn,
@@ -1162,6 +1163,9 @@ function VoiceBubble({
     "idle" | "loading" | "playing" | "paused"
   >("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // False until the element carries the real clip (it may hold the silent
+  // autoplay-unlock blip first).
+  const audioReadyRef = useRef(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(
@@ -1179,7 +1183,7 @@ function VoiceBubble({
   );
 
   async function ensureAudio(): Promise<HTMLAudioElement | null> {
-    if (audioRef.current) return audioRef.current;
+    if (audioRef.current && audioReadyRef.current) return audioRef.current;
     let id = audioId ?? null;
     // Gemini and Local both generate server-side audio files.
     if (!id && engine !== "browser") {
@@ -1189,7 +1193,9 @@ function VoiceBubble({
       id = (await synthesizeSpeech(clean)).audioId;
     }
     if (!id) return null;
-    const audio = new Audio(`/v1/voice/audio/${id}`);
+    // Reuse the tap-blessed element when one exists (mobile autoplay).
+    const audio = audioRef.current ?? new Audio();
+    audio.src = `/v1/voice/audio/${id}`;
     audio.onended = () => setState("idle");
     // A global stop (another playback starting) pauses us mid-flight — show
     // that as paused so Resume works naturally.
@@ -1199,12 +1205,20 @@ function VoiceBubble({
       }
     };
     audioRef.current = audio;
+    audioReadyRef.current = true;
     return audio;
   }
 
   async function play() {
     stopReplySpeech();
     try {
+      if (!audioReadyRef.current && !audioRef.current && engine !== "browser") {
+        // Consume the tap NOW: a silent blip blesses this element so the
+        // real clip may start after a seconds-long generation.
+        const blip = new Audio(SILENT_WAV);
+        void blip.play().catch(() => undefined);
+        audioRef.current = blip;
+      }
       if (!audioId && engine === "browser") {
         // Device TTS path, with pause/resume support.
         if (!("speechSynthesis" in window)) return;
@@ -1604,6 +1618,11 @@ function MicButton({
 // models (it never appears in the chat model picker). Groq Whisper = the
 // accuracy-benchmark model on the fastest chips; transcription sits inside
 // Groq's free tier. One click reuses an already-connected Groq chat key.
+// A 4-sample silent WAV: played inside the tap so the same element may make
+// real sound after a seconds-long TTS generation (mobile autoplay rules).
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQQAAAAAAAAA";
+
 const GEMINI_TTS_VOICES = [
   { id: "Kore", label: "Kore (Recommended)" },
   { id: "Leda", label: "Leda" },
@@ -1628,6 +1647,7 @@ function VoicePanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outputError, setOutputError] = useState<string | null>(null);
+  const [visionError, setVisionError] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchVoiceStatus()
@@ -1714,14 +1734,41 @@ function VoicePanel() {
           ? "你好,我是 Vaenyx。这是当前音色的试听。"
           : "Hi, I'm Vaenyx — this is how the current voice sounds.";
       if (outputEngine !== "browser") {
+        // Mobile autoplay rules tie playback to the tap, and generation can
+        // take seconds — play a silent blip NOW so this element is allowed
+        // to sound later.
+        const audio = new Audio(SILENT_WAV);
+        void audio.play().catch(() => undefined);
         const { audioId } = await synthesizeSpeech(sample);
-        const audio = new Audio(`/v1/voice/audio/${audioId}`);
+        audio.src = `/v1/voice/audio/${audioId}`;
         await audio.play();
       } else {
         speakText(sample);
       }
-    } catch {
-      setOutputError("Could not play the test — is the engine connected?");
+    } catch (nextError) {
+      // Show the server's actual reason (e.g. a Gemini free-tier limit) —
+      // "is it connected?" misled when the engine WAS connected.
+      setOutputError(
+        nextError instanceof Error && nextError.message
+          ? nextError.message
+          : "Could not play the test — is the engine connected?",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyVisionEngine(next: VisionStatus["chosen"]) {
+    setBusy(true);
+    setVisionError(null);
+    try {
+      setVision(await setVisionEngine(next));
+    } catch (nextError) {
+      setVisionError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not change the vision engine.",
+      );
     } finally {
       setBusy(false);
     }
@@ -2090,10 +2137,28 @@ function VoicePanel() {
       <h3 className="settings-subhead">Vision (Photos)</h3>
       <p className="settings-card-copy">
         The camera button turns photos into text (a fridge shot becomes an
-        ingredient list). Auto-powered by your first vision-capable
-        connection — Gemini, Zhipu BigModel or OpenAI. Models without vision
-        (Groq, Cerebras…) are skipped automatically.
+        ingredient list). Auto picks your first vision-capable connection —
+        Gemini, Zhipu BigModel or OpenAI — or pin one here; models without
+        vision (Groq, Cerebras…) are skipped automatically.
       </p>
+      <label className="chat-font-field">
+        Engine
+        <select
+          className="task-select"
+          disabled={busy}
+          onChange={(event) =>
+            void applyVisionEngine(
+              event.target.value as VisionStatus["chosen"],
+            )
+          }
+          value={vision?.chosen ?? "auto"}
+        >
+          <option value="auto">Auto — First Vision-Capable Model</option>
+          <option value="gemini">Gemini</option>
+          <option value="zhipu">Zhipu BigModel</option>
+          <option value="openai">OpenAI</option>
+        </select>
+      </label>
       {vision?.connected ? (
         <div className="model-card-head">
           <span className="library-chip chip-published">Connected</span>
@@ -2103,7 +2168,7 @@ function VoicePanel() {
               : vision.provider === "zhipu"
                 ? "Zhipu BigModel"
                 : "OpenAI"}{" "}
-            (Auto)
+            {vision.chosen === "auto" ? "(Auto)" : "(Your Pick)"}
           </small>
         </div>
       ) : (
@@ -2112,6 +2177,7 @@ function VoicePanel() {
           (a free key works) and the camera appears by itself.
         </p>
       )}
+      {visionError ? <p className="form-error">{visionError}</p> : null}
     </section>
   );
 }

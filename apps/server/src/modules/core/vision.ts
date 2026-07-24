@@ -8,6 +8,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { readProviderConnections } from "../models/connections.js";
+import { writeConnections } from "../models/provider-settings.js";
 
 // Stored conversation photos (Phase B): originals kept under
 // <dataDirectory>/images so a vision-capable main model can keep seeing them
@@ -100,17 +101,58 @@ function candidateKey(
   return undefined;
 }
 
+// The Owner can pin the vision engine (same sticky-override pattern as the
+// voice engines); "auto" (nothing stored) keeps the first-capable scan. A
+// pinned engine whose key disappeared falls back to auto silently.
+export type VisionEngineChoice = "auto" | "gemini" | "zhipu" | "openai";
+
+function pickCandidate(
+  connections: ReturnType<typeof readProviderConnections>,
+): (typeof VISION_CANDIDATES)[number] | null {
+  const chosen = connections.vision?.provider;
+  if (chosen) {
+    const pinned = VISION_CANDIDATES.find((entry) => entry.id === chosen);
+    if (pinned && candidateKey(connections, pinned.id)) return pinned;
+  }
+  return (
+    VISION_CANDIDATES.find((entry) => candidateKey(connections, entry.id)) ??
+    null
+  );
+}
+
 export function getVisionStatus(secretsDirectory: string): {
   connected: boolean;
   provider: string | null;
+  chosen: VisionEngineChoice;
 } {
   const connections = readProviderConnections(secretsDirectory);
-  for (const candidate of VISION_CANDIDATES) {
-    if (candidateKey(connections, candidate.id)) {
-      return { connected: true, provider: candidate.id };
-    }
+  const candidate = pickCandidate(connections);
+  const chosen = (connections.vision?.provider ??
+    "auto") as VisionEngineChoice;
+  if (candidate) {
+    return { connected: true, provider: candidate.id, chosen };
   }
-  return { connected: false, provider: null };
+  return { connected: false, provider: null, chosen };
+}
+
+export function setVisionEngine(
+  secretsDirectory: string,
+  choice: VisionEngineChoice,
+): ReturnType<typeof getVisionStatus> {
+  const connections = readProviderConnections(secretsDirectory);
+  if (choice === "auto") {
+    if ("vision" in connections) {
+      delete connections.vision;
+      writeConnections(secretsDirectory, connections);
+    }
+    return getVisionStatus(secretsDirectory);
+  }
+  if (!candidateKey(connections, choice)) {
+    throw new Error("VISION_NO_KEY");
+  }
+  connections.vision = { provider: choice };
+  writeConnections(secretsDirectory, connections);
+  return getVisionStatus(secretsDirectory);
 }
 
 export async function describeImage(
@@ -120,9 +162,7 @@ export async function describeImage(
   lang: string,
 ): Promise<string> {
   const connections = readProviderConnections(secretsDirectory);
-  const candidate = VISION_CANDIDATES.find((entry) =>
-    candidateKey(connections, entry.id),
-  );
+  const candidate = pickCandidate(connections);
   if (!candidate) {
     throw new Error("VISION_NOT_CONNECTED");
   }

@@ -866,10 +866,20 @@ export function sendTestPush(): Promise<PushDiagnostics> {
 export interface VisionStatus {
   connected: boolean;
   provider: string | null;
+  chosen: "auto" | "gemini" | "zhipu" | "openai";
 }
 
 export function fetchVisionStatus(): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/vision/status");
+}
+
+export function setVisionEngine(
+  provider: VisionStatus["chosen"],
+): Promise<VisionStatus> {
+  return requestJson<VisionStatus>("/v1/vision/engine", {
+    method: "POST",
+    body: JSON.stringify({ provider }),
+  });
 }
 
 export async function uploadPhoto(blob: Blob): Promise<{ imageId: string }> {
