@@ -13,7 +13,11 @@ import { resolve } from "node:path";
 import { readProviderConnections } from "../models/connections.js";
 import { writeConnections } from "../models/provider-settings.js";
 import {
+  getLocalTtsStatus,
   isLocalTtsInstalled,
+  isVoiceDownloaded,
+  localVoiceCatalogEntry,
+  startLocalVoiceInstall,
   synthesizeLocalSpeech,
 } from "./voice-local.js";
 
@@ -115,8 +119,11 @@ export function getVoiceOutput(
   engine: VoiceOutputEngine;
   connected: boolean;
   voice: string | null;
+  zhVoice?: string;
+  enVoice?: string;
 } {
   const resolved = resolveVoiceOutput(secretsDirectory, dataDirectory);
+  const stored = readProviderConnections(secretsDirectory).voiceOutput;
   return {
     engine: resolved.engine,
     connected: resolved.engine !== "none",
@@ -126,6 +133,8 @@ export function getVoiceOutput(
         : resolved.engine === "local"
           ? "auto"
           : null,
+    ...(stored?.zhVoice ? { zhVoice: stored.zhVoice } : {}),
+    ...(stored?.enVoice ? { enVoice: stored.enVoice } : {}),
   };
 }
 
@@ -141,7 +150,16 @@ export function connectVoiceOutput(
     if (!isLocalTtsInstalled(dataDirectory)) {
       throw new Error("LOCAL_TTS_NOT_INSTALLED");
     }
-    connections.voiceOutput = { engine: "local" };
+    // Keep the per-language voice picks across engine switches.
+    connections.voiceOutput = {
+      ...(connections.voiceOutput?.zhVoice
+        ? { zhVoice: connections.voiceOutput.zhVoice }
+        : {}),
+      ...(connections.voiceOutput?.enVoice
+        ? { enVoice: connections.voiceOutput.enVoice }
+        : {}),
+      engine: "local",
+    };
   } else if (input.engine === "browser") {
     connections.voiceOutput = { engine: "browser" };
   } else {
@@ -156,6 +174,30 @@ export function connectVoiceOutput(
   }
   writeConnections(secretsDirectory, connections);
   return getVoiceOutput(secretsDirectory, dataDirectory);
+}
+
+// Pick a local voice for its language slot (Chinese or English, from the
+// catalogue). A voice not on disk yet starts its ~60 MB download; synthesis
+// falls back to the shipped default until it lands.
+export function setLocalVoice(
+  secretsDirectory: string,
+  dataDirectory: string,
+  voiceId: string,
+): ReturnType<typeof getLocalTtsStatus> {
+  const entry = localVoiceCatalogEntry(voiceId);
+  if (!entry) {
+    throw new Error("LOCAL_VOICE_UNKNOWN");
+  }
+  const connections = readProviderConnections(secretsDirectory);
+  const output = connections.voiceOutput ?? { engine: "local" };
+  if (entry.lang === "zh") output.zhVoice = voiceId;
+  else output.enVoice = voiceId;
+  connections.voiceOutput = output;
+  writeConnections(secretsDirectory, connections);
+  if (!isVoiceDownloaded(dataDirectory, voiceId)) {
+    startLocalVoiceInstall(dataDirectory, voiceId);
+  }
+  return getLocalTtsStatus(dataDirectory);
 }
 
 // After a Remove-download, an engine pointing at "local" would resolve to
@@ -198,7 +240,11 @@ export async function synthesizeSpeech(
 ): Promise<string> {
   const resolved = resolveVoiceOutput(secretsDirectory, dataDirectory);
   if (resolved.engine === "local") {
-    return synthesizeLocalSpeech(dataDirectory, text);
+    const output = readProviderConnections(secretsDirectory).voiceOutput;
+    return synthesizeLocalSpeech(dataDirectory, text, {
+      zhVoice: output?.zhVoice,
+      enVoice: output?.enVoice,
+    });
   }
   if (resolved.engine !== "gemini" || !resolved.apiKey) {
     throw new Error("VOICE_OUTPUT_NOT_CONNECTED");

@@ -781,6 +781,8 @@ export interface VoiceOutputStatus {
   engine: "none" | "browser" | "gemini" | "local";
   connected: boolean;
   voice: string | null;
+  zhVoice?: string;
+  enVoice?: string;
 }
 
 export interface LocalTtsStatus {
@@ -788,6 +790,12 @@ export interface LocalTtsStatus {
   status: "idle" | "downloading" | "ready" | "error";
   progress: number;
   detail: string | null;
+  voices: {
+    id: string;
+    lang: "zh" | "en";
+    label: string;
+    downloaded: boolean;
+  }[];
 }
 
 export function fetchVoiceOutput(): Promise<VoiceOutputStatus> {
@@ -825,6 +833,13 @@ export function installLocalTts(): Promise<LocalTtsStatus> {
 export function removeLocalTtsDownload(): Promise<LocalTtsStatus> {
   return requestJson<LocalTtsStatus>("/v1/voice/local", {
     method: "DELETE",
+  });
+}
+
+export function setLocalVoice(id: string): Promise<LocalTtsStatus> {
+  return requestJson<LocalTtsStatus>("/v1/voice/local/voice", {
+    method: "POST",
+    body: JSON.stringify({ id }),
   });
 }
 

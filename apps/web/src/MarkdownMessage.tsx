@@ -79,9 +79,15 @@ const components: Components = {
 // lines, so pills flow inline (Oskar, dev.161/163). List items ("- https://…")
 // are untouched — a link-only line must START with the link.
 const SOURCE_TOKEN = String.raw`(?:\[[^\]\n]*\]\(https?:[^)\n]*\)|https?:\/\/\S+)`;
+// Separators between links: spaces, ASCII/full-width commas and semicolons,
+// and the CJK enumeration comma — written as escapes so the full-width
+// characters can never silently degrade to their ASCII lookalikes.
+const SOURCE_SEP = "[ \\t,;\\u3001\\uFF0C\\uFF1B]";
 const SOURCE_LINE = new RegExp(
-  String.raw`^[ \t]*${SOURCE_TOKEN}(?:[ \t,、;;]+${SOURCE_TOKEN})*[ \t,、;;]*$`,
+  `^[ \\t]*${SOURCE_TOKEN}(?:${SOURCE_SEP}+${SOURCE_TOKEN})*${SOURCE_SEP}*$`,
 );
+// ASCII ":" or full-width colon (U+FF1A) ending the label line.
+const COLON_LINE_END = new RegExp("[:\\uFF1A][ \\t]*$");
 
 function inlineSourceLines(content: string): string {
   const lines = content.split("\n");
@@ -89,8 +95,7 @@ function inlineSourceLines(content: string): string {
   let index = 0;
   while (index < lines.length) {
     let line = lines[index] ?? "";
-    const canAbsorb =
-      /[::][ \t]*$/.test(line) || SOURCE_LINE.test(line);
+    const canAbsorb = COLON_LINE_END.test(line) || SOURCE_LINE.test(line);
     if (canAbsorb) {
       let cursor = index + 1;
       while (cursor < lines.length) {

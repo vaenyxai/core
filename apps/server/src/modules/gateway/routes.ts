@@ -35,6 +35,8 @@ import {
   SpeakRequestSchema,
   SpeakResponseSchema,
   LocalTtsStatusSchema,
+  SetLocalVoiceRequestSchema,
+  type SetLocalVoiceRequest,
   StopTurnRequestSchema,
   VisionStatusSchema,
   ConnectVisionRequestSchema,
@@ -203,6 +205,7 @@ import {
   readVoiceAudio,
   resetVoiceOutputIfLocal,
   saveVoiceAudio,
+  setLocalVoice,
   setVoiceInput,
   synthesizeSpeech,
   transcribeVoice,
@@ -4013,6 +4016,43 @@ export async function registerGatewayRoutes(
       removeLocalTts(context.config.dataDirectory);
       resetVoiceOutputIfLocal(context.config.secretsDirectory);
       return getLocalTtsStatus(context.config.dataDirectory);
+    },
+  );
+
+  // Pick a local voice for its language slot; an absent voice starts its
+  // ~60 MB download (progress shows in the same status poll).
+  app.post<{ Body: SetLocalVoiceRequest }>(
+    "/v1/voice/local/voice",
+    {
+      schema: {
+        body: SetLocalVoiceRequestSchema,
+        response: {
+          200: LocalTtsStatusSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return setLocalVoice(
+          context.config.secretsDirectory,
+          context.config.dataDirectory,
+          request.body.id,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "LOCAL_VOICE_UNKNOWN"
+        ) {
+          return reply.code(400).send({ error: "Unknown local voice." });
+        }
+        throw error;
+      }
     },
   );
 

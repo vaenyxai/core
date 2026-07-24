@@ -1,7 +1,8 @@
 // Local voice (v2b, Owner decision 2026-07-23): fully offline TTS through
 // Piper — a small neural engine that runs on the CPU, no key, no cloud, no
-// per-use cost. One ~150 MB download (engine + one Chinese + one English
-// voice) into userdata/tts; the voice is picked per utterance by the text's
+// per-use cost. One ~150 MB base download (engine + one Chinese + one English
+// voice) into userdata/tts; extra English voices download individually on
+// pick (~60 MB each). The voice is chosen per utterance by the text's
 // language. Deliberately OUTSIDE the database folder so backups stay small.
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -18,42 +19,62 @@ const PIPER_ZIP_URL =
 const VOICES_BASE_URL =
   "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0";
 
-interface LocalVoice {
+export interface LocalVoiceInfo {
   id: string;
-  files: { url: string; name: string }[];
+  lang: "zh" | "en";
+  label: string;
 }
 
-const VOICES: LocalVoice[] = [
+interface LocalVoice extends LocalVoiceInfo {
+  // Repo path fragment under the voice pack (…/<path>/<id>.onnx[.json]).
+  path: string;
+}
+
+// The catalogue the settings dropdowns show. Chinese has a single finished
+// Piper voice today (the dropdown exists so a future voice slots straight
+// in); English offers a real choice. Defaults ship with the base install.
+const VOICE_CATALOG: LocalVoice[] = [
   {
     id: "zh_CN-huayan-medium",
-    files: [
-      {
-        url: `${VOICES_BASE_URL}/zh/zh_CN/huayan/medium/zh_CN-huayan-medium.onnx`,
-        name: "zh_CN-huayan-medium.onnx",
-      },
-      {
-        url: `${VOICES_BASE_URL}/zh/zh_CN/huayan/medium/zh_CN-huayan-medium.onnx.json`,
-        name: "zh_CN-huayan-medium.onnx.json",
-      },
-    ],
+    lang: "zh",
+    label: "Huayan (Female)",
+    path: "zh/zh_CN/huayan/medium",
   },
   {
     id: "en_US-amy-medium",
-    files: [
-      {
-        url: `${VOICES_BASE_URL}/en/en_US/amy/medium/en_US-amy-medium.onnx`,
-        name: "en_US-amy-medium.onnx",
-      },
-      {
-        url: `${VOICES_BASE_URL}/en/en_US/amy/medium/en_US-amy-medium.onnx.json`,
-        name: "en_US-amy-medium.onnx.json",
-      },
-    ],
+    lang: "en",
+    label: "Amy (Female)",
+    path: "en/en_US/amy/medium",
+  },
+  {
+    id: "en_US-ryan-medium",
+    lang: "en",
+    label: "Ryan (Male)",
+    path: "en/en_US/ryan/medium",
+  },
+  {
+    id: "en_US-lessac-medium",
+    lang: "en",
+    label: "Lessac (Female)",
+    path: "en/en_US/lessac/medium",
+  },
+  {
+    id: "en_US-joe-medium",
+    lang: "en",
+    label: "Joe (Male)",
+    path: "en/en_US/joe/medium",
   },
 ];
 
+export const DEFAULT_ZH_VOICE = "zh_CN-huayan-medium";
+export const DEFAULT_EN_VOICE = "en_US-amy-medium";
+
+export function localVoiceCatalogEntry(id: string): LocalVoice | null {
+  return VOICE_CATALOG.find((voice) => voice.id === id) ?? null;
+}
+
 // userdata/tts — a sibling of userdata/db, so database backups (which copy
-// the db + library only) never swallow the 150 MB of model files.
+// the db + library only) never swallow the model files.
 export function localTtsRoot(dataDirectory: string): string {
   return resolve(dataDirectory, "..", "tts");
 }
@@ -66,15 +87,23 @@ function voicePath(dataDirectory: string, voiceId: string): string {
   return resolve(localTtsRoot(dataDirectory), "voices", `${voiceId}.onnx`);
 }
 
+export function isVoiceDownloaded(
+  dataDirectory: string,
+  voiceId: string,
+): boolean {
+  return existsSync(voicePath(dataDirectory, voiceId));
+}
+
 export function isLocalTtsInstalled(dataDirectory: string): boolean {
   return (
     existsSync(piperExecutable(dataDirectory)) &&
-    VOICES.every((voice) => existsSync(voicePath(dataDirectory, voice.id)))
+    isVoiceDownloaded(dataDirectory, DEFAULT_ZH_VOICE) &&
+    isVoiceDownloaded(dataDirectory, DEFAULT_EN_VOICE)
   );
 }
 
-// One in-memory download at a time; `installed` is always re-checked from
-// disk so the status survives a server restart mid-way or after completion.
+// One in-memory download at a time; `installed`/`downloaded` are always
+// re-checked from disk so status survives a server restart mid-way.
 type InstallPhase = "idle" | "downloading" | "ready" | "error";
 
 const installState: {
@@ -88,15 +117,25 @@ export function getLocalTtsStatus(dataDirectory: string): {
   status: InstallPhase;
   progress: number;
   detail: string | null;
+  voices: (LocalVoiceInfo & { downloaded: boolean })[];
 } {
   const installed = isLocalTtsInstalled(dataDirectory);
   return {
     installed,
-    status: installed && installState.status !== "downloading"
-      ? "ready"
-      : installState.status,
-    progress: installed ? 100 : installState.progress,
+    status:
+      installed && installState.status !== "downloading"
+        ? "ready"
+        : installState.status,
+    progress: installed && installState.status !== "downloading"
+      ? 100
+      : installState.progress,
     detail: installState.detail,
+    voices: VOICE_CATALOG.map(({ id, lang, label }) => ({
+      id,
+      lang,
+      label,
+      downloaded: isVoiceDownloaded(dataDirectory, id),
+    })),
   };
 }
 
@@ -149,65 +188,41 @@ function extractZip(zipPath: string, into: string): Promise<void> {
   });
 }
 
-// Kick off (or ignore, if already running/finished) the ~150 MB background
-// install: engine zip + 2 voices, sequentially, with byte-level progress.
-export function startLocalTtsInstall(dataDirectory: string): void {
-  if (installState.status === "downloading") return;
-  if (isLocalTtsInstalled(dataDirectory)) {
-    installState.status = "ready";
-    installState.progress = 100;
-    installState.detail = null;
-    return;
-  }
+interface InstallStep {
+  label: string;
+  weight: number;
+  run: (onFraction: (fraction: number) => void) => Promise<void>;
+}
+
+function voiceDownloadStep(
+  dataDirectory: string,
+  voice: LocalVoice,
+): InstallStep {
+  const voicesDirectory = resolve(localTtsRoot(dataDirectory), "voices");
+  return {
+    label: `Voice ${voice.label}`,
+    weight: 63,
+    run: async (onFraction) => {
+      mkdirSync(voicesDirectory, { recursive: true });
+      for (const extension of [".onnx", ".onnx.json"]) {
+        const isModel = extension === ".onnx";
+        await downloadFile(
+          `${VOICES_BASE_URL}/${voice.path}/${voice.id}${extension}`,
+          resolve(voicesDirectory, `${voice.id}${extension}`),
+          (received, total) => {
+            if (isModel) onFraction(total ? received / total : 0);
+          },
+        );
+      }
+    },
+  };
+}
+
+function runInstall(steps: InstallStep[]): void {
   installState.status = "downloading";
   installState.progress = 0;
   installState.detail = "Starting download…";
-
   void (async () => {
-    const root = localTtsRoot(dataDirectory);
-    const voicesDirectory = resolve(root, "voices");
-    mkdirSync(voicesDirectory, { recursive: true });
-
-    // Rough byte weights for overall progress: engine ~21 MB, each voice
-    // ~63 MB (the .json sidecars are tiny).
-    const steps: {
-      label: string;
-      weight: number;
-      run: (onFraction: (fraction: number) => void) => Promise<void>;
-    }[] = [
-      {
-        label: "Speech engine",
-        weight: 21,
-        run: async (onFraction) => {
-          const zipPath = resolve(root, "piper.zip");
-          await downloadFile(PIPER_ZIP_URL, zipPath, (received, total) =>
-            onFraction(total ? received / total : 0),
-          );
-          await extractZip(zipPath, root);
-          await rm(zipPath, { force: true });
-          if (!existsSync(piperExecutable(dataDirectory))) {
-            throw new Error("Engine archive did not contain piper.exe.");
-          }
-        },
-      },
-      ...VOICES.map((voice) => ({
-        label: `Voice ${voice.id}`,
-        weight: 63,
-        run: async (onFraction: (fraction: number) => void) => {
-          for (const file of voice.files) {
-            const isModel = file.name.endsWith(".onnx");
-            await downloadFile(
-              file.url,
-              resolve(voicesDirectory, file.name),
-              (received, total) => {
-                if (isModel) onFraction(total ? received / total : 0);
-              },
-            );
-          }
-        },
-      })),
-    ];
-
     const totalWeight = steps.reduce((sum, step) => sum + step.weight, 0);
     let doneWeight = 0;
     try {
@@ -233,6 +248,55 @@ export function startLocalTtsInstall(dataDirectory: string): void {
   })();
 }
 
+// Kick off (or ignore, if already running/finished) the ~150 MB base
+// install: engine zip + the two default voices, with byte-level progress.
+export function startLocalTtsInstall(dataDirectory: string): void {
+  if (installState.status === "downloading") return;
+  if (isLocalTtsInstalled(dataDirectory)) {
+    installState.status = "ready";
+    installState.progress = 100;
+    installState.detail = null;
+    return;
+  }
+  const root = localTtsRoot(dataDirectory);
+  mkdirSync(root, { recursive: true });
+  const steps: InstallStep[] = [];
+  if (!existsSync(piperExecutable(dataDirectory))) {
+    steps.push({
+      label: "Speech engine",
+      weight: 21,
+      run: async () => {
+        const zipPath = resolve(root, "piper.zip");
+        await downloadFile(PIPER_ZIP_URL, zipPath, () => undefined);
+        await extractZip(zipPath, root);
+        await rm(zipPath, { force: true });
+        if (!existsSync(piperExecutable(dataDirectory))) {
+          throw new Error("Engine archive did not contain piper.exe.");
+        }
+      },
+    });
+  }
+  for (const id of [DEFAULT_ZH_VOICE, DEFAULT_EN_VOICE]) {
+    const voice = localVoiceCatalogEntry(id);
+    if (voice && !isVoiceDownloaded(dataDirectory, id)) {
+      steps.push(voiceDownloadStep(dataDirectory, voice));
+    }
+  }
+  runInstall(steps);
+}
+
+// Download ONE extra voice from the catalogue (~60 MB). No-op if already
+// present or another download is running.
+export function startLocalVoiceInstall(
+  dataDirectory: string,
+  voiceId: string,
+): void {
+  if (installState.status === "downloading") return;
+  const voice = localVoiceCatalogEntry(voiceId);
+  if (!voice || isVoiceDownloaded(dataDirectory, voiceId)) return;
+  runInstall([voiceDownloadStep(dataDirectory, voice)]);
+}
+
 // Reclaim the disk: delete userdata/tts entirely. The caller resets the
 // voice-output engine if it pointed here.
 export function removeLocalTts(dataDirectory: string): void {
@@ -242,24 +306,29 @@ export function removeLocalTts(dataDirectory: string): void {
   installState.detail = null;
 }
 
-function pickVoiceForText(text: string): string {
-  // Any CJK character → the Chinese voice; otherwise English.
-  return /[一-鿿]/.test(text)
-    ? "zh_CN-huayan-medium"
-    : "en_US-amy-medium";
-}
-
 // Text → WAV through the local engine, cached exactly like the Gemini path
-// (same tts-<hash>.wav id shape, same voice/ directory, same replay-free
-// semantics). The engine-prefixed hash keeps local and cloud caches apart.
+// (same tts-<hash>.wav id shape, same voice/ directory). The engine-prefixed
+// hash keeps local and cloud caches apart. The Owner's per-language voice
+// picks arrive from the caller; a picked voice that is not on disk (download
+// still running) falls back to the shipped default.
 export async function synthesizeLocalSpeech(
   dataDirectory: string,
   text: string,
+  preferences?: { zhVoice?: string; enVoice?: string },
 ): Promise<string> {
   if (!isLocalTtsInstalled(dataDirectory)) {
     throw new Error("LOCAL_TTS_NOT_INSTALLED");
   }
-  const voiceId = pickVoiceForText(text);
+  const wantsChinese = /[一-鿿]/.test(text);
+  const preferred = wantsChinese
+    ? preferences?.zhVoice ?? DEFAULT_ZH_VOICE
+    : preferences?.enVoice ?? DEFAULT_EN_VOICE;
+  const fallback = wantsChinese ? DEFAULT_ZH_VOICE : DEFAULT_EN_VOICE;
+  const voiceId =
+    localVoiceCatalogEntry(preferred) &&
+    isVoiceDownloaded(dataDirectory, preferred)
+      ? preferred
+      : fallback;
   const hash = createHash("sha256")
     .update(`local:${voiceId}\n${text}`)
     .digest("hex")

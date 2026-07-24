@@ -131,6 +131,7 @@ import {
   fetchLocalTts,
   installLocalTts,
   removeLocalTtsDownload,
+  setLocalVoice,
   setVisionEngine,
   type LocalTtsStatus,
   postPresenceHeartbeat,
@@ -1645,6 +1646,8 @@ function VoicePanel() {
   >("none");
   const [outputVoice, setOutputVoice] = useState("Kore");
   const [localTts, setLocalTts] = useState<LocalTtsStatus | null>(null);
+  const [localEnVoice, setLocalEnVoice] = useState("en_US-amy-medium");
+  const [localZhVoice, setLocalZhVoice] = useState("zh_CN-huayan-medium");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outputError, setOutputError] = useState<string | null>(null);
@@ -1661,6 +1664,8 @@ function VoicePanel() {
         if (current.voice && current.engine === "gemini") {
           setOutputVoice(current.voice);
         }
+        if (current.enVoice) setLocalEnVoice(current.enVoice);
+        if (current.zhVoice) setLocalZhVoice(current.zhVoice);
       })
       .catch(() => undefined);
     void fetchVisionStatus()
@@ -1767,6 +1772,19 @@ function VoicePanel() {
       setLocalTts(await installLocalTts());
     } catch {
       setOutputError("Could not start the download.");
+    }
+  }
+
+  // Pick a local voice for its language slot; a not-yet-downloaded voice
+  // starts its ~60 MB download and the status poll shows the progress.
+  async function pickLocalVoice(id: string, lang: "zh" | "en") {
+    setOutputError(null);
+    if (lang === "en") setLocalEnVoice(id);
+    else setLocalZhVoice(id);
+    try {
+      setLocalTts(await setLocalVoice(id));
+    } catch {
+      setOutputError("Could not change the local voice.");
     }
   }
 
@@ -1899,9 +1917,62 @@ function VoicePanel() {
               </div>
               <p className="settings-card-copy">
                 Speech is generated on this computer — nothing leaves it and
-                there is no per-use cost. The voice follows the reply's
-                language automatically: Chinese → Huayan, English → Amy.
+                there is no per-use cost. The right voice is used per reply
+                by its language.
               </p>
+              <label className="chat-font-field">
+                English Voice
+                <select
+                  className="task-select"
+                  disabled={busy || localTts.status === "downloading"}
+                  onChange={(event) =>
+                    void pickLocalVoice(event.target.value, "en")
+                  }
+                  value={localEnVoice}
+                >
+                  {localTts.voices
+                    .filter((voice) => voice.lang === "en")
+                    .map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.label}
+                        {voice.downloaded ? "" : " — Downloads 60 MB"}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="chat-font-field">
+                Chinese Voice
+                <select
+                  className="task-select"
+                  disabled={busy || localTts.status === "downloading"}
+                  onChange={(event) =>
+                    void pickLocalVoice(event.target.value, "zh")
+                  }
+                  value={localZhVoice}
+                >
+                  {localTts.voices
+                    .filter((voice) => voice.lang === "zh")
+                    .map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.label}
+                        {voice.downloaded ? "" : " — Downloads 60 MB"}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              {localTts.status === "downloading" ? (
+                <>
+                  <p className="settings-card-copy">
+                    Downloading… {localTts.progress}%
+                    {localTts.detail ? ` · ${localTts.detail}` : ""}
+                  </p>
+                  <progress
+                    className="local-tts-progress"
+                    max={100}
+                    value={localTts.progress}
+                  />
+                </>
+              ) : null}
               <div className="model-card-actions">
                 {output?.engine !== "local" ? (
                   <button

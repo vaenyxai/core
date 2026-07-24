@@ -13,6 +13,9 @@ export interface ProviderConnection {
   // Voice output entry only: which TTS engine + which prebuilt voice.
   engine?: string;
   voice?: string;
+  // Local-voice per-language picks (voice output entry only).
+  zhVoice?: string;
+  enVoice?: string;
   // Vision entry only: the pinned vision engine ("auto" = entry absent).
   provider?: string;
 }

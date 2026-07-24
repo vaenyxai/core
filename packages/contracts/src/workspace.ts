@@ -850,6 +850,9 @@ export const VoiceOutputStatusSchema = Type.Object(
     ]),
     connected: Type.Boolean(),
     voice: Type.Union([Type.String(), Type.Null()]),
+    // Local engine: the per-language voice picks (absent = defaults).
+    zhVoice: Type.Optional(Type.String()),
+    enVoice: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );
@@ -882,6 +885,26 @@ export const LocalTtsStatusSchema = Type.Object(
     ]),
     progress: Type.Number(),
     detail: Type.Union([Type.String(), Type.Null()]),
+    // The voice catalogue with per-voice download state — drives the
+    // English / Chinese voice dropdowns.
+    voices: Type.Array(
+      Type.Object(
+        {
+          id: Type.String(),
+          lang: Type.Union([Type.Literal("zh"), Type.Literal("en")]),
+          label: Type.String(),
+          downloaded: Type.Boolean(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const SetLocalVoiceRequestSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1, maxLength: 64 }),
   },
   { additionalProperties: false },
 );
@@ -1708,6 +1731,7 @@ export type ConnectVoiceOutputRequest = Static<
 >;
 export type SpeakRequest = Static<typeof SpeakRequestSchema>;
 export type LocalTtsStatus = Static<typeof LocalTtsStatusSchema>;
+export type SetLocalVoiceRequest = Static<typeof SetLocalVoiceRequestSchema>;
 export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
