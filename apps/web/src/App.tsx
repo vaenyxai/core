@@ -1714,13 +1714,15 @@ function VoicePanel() {
     }
   }
 
-  // Hear the current voice before living with it (Oskar, dev.154).
-  async function testVoice() {
+  // Hear the current voice before living with it (Oskar, dev.154). The
+  // local engine tests Chinese and English separately (two voices).
+  async function testVoice(sampleLang?: "zh" | "en") {
     setBusy(true);
     setOutputError(null);
     try {
+      const effectiveLang = sampleLang ?? (lang === "zh" ? "zh" : "en");
       const sample =
-        lang === "zh"
+        effectiveLang === "zh"
           ? "你好,我是 Vaenyx。这是当前音色的试听。"
           : "Hi, I'm Vaenyx — this is how the current voice sounds.";
       if (outputEngine === "gemini" || outputEngine === "local") {
@@ -1987,10 +1989,18 @@ function VoicePanel() {
                 <button
                   className="secondary-button"
                   disabled={busy}
-                  onClick={() => void testVoice()}
+                  onClick={() => void testVoice("en")}
                   type="button"
                 >
-                  Test Voice
+                  Test English
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => void testVoice("zh")}
+                  type="button"
+                >
+                  Test Chinese
                 </button>
                 <button
                   className="text-button"

@@ -2288,10 +2288,16 @@ select {
   font-size: 1.12em;
 }
 
-.markdown-body ul,
+/* Word-style lists: the marker sits at the paragraph's left edge and
+   wrapped lines hang after it. */
+.markdown-body ul {
+  margin: 0 0 12px;
+  padding-left: 1.15em;
+}
+
 .markdown-body ol {
   margin: 0 0 12px;
-  padding-left: 22px;
+  padding-left: 1.45em;
 }
 
 .markdown-body li {
@@ -2333,6 +2339,16 @@ select {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* Source pills inline with their label line: same visual height as the
+   text, no underline (the generic link rule above would win otherwise). */
+.markdown-body a.source-pill {
+  font-size: 0.82em;
+  line-height: 1.5;
+  padding: 1px 10px;
+  text-decoration: none;
+  vertical-align: middle;
 }
 
 /* Inline code matches the body font + size so a model wrapping ordinary words
