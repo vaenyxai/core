@@ -7,7 +7,10 @@ import { resolve } from "node:path";
 
 import type { ModelProviderInfo } from "@vaenyx/contracts";
 
-import { readProviderConnections } from "./connections.js";
+import {
+  readProviderConnections,
+  type ProviderConnection,
+} from "./connections.js";
 import { getModelRegistry, initModelRegistry } from "./registry.js";
 
 interface KnownProvider {
@@ -134,6 +137,106 @@ export function listModelProviders(
   });
 }
 
+// Which connected backends can power each side engine (Oskar's unified
+// model, dev.162): keys live ONLY in the provider entries above; the three
+// engine slots (voice input / voice output / vision) are plain pointers —
+// empty slot = feature off, auto-filled once when a capable model connects,
+// changeable by hand any time. No hidden "auto" resolution.
+const STT_CAPABLE_PROVIDERS = ["groq", "openai"];
+const TTS_CAPABLE_PROVIDERS = ["gemini"];
+const VISION_CAPABLE_PROVIDERS = ["gemini", "zhipu", "openai"];
+
+// Fill empty engine slots from connected capable providers, and clear slots
+// whose provider lost its key (falling back to another capable one when
+// possible). Returns whether anything changed.
+export function fillEngineDefaults(
+  connections: Record<string, ProviderConnection>,
+): boolean {
+  let changed = false;
+  const hasKey = (id: string) => Boolean(connections[id]?.apiKey);
+
+  const voiceProvider = connections.voice?.provider;
+  if (!voiceProvider) {
+    const pick = STT_CAPABLE_PROVIDERS.find(hasKey);
+    if (pick && !connections.voice) {
+      connections.voice = { provider: pick };
+      changed = true;
+    }
+  } else if (!hasKey(voiceProvider)) {
+    const pick = STT_CAPABLE_PROVIDERS.find(hasKey);
+    if (pick) connections.voice = { provider: pick };
+    else delete connections.voice;
+    changed = true;
+  }
+
+  const output = connections.voiceOutput;
+  if (!output?.engine) {
+    const pick = TTS_CAPABLE_PROVIDERS.find(hasKey);
+    if (pick) {
+      connections.voiceOutput = { engine: pick };
+      changed = true;
+    }
+  } else if (
+    TTS_CAPABLE_PROVIDERS.includes(output.engine) &&
+    !hasKey(output.engine)
+  ) {
+    // A cloud TTS engine whose key vanished -> slot empties ("browser" and
+    // "local" carry no key and are never cleared here).
+    delete connections.voiceOutput;
+    changed = true;
+  }
+
+  const visionProvider = connections.vision?.provider;
+  if (!visionProvider) {
+    const pick = VISION_CAPABLE_PROVIDERS.find(hasKey);
+    if (pick) {
+      connections.vision = { provider: pick };
+      changed = true;
+    }
+  } else if (!hasKey(visionProvider)) {
+    const pick = VISION_CAPABLE_PROVIDERS.find(hasKey);
+    if (pick) connections.vision = { provider: pick };
+    else delete connections.vision;
+    changed = true;
+  }
+
+  return changed;
+}
+
+// One-time migration + repair, run at startup: keys that older builds stored
+// INSIDE the engine entries (voice.apiKey was a Groq key, voiceOutput.apiKey
+// a Gemini key) move to their real provider entries, then empty slots fill.
+export function normalizeEngineConnections(config: {
+  secretsDirectory: string;
+}): void {
+  const connections = readProviderConnections(config.secretsDirectory);
+  let changed = false;
+  if (connections.voice?.apiKey) {
+    if (!connections.groq?.apiKey) {
+      connections.groq = { ...connections.groq, apiKey: connections.voice.apiKey };
+    }
+    connections.voice = { provider: "groq" };
+    changed = true;
+  }
+  if (connections.voiceOutput?.apiKey) {
+    if (!connections.gemini?.apiKey) {
+      connections.gemini = {
+        ...connections.gemini,
+        apiKey: connections.voiceOutput.apiKey,
+      };
+    }
+    connections.voiceOutput = {
+      engine: connections.voiceOutput.engine ?? "gemini",
+      ...(connections.voiceOutput.voice
+        ? { voice: connections.voiceOutput.voice }
+        : {}),
+    };
+    changed = true;
+  }
+  if (fillEngineDefaults(connections)) changed = true;
+  if (changed) writeConnections(config.secretsDirectory, connections);
+}
+
 export function writeConnections(
   secretsDirectory: string,
   connections: Record<string, unknown>,
@@ -161,6 +264,9 @@ export function connectModelProvider(
     ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
     ...(input.model !== undefined ? { model: input.model } : {}),
   };
+  // A newly capable connection auto-fills any empty engine slot (voice
+  // input / voice output / vision) — Oskar's install-time expectation.
+  fillEngineDefaults(connections);
   writeConnections(config.secretsDirectory, connections);
   // Re-register so the new/updated connection takes effect immediately.
   initModelRegistry(config);
@@ -173,6 +279,9 @@ export function disconnectModelProvider(
   const connections = readProviderConnections(config.secretsDirectory);
   if (!(id in connections)) return;
   delete connections[id];
+  // Engine slots that pointed at the removed provider re-fill from another
+  // capable connection, or empty out.
+  fillEngineDefaults(connections);
   writeConnections(config.secretsDirectory, connections);
   initModelRegistry(config);
 }

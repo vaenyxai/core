@@ -116,8 +116,7 @@ import {
   subscribePush,
   unsubscribePush,
   fetchVoiceStatus,
-  connectVoice,
-  disconnectVoice,
+  setVoiceInput,
   transcribeAudio,
   fetchPushStatus,
   sendTestPush,
@@ -1156,7 +1155,7 @@ function VoiceBubble({
   text,
 }: {
   audioId?: string | null;
-  engine?: "browser" | "gemini" | "local";
+  engine?: "none" | "browser" | "gemini" | "local";
   text: string;
 }) {
   const [state, setState] = useState<
@@ -1186,7 +1185,7 @@ function VoiceBubble({
     if (audioRef.current && audioReadyRef.current) return audioRef.current;
     let id = audioId ?? null;
     // Gemini and Local both generate server-side audio files.
-    if (!id && engine !== "browser") {
+    if (!id && (engine === "gemini" || engine === "local")) {
       const clean = cleanSpeechText(text).slice(0, 4000);
       if (!clean) return null;
       setState("loading");
@@ -1212,14 +1211,18 @@ function VoiceBubble({
   async function play() {
     stopReplySpeech();
     try {
-      if (!audioReadyRef.current && !audioRef.current && engine !== "browser") {
+      if (
+        !audioReadyRef.current &&
+        !audioRef.current &&
+        (engine === "gemini" || engine === "local")
+      ) {
         // Consume the tap NOW: a silent blip blesses this element so the
         // real clip may start after a seconds-long generation.
         const blip = new Audio(SILENT_WAV);
         void blip.play().catch(() => undefined);
         audioRef.current = blip;
       }
-      if (!audioId && engine === "browser") {
+      if (!audioId && engine !== "gemini" && engine !== "local") {
         // Device TTS path, with pause/resume support.
         if (!("speechSynthesis" in window)) return;
         const clean = cleanSpeechText(text);
@@ -1633,15 +1636,13 @@ const GEMINI_TTS_VOICES = [
 ];
 
 function VoicePanel() {
-  const { lang, t } = useI18n();
+  const { lang } = useI18n();
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [vision, setVision] = useState<VisionStatus | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [outputKey, setOutputKey] = useState("");
   const [outputEngine, setOutputEngine] = useState<
-    "browser" | "gemini" | "local"
-  >("browser");
+    "none" | "browser" | "gemini" | "local"
+  >("none");
   const [outputVoice, setOutputVoice] = useState("Kore");
   const [localTts, setLocalTts] = useState<LocalTtsStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1692,33 +1693,17 @@ function VoicePanel() {
     return () => window.clearInterval(timer);
   }, [localTts?.status]);
 
-  async function connect(reuseGroqKey: boolean) {
+  async function applyInput(provider: "none" | "groq" | "openai") {
     setBusy(true);
     setError(null);
     try {
-      const next = await connectVoice(
-        reuseGroqKey ? {} : { apiKey: apiKey.trim() },
-      );
-      setStatus(next);
-      setApiKey("");
+      setStatus(await setVoiceInput(provider));
     } catch (nextError) {
       setError(
         nextError instanceof Error
           ? nextError.message
-          : "Could not connect voice.",
+          : "Could not change voice input.",
       );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function disconnect() {
-    setBusy(true);
-    setError(null);
-    try {
-      setStatus(await disconnectVoice());
-    } catch {
-      setError("Could not disconnect voice.");
     } finally {
       setBusy(false);
     }
@@ -1733,7 +1718,7 @@ function VoicePanel() {
         lang === "zh"
           ? "你好,我是 Vaenyx。这是当前音色的试听。"
           : "Hi, I'm Vaenyx — this is how the current voice sounds.";
-      if (outputEngine !== "browser") {
+      if (outputEngine === "gemini" || outputEngine === "local") {
         // Mobile autoplay rules tie playback to the tap, and generation can
         // take seconds — play a silent blip NOW so this element is allowed
         // to sound later.
@@ -1758,7 +1743,9 @@ function VoicePanel() {
     }
   }
 
-  async function applyVisionEngine(next: VisionStatus["chosen"]) {
+  async function applyVisionEngine(
+    next: "none" | "gemini" | "zhipu" | "openai",
+  ) {
     setBusy(true);
     setVisionError(null);
     try {
@@ -1799,8 +1786,7 @@ function VoicePanel() {
   }
 
   async function applyOutput(input: {
-    engine: "browser" | "gemini" | "local";
-    apiKey?: string;
+    engine: "none" | "browser" | "gemini" | "local";
     voice?: string;
   }) {
     setBusy(true);
@@ -1810,7 +1796,6 @@ function VoicePanel() {
       setOutput(next);
       setOutputEngine(next.engine);
       if (next.voice && next.engine === "gemini") setOutputVoice(next.voice);
-      setOutputKey("");
     } catch (nextError) {
       setOutputError(
         nextError instanceof Error
@@ -1827,79 +1812,42 @@ function VoicePanel() {
       <p className="eyebrow">Voice</p>
       <h2>Voice</h2>
 
+      <p className="settings-card-copy">
+        API keys live in one place — Models. Connect a model there once and
+        these three engines fill in by themselves when it is capable;
+        change any of them here whenever you like.
+      </p>
+
       <h3 className="settings-subhead">Voice Input (Speech To Text)</h3>
       <p className="settings-card-copy">
-        Turns what you say into text — the mic button in chat. A Groq model
-        connected under Models powers this automatically; connecting a key
-        here overrides it. Other chat models don't do speech recognition —
-        the engine stays Whisper.
+        Turns what you say into text — the mic button in chat. Whisper via
+        Groq (fast, free tier) or OpenAI.
       </p>
       <label className="chat-font-field">
         Engine
-        <select className="task-select" disabled value="groq">
-          <option value="groq">Groq Whisper — Recommended (Fast, Accurate)</option>
+        <select
+          className="task-select"
+          disabled={busy}
+          onChange={(event) =>
+            void applyInput(
+              event.target.value as "none" | "groq" | "openai",
+            )
+          }
+          value={status?.provider ?? "none"}
+        >
+          <option value="none">None — Mic Off</option>
+          <option value="groq">Groq Whisper — Recommended</option>
+          <option value="openai">OpenAI Whisper</option>
         </select>
       </label>
       {status?.connected ? (
-        <>
-          <div className="model-card-head">
-            <span className="library-chip chip-published">Connected</span>
-            {status.model ? (
-              <small className="model-card-model">{status.model}</small>
-            ) : null}
-          </div>
-          <div className="model-card-actions">
-            <button
-              className="text-button"
-              disabled={busy}
-              onClick={() => void disconnect()}
-              type="button"
-            >
-              Disconnect
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="model-connect-form">
-          <a
-            className="model-key-link"
-            href="https://console.groq.com/keys"
-            rel="noreferrer"
-            target="_blank"
-          >
-            Get a Groq API key ↗
-          </a>
-          <input
-            className="method-rename-input"
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder="Groq API key"
-            type="password"
-            value={apiKey}
-          />
-          <p className="context-disclaimer">
-            {t("legal.notice.modelConnect.cloud")}
-          </p>
-          <div className="model-card-actions">
-            <button
-              className="primary-button"
-              disabled={busy || !apiKey.trim()}
-              onClick={() => void connect(false)}
-              type="button"
-            >
-              Connect
-            </button>
-            <button
-              className="secondary-button"
-              disabled={busy}
-              onClick={() => void connect(true)}
-              title="Reuses the key of the Groq model connected under Models."
-              type="button"
-            >
-              Use My Groq Key
-            </button>
-          </div>
+        <div className="model-card-head">
+          <span className="library-chip chip-published">Connected</span>
+          {status.model ? (
+            <small className="model-card-model">{status.model}</small>
+          ) : null}
         </div>
-      )}
+      ) : null}
       {error ? <p className="form-error">{error}</p> : null}
 
       <div className="settings-card-divider" />
@@ -1907,26 +1855,32 @@ function VoicePanel() {
       <h3 className="settings-subhead">Voice Output (Replies Read Aloud)</h3>
       <p className="settings-card-copy">
         The voice that reads replies — voice bubbles and the speaker toggle in
-        chat both use it. A Gemini connection under Models powers this
-        automatically; choosing Browser or Local Voice here overrides that.
+        chat both use it.
       </p>
       <label className="chat-font-field">
         Engine
         <select
           className="task-select"
+          disabled={busy}
           onChange={(event) => {
-            const next = event.target.value as "browser" | "gemini" | "local";
+            const next = event.target.value as
+              | "none"
+              | "browser"
+              | "gemini"
+              | "local";
             setOutputEngine(next);
-            if (next === "browser") {
-              void applyOutput({ engine: "browser" });
-            } else if (next === "local" && localTts?.installed) {
-              void applyOutput({ engine: "local" });
+            if (next === "local" && !localTts?.installed) {
+              // Show the download flow first; the engine applies once the
+              // download lands.
+              return;
             }
+            void applyOutput({ engine: next });
           }}
           value={outputEngine}
         >
+          <option value="none">None — Replies Not Read Aloud</option>
           <option value="gemini">
-            Gemini TTS — Recommended (Natural Voice, Free Key)
+            Gemini TTS — Natural Voice (Gemini Under Models)
           </option>
           <option value="local">
             Local Voice — Offline, No Key (150 MB Download)
@@ -2016,8 +1970,8 @@ function VoicePanel() {
       ) : outputEngine === "browser" ? (
         <>
           <p className="settings-card-copy">
-            Using the device's built-in voice. Pick Gemini TTS above for a
-            much more natural one.
+            Using the device's built-in voice. Gemini TTS or Local Voice
+            above sound much more natural.
           </p>
           <div className="model-card-actions">
             <button
@@ -2030,106 +1984,51 @@ function VoicePanel() {
             </button>
           </div>
         </>
-      ) : output?.engine === "gemini" ? (
-        <>
-          <div className="model-card-head">
-            <span className="library-chip chip-published">Connected</span>
-          </div>
-          <label className="chat-font-field">
-            Voice
-            <select
-              className="task-select"
-              disabled={busy}
-              onChange={(event) => {
-                setOutputVoice(event.target.value);
-                void applyOutput({
-                  engine: "gemini",
-                  voice: event.target.value,
-                });
-              }}
-              value={outputVoice}
-            >
-              {GEMINI_TTS_VOICES.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="model-card-actions">
-            <button
-              className="secondary-button"
-              disabled={busy}
-              onClick={() => void testVoice()}
-              type="button"
-            >
-              Test Voice
-            </button>
-          </div>
-        </>
-      ) : (
-        <div className="model-connect-form">
-          <a
-            className="model-key-link"
-            href="https://aistudio.google.com/apikey"
-            rel="noreferrer"
-            target="_blank"
-          >
-            Get a free Google AI Studio key ↗
-          </a>
-          <input
-            className="method-rename-input"
-            onChange={(event) => setOutputKey(event.target.value)}
-            placeholder="Google AI Studio key"
-            type="password"
-            value={outputKey}
-          />
-          <label className="chat-font-field">
-            Voice
-            <select
-              className="task-select"
-              onChange={(event) => setOutputVoice(event.target.value)}
-              value={outputVoice}
-            >
-              {GEMINI_TTS_VOICES.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="context-disclaimer">
-            {t("legal.notice.modelConnect.cloud")}
+      ) : outputEngine === "gemini" ? (
+        output?.engine === "gemini" ? (
+          <>
+            <div className="model-card-head">
+              <span className="library-chip chip-published">Connected</span>
+            </div>
+            <label className="chat-font-field">
+              Voice
+              <select
+                className="task-select"
+                disabled={busy}
+                onChange={(event) => {
+                  setOutputVoice(event.target.value);
+                  void applyOutput({
+                    engine: "gemini",
+                    voice: event.target.value,
+                  });
+                }}
+                value={outputVoice}
+              >
+                {GEMINI_TTS_VOICES.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="model-card-actions">
+              <button
+                className="secondary-button"
+                disabled={busy}
+                onClick={() => void testVoice()}
+                type="button"
+              >
+                Test Voice
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="settings-card-copy">
+            Gemini is not connected yet — add its key under Models (a free
+            Google AI Studio key works), then pick it here.
           </p>
-          <div className="model-card-actions">
-            <button
-              className="primary-button"
-              disabled={busy || !outputKey.trim()}
-              onClick={() =>
-                void applyOutput({
-                  engine: "gemini",
-                  apiKey: outputKey.trim(),
-                  voice: outputVoice,
-                })
-              }
-              type="button"
-            >
-              Connect
-            </button>
-            <button
-              className="secondary-button"
-              disabled={busy}
-              onClick={() =>
-                void applyOutput({ engine: "gemini", voice: outputVoice })
-              }
-              title="Reuses the key of the Gemini model connected under Models."
-              type="button"
-            >
-              Use My Gemini Key
-            </button>
-          </div>
-        </div>
-      )}
+        )
+      ) : null}
       {outputError ? <p className="form-error">{outputError}</p> : null}
 
       <div className="settings-card-divider" />
@@ -2137,9 +2036,8 @@ function VoicePanel() {
       <h3 className="settings-subhead">Vision (Photos)</h3>
       <p className="settings-card-copy">
         The camera button turns photos into text (a fridge shot becomes an
-        ingredient list). Auto picks your first vision-capable connection —
-        Gemini, Zhipu BigModel or OpenAI — or pin one here; models without
-        vision (Groq, Cerebras…) are skipped automatically.
+        ingredient list). Powered by a vision-capable model — Gemini, Zhipu
+        BigModel or OpenAI.
       </p>
       <label className="chat-font-field">
         Engine
@@ -2148,12 +2046,12 @@ function VoicePanel() {
           disabled={busy}
           onChange={(event) =>
             void applyVisionEngine(
-              event.target.value as VisionStatus["chosen"],
+              event.target.value as "none" | "gemini" | "zhipu" | "openai",
             )
           }
-          value={vision?.chosen ?? "auto"}
+          value={vision?.provider ?? "none"}
         >
-          <option value="auto">Auto — First Vision-Capable Model</option>
+          <option value="none">None — Camera Off</option>
           <option value="gemini">Gemini</option>
           <option value="zhipu">Zhipu BigModel</option>
           <option value="openai">OpenAI</option>
@@ -2167,14 +2065,13 @@ function VoicePanel() {
               ? "Gemini"
               : vision.provider === "zhipu"
                 ? "Zhipu BigModel"
-                : "OpenAI"}{" "}
-            {vision.chosen === "auto" ? "(Auto)" : "(Your Pick)"}
+                : "OpenAI"}
           </small>
         </div>
       ) : (
         <p className="settings-card-copy">
-          Not available yet — connect Gemini or Zhipu BigModel under Models
-          (a free key works) and the camera appears by itself.
+          Off. Connect Gemini or Zhipu BigModel under Models (a free key
+          works) and this fills in by itself.
         </p>
       )}
       {visionError ? <p className="form-error">{visionError}</p> : null}
@@ -4180,7 +4077,10 @@ function AskVaenyxPanel({
     stopReplySpeech();
     const token = {};
     currentReplyToken = token;
-    if (voiceOutput && voiceOutput.engine !== "browser") {
+    if (
+      voiceOutput &&
+      (voiceOutput.engine === "gemini" || voiceOutput.engine === "local")
+    ) {
       try {
         const clean = cleanSpeechText(text).slice(0, 4000);
         if (!clean) return;
@@ -4946,7 +4846,7 @@ function AskVaenyxPanel({
           !wantsVoiceReply ||
           voicePrewarm ||
           !voiceOutput ||
-          voiceOutput.engine === "browser"
+          (voiceOutput.engine !== "gemini" && voiceOutput.engine !== "local")
         ) {
           return;
         }

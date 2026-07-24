@@ -760,6 +760,7 @@ export function unsubscribePush(endpoint: string): Promise<{ ok: boolean }> {
 
 export interface VoiceStatus {
   connected: boolean;
+  provider: string | null;
   model: string | null;
 }
 
@@ -767,22 +768,17 @@ export function fetchVoiceStatus(): Promise<VoiceStatus> {
   return requestJson<VoiceStatus>("/v1/voice/status");
 }
 
-export function connectVoice(input: {
-  apiKey?: string;
-  model?: string;
-}): Promise<VoiceStatus> {
+export function setVoiceInput(
+  provider: "none" | "groq" | "openai",
+): Promise<VoiceStatus> {
   return requestJson<VoiceStatus>("/v1/voice/connect", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ provider }),
   });
 }
 
-export function disconnectVoice(): Promise<VoiceStatus> {
-  return requestJson<VoiceStatus>("/v1/voice/connect", { method: "DELETE" });
-}
-
 export interface VoiceOutputStatus {
-  engine: "browser" | "gemini" | "local";
+  engine: "none" | "browser" | "gemini" | "local";
   connected: boolean;
   voice: string | null;
 }
@@ -799,8 +795,7 @@ export function fetchVoiceOutput(): Promise<VoiceOutputStatus> {
 }
 
 export function connectVoiceOutput(input: {
-  engine: "browser" | "gemini" | "local";
-  apiKey?: string;
+  engine: "none" | "browser" | "gemini" | "local";
   voice?: string;
 }): Promise<VoiceOutputStatus> {
   return requestJson<VoiceOutputStatus>("/v1/voice/output", {
@@ -866,7 +861,6 @@ export function sendTestPush(): Promise<PushDiagnostics> {
 export interface VisionStatus {
   connected: boolean;
   provider: string | null;
-  chosen: "auto" | "gemini" | "zhipu" | "openai";
 }
 
 export function fetchVisionStatus(): Promise<VisionStatus> {
@@ -874,7 +868,7 @@ export function fetchVisionStatus(): Promise<VisionStatus> {
 }
 
 export function setVisionEngine(
-  provider: VisionStatus["chosen"],
+  provider: "none" | "gemini" | "zhipu" | "openai",
 ): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/vision/engine", {
     method: "POST",

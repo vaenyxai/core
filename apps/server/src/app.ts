@@ -9,6 +9,7 @@ import { type AppConfig, loadConfig } from "./config.js";
 import { createDatabase } from "./db/database.js";
 import { seedLibraryIfEmpty } from "./modules/core/library-seed.js";
 import { initModelRegistry } from "./modules/models/registry.js";
+import { normalizeEngineConnections } from "./modules/models/provider-settings.js";
 import { initPushService } from "./modules/core/push.js";
 import { reconcileInterruptedTasks, runDueTasks } from "./modules/core/tasks.js";
 import { runScheduledBackupIfDue } from "./modules/core/backup-schedule.js";
@@ -31,7 +32,10 @@ export async function buildApp(
   });
   // Build the model-provider registry from config (Codex is the default; any
   // backend configured in the local model-providers.json secrets file is added)
-  // before the server serves requests.
+  // before the server serves requests. Engine slots normalize first: keys an
+  // older build stored inside voice/voiceOutput move to their provider
+  // entries, and empty slots fill from capable connections.
+  normalizeEngineConnections(config);
   initModelRegistry(config);
   // Web Push: point the push module at the secrets directory (VAPID keypair
   // lives there, generated on first use).

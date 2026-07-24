@@ -806,11 +806,12 @@ export const PushDiagnosticsSchema = Type.Object(
   { additionalProperties: false },
 );
 
-// Voice (speech-to-text) connection: separate from the chat models. Connect
-// with a key, or with none to reuse an already-connected Groq chat key.
+// Voice input (speech-to-text): a pointer at a connected Whisper-capable
+// provider. Keys live only in the Models connections; "none" = mic off.
 export const VoiceStatusSchema = Type.Object(
   {
     connected: Type.Boolean(),
+    provider: Type.Union([Type.String(), Type.Null()]),
     model: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
@@ -818,8 +819,11 @@ export const VoiceStatusSchema = Type.Object(
 
 export const ConnectVoiceRequestSchema = Type.Object(
   {
-    apiKey: Type.Optional(Type.String({ maxLength: 500 })),
-    model: Type.Optional(Type.String({ maxLength: 200 })),
+    provider: Type.Union([
+      Type.Literal("none"),
+      Type.Literal("groq"),
+      Type.Literal("openai"),
+    ]),
   },
   { additionalProperties: false },
 );
@@ -839,6 +843,7 @@ export const TranscribeVoiceResponseSchema = Type.Object(
 export const VoiceOutputStatusSchema = Type.Object(
   {
     engine: Type.Union([
+      Type.Literal("none"),
       Type.Literal("browser"),
       Type.Literal("gemini"),
       Type.Literal("local"),
@@ -849,14 +854,15 @@ export const VoiceOutputStatusSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// No apiKey here — the Gemini engine uses the Models → Gemini connection.
 export const ConnectVoiceOutputRequestSchema = Type.Object(
   {
     engine: Type.Union([
+      Type.Literal("none"),
       Type.Literal("browser"),
       Type.Literal("gemini"),
       Type.Literal("local"),
     ]),
-    apiKey: Type.Optional(Type.String({ maxLength: 500 })),
     voice: Type.Optional(Type.String({ maxLength: 100 })),
   },
   { additionalProperties: false },
@@ -906,17 +912,12 @@ export const StopTurnRequestSchema = Type.Object(
 
 // Vision: a photo in, useful text out (fridge shot → ingredient list). The
 // engine is auto-picked from the Owner's connected vision-capable models.
+// Vision: a pointer at a connected vision-capable provider ("none" = camera
+// off). Keys live only in the Models connections.
 export const VisionStatusSchema = Type.Object(
   {
     connected: Type.Boolean(),
     provider: Type.Union([Type.String(), Type.Null()]),
-    // The Owner's sticky engine pick; "auto" = first vision-capable model.
-    chosen: Type.Union([
-      Type.Literal("auto"),
-      Type.Literal("gemini"),
-      Type.Literal("zhipu"),
-      Type.Literal("openai"),
-    ]),
   },
   { additionalProperties: false },
 );
@@ -924,7 +925,7 @@ export const VisionStatusSchema = Type.Object(
 export const ConnectVisionRequestSchema = Type.Object(
   {
     provider: Type.Union([
-      Type.Literal("auto"),
+      Type.Literal("none"),
       Type.Literal("gemini"),
       Type.Literal("zhipu"),
       Type.Literal("openai"),

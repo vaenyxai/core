@@ -1,86 +1,87 @@
-// Voice (Owner decision 2026-07-22): speech-to-text through Groq's Whisper —
-// the accuracy-benchmark model on the fastest chips, with transcription inside
-// the free tier. The voice connection is SEPARATE from the chat models (it
-// never appears in the chat model picker); its key lives in the same local
-// model-providers.json under "voice", and connecting can simply reuse an
-// already-connected Groq chat key. Audio flows browser → this local server →
-// Groq (the key never reaches the browser).
+// Voice engines, unified model (Oskar, dev.162): API keys live ONLY in the
+// Models connections; the voice slots here are plain POINTERS at a provider.
+// Empty slot = feature off. A slot fills automatically when a capable model
+// connects (fillEngineDefaults) and can be repointed by hand any time — no
+// hidden "auto" resolution, no keys stored per engine.
+//
+// Speech-to-text runs on Whisper (Groq's fast chips or OpenAI); audio flows
+// browser → this local server → the provider (keys never reach the browser).
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { readProviderConnections } from "../models/connections.js";
 import { writeConnections } from "../models/provider-settings.js";
-import { initModelRegistry } from "../models/registry.js";
 import {
   isLocalTtsInstalled,
   synthesizeLocalSpeech,
 } from "./voice-local.js";
 
-// Voice keys double as chat keys (registry borrows them), so any voice
-// connection change must re-register the model backends immediately.
-function refreshRegistry(secretsDirectory: string): void {
-  initModelRegistry({ secretsDirectory });
-}
+// The STT-capable backends and how to call them.
+const STT_ENGINES: Record<string, { baseUrl: string; model: string }> = {
+  groq: {
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "whisper-large-v3-turbo",
+  },
+  openai: {
+    baseUrl: "https://api.openai.com/v1",
+    model: "whisper-1",
+  },
+};
 
-const VOICE_BASE_URL = "https://api.groq.com/openai/v1";
-const DEFAULT_VOICE_MODEL = "whisper-large-v3-turbo";
-
-// The dedicated voice entry wins; without one, a main-model connection that
-// CAN do speech powers it automatically (Oskar's rule, dev.153/154): Groq →
-// Whisper large, OpenAI → whisper-1. Manual connect still overrides.
 function resolveVoiceConnection(secretsDirectory: string): {
+  provider: string;
   apiKey: string;
   model: string;
   baseUrl: string;
 } | null {
   const connections = readProviderConnections(secretsDirectory);
-  if (connections.voice?.apiKey) {
-    return {
-      apiKey: connections.voice.apiKey,
-      model: connections.voice.model ?? DEFAULT_VOICE_MODEL,
-      baseUrl: VOICE_BASE_URL,
-    };
-  }
-  if (connections.groq?.apiKey) {
-    return {
-      apiKey: connections.groq.apiKey,
-      model: DEFAULT_VOICE_MODEL,
-      baseUrl: VOICE_BASE_URL,
-    };
-  }
-  if (connections.openai?.apiKey) {
-    return {
-      apiKey: connections.openai.apiKey,
-      model: "whisper-1",
-      baseUrl: "https://api.openai.com/v1",
-    };
-  }
-  return null;
+  const provider = connections.voice?.provider;
+  if (!provider) return null;
+  const engine = STT_ENGINES[provider];
+  const apiKey = connections[provider]?.apiKey;
+  if (!engine || !apiKey) return null;
+  return { provider, apiKey, model: engine.model, baseUrl: engine.baseUrl };
 }
 
 export function getVoiceStatus(secretsDirectory: string): {
   connected: boolean;
+  provider: string | null;
   model: string | null;
 } {
   const voice = resolveVoiceConnection(secretsDirectory);
-  if (!voice) return { connected: false, model: null };
-  return { connected: true, model: voice.model };
+  if (!voice) return { connected: false, provider: null, model: null };
+  return { connected: true, provider: voice.provider, model: voice.model };
+}
+
+// Point the voice-input slot at a connected provider ("none" empties it).
+export function setVoiceInput(
+  secretsDirectory: string,
+  provider: "none" | "groq" | "openai",
+): ReturnType<typeof getVoiceStatus> {
+  const connections = readProviderConnections(secretsDirectory);
+  if (provider === "none") {
+    delete connections.voice;
+    writeConnections(secretsDirectory, connections);
+    return getVoiceStatus(secretsDirectory);
+  }
+  if (!connections[provider]?.apiKey) {
+    throw new Error("VOICE_NO_KEY");
+  }
+  connections.voice = { provider };
+  writeConnections(secretsDirectory, connections);
+  return getVoiceStatus(secretsDirectory);
 }
 
 // ── Voice output (TTS engine) ────────────────────────────────────────────────
-// "browser" = the device's own TTS (basic, free, no key). "gemini" = Gemini
-// TTS generated server-side into real audio files (natural voice; a Google AI
-// Studio key, reusable from the Models → Gemini connection). "local" = Piper
-// running fully offline on this machine (v2b; one 150 MB download, no key).
+// "browser" = the device's own TTS (basic, free). "gemini" = Gemini TTS with
+// the key from the Models → Gemini connection. "local" = Piper running fully
+// offline (150 MB download). "none" = replies are not read aloud.
 const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const DEFAULT_GEMINI_VOICE = "Kore";
 
-export type VoiceOutputEngine = "browser" | "gemini" | "local";
+export type VoiceOutputEngine = "none" | "browser" | "gemini" | "local";
 
-// Resolution order (Oskar's rule, dev.154): an explicit choice sticks (local
-// once installed, gemini with a key, or browser chosen on purpose); with no
-// choice at all, a connected Gemini main model powers speech automatically.
 function resolveVoiceOutput(
   secretsDirectory: string,
   dataDirectory: string,
@@ -94,21 +95,17 @@ function resolveVoiceOutput(
   if (output?.engine === "local" && isLocalTtsInstalled(dataDirectory)) {
     return { engine: "local", apiKey: null, voice: "auto" };
   }
-  if (output?.engine === "gemini" && output.apiKey) {
+  if (output?.engine === "gemini" && connections.gemini?.apiKey) {
     return {
       engine: "gemini",
-      apiKey: output.apiKey,
+      apiKey: connections.gemini.apiKey,
       voice: output.voice ?? DEFAULT_GEMINI_VOICE,
     };
   }
   if (output?.engine === "browser") {
     return { engine: "browser", apiKey: null, voice: DEFAULT_GEMINI_VOICE };
   }
-  const geminiKey = connections.gemini?.apiKey;
-  if (geminiKey) {
-    return { engine: "gemini", apiKey: geminiKey, voice: DEFAULT_GEMINI_VOICE };
-  }
-  return { engine: "browser", apiKey: null, voice: DEFAULT_GEMINI_VOICE };
+  return { engine: "none", apiKey: null, voice: DEFAULT_GEMINI_VOICE };
 }
 
 export function getVoiceOutput(
@@ -120,64 +117,54 @@ export function getVoiceOutput(
   voice: string | null;
 } {
   const resolved = resolveVoiceOutput(secretsDirectory, dataDirectory);
-  if (resolved.engine === "local") {
-    return { engine: "local", connected: true, voice: "auto" };
-  }
-  if (resolved.engine === "gemini") {
-    return { engine: "gemini", connected: true, voice: resolved.voice };
-  }
-  return { engine: "browser", connected: true, voice: null };
+  return {
+    engine: resolved.engine,
+    connected: resolved.engine !== "none",
+    voice:
+      resolved.engine === "gemini"
+        ? resolved.voice
+        : resolved.engine === "local"
+          ? "auto"
+          : null,
+  };
 }
 
 export function connectVoiceOutput(
   secretsDirectory: string,
   dataDirectory: string,
-  input: { engine: VoiceOutputEngine; apiKey?: string; voice?: string },
+  input: { engine: VoiceOutputEngine; voice?: string },
 ): ReturnType<typeof getVoiceOutput> {
   const connections = readProviderConnections(secretsDirectory);
-  if (input.engine === "local") {
+  if (input.engine === "none") {
+    delete connections.voiceOutput;
+  } else if (input.engine === "local") {
     if (!isLocalTtsInstalled(dataDirectory)) {
       throw new Error("LOCAL_TTS_NOT_INSTALLED");
     }
     connections.voiceOutput = { engine: "local" };
-    writeConnections(secretsDirectory, connections);
-    refreshRegistry(secretsDirectory);
-    return getVoiceOutput(secretsDirectory, dataDirectory);
-  }
-  if (input.engine === "browser") {
-    // Explicit browser choice sticks — it must beat the Gemini auto-follow.
+  } else if (input.engine === "browser") {
     connections.voiceOutput = { engine: "browser" };
-    writeConnections(secretsDirectory, connections);
-    refreshRegistry(secretsDirectory);
-    return getVoiceOutput(secretsDirectory, dataDirectory);
+  } else {
+    // gemini: the key must already sit in the Models → Gemini connection.
+    if (!connections.gemini?.apiKey) {
+      throw new Error("VOICE_NO_KEY");
+    }
+    connections.voiceOutput = {
+      engine: "gemini",
+      voice: input.voice?.trim() || DEFAULT_GEMINI_VOICE,
+    };
   }
-  // Gemini: bring a key, keep the one already stored (e.g. a voice change),
-  // or reuse the Models → Gemini connection's key.
-  const apiKey =
-    input.apiKey?.trim() ||
-    connections.voiceOutput?.apiKey ||
-    connections.gemini?.apiKey;
-  if (!apiKey) {
-    throw new Error("VOICE_NO_KEY");
-  }
-  connections.voiceOutput = {
-    engine: "gemini",
-    apiKey,
-    voice: input.voice?.trim() || DEFAULT_GEMINI_VOICE,
-  };
   writeConnections(secretsDirectory, connections);
-  refreshRegistry(secretsDirectory);
   return getVoiceOutput(secretsDirectory, dataDirectory);
 }
 
-// After a Remove-download, an engine pointing at "local" would silently fall
-// back anyway — reset it explicitly so the stored choice matches reality.
+// After a Remove-download, an engine pointing at "local" would resolve to
+// none anyway — reset the stored choice so the setting matches reality.
 export function resetVoiceOutputIfLocal(secretsDirectory: string): void {
   const connections = readProviderConnections(secretsDirectory);
   if (connections.voiceOutput?.engine === "local") {
     delete connections.voiceOutput;
     writeConnections(secretsDirectory, connections);
-    refreshRegistry(secretsDirectory);
   }
 }
 
@@ -262,38 +249,6 @@ export async function synthesizeSpeech(
   return audioId;
 }
 
-export function connectVoice(
-  secretsDirectory: string,
-  input: { apiKey?: string; model?: string },
-): { connected: boolean; model: string | null } {
-  const connections = readProviderConnections(secretsDirectory);
-  // No key supplied = reuse the Groq chat connection's key (one key, two uses).
-  const apiKey = input.apiKey?.trim() || connections.groq?.apiKey;
-  if (!apiKey) {
-    throw new Error("VOICE_NO_KEY");
-  }
-  connections.voice = {
-    apiKey,
-    ...(input.model?.trim() ? { model: input.model.trim() } : {}),
-  };
-  writeConnections(secretsDirectory, connections);
-  refreshRegistry(secretsDirectory);
-  return getVoiceStatus(secretsDirectory);
-}
-
-export function disconnectVoice(secretsDirectory: string): {
-  connected: boolean;
-  model: string | null;
-} {
-  const connections = readProviderConnections(secretsDirectory);
-  if ("voice" in connections) {
-    delete connections.voice;
-    writeConnections(secretsDirectory, connections);
-    refreshRegistry(secretsDirectory);
-  }
-  return { connected: false, model: null };
-}
-
 // The Owner's original recordings, kept so a voice bubble can replay them
 // (WeChat-style). Files live under <dataDirectory>/voice; the id embeds the
 // extension and is strictly validated before any read.
@@ -337,8 +292,8 @@ export function readVoiceAudio(
   }
 }
 
-// Forward one recorded utterance to Groq's transcription endpoint and return
-// the text. Language is auto-detected (Chinese and English both fine).
+// Forward one recorded utterance to the picked Whisper backend and return the
+// text. Language is auto-detected (Chinese and English both fine).
 export async function transcribeVoice(
   secretsDirectory: string,
   audio: Buffer,

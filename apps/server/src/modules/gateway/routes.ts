@@ -197,14 +197,13 @@ import {
   sendPushToAllDevices,
 } from "../core/push.js";
 import {
-  connectVoice,
   connectVoiceOutput,
-  disconnectVoice,
   getVoiceOutput,
   getVoiceStatus,
   readVoiceAudio,
   resetVoiceOutputIfLocal,
   saveVoiceAudio,
+  setVoiceInput,
   synthesizeSpeech,
   transcribeVoice,
 } from "../core/voice.js";
@@ -3820,12 +3819,15 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       try {
-        return connectVoice(context.config.secretsDirectory, request.body);
+        return setVoiceInput(
+          context.config.secretsDirectory,
+          request.body.provider,
+        );
       } catch (error) {
         if (error instanceof Error && error.message === "VOICE_NO_KEY") {
           return reply.code(400).send({
             error:
-              "No key: paste a Groq API key, or connect Groq under Models first to reuse its key.",
+              "That model has no key yet — connect it under Models first, then pick it here.",
           });
         }
         throw error;
@@ -3845,7 +3847,7 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return disconnectVoice(context.config.secretsDirectory);
+      return setVoiceInput(context.config.secretsDirectory, "none");
     },
   );
 
@@ -3945,7 +3947,7 @@ export async function registerGatewayRoutes(
         if (error instanceof Error && error.message === "VOICE_NO_KEY") {
           return reply.code(400).send({
             error:
-              "No key: paste a Google AI Studio key, or connect Gemini under Models first to reuse its key.",
+              "Gemini has no key yet — connect it under Models first, then pick it here.",
           });
         }
         if (

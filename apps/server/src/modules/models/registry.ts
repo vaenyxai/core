@@ -117,28 +117,18 @@ export function initModelRegistry(config: {
   // Every key-based OpenAI-compatible backend registers the same way — one
   // table, not one hand-rolled block per provider. Groq / Cerebras / OpenRouter
   // are the free-tier presets (2026-07-22): generous free quotas, no card.
+  // Keys live ONLY in these provider entries (normalizeEngineConnections
+  // migrates any key an older build stored inside an engine slot).
   for (const preset of OPENAI_COMPATIBLE_PRESETS) {
     const connection = connections[preset.id];
-    // Keys pasted for the voice engines double as chat keys — the reverse of
-    // the auto-follow rule (Oskar, dev.158; same principle vision.ts already
-    // uses): the Voice Input entry is a Groq key by construction, and the
-    // Gemini voice-output key is a Google AI Studio key. One key, every use.
-    const borrowedKey =
-      preset.id === "groq"
-        ? connections.voice?.apiKey
-        : preset.id === "gemini" &&
-            connections.voiceOutput?.engine === "gemini"
-          ? connections.voiceOutput.apiKey
-          : undefined;
-    const apiKey = connection?.apiKey ?? borrowedKey;
-    if (!apiKey) continue;
+    if (!connection?.apiKey) continue;
     next.register(
       new OpenAICompatibleProvider({
         id: preset.id,
         name: preset.name,
-        baseUrl: connection?.baseUrl ?? preset.baseUrl,
-        apiKey,
-        model: connection?.model ?? preset.model,
+        baseUrl: connection.baseUrl ?? preset.baseUrl,
+        apiKey: connection.apiKey,
+        model: connection.model ?? preset.model,
         requiresKey: true,
       }),
     );

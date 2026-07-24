@@ -87,52 +87,31 @@ const VISION_CANDIDATES = [
   },
 ] as const;
 
-// A Google key stored only for Voice Output (Gemini TTS) works for Gemini
-// vision too — reuse it so the camera lights up without a second setup.
-function candidateKey(
-  connections: ReturnType<typeof readProviderConnections>,
-  candidateId: string,
-): string | undefined {
-  const direct = connections[candidateId]?.apiKey;
-  if (direct) return direct;
-  if (candidateId === "gemini" && connections.voiceOutput?.engine === "gemini") {
-    return connections.voiceOutput.apiKey;
-  }
-  return undefined;
-}
-
-// The Owner can pin the vision engine (same sticky-override pattern as the
-// voice engines); "auto" (nothing stored) keeps the first-capable scan. A
-// pinned engine whose key disappeared falls back to auto silently.
-export type VisionEngineChoice = "auto" | "gemini" | "zhipu" | "openai";
+// The vision slot is a plain pointer at a connected provider (Oskar's
+// unified model, dev.162): empty = camera off, auto-filled once when a
+// capable model connects (fillEngineDefaults), repointable here. Keys live
+// only in the Models connections.
+export type VisionEngineChoice = "none" | "gemini" | "zhipu" | "openai";
 
 function pickCandidate(
   connections: ReturnType<typeof readProviderConnections>,
 ): (typeof VISION_CANDIDATES)[number] | null {
   const chosen = connections.vision?.provider;
-  if (chosen) {
-    const pinned = VISION_CANDIDATES.find((entry) => entry.id === chosen);
-    if (pinned && candidateKey(connections, pinned.id)) return pinned;
-  }
-  return (
-    VISION_CANDIDATES.find((entry) => candidateKey(connections, entry.id)) ??
-    null
-  );
+  if (!chosen) return null;
+  const pinned = VISION_CANDIDATES.find((entry) => entry.id === chosen);
+  if (!pinned || !connections[pinned.id]?.apiKey) return null;
+  return pinned;
 }
 
 export function getVisionStatus(secretsDirectory: string): {
   connected: boolean;
   provider: string | null;
-  chosen: VisionEngineChoice;
 } {
   const connections = readProviderConnections(secretsDirectory);
   const candidate = pickCandidate(connections);
-  const chosen = (connections.vision?.provider ??
-    "auto") as VisionEngineChoice;
-  if (candidate) {
-    return { connected: true, provider: candidate.id, chosen };
-  }
-  return { connected: false, provider: null, chosen };
+  return candidate
+    ? { connected: true, provider: candidate.id }
+    : { connected: false, provider: null };
 }
 
 export function setVisionEngine(
@@ -140,14 +119,14 @@ export function setVisionEngine(
   choice: VisionEngineChoice,
 ): ReturnType<typeof getVisionStatus> {
   const connections = readProviderConnections(secretsDirectory);
-  if (choice === "auto") {
+  if (choice === "none") {
     if ("vision" in connections) {
       delete connections.vision;
       writeConnections(secretsDirectory, connections);
     }
     return getVisionStatus(secretsDirectory);
   }
-  if (!candidateKey(connections, choice)) {
+  if (!connections[choice]?.apiKey) {
     throw new Error("VISION_NO_KEY");
   }
   connections.vision = { provider: choice };
@@ -166,8 +145,8 @@ export async function describeImage(
   if (!candidate) {
     throw new Error("VISION_NOT_CONNECTED");
   }
-  const apiKey = candidateKey(connections, candidate.id) ?? "";
   const connection = connections[candidate.id];
+  const apiKey = connection?.apiKey ?? "";
   const dataUrl = `data:${mimeType};base64,${image.toString("base64")}`;
   const prompt =
     lang === "zh"
