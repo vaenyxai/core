@@ -46,6 +46,7 @@ import {
   type SwitchModeRequest,
   ExitModeRequestSchema,
   type ExitModeRequest,
+  PushPrefsSchema,
   StopTurnRequestSchema,
   VisionStatusSchema,
   ConnectVisionRequestSchema,
@@ -203,9 +204,12 @@ import {
   getPushDiagnostics,
   getPushPublicKey,
   notePresence,
+  readPushPrefs,
   removePushSubscription,
   savePushSubscription,
   sendPushToAllDevices,
+  writePushPrefs,
+  type PushPrefs,
 } from "../core/push.js";
 import {
   connectVoiceOutput,
@@ -543,8 +547,10 @@ export async function registerGatewayRoutes(
   // reveals are blocked explicitly even though they are GETs. Logging out
   // of the OWN session stays allowed; mode management routes have their own
   // stricter any-mode guard.
+  // "/v1/settings" is deliberately NOT here: Agent Name (and the client-side
+  // personal preferences) stay available inside a locked mode (Oskar,
+  // dev.170) — everything structural below remains blocked.
   const LOCKED_MUTATION_PREFIXES = [
-    "/v1/settings",
     "/v1/models/",
     "/v1/voice/connect",
     "/v1/voice/output",
@@ -597,11 +603,15 @@ export async function registerGatewayRoutes(
     const nowMs = Date.now();
     if (nowMs - lastModeBlockPushAt < 60_000) return;
     lastModeBlockPushAt = nowMs;
-    void sendPushToAllDevices(context.database, {
-      title: `Mode "${modeName}" hit a restriction`,
-      body,
-      url: "/",
-    }).catch(() => undefined);
+    void sendPushToAllDevices(
+      context.database,
+      {
+        title: `Mode "${modeName}" hit a restriction`,
+        body,
+        url: "/",
+      },
+      "mode",
+    ).catch(() => undefined);
   };
 
   // Custom Mode sandbox hardening: direct-id access respects the mode
@@ -3899,6 +3909,40 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
       }
       return listModes(context.database);
+    },
+  );
+
+  // App-level notification preferences: which event categories push.
+  app.get(
+    "/v1/push/prefs",
+    {
+      schema: {
+        response: { 200: PushPrefsSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return readPushPrefs();
+    },
+  );
+
+  app.put<{ Body: PushPrefs }>(
+    "/v1/push/prefs",
+    {
+      schema: {
+        body: PushPrefsSchema,
+        response: { 200: PushPrefsSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return writePushPrefs(request.body);
     },
   );
 

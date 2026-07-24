@@ -753,11 +753,15 @@ export async function createAskVaenyxMessage(
     const titleRow = database.sqlite
       .prepare("SELECT title FROM ask_vaenyx_conversations WHERE id = ?")
       .get(conversationId) as { title: string } | undefined;
-    schedulePresenceAwarePush(database, {
-      title: titleRow?.title?.trim() || "Vaenyx",
-      body: assistantContent.replace(/\s+/g, " ").trim().slice(0, 90),
-      url: "/",
-    });
+    schedulePresenceAwarePush(
+      database,
+      {
+        title: titleRow?.title?.trim() || "Vaenyx",
+        body: assistantContent.replace(/\s+/g, " ").trim().slice(0, 90),
+        url: "/",
+      },
+      "chat",
+    );
   }
 
   // Project auto-summary cadence (spec §7): count this completed round and,

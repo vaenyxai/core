@@ -120,6 +120,9 @@ import {
   transcribeAudio,
   fetchPushStatus,
   sendTestPush,
+  fetchPushPrefs,
+  updatePushPrefs,
+  type PushPrefs,
   type PushDiagnostics,
   fetchVisionStatus,
   describePhoto,
@@ -136,6 +139,7 @@ import {
   fetchModes,
   createMode,
   deleteMode,
+  updateMode,
   switchMode,
   exitMode,
   fetchModeThreads,
@@ -2183,17 +2187,17 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return output;
 }
 
-// The Owner's standing choice: "1" once notifications were turned on anywhere
-// on this device — the self-heal below re-subscribes whenever the browser
-// drops the subscription on its own (Android does, from time to time).
-const PUSH_WANTED_KEY = "vaenyx.pushWanted";
+// App-level rule (Oskar, dev.170): the system permission IS the consent —
+// once notifications are allowed for this site, the device keeps itself
+// subscribed. The only extra state is an explicit per-device opt-out.
+const PUSH_OPTOUT_KEY = "vaenyx.pushOptOut";
 
 async function healPushSubscription(): Promise<boolean> {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     return false;
   }
   try {
-    if (window.localStorage.getItem(PUSH_WANTED_KEY) !== "1") return false;
+    if (window.localStorage.getItem(PUSH_OPTOUT_KEY) === "1") return false;
   } catch {
     return false;
   }
@@ -2253,6 +2257,13 @@ function NotificationsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<PushDiagnostics | null>(null);
   const [testNote, setTestNote] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<PushPrefs | null>(null);
+
+  useEffect(() => {
+    void fetchPushPrefs()
+      .then(setPrefs)
+      .catch(() => undefined);
+  }, []);
 
   function reloadDiagnostics() {
     void fetchPushStatus()
@@ -2274,21 +2285,25 @@ function NotificationsPanel() {
         : null;
       setEnabled(Boolean(subscription));
       reloadDiagnostics();
-      let wanted = false;
+      let optedOut = false;
       try {
-        wanted = window.localStorage.getItem(PUSH_WANTED_KEY) === "1";
+        optedOut = window.localStorage.getItem(PUSH_OPTOUT_KEY) === "1";
       } catch {
         // Best-effort.
       }
-      if (wanted && !subscription) {
-        const reason =
-          Notification.permission === "denied"
-            ? "Notifications were ON for this device, but the browser or system has BLOCKED them since — re-allow notifications for this site, then press Turn On again."
-            : Notification.permission === "default"
-              ? "Notifications were ON for this device, but the permission was reset — press Turn On to re-enable."
-              : "Notifications were ON for this device, but the subscription could not be repaired automatically — press Turn On again.";
-        setError(reason);
-        showErrorToast(reason);
+      if (!optedOut && !subscription) {
+        if (Notification.permission === "denied") {
+          const reason =
+            "The browser or system has BLOCKED notifications for this site — re-allow them in the system settings, then reopen this page.";
+          setError(reason);
+          showErrorToast(reason);
+        } else if (Notification.permission === "granted") {
+          const reason =
+            "Notifications are allowed, but the subscription could not be repaired automatically — press Turn On again.";
+          setError(reason);
+          showErrorToast(reason);
+        }
+        // "default" = never asked yet: just show the Turn On button quietly.
       }
     })();
   }, [supported]);
@@ -2330,9 +2345,9 @@ function NotificationsPanel() {
         keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
       });
       try {
-        window.localStorage.setItem(PUSH_WANTED_KEY, "1");
+        window.localStorage.removeItem(PUSH_OPTOUT_KEY);
       } catch {
-        // Best-effort; self-heal just won't run without it.
+        // Best-effort.
       }
       setEnabled(true);
       reloadDiagnostics();
@@ -2358,7 +2373,7 @@ function NotificationsPanel() {
         await subscription.unsubscribe();
       }
       try {
-        window.localStorage.setItem(PUSH_WANTED_KEY, "0");
+        window.localStorage.setItem(PUSH_OPTOUT_KEY, "1");
       } catch {
         // Best-effort.
       }
@@ -2394,11 +2409,44 @@ function NotificationsPanel() {
       <p className="eyebrow">Notifications</p>
       <h2>Notifications</h2>
       <p className="settings-card-copy">
-        Vaenyx pushes a notification when a reply or a scheduled result stays
-        unseen for ~30 seconds — while any device is viewing the app, it stays
-        quiet. Each device subscribes separately, on this screen. iPhone: add
-        Vaenyx to the Home Screen first and open it from there.
+        Vaenyx pushes a notification when something stays unseen for ~30
+        seconds — while any device is viewing the app, it stays quiet. Once a
+        device's system permission is granted, it keeps itself subscribed.
+        iPhone: add Vaenyx to the Home Screen first and open it from there.
       </p>
+
+      <h3 className="settings-subhead">What Gets Pushed</h3>
+      <p className="settings-card-copy">
+        App-wide choices — they apply to every device at once.
+      </p>
+      {(
+        [
+          ["chat", "Chat Replies"],
+          ["scheduled", "Scheduled Task Results"],
+          ["mode", "Mode Alerts (Blocked Actions)"],
+        ] as const
+      ).map(([key, label]) => (
+        <label className="modes-toggle" key={key}>
+          <input
+            checked={prefs?.[key] ?? true}
+            disabled={!prefs}
+            onChange={(event) => {
+              const next = {
+                chat: prefs?.chat ?? true,
+                scheduled: prefs?.scheduled ?? true,
+                mode: prefs?.mode ?? true,
+                [key]: event.target.checked,
+              };
+              setPrefs(next);
+              void updatePushPrefs(next).then(setPrefs).catch(() => undefined);
+            }}
+            type="checkbox"
+          />
+          {label}
+        </label>
+      ))}
+
+      <div className="settings-card-divider" />
 
       <div className="model-card-head">
         <strong>This Device</strong>
@@ -3672,6 +3720,66 @@ function ModesPanel() {
     }
   }
 
+  // Editing an existing mode from User Mode (Oskar, dev.170). PIN fields:
+  // blank = keep the current PIN, "Remove" checked = clear it, a typed
+  // value = set a new one.
+  const [editFor, setEditFor] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRules, setEditRules] = useState("");
+  const [editLockSettings, setEditLockSettings] = useState(false);
+  const [editLocalOnly, setEditLocalOnly] = useState(false);
+  const [editEnterPin, setEditEnterPin] = useState("");
+  const [editExitPin, setEditExitPin] = useState("");
+  const [editClearEnterPin, setEditClearEnterPin] = useState(false);
+  const [editClearExitPin, setEditClearExitPin] = useState(false);
+
+  function startEdit(mode: Mode) {
+    setEditFor(mode.id);
+    setEditName(mode.name);
+    setEditRules(mode.rules);
+    setEditLockSettings(mode.lockSettings);
+    setEditLocalOnly(mode.localOnly);
+    setEditEnterPin("");
+    setEditExitPin("");
+    setEditClearEnterPin(false);
+    setEditClearExitPin(false);
+  }
+
+  async function saveEdit(modeId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await updateMode(modeId, {
+        name: editName.trim() || undefined,
+        rules: editRules,
+        lockSettings: editLockSettings,
+        localOnly: editLocalOnly,
+        ...(editClearEnterPin
+          ? { enterPin: "" }
+          : editEnterPin.trim()
+            ? { enterPin: editEnterPin.trim() }
+            : {}),
+        ...(editClearExitPin
+          ? { exitPin: "" }
+          : editExitPin.trim()
+            ? { exitPin: editExitPin.trim() }
+            : {}),
+      });
+      setModes((current) =>
+        current.map((item) => (item.id === modeId ? updated : item)),
+      );
+      setEditFor(null);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not update the mode.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeMode(modeId: string) {
     setBusy(true);
     setError(null);
@@ -3818,15 +3926,124 @@ function ModesPanel() {
               <article className="modes-card" key={mode.id}>
                 <div className="modes-card-head">
                   <strong>{mode.name}</strong>
-                  <button
-                    className="text-button"
-                    disabled={busy}
-                    onClick={() => void removeMode(mode.id)}
-                    type="button"
-                  >
-                    Remove
-                  </button>
+                  <span className="modes-card-buttons">
+                    <button
+                      className="text-button"
+                      disabled={busy}
+                      onClick={() =>
+                        editFor === mode.id ? setEditFor(null) : startEdit(mode)
+                      }
+                      type="button"
+                    >
+                      {editFor === mode.id ? "Cancel" : "Edit"}
+                    </button>
+                    <button
+                      className="text-button"
+                      disabled={busy}
+                      onClick={() => void removeMode(mode.id)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </span>
                 </div>
+                {editFor === mode.id ? (
+                  <div className="memory-form">
+                    <label>
+                      Name
+                      <input
+                        maxLength={60}
+                        onChange={(event) => setEditName(event.target.value)}
+                        value={editName}
+                      />
+                    </label>
+                    <label>
+                      Natural-language rules
+                      <textarea
+                        maxLength={2000}
+                        onChange={(event) => setEditRules(event.target.value)}
+                        rows={3}
+                        value={editRules}
+                      />
+                    </label>
+                    <label className="modes-toggle">
+                      <input
+                        checked={editLockSettings}
+                        onChange={(event) =>
+                          setEditLockSettings(event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      Lock settings
+                    </label>
+                    <label className="modes-toggle">
+                      <input
+                        checked={editLocalOnly}
+                        onChange={(event) =>
+                          setEditLocalOnly(event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      Local model only (also blocks network)
+                    </label>
+                    <label>
+                      Enter PIN — blank keeps the current one
+                      <input
+                        disabled={editClearEnterPin}
+                        inputMode="numeric"
+                        onChange={(event) =>
+                          setEditEnterPin(event.target.value)
+                        }
+                        placeholder={
+                          mode.hasEnterPin ? "Unchanged" : "None set"
+                        }
+                        value={editEnterPin}
+                      />
+                    </label>
+                    {mode.hasEnterPin ? (
+                      <label className="modes-toggle">
+                        <input
+                          checked={editClearEnterPin}
+                          onChange={(event) =>
+                            setEditClearEnterPin(event.target.checked)
+                          }
+                          type="checkbox"
+                        />
+                        Remove Enter PIN
+                      </label>
+                    ) : null}
+                    <label>
+                      Exit PIN — blank keeps the current one
+                      <input
+                        disabled={editClearExitPin}
+                        inputMode="numeric"
+                        onChange={(event) => setEditExitPin(event.target.value)}
+                        placeholder={mode.hasExitPin ? "Unchanged" : "None set"}
+                        value={editExitPin}
+                      />
+                    </label>
+                    {mode.hasExitPin ? (
+                      <label className="modes-toggle">
+                        <input
+                          checked={editClearExitPin}
+                          onChange={(event) =>
+                            setEditClearExitPin(event.target.checked)
+                          }
+                          type="checkbox"
+                        />
+                        Remove Exit PIN
+                      </label>
+                    ) : null}
+                    <button
+                      className="primary-button"
+                      disabled={busy}
+                      onClick={() => void saveEdit(mode.id)}
+                      type="button"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                ) : null}
                 {mode.rules ? <p>{mode.rules}</p> : null}
                 <div className="modes-tags">
                   {mode.lockSettings ? (
@@ -8464,15 +8681,113 @@ function SettingsPanel({
   }
 
   if (sessionMode?.lockSettings) {
+    // Locked mode keeps the harmless personal preferences (Oskar, dev.170):
+    // theme, chat text, language, agent name. Everything structural is gone
+    // from the UI and blocked server-side.
     return (
       <div className="settings-layout">
         <section className="settings-card">
           <p className="eyebrow">Restricted Mode</p>
-          <h2>Settings Are Locked</h2>
+          <h2>Personalize</h2>
           <p className="settings-card-copy">
-            The mode "{sessionMode.name}" locks all settings. Exit to User
-            Mode (the badge in the corner) to change anything.
+            The mode "{sessionMode.name}" locks the rest of the settings —
+            these personal preferences stay available.
           </p>
+          <h3 className="settings-subhead">Theme</h3>
+          <ThemeSelect
+            onChange={(id) => {
+              applyTheme(id);
+              setTheme(id);
+            }}
+            value={theme}
+          />
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Chat Text</h3>
+          <div className="chat-font-controls">
+            <label className="chat-font-field">
+              Size
+              <select
+                className="task-select"
+                onChange={(event) => {
+                  setChatFontSize(event.target.value);
+                  applyChatFont(event.target.value, chatFontFamily);
+                }}
+                value={chatFontSize}
+              >
+                {CHAT_FONT_SIZES.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="chat-font-field">
+              Font
+              <select
+                className="task-select"
+                onChange={(event) => {
+                  setChatFontFamily(event.target.value);
+                  applyChatFont(chatFontSize, event.target.value);
+                }}
+                value={chatFontFamily}
+              >
+                {CHAT_FONT_FAMILIES.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">{t("settings.language.title")}</h3>
+          <div className="lang-toggle">
+            <button
+              className={`lang-toggle-option ${lang === "en" ? "active" : ""}`}
+              onClick={() => setLang("en")}
+              type="button"
+            >
+              {t("settings.language.english")}
+            </button>
+            <button
+              className={`lang-toggle-option ${lang === "zh" ? "active" : ""}`}
+              onClick={() => setLang("zh")}
+              type="button"
+            >
+              {t("settings.language.chinese")}
+            </button>
+          </div>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Agent Name</h3>
+          <label className="chat-font-field">
+            Agent Name
+            <input
+              maxLength={100}
+              onChange={(event) => {
+                setAgentName(event.target.value);
+                setSaved(false);
+              }}
+              value={agentName}
+            />
+          </label>
+          <div className="model-card-actions">
+            <button
+              className="secondary-button"
+              onClick={() =>
+                void updateSettings({
+                  instanceName: settings.instanceName,
+                  agentName,
+                }).then((updated) => {
+                  onUpdate(updated);
+                  setSaved(true);
+                })
+              }
+              type="button"
+            >
+              Save
+            </button>
+          </div>
+          {saved ? <p className="saved-note">Saved.</p> : null}
         </section>
       </div>
     );

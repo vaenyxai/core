@@ -921,6 +921,23 @@ export function deleteMode(modeId: string): Promise<Mode> {
   return requestJson<Mode>(`/v1/modes/${modeId}`, { method: "DELETE" });
 }
 
+export interface PushPrefs {
+  chat: boolean;
+  scheduled: boolean;
+  mode: boolean;
+}
+
+export function fetchPushPrefs(): Promise<PushPrefs> {
+  return requestJson<PushPrefs>("/v1/push/prefs");
+}
+
+export function updatePushPrefs(input: PushPrefs): Promise<PushPrefs> {
+  return requestJson<PushPrefs>("/v1/push/prefs", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
 export function fetchModeThreads(modeId: string): Promise<VaenyxThread[]> {
   return requestJson<VaenyxThread[]>(`/v1/modes/${modeId}/threads`);
 }

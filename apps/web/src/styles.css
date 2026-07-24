@@ -4277,6 +4277,11 @@ select {
   font-size: 13px;
 }
 
+.modes-card-buttons {
+  display: flex;
+  gap: 12px;
+}
+
 .modes-card p {
   margin: 0;
   color: var(--text-muted);

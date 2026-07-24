@@ -983,6 +983,17 @@ export const StopTurnRequestSchema = Type.Object(
 
 // Vision: a photo in, useful text out (fridge shot → ingredient list). The
 // engine is auto-picked from the Owner's connected vision-capable models.
+// App-level notification categories (Oskar, dev.170): which kinds of
+// events push. Per-device on/off is just the system permission.
+export const PushPrefsSchema = Type.Object(
+  {
+    chat: Type.Boolean(),
+    scheduled: Type.Boolean(),
+    mode: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
 // Switching (M2): enter a mode / return to User Mode. `secret` is the
 // mode's PIN — or the account password, which always overrides (spec: the
 // main login is the master key so a forgotten PIN can never lock you out).
@@ -1803,6 +1814,7 @@ export type CreateModeRequest = Static<typeof CreateModeRequestSchema>;
 export type UpdateModeRequest = Static<typeof UpdateModeRequestSchema>;
 export type SwitchModeRequest = Static<typeof SwitchModeRequestSchema>;
 export type ExitModeRequest = Static<typeof ExitModeRequestSchema>;
+export type PushPrefs = Static<typeof PushPrefsSchema>;
 export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;

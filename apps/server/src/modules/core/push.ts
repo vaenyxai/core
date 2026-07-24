@@ -13,6 +13,48 @@ import type { DatabaseHandle } from "../../db/database.js";
 const VAPID_FILENAME = "push-vapid.json";
 const VAPID_SUBJECT = "mailto:hello@vaenyx.ai";
 const LAST_SEND_FILENAME = "push-last-send.txt";
+const PREFS_FILENAME = "push-prefs.json";
+
+// App-level notification categories (Oskar, dev.170): what KINDS of events
+// push, chosen once for the whole app. "test" always sends.
+export type PushCategory = "chat" | "scheduled" | "mode" | "test";
+
+export interface PushPrefs {
+  chat: boolean;
+  scheduled: boolean;
+  mode: boolean;
+}
+
+export function readPushPrefs(): PushPrefs {
+  const defaults: PushPrefs = { chat: true, scheduled: true, mode: true };
+  if (!dataDirectory) return defaults;
+  try {
+    const raw = JSON.parse(
+      readFileSync(resolve(dataDirectory, PREFS_FILENAME), "utf8"),
+    ) as Partial<PushPrefs>;
+    return {
+      chat: raw.chat !== false,
+      scheduled: raw.scheduled !== false,
+      mode: raw.mode !== false,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+export function writePushPrefs(next: PushPrefs): PushPrefs {
+  if (dataDirectory) {
+    try {
+      writeFileSync(
+        resolve(dataDirectory, PREFS_FILENAME),
+        `${JSON.stringify(next, null, 2)}\n`,
+      );
+    } catch {
+      // Best-effort.
+    }
+  }
+  return next;
+}
 
 let secretsDirectory: string | null = null;
 let dataDirectory: string | null = null;
@@ -38,6 +80,7 @@ const UNSEEN_WAIT_MS = 35_000;
 export function schedulePresenceAwarePush(
   database: DatabaseHandle,
   payload: { title: string; body: string; url: string },
+  category: PushCategory = "test",
 ): void {
   const completedAt = Date.now();
   setTimeout(() => {
@@ -48,7 +91,9 @@ export function schedulePresenceAwarePush(
       );
       return;
     }
-    void sendPushToAllDevices(database, payload).catch(() => undefined);
+    void sendPushToAllDevices(database, payload, category).catch(
+      () => undefined,
+    );
   }, UNSEEN_WAIT_MS).unref?.();
 }
 
@@ -163,7 +208,14 @@ export function getPushDiagnostics(database: DatabaseHandle): {
 export async function sendPushToAllDevices(
   database: DatabaseHandle,
   payload: { title: string; body: string; url: string },
+  category: PushCategory = "test",
 ): Promise<string> {
+  if (category !== "test" && !readPushPrefs()[category]) {
+    recordLastSend(
+      `${new Date().toISOString()} — skipped: "${category}" notifications are turned off in Settings.`,
+    );
+    return lastSendResult ?? "";
+  }
   const keys = loadOrCreateVapidKeys();
   if (!keys) {
     recordLastSend("No VAPID keys (secrets directory unavailable).");

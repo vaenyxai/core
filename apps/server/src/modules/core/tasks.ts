@@ -799,14 +799,18 @@ async function executeTaskRun(
       const titleRow = database.sqlite
         .prepare("SELECT title FROM tasks WHERE id = ?")
         .get(id) as { title: string } | undefined;
-      schedulePresenceAwarePush(database, {
-        title: titleRow?.title ?? "Vaenyx task",
-        body:
-          status === "completed"
-            ? "New result is ready."
-            : "The scheduled run failed.",
-        url: "/",
-      });
+      schedulePresenceAwarePush(
+        database,
+        {
+          title: titleRow?.title ?? "Vaenyx task",
+          body:
+            status === "completed"
+              ? "New result is ready."
+              : "The scheduled run failed.",
+          url: "/",
+        },
+        "scheduled",
+      );
     }
   } catch {
     // Server shutting down (database closed); reconcile handles it next start.
