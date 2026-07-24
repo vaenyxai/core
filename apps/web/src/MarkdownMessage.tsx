@@ -70,11 +70,23 @@ const components: Components = {
   },
 };
 
+// Models tend to put "来源:" / "Sources:" on one line and the URL(s) on the
+// next, which renders the source pill on its own row. Fold a URL line back
+// onto a preceding line that ends with a colon, and consecutive URL-only
+// lines onto one line, so the pills flow inline (Oskar, dev.161). List items
+// ("- https://…") are untouched — the lookahead requires the URL to start
+// the line.
+function inlineSourceLines(content: string): string {
+  return content
+    .replace(/([::][ \t]*)\n+(?=[ \t]*https?:\/\/)/g, "$1")
+    .replace(/(https?:\/\/\S+)[ \t]*\n+(?=[ \t]*https?:\/\/)/g, "$1 ");
+}
+
 export function MarkdownMessage({ content }: { content: string }) {
   return (
     <div className="markdown-body">
       <Markdown remarkPlugins={remarkPlugins} components={components}>
-        {content}
+        {inlineSourceLines(content)}
       </Markdown>
     </div>
   );

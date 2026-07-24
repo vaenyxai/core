@@ -1047,7 +1047,8 @@ textarea::placeholder {
 .jump-latest {
   position: fixed;
   right: 18px;
-  bottom: 168px;
+  /* Sits just above the composer (Oskar, dev.161: closer than before). */
+  bottom: 148px;
   z-index: 7;
   display: flex;
   align-items: center;
@@ -1070,7 +1071,7 @@ textarea::placeholder {
 
 @media (max-width: 720px) {
   .jump-latest {
-    bottom: 200px;
+    bottom: 168px;
   }
 }
 
@@ -2236,7 +2237,10 @@ select {
   max-width: 100%;
   min-width: 0;
   color: #dedbd1;
-  font-size: var(--fs-base);
+  /* One base size for the whole reply — the Owner's Chat Text setting —
+     and every inner element scales off it in em, so headings can never end
+     up smaller than the body (Oskar, dev.161). */
+  font-size: var(--chat-font-size, var(--fs-base));
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -2252,9 +2256,20 @@ select {
 .markdown-body p {
   margin: 0 0 12px;
   color: #dedbd1;
-  font-size: var(--fs-base);
+  font-size: inherit;
   line-height: 1.55;
   white-space: normal;
+}
+
+.markdown-body li,
+.markdown-body td,
+.markdown-body th,
+.markdown-body blockquote {
+  font-size: inherit;
+}
+
+.markdown-body strong {
+  font-weight: 700;
 }
 
 .markdown-body ul,
@@ -2280,20 +2295,22 @@ select {
   font-weight: 700;
 }
 
+/* Headings step DOWN from h1 but always stay at least as large as body
+   text, whatever Chat Text size is picked. */
 .markdown-body h1 {
-  font-size: 18px;
+  font-size: 1.25em;
 }
 
 .markdown-body h2 {
-  font-size: var(--fs-lg);
+  font-size: 1.18em;
 }
 
 .markdown-body h3 {
-  font-size: var(--fs-md);
+  font-size: 1.12em;
 }
 
 .markdown-body h4 {
-  font-size: 16px;
+  font-size: 1.05em;
 }
 
 .markdown-body a {
