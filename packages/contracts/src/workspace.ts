@@ -4,6 +4,9 @@ export const OwnerSchema = Type.Object(
   {
     id: Type.String(),
     name: Type.String(),
+    // Custom Mode M2: the mode this session is switched into (null = User
+    // Mode). Carried on the owner because it is per-session state.
+    modeId: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -628,6 +631,48 @@ export const TaskRunSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Custom Mode (spec §6): a neutral restricted sandbox definition. PINs are
+// write-only (requests carry them, responses only say whether one is set).
+export const ModeSchema = Type.Object(
+  {
+    id: Type.String(),
+    name: Type.String(),
+    rules: Type.String(),
+    lockSettings: Type.Boolean(),
+    localOnly: Type.Boolean(),
+    hasEnterPin: Type.Boolean(),
+    hasExitPin: Type.Boolean(),
+    createdAt: Type.String(),
+    updatedAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const CreateModeRequestSchema = Type.Object(
+  {
+    name: Type.String({ minLength: 1, maxLength: 60 }),
+    rules: Type.Optional(Type.String({ maxLength: 2000 })),
+    lockSettings: Type.Optional(Type.Boolean()),
+    localOnly: Type.Optional(Type.Boolean()),
+    enterPin: Type.Optional(Type.String({ maxLength: 20 })),
+    exitPin: Type.Optional(Type.String({ maxLength: 20 })),
+  },
+  { additionalProperties: false },
+);
+
+// PIN fields: absent = keep as is, empty string = clear, value = set anew.
+export const UpdateModeRequestSchema = Type.Object(
+  {
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
+    rules: Type.Optional(Type.String({ maxLength: 2000 })),
+    lockSettings: Type.Optional(Type.Boolean()),
+    localOnly: Type.Optional(Type.Boolean()),
+    enterPin: Type.Optional(Type.String({ maxLength: 20 })),
+    exitPin: Type.Optional(Type.String({ maxLength: 20 })),
+  },
+  { additionalProperties: false },
+);
+
 export const WorkspaceSchema = Type.Object(
   {
     owner: OwnerSchema,
@@ -637,6 +682,9 @@ export const WorkspaceSchema = Type.Object(
     vaenyxMe: VaenyxMeProfileSchema,
     tasks: Type.Array(TaskSchema),
     threads: Type.Array(VaenyxThreadSchema),
+    // Custom Mode M2: the mode this session is currently in (null = User
+    // Mode) — drives the persistent badge and in-mode UI.
+    mode: Type.Union([ModeSchema, Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -935,44 +983,20 @@ export const StopTurnRequestSchema = Type.Object(
 
 // Vision: a photo in, useful text out (fridge shot → ingredient list). The
 // engine is auto-picked from the Owner's connected vision-capable models.
-// Custom Mode (spec §6): a neutral restricted sandbox definition. PINs are
-// write-only (requests carry them, responses only say whether one is set).
-export const ModeSchema = Type.Object(
+// Switching (M2): enter a mode / return to User Mode. `secret` is the
+// mode's PIN — or the account password, which always overrides (spec: the
+// main login is the master key so a forgotten PIN can never lock you out).
+export const SwitchModeRequestSchema = Type.Object(
   {
-    id: Type.String(),
-    name: Type.String(),
-    rules: Type.String(),
-    lockSettings: Type.Boolean(),
-    localOnly: Type.Boolean(),
-    hasEnterPin: Type.Boolean(),
-    hasExitPin: Type.Boolean(),
-    createdAt: Type.String(),
-    updatedAt: Type.String(),
+    modeId: Type.String({ minLength: 1 }),
+    secret: Type.Optional(Type.String({ maxLength: 200 })),
   },
   { additionalProperties: false },
 );
 
-export const CreateModeRequestSchema = Type.Object(
+export const ExitModeRequestSchema = Type.Object(
   {
-    name: Type.String({ minLength: 1, maxLength: 60 }),
-    rules: Type.Optional(Type.String({ maxLength: 2000 })),
-    lockSettings: Type.Optional(Type.Boolean()),
-    localOnly: Type.Optional(Type.Boolean()),
-    enterPin: Type.Optional(Type.String({ maxLength: 20 })),
-    exitPin: Type.Optional(Type.String({ maxLength: 20 })),
-  },
-  { additionalProperties: false },
-);
-
-// PIN fields: absent = keep as is, empty string = clear, value = set anew.
-export const UpdateModeRequestSchema = Type.Object(
-  {
-    name: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
-    rules: Type.Optional(Type.String({ maxLength: 2000 })),
-    lockSettings: Type.Optional(Type.Boolean()),
-    localOnly: Type.Optional(Type.Boolean()),
-    enterPin: Type.Optional(Type.String({ maxLength: 20 })),
-    exitPin: Type.Optional(Type.String({ maxLength: 20 })),
+    secret: Type.Optional(Type.String({ maxLength: 200 })),
   },
   { additionalProperties: false },
 );
@@ -1777,6 +1801,8 @@ export type SetLocalVoiceRequest = Static<typeof SetLocalVoiceRequestSchema>;
 export type Mode = Static<typeof ModeSchema>;
 export type CreateModeRequest = Static<typeof CreateModeRequestSchema>;
 export type UpdateModeRequest = Static<typeof UpdateModeRequestSchema>;
+export type SwitchModeRequest = Static<typeof SwitchModeRequestSchema>;
+export type ExitModeRequest = Static<typeof ExitModeRequestSchema>;
 export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;

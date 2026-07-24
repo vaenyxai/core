@@ -14,6 +14,7 @@ import {
   listModes,
   updateMode,
 } from "../src/modules/core/modes.js";
+import { listProjects } from "../src/modules/core/projects.js";
 
 const temporaryDirectories: string[] = [];
 const openDatabases: DatabaseHandle[] = [];
@@ -103,5 +104,25 @@ describe("Custom Mode M1", () => {
     expect(() => createMode(database, { name: "   " })).toThrow(
       "MODE_NAME_REQUIRED",
     );
+  });
+
+  it("sandbox filter: each mode lens sees only its own projects", () => {
+    const database = createTestDatabase();
+    const mode = createMode(database, { name: "Guest" });
+    database.sqlite
+      .prepare(
+        "INSERT INTO projects (id, name, description, mode_id) VALUES (?, ?, ?, ?)",
+      )
+      .run("sandboxed", "Sandboxed", "", mode.id);
+
+    const userModeNames = listProjects(database, null).map(
+      (project) => project.name,
+    );
+    expect(userModeNames).not.toContain("Sandboxed");
+
+    const modeNames = listProjects(database, mode.id).map(
+      (project) => project.name,
+    );
+    expect(modeNames).toEqual(["Sandboxed"]);
   });
 });

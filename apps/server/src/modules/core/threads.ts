@@ -76,17 +76,23 @@ const threadSelect = `
 export function listVaenyxThreads(
   database: DatabaseHandle,
   ownerId: string,
+  modeId: string | null = null,
 ): VaenyxThread[] {
+  // Sandbox filter (Custom Mode M2): a session sees only its own mode's
+  // threads; User Mode (null) sees User-Mode threads. Sandboxes never see
+  // each other; User Mode's god view over sandboxes is the M4 view window.
   const rows = database.sqlite
     .prepare(
       `${threadSelect}
-       WHERE vaenyx_threads.owner_id = ?
-          OR vaenyx_threads.owner_id IS NULL
+       WHERE (vaenyx_threads.owner_id = ?
+          OR vaenyx_threads.owner_id IS NULL)
+         AND ((? IS NULL AND vaenyx_threads.mode_id IS NULL)
+          OR vaenyx_threads.mode_id = ?)
        ORDER BY
          CASE vaenyx_threads.status WHEN 'pinned' THEN 0 ELSE 1 END,
          vaenyx_threads.updated_at DESC`,
     )
-    .all(ownerId) as unknown as VaenyxThreadRow[];
+    .all(ownerId, modeId, modeId) as unknown as VaenyxThreadRow[];
 
   return rows.map(toThread);
 }
@@ -238,14 +244,16 @@ export function ensureChatThread(
     .prepare(
       `INSERT INTO vaenyx_threads (
          id, owner_id, kind, title, project_id, status, conversation_id,
-         routine_id, created_at, updated_at
-       ) VALUES (?, ?, 'chat', ?, ?, 'active', ?, ?, ?, ?)
+         routine_id, created_at, updated_at, mode_id
+       ) VALUES (?, ?, 'chat', ?, ?, 'active', ?, ?, ?, ?,
+         (SELECT mode_id FROM ask_vaenyx_conversations WHERE id = ?))
        ON CONFLICT(id) DO UPDATE SET
          owner_id = excluded.owner_id,
          title = excluded.title,
          project_id = excluded.project_id,
          conversation_id = excluded.conversation_id,
          routine_id = COALESCE(excluded.routine_id, routine_id),
+         mode_id = excluded.mode_id,
          updated_at = excluded.updated_at`,
     )
     .run(
@@ -257,6 +265,7 @@ export function ensureChatThread(
       input.routineId ?? null,
       input.createdAt,
       input.updatedAt,
+      input.conversationId,
     );
 }
 
@@ -324,14 +333,16 @@ export function ensureTaskThread(
     .prepare(
       `INSERT INTO vaenyx_threads (
          id, owner_id, kind, title, project_id, status, source_chat_id, task_id,
-         created_at, updated_at
-       ) VALUES (?, ?, 'task', ?, ?, 'active', ?, ?, ?, ?)
+         created_at, updated_at, mode_id
+       ) VALUES (?, ?, 'task', ?, ?, 'active', ?, ?, ?, ?,
+         (SELECT mode_id FROM tasks WHERE id = ?))
        ON CONFLICT(id) DO UPDATE SET
          owner_id = excluded.owner_id,
          title = excluded.title,
          project_id = excluded.project_id,
          source_chat_id = COALESCE(excluded.source_chat_id, source_chat_id),
          task_id = excluded.task_id,
+         mode_id = excluded.mode_id,
          updated_at = excluded.updated_at`,
     )
     .run(
@@ -343,5 +354,6 @@ export function ensureTaskThread(
       input.taskId,
       input.createdAt,
       input.updatedAt,
+      input.taskId,
     );
 }

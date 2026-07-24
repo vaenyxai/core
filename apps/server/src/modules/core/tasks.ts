@@ -308,7 +308,12 @@ function listTaskProjectMemories(
   return listProjectMemories(database, projectId);
 }
 
-export function listTasks(database: DatabaseHandle): Task[] {
+export function listTasks(
+  database: DatabaseHandle,
+  modeId: string | null = null,
+): Task[] {
+  // Sandbox filter (Custom Mode M2): tasks belong to the mode they were
+  // created in; User Mode (null) sees only User-Mode tasks.
   const rows = database.sqlite
     .prepare(
       `SELECT tasks.*, projects.name AS project_name, skills.name AS skill_name,
@@ -329,11 +334,28 @@ export function listTasks(database: DatabaseHandle): Task[] {
          ON thread_projects.id = task_threads.project_id
        LEFT JOIN ask_vaenyx_conversations AS source_chat
          ON source_chat.id = task_threads.source_chat_id
+       WHERE ((? IS NULL AND tasks.mode_id IS NULL) OR tasks.mode_id = ?)
        ORDER BY tasks.created_at DESC`,
     )
-    .all() as unknown as TaskRow[];
+    .all(modeId, modeId) as unknown as TaskRow[];
 
   return rows.map(toTask);
+}
+
+// Stamp a just-created task with the session's mode (Custom Mode M2). A
+// separate statement so the three create paths don't each grow a column.
+export function stampTaskMode(
+  database: DatabaseHandle,
+  taskId: string,
+  modeId: string | null,
+): void {
+  if (!modeId) return;
+  database.sqlite
+    .prepare("UPDATE tasks SET mode_id = ? WHERE id = ?")
+    .run(modeId, taskId);
+  database.sqlite
+    .prepare("UPDATE vaenyx_threads SET mode_id = ? WHERE task_id = ?")
+    .run(modeId, taskId);
 }
 
 export function createMockTask(

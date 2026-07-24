@@ -42,26 +42,33 @@ const memorySelect = `
 export function listProjectMemories(
   database: DatabaseHandle,
   projectId?: string,
+  modeId: string | null = null,
 ): ProjectMemory[] {
   if (projectId === GENERAL_PROJECT_ID) {
     return [];
   }
 
+  // Sandbox filter (Custom Mode M2): memories stay inside the mode that
+  // wrote them; User Mode (null) sees only User-Mode memories.
+  const modeClause = `((? IS NULL AND project_memories.mode_id IS NULL)
+        OR project_memories.mode_id = ?)`;
   const rows = projectId
     ? database.sqlite
         .prepare(
           `${memorySelect}
            WHERE project_memories.project_id = ?
+             AND ${modeClause}
            ORDER BY project_memories.updated_at DESC`,
         )
-        .all(projectId)
+        .all(projectId, modeId, modeId)
     : database.sqlite
         .prepare(
           `${memorySelect}
            WHERE project_memories.project_id != ?
+             AND ${modeClause}
            ORDER BY project_memories.updated_at DESC`,
         )
-        .all(GENERAL_PROJECT_ID);
+        .all(GENERAL_PROJECT_ID, modeId, modeId);
 
   return (rows as unknown as MemoryRow[]).map(toMemory);
 }
@@ -69,6 +76,7 @@ export function listProjectMemories(
 export function createProjectMemory(
   database: DatabaseHandle,
   input: CreateProjectMemoryRequest,
+  modeId: string | null = null,
 ): ProjectMemory {
   if (input.projectId === GENERAL_PROJECT_ID) {
     throw new Error("GENERAL_PROJECT_MEMORY_DISABLED");
@@ -88,12 +96,22 @@ export function createProjectMemory(
   database.sqlite
     .prepare(
       `INSERT INTO project_memories (
-        id, project_id, title, content, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
+        id, project_id, title, content, created_at, updated_at, mode_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, input.projectId, input.title.trim(), input.content.trim(), now, now);
+    .run(
+      id,
+      input.projectId,
+      input.title.trim(),
+      input.content.trim(),
+      now,
+      now,
+      modeId,
+    );
 
-  return listProjectMemories(database).find((memory) => memory.id === id)!;
+  return listProjectMemories(database, undefined, modeId).find(
+    (memory) => memory.id === id,
+  )!;
 }
 
 export function updateProjectMemory(

@@ -136,6 +136,8 @@ import {
   fetchModes,
   createMode,
   deleteMode,
+  switchMode,
+  exitMode,
   type Mode,
   type LocalTtsStatus,
   postPresenceHeartbeat,
@@ -3314,10 +3316,74 @@ const MODE_TEMPLATES = [
   },
 ];
 
-// Custom Mode management (spec §6) — M1 wired: mode definitions persist in
-// the database and every chat/project/memory/task row carries a mode
-// ownership column. Switching INTO a mode (PIN gates, sandbox filtering)
-// lands in M2 — until then all content stays in User Mode.
+// The persistent "you are in a mode" marker (spec §6, 建议 A): always
+// visible while a session is switched into a Custom Mode, with the exit
+// gate built in. Exit PIN or the account password both open it.
+function ModeBadge({ mode }: { mode: Mode }) {
+  const [asking, setAsking] = useState(false);
+  const [secret, setSecret] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function leave(withSecret?: string) {
+    setError(null);
+    try {
+      await exitMode(withSecret);
+      window.location.reload();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : "Could not exit.",
+      );
+    }
+  }
+
+  return (
+    <div className="mode-badge">
+      <span className="mode-badge-name">Mode: {mode.name}</span>
+      {asking ? (
+        <span className="mode-badge-exit">
+          <input
+            autoFocus
+            onChange={(event) => setSecret(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void leave(secret);
+            }}
+            placeholder="PIN Or Password"
+            type="password"
+            value={secret}
+          />
+          <button onClick={() => void leave(secret)} type="button">
+            OK
+          </button>
+          <button
+            onClick={() => {
+              setAsking(false);
+              setSecret("");
+              setError(null);
+            }}
+            type="button"
+          >
+            Cancel
+          </button>
+        </span>
+      ) : (
+        <button
+          onClick={() => {
+            if (mode.hasExitPin) setAsking(true);
+            else void leave();
+          }}
+          type="button"
+        >
+          Exit
+        </button>
+      )}
+      {error ? <span className="mode-badge-error">{error}</span> : null}
+    </div>
+  );
+}
+
+// Custom Mode management (spec §6) — M1 wired storage; M2 adds switching:
+// Enter gates (PIN or account password), the per-session sandbox filter
+// server-side, and the persistent badge with its exit gate.
 function ModesPanel() {
   const [modes, setModes] = useState<Mode[]>([]);
   const [name, setName] = useState("");
@@ -3328,12 +3394,38 @@ function ModesPanel() {
   const [exitPin, setExitPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Which mode's Enter is asking for its PIN right now (null = none).
+  const [enterFor, setEnterFor] = useState<string | null>(null);
+  const [enterSecret, setEnterSecret] = useState("");
 
   useEffect(() => {
     void fetchModes()
       .then(setModes)
-      .catch(() => undefined);
+      .catch((nextError) =>
+        setError(
+          nextError instanceof Error
+            ? nextError.message
+            : "Could not load modes.",
+        ),
+      );
   }, []);
+
+  async function enterMode(mode: Mode, secret?: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await switchMode(mode.id, secret);
+      // A full reload re-fetches everything through the new mode's lens.
+      window.location.reload();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not enter the mode.",
+      );
+      setBusy(false);
+    }
+  }
 
   async function addMode(template?: { name: string; rules: string }) {
     const draftName = template?.name ?? name.trim();
@@ -3393,8 +3485,9 @@ function ModesPanel() {
   return (
     <div className="modes-layout">
       <p className="modes-preview-note">
-        Modes are saved. Switching into a mode (PIN gates, its own sandboxed
-        chats and projects) is the next step — coming soon.
+        Enter a mode to work inside its own sandbox — separate chats,
+        projects and memory. The badge in the corner shows where you are and
+        is the way back; your account password always overrides a PIN.
       </p>
 
       <section className="settings-card">
@@ -3542,6 +3635,61 @@ function ModesPanel() {
                     <span className="library-chip">Exit PIN · locked</span>
                   ) : null}
                 </div>
+                {enterFor === mode.id ? (
+                  <div className="modes-enter-row">
+                    <input
+                      autoFocus
+                      className="method-rename-input"
+                      onChange={(event) => setEnterSecret(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void enterMode(mode, enterSecret);
+                        }
+                      }}
+                      placeholder="Enter PIN (Or Account Password)"
+                      type="password"
+                      value={enterSecret}
+                    />
+                    <button
+                      className="primary-button"
+                      disabled={busy}
+                      onClick={() => void enterMode(mode, enterSecret)}
+                      type="button"
+                    >
+                      Go
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={busy}
+                      onClick={() => {
+                        setEnterFor(null);
+                        setEnterSecret("");
+                      }}
+                      type="button"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="model-card-actions">
+                    <button
+                      className="primary-button"
+                      disabled={busy}
+                      onClick={() => {
+                        if (mode.hasEnterPin) {
+                          setEnterFor(mode.id);
+                          setEnterSecret("");
+                        } else {
+                          void enterMode(mode);
+                        }
+                      }}
+                      type="button"
+                    >
+                      Enter This Mode
+                    </button>
+                  </div>
+                )}
                 <p className="library-note">
                   Supervision: view window + push alerts to User Mode (coming).
                 </p>
@@ -12945,6 +13093,7 @@ function VaenyxWorkspace({
       {systemStatus?.version ? (
         <span className="version-badge">v{systemStatus.version}</span>
       ) : null}
+      {workspace.mode ? <ModeBadge mode={workspace.mode} /> : null}
       {updateAvailable ? (
         <button
           className="update-banner"

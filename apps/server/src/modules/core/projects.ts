@@ -53,30 +53,40 @@ const projectSelect = `
   FROM projects
 `;
 
-export function listProjects(database: DatabaseHandle): Project[] {
+export function listProjects(
+  database: DatabaseHandle,
+  modeId: string | null = null,
+): Project[] {
+  // Sandbox filter (Custom Mode M2): each session sees its own mode's
+  // projects only; the seeded projects (mode_id NULL) belong to User Mode.
   return (
     database.sqlite
       .prepare(
         `${projectSelect}
+         WHERE ((? IS NULL AND projects.mode_id IS NULL)
+            OR projects.mode_id = ?)
          ORDER BY
            CASE WHEN projects.id = ? THEN 1 ELSE 0 END,
            projects.name`,
       )
-      .all(GENERAL_PROJECT_ID) as unknown as ProjectRow[]
+      .all(modeId, modeId, GENERAL_PROJECT_ID) as unknown as ProjectRow[]
   ).map(toProject);
 }
 
 export function createProject(
   database: DatabaseHandle,
   input: CreateProjectRequest,
+  modeId: string | null = null,
 ): Project {
   const id = randomUUID();
 
   database.sqlite
-    .prepare("INSERT INTO projects (id, name, description) VALUES (?, ?, ?)")
-    .run(id, input.name.trim(), input.description.trim());
+    .prepare(
+      "INSERT INTO projects (id, name, description, mode_id) VALUES (?, ?, ?, ?)",
+    )
+    .run(id, input.name.trim(), input.description.trim(), modeId);
 
-  return listProjects(database).find((project) => project.id === id)!;
+  return listProjects(database, modeId).find((project) => project.id === id)!;
 }
 
 export function updateProject(

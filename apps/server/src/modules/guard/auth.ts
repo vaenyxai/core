@@ -25,6 +25,10 @@ function sessionExpiry(): string {
 export interface AuthenticatedOwner {
   id: string;
   name: string;
+  // Custom Mode (M2): the mode this SESSION is currently switched into;
+  // null = User Mode. Read from owner_sessions on every request so the
+  // sandbox is enforced server-side.
+  modeId: string | null;
 }
 
 interface OwnerRow {
@@ -121,7 +125,7 @@ export function ownerExists(database: DatabaseHandle): boolean {
 
 export function getOwner(database: DatabaseHandle): AuthenticatedOwner | null {
   const row = database.sqlite
-    .prepare("SELECT id, name FROM owners LIMIT 1")
+    .prepare("SELECT id, name, NULL AS modeId FROM owners LIMIT 1")
     .get() as AuthenticatedOwner | undefined;
 
   return row ?? null;
@@ -154,6 +158,7 @@ export function createOwner(
   const owner = {
     id: randomUUID(),
     name: name.trim(),
+    modeId: null,
   };
 
   database.sqlite
@@ -180,6 +185,7 @@ export function findOwnerByPassword(
   return {
     id: row.id,
     name: row.name,
+    modeId: null,
   };
 }
 
@@ -231,7 +237,7 @@ export function authenticateOwner(
 
   const owner = database.sqlite
     .prepare(
-      `SELECT owners.id, owners.name
+      `SELECT owners.id, owners.name, owner_sessions.mode_id AS modeId
        FROM owner_sessions
        JOIN owners ON owners.id = owner_sessions.owner_id
        WHERE owner_sessions.token_hash = ?
@@ -242,6 +248,23 @@ export function authenticateOwner(
     | undefined;
 
   return owner ?? null;
+}
+
+// Point this session at a Custom Mode (or back to User Mode with null).
+// The caller has already verified any PIN/password gate.
+export function setSessionMode(
+  database: DatabaseHandle,
+  request: FastifyRequest,
+  modeId: string | null,
+): boolean {
+  const token = parseCookie(request);
+  if (!token) {
+    return false;
+  }
+  const result = database.sqlite
+    .prepare("UPDATE owner_sessions SET mode_id = ? WHERE token_hash = ?")
+    .run(modeId, hashSessionToken(token));
+  return result.changes > 0;
 }
 
 export function renewSessionOnUse(

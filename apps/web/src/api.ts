@@ -912,6 +912,23 @@ export function deleteMode(modeId: string): Promise<Mode> {
   return requestJson<Mode>(`/v1/modes/${modeId}`, { method: "DELETE" });
 }
 
+export function switchMode(
+  modeId: string,
+  secret?: string,
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/v1/mode/switch", {
+    method: "POST",
+    body: JSON.stringify({ modeId, ...(secret ? { secret } : {}) }),
+  });
+}
+
+export function exitMode(secret?: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/v1/mode/exit", {
+    method: "POST",
+    body: JSON.stringify(secret ? { secret } : {}),
+  });
+}
+
 export function setVisionEngine(
   provider: "none" | "gemini" | "zhipu" | "openai",
 ): Promise<VisionStatus> {

@@ -42,6 +42,10 @@ import {
   type CreateModeRequest,
   UpdateModeRequestSchema,
   type UpdateModeRequest,
+  SwitchModeRequestSchema,
+  type SwitchModeRequest,
+  ExitModeRequestSchema,
+  type ExitModeRequest,
   StopTurnRequestSchema,
   VisionStatusSchema,
   ConnectVisionRequestSchema,
@@ -230,7 +234,10 @@ import {
 import {
   createMode,
   deleteMode,
+  findMode,
+  getModeRowById,
   listModes,
+  modePinMatches,
   updateMode,
 } from "../core/modes.js";
 import {
@@ -335,6 +342,7 @@ import {
   listTasks,
   retryTask,
   setTaskSchedule,
+  stampTaskMode,
 } from "../core/tasks.js";
 import {
   listVaenyxThreads,
@@ -379,6 +387,7 @@ import {
   isLocalDirectRequest,
   ownerExists,
   setOwnerPassword,
+  setSessionMode,
 } from "../guard/auth.js";
 import {
   loginBlockedSeconds,
@@ -1368,14 +1377,17 @@ export async function registerGatewayRoutes(
         });
       }
 
+      // Custom Mode M2: the whole workspace is served through the session's
+      // mode lens — a Custom Mode session sees only its own sandbox.
       return {
         owner,
-        projects: listProjects(context.database),
+        projects: listProjects(context.database, owner.modeId),
         skills: listSkills(context.database),
         agents: listAgentProfiles(context.database),
         vaenyxMe: getVaenyxMeProfile(context.database),
-        tasks: listTasks(context.database),
-        threads: listVaenyxThreads(context.database, owner.id),
+        tasks: listTasks(context.database, owner.modeId),
+        threads: listVaenyxThreads(context.database, owner.id, owner.modeId),
+        mode: owner.modeId ? findMode(context.database, owner.modeId) : null,
       };
     },
   );
@@ -1664,7 +1676,11 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
 
-      return listAskVaenyxConversations(context.database, owner.id);
+      return listAskVaenyxConversations(
+        context.database,
+        owner.id,
+        owner.modeId,
+      );
     },
   );
 
@@ -1698,6 +1714,7 @@ export async function registerGatewayRoutes(
           context.database,
           owner.id,
           request.body,
+          owner.modeId,
         );
         recordAudit(context.database, {
           actorType: "owner",
@@ -3148,6 +3165,9 @@ export async function registerGatewayRoutes(
             : request.body.executionMode === "research"
               ? createResearchTask(context.database, request.body, owner.id)
               : createMockTask(context.database, request.body, null, owner.id);
+        // Custom Mode M2: the task (and its thread) belongs to the mode the
+        // session created it in.
+        stampTaskMode(context.database, task.id, owner.modeId);
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
@@ -3225,7 +3245,11 @@ export async function registerGatewayRoutes(
         });
       }
 
-      const project = createProject(context.database, request.body);
+      const project = createProject(
+        context.database,
+        request.body,
+        owner.modeId,
+      );
       recordAudit(context.database, {
         actorType: "owner",
         actorId: owner.id,
@@ -3719,12 +3743,22 @@ export async function registerGatewayRoutes(
     },
   );
 
-  // ── Custom Modes (M1): CRUD over mode definitions, Owner/User-Mode only ──
+  // ── Custom Modes: CRUD over mode definitions, Owner/User-Mode only ──
+  // Spec §6: all mode settings live in User Mode — a session inside a
+  // Custom Mode cannot see or change mode definitions (the exit gate is
+  // what guards the configuration).
+  const MODE_SETTINGS_LOCKED =
+    "Mode settings live in User Mode — exit this mode first.";
+
   app.get(
     "/v1/modes",
     {
       schema: {
-        response: { 200: Type.Array(ModeSchema), 401: ErrorResponseSchema },
+        response: {
+          200: Type.Array(ModeSchema),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
       },
     },
     async (request, reply) => {
@@ -3732,7 +3766,110 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
+      }
       return listModes(context.database);
+    },
+  );
+
+  // Switch this session into a mode. The secret is the mode's enter PIN —
+  // or the account password, which always overrides (master key).
+  app.post<{ Body: SwitchModeRequest }>(
+    "/v1/mode/switch",
+    {
+      schema: {
+        body: SwitchModeRequestSchema,
+        response: {
+          200: Type.Object({ ok: Type.Boolean() }),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const mode = getModeRowById(context.database, request.body.modeId);
+      if (!mode) {
+        return reply.code(404).send({ error: "Mode not found." });
+      }
+      if (mode.enterPinHash) {
+        const secret = request.body.secret?.trim() ?? "";
+        const allowed =
+          (secret && modePinMatches(mode.id, secret, mode.enterPinHash)) ||
+          (secret && findOwnerByPassword(context.database, secret) !== null);
+        if (!allowed) {
+          return reply.code(403).send({
+            error: "Wrong PIN. Your account password also works here.",
+          });
+        }
+      }
+      setSessionMode(context.database, request, mode.id);
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "mode.switch",
+        decision: "allowed",
+        reason: `Session switched into mode "${mode.name}".`,
+        resourceType: "mode",
+        resourceId: mode.id,
+      });
+      return { ok: true };
+    },
+  );
+
+  // Return this session to User Mode. The secret is the mode's exit PIN —
+  // or the account password (master key), so a forgotten PIN never locks
+  // anyone out.
+  app.post<{ Body: ExitModeRequest }>(
+    "/v1/mode/exit",
+    {
+      schema: {
+        body: ExitModeRequestSchema,
+        response: {
+          200: Type.Object({ ok: Type.Boolean() }),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (!owner.modeId) {
+        return { ok: true };
+      }
+      const mode = getModeRowById(context.database, owner.modeId);
+      if (mode?.exitPinHash) {
+        const secret = request.body.secret?.trim() ?? "";
+        const allowed =
+          (secret && modePinMatches(mode.id, secret, mode.exitPinHash)) ||
+          (secret && findOwnerByPassword(context.database, secret) !== null);
+        if (!allowed) {
+          return reply.code(403).send({
+            error: "Wrong PIN. Your account password also works here.",
+          });
+        }
+      }
+      setSessionMode(context.database, request, null);
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "mode.exit",
+        decision: "allowed",
+        reason: `Session returned to User Mode from "${mode?.name ?? owner.modeId}".`,
+        resourceType: "mode",
+        resourceId: owner.modeId,
+      });
+      return { ok: true };
     },
   );
 
@@ -3752,6 +3889,9 @@ export async function registerGatewayRoutes(
       const owner = requireOwner(request);
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
       }
       try {
         return createMode(context.database, request.body);
@@ -3783,6 +3923,9 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
+      }
       try {
         return updateMode(context.database, request.params.id, request.body);
       } catch (error) {
@@ -3813,6 +3956,9 @@ export async function registerGatewayRoutes(
       const owner = requireOwner(request);
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
       }
       try {
         // Content created inside the mode returns to User Mode first —
@@ -6931,11 +7077,12 @@ export async function registerGatewayRoutes(
       },
     },
     async (request, reply) => {
-      if (!requireOwner(request)) {
+      const owner = requireOwner(request);
+      if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
 
-      return listProjectMemories(context.database);
+      return listProjectMemories(context.database, undefined, owner.modeId);
     },
   );
 
@@ -6965,7 +7112,11 @@ export async function registerGatewayRoutes(
       }
 
       try {
-        const memory = createProjectMemory(context.database, request.body);
+        const memory = createProjectMemory(
+          context.database,
+          request.body,
+          owner.modeId,
+        );
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,

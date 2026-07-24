@@ -267,7 +267,10 @@ function getConversationProjectContext(
 export function listAskVaenyxConversations(
   database: DatabaseHandle,
   ownerId: string,
+  modeId: string | null = null,
 ): AskVaenyxConversation[] {
+  // Sandbox filter (Custom Mode M2): conversations stay inside the mode
+  // they were started in; User Mode (null) sees only User-Mode chats.
   const rows = database.sqlite
     .prepare(
       `SELECT ask_vaenyx_conversations.id, ask_vaenyx_conversations.title,
@@ -280,6 +283,8 @@ export function listAskVaenyxConversations(
        LEFT JOIN ask_vaenyx_messages
          ON ask_vaenyx_messages.conversation_id = ask_vaenyx_conversations.id
        WHERE ask_vaenyx_conversations.owner_id = ?
+        AND ((? IS NULL AND ask_vaenyx_conversations.mode_id IS NULL)
+          OR ask_vaenyx_conversations.mode_id = ?)
         AND NOT EXISTS (
           SELECT 1
           FROM vaenyx_threads
@@ -289,7 +294,7 @@ export function listAskVaenyxConversations(
        GROUP BY ask_vaenyx_conversations.id
        ORDER BY ask_vaenyx_conversations.updated_at DESC`,
     )
-    .all(ownerId) as unknown as AskVaenyxConversationRow[];
+    .all(ownerId, modeId, modeId) as unknown as AskVaenyxConversationRow[];
 
   return rows.map(toConversation);
 }
@@ -298,6 +303,7 @@ export function createAskVaenyxConversation(
   database: DatabaseHandle,
   ownerId: string,
   input: CreateAskVaenyxConversationRequest = {},
+  modeId: string | null = null,
 ): AskVaenyxConversation {
   const id = randomUUID();
   const now = new Date().toISOString();
@@ -320,10 +326,10 @@ export function createAskVaenyxConversation(
 
   database.sqlite
     .prepare(
-      `INSERT INTO ask_vaenyx_conversations (id, owner_id, title, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO ask_vaenyx_conversations (id, owner_id, title, created_at, updated_at, mode_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, ownerId, title, now, now);
+    .run(id, ownerId, title, now, now, modeId);
   ensureChatThread(database, {
     conversationId: id,
     ownerId,

@@ -53,6 +53,7 @@ describe("M1 contracts", () => {
         owner: {
           id: "owner-id",
           name: "Oskar",
+          modeId: null,
         },
         projects: [],
         skills: [],
@@ -63,6 +64,7 @@ describe("M1 contracts", () => {
         },
         tasks: [],
         threads: [],
+        mode: null,
       }),
     ).toBe(true);
   });

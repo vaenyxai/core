@@ -4077,7 +4077,10 @@ select {
   margin-top: 12px;
 }
 
+/* A checkbox row — the global input sizing (width 100%, height 46px) must
+   not stretch the checkbox into a giant block. */
 .modes-toggle {
+  display: flex;
   flex-direction: row;
   align-items: center;
   gap: 9px;
@@ -4086,8 +4089,71 @@ select {
 }
 
 .modes-toggle input {
-  width: auto;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
   margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.modes-enter-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.modes-enter-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Persistent "you are in a mode" marker with its exit gate (spec §6). */
+.mode-badge {
+  position: fixed;
+  z-index: 55;
+  left: calc(10px + env(safe-area-inset-left));
+  bottom: calc(40px + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 11px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mode-badge button {
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent, #14181c);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mode-badge-exit {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.mode-badge-exit input {
+  width: 150px;
+  height: 30px;
+  min-height: 0;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.mode-badge-error {
+  color: #df938a;
+  font-weight: 500;
 }
 
 .modes-list {

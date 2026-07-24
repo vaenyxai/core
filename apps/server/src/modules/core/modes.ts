@@ -42,6 +42,44 @@ function pinHash(modeId: string, pin: string): string {
   return createHash("sha256").update(`${modeId}\n${pin}`).digest("hex");
 }
 
+// Internal row access for the switch/exit gates (M2) — hashes never leave
+// the server module boundary.
+export function getModeRowById(
+  database: DatabaseHandle,
+  modeId: string,
+): {
+  id: string;
+  name: string;
+  enterPinHash: string | null;
+  exitPinHash: string | null;
+} | null {
+  const row = database.sqlite
+    .prepare("SELECT * FROM modes WHERE id = ?")
+    .get(modeId) as unknown as ModeRow | undefined;
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    enterPinHash: row.enter_pin_hash,
+    exitPinHash: row.exit_pin_hash,
+  };
+}
+
+export function findMode(database: DatabaseHandle, modeId: string): Mode | null {
+  const row = database.sqlite
+    .prepare("SELECT * FROM modes WHERE id = ?")
+    .get(modeId) as unknown as ModeRow | undefined;
+  return row ? toMode(row) : null;
+}
+
+export function modePinMatches(
+  modeId: string,
+  pin: string,
+  storedHash: string,
+): boolean {
+  return pinHash(modeId, pin) === storedHash;
+}
+
 export function listModes(database: DatabaseHandle): Mode[] {
   const rows = database.sqlite
     .prepare("SELECT * FROM modes ORDER BY created_at ASC")
