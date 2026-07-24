@@ -4067,6 +4067,9 @@ function AskVaenyxPanel({
   const [newChatModelName, setNewChatModelName] = useState<string | null>(
     null,
   );
+  const [newChatEffort, setNewChatEffort] = useState<ReasoningEffort | null>(
+    null,
+  );
   async function applyNewChatModelChoice(conversationId: string) {
     if (newChatProviderId) {
       await setChatProvider(conversationId, newChatProviderId).catch(
@@ -4079,8 +4082,14 @@ function AskVaenyxPanel({
         () => undefined,
       );
     }
+    if (newChatEffort && newChatEffort !== "medium") {
+      await setReasoningEffort(conversationId, newChatEffort).catch(
+        () => undefined,
+      );
+    }
     setNewChatProviderId(null);
     setNewChatModelName(null);
+    setNewChatEffort(null);
   }
   const [voiceReplies, setVoiceReplies] = useState(voiceRepliesEnabled);
   const [voiceOutput, setVoiceOutput] = useState<VoiceOutputStatus | null>(
@@ -5420,6 +5429,8 @@ function AskVaenyxPanel({
           </div>
 
           {chatProviders.length > 1 ? (
+            // Identical to the conversation composer's picker row (Oskar,
+            // dev.159): backend · model version · reasoning level.
             <div className="composer-status">
               <select
                 aria-label="Model"
@@ -5432,16 +5443,17 @@ function AskVaenyxPanel({
                 value={newChatProviderId ?? ""}
               >
                 <option value="">
-                  Default (
                   {chatProviders.find((provider) => provider.isDefault)?.name ??
-                    "Codex"}
-                  )
+                    "Codex"}{" "}
+                  (Default)
                 </option>
-                {chatProviders.map((provider) => (
-                  <option key={provider.id} value={provider.id}>
-                    {provider.name}
-                  </option>
-                ))}
+                {chatProviders
+                  .filter((provider) => !provider.isDefault)
+                  .map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name}
+                    </option>
+                  ))}
               </select>
               {newChatModelChoices.length > 0 && newChatEffective ? (
                 <>
@@ -5457,7 +5469,7 @@ function AskVaenyxPanel({
                     value={newChatModelName ?? ""}
                   >
                     <option value="">
-                      Default ({newChatEffective.model ?? "provider default"})
+                      {newChatEffective.model ?? "provider default"} (Default)
                     </option>
                     {newChatModelChoices
                       .filter((choice) => choice !== newChatEffective.model)
@@ -5469,6 +5481,21 @@ function AskVaenyxPanel({
                   </select>
                 </>
               ) : null}
+              <span aria-hidden="true" className="composer-sep">
+                ·
+              </span>
+              <select
+                aria-label="Reasoning level"
+                className="composer-level-select"
+                onChange={(event) =>
+                  setNewChatEffort(event.target.value as ReasoningEffort)
+                }
+                value={newChatEffort ?? "medium"}
+              >
+                <option value="low">Fast</option>
+                <option value="medium">Balanced</option>
+                <option value="high">Deep</option>
+              </select>
             </div>
           ) : null}
 
@@ -6049,17 +6076,20 @@ function AskVaenyxPanel({
                 title={t("legal.notice.modelPicker")}
                 value={activeConversation?.modelProviderId ?? ""}
               >
+                {/* The default backend IS the empty choice — one entry,
+                    marked inline, never listed twice (Oskar, dev.159). */}
                 <option value="">
-                  Default (
                   {chatProviders.find((provider) => provider.isDefault)?.name ??
-                    "Codex"}
-                  )
+                    "Codex"}{" "}
+                  (Default)
                 </option>
-                {chatProviders.map((provider) => (
-                  <option key={provider.id} value={provider.id}>
-                    {provider.name}
-                  </option>
-                ))}
+                {chatProviders
+                  .filter((provider) => !provider.isDefault)
+                  .map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name}
+                    </option>
+                  ))}
               </select>
             ) : (
               <span className="composer-model">
@@ -6107,7 +6137,7 @@ function AskVaenyxPanel({
                     value={activeConversation?.modelName ?? ""}
                   >
                     <option value="">
-                      Default ({effective.model ?? "provider default"})
+                      {effective.model ?? "provider default"} (Default)
                     </option>
                     {choices
                       .filter((choice) => choice !== effective.model)
