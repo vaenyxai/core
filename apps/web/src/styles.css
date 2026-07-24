@@ -1732,6 +1732,12 @@ select {
   padding-bottom: 12px;
 }
 
+/* Focused chat/task views end at the composer — without this, overscrolling
+   shows a dead band below it (the default 80px page clearance). */
+.workspace-content:has(.focused-workspace) {
+  padding-bottom: 10px;
+}
+
 .simple-compose-panel {
   display: grid;
   gap: 22px;
@@ -2268,8 +2274,18 @@ select {
   font-size: inherit;
 }
 
+/* Beats the legacy 11px `.ask-vaenyx-message strong` meta rule — bold text
+   INSIDE a reply keeps the body size (the news "headings" written as
+   **bold** paragraphs were being squashed). */
 .markdown-body strong {
   font-weight: 700;
+  font-size: inherit;
+}
+
+/* A paragraph that is entirely bold is a heading in spirit (models write
+   news-section titles that way) — give it heading size. */
+.markdown-body p > strong:only-child {
+  font-size: 1.12em;
 }
 
 .markdown-body ul,

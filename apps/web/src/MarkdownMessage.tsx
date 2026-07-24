@@ -42,7 +42,9 @@ const components: Components = {
       label === href ||
       label.startsWith("http://") ||
       label.startsWith("https://");
-    if (isBareUrl && href) {
+    // "[ft.com](https://…)"-style links read as citations too — same pill.
+    const looksLikeDomain = /^[\w-]+(?:\.[\w-]+)+$/.test(label);
+    if ((isBareUrl || looksLikeDomain) && href) {
       let domain = label;
       try {
         domain = new URL(href).hostname.replace(/^www\./, "");
@@ -70,16 +72,47 @@ const components: Components = {
   },
 };
 
-// Models tend to put "来源:" / "Sources:" on one line and the URL(s) on the
-// next, which renders the source pill on its own row. Fold a URL line back
-// onto a preceding line that ends with a colon, and consecutive URL-only
-// lines onto one line, so the pills flow inline (Oskar, dev.161). List items
-// ("- https://…") are untouched — the lookahead requires the URL to start
-// the line.
+// Models tend to put "来源:" / "Sources:" on one line and the link(s) on the
+// following line(s) — bare URLs or [text](url) markdown links — which makes
+// the source pills render on their own row. Fold link-only lines back onto a
+// preceding line that ends with a colon, and merge consecutive link-only
+// lines, so pills flow inline (Oskar, dev.161/163). List items ("- https://…")
+// are untouched — a link-only line must START with the link.
+const SOURCE_TOKEN = String.raw`(?:\[[^\]\n]*\]\(https?:[^)\n]*\)|https?:\/\/\S+)`;
+const SOURCE_LINE = new RegExp(
+  String.raw`^[ \t]*${SOURCE_TOKEN}(?:[ \t,、;;]+${SOURCE_TOKEN})*[ \t,、;;]*$`,
+);
+
 function inlineSourceLines(content: string): string {
-  return content
-    .replace(/([::][ \t]*)\n+(?=[ \t]*https?:\/\/)/g, "$1")
-    .replace(/(https?:\/\/\S+)[ \t]*\n+(?=[ \t]*https?:\/\/)/g, "$1 ");
+  const lines = content.split("\n");
+  const out: string[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    let line = lines[index] ?? "";
+    const canAbsorb =
+      /[::][ \t]*$/.test(line) || SOURCE_LINE.test(line);
+    if (canAbsorb) {
+      let cursor = index + 1;
+      while (cursor < lines.length) {
+        let next = cursor;
+        while (next < lines.length && (lines[next] ?? "").trim() === "") {
+          next += 1;
+        }
+        const candidate = next < lines.length ? lines[next] ?? "" : "";
+        if (candidate && SOURCE_LINE.test(candidate)) {
+          line = `${line.trimEnd()} ${candidate.trim()}`;
+          cursor = next + 1;
+        } else {
+          break;
+        }
+      }
+      index = cursor;
+    } else {
+      index += 1;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
 }
 
 export function MarkdownMessage({ content }: { content: string }) {
