@@ -3918,6 +3918,29 @@ function AskVaenyxPanel({
   // Phase B: an uploaded photo waiting to ride on the next message (direct
   // vision mode); null = no attachment pending.
   const [pendingImageId, setPendingImageId] = useState<string | null>(null);
+  // New-chat model choice (dev.156): picked before the conversation exists,
+  // applied the moment it is created so the very first turn uses it.
+  const [newChatProviderId, setNewChatProviderId] = useState<string | null>(
+    null,
+  );
+  const [newChatModelName, setNewChatModelName] = useState<string | null>(
+    null,
+  );
+  async function applyNewChatModelChoice(conversationId: string) {
+    if (newChatProviderId) {
+      await setChatProvider(conversationId, newChatProviderId).catch(
+        () => undefined,
+      );
+    }
+    // A model can be pinned even on the default provider.
+    if (newChatModelName) {
+      await setChatModel(conversationId, newChatModelName).catch(
+        () => undefined,
+      );
+    }
+    setNewChatProviderId(null);
+    setNewChatModelName(null);
+  }
   const [voiceReplies, setVoiceReplies] = useState(voiceRepliesEnabled);
   const [voiceOutput, setVoiceOutput] = useState<VoiceOutputStatus | null>(
     null,
@@ -4521,6 +4544,7 @@ function AskVaenyxPanel({
         preCreatedConversationId = conversation.id;
         onConversationsChange(upsertConversation(conversations, conversation));
         setActiveConversationId(conversation.id);
+        await applyNewChatModelChoice(conversation.id);
       } catch {
         // Could not pre-create: fall through to the normal (unclassified) path.
       }
@@ -4651,6 +4675,7 @@ function AskVaenyxPanel({
         onConversationsChange(nextConversations);
         setActiveConversationId(conversation.id);
         createdConversationId = conversation.id;
+        await applyNewChatModelChoice(conversation.id);
       }
 
       if (!conversationId) {
@@ -5161,9 +5186,17 @@ function AskVaenyxPanel({
   }
 
   function renderSimpleCompose() {
+    const newChatEffective =
+      chatProviders.find((candidate) => candidate.id === newChatProviderId) ??
+      chatProviders.find((candidate) => candidate.isDefault) ??
+      null;
     const defaultCanAttach = VISION_DIRECT_IDS.includes(
-      chatProviders.find((candidate) => candidate.isDefault)?.id ?? "",
+      newChatEffective?.id ?? "",
     );
+    const newChatModelChoices =
+      newChatEffective && newChatEffective.kind !== "cli-login"
+        ? MODEL_CHOICES[newChatEffective.id] ?? []
+        : [];
     return (
       <div className="simple-compose-shell">
         <form className="simple-compose-panel" onSubmit={startWork}>
@@ -5243,6 +5276,59 @@ function AskVaenyxPanel({
               {sending ? "Sending" : "Send"}
             </button>
           </div>
+
+          {chatProviders.length > 1 ? (
+            <div className="composer-status">
+              <select
+                aria-label="Model"
+                className="composer-level-select"
+                onChange={(event) => {
+                  setNewChatProviderId(event.target.value || null);
+                  setNewChatModelName(null);
+                }}
+                title={t("legal.notice.modelPicker")}
+                value={newChatProviderId ?? ""}
+              >
+                <option value="">
+                  Default (
+                  {chatProviders.find((provider) => provider.isDefault)?.name ??
+                    "Codex"}
+                  )
+                </option>
+                {chatProviders.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+              {newChatModelChoices.length > 0 && newChatEffective ? (
+                <>
+                  <span aria-hidden="true" className="composer-sep">
+                    ·
+                  </span>
+                  <select
+                    aria-label="Model version"
+                    className="composer-level-select"
+                    onChange={(event) =>
+                      setNewChatModelName(event.target.value || null)
+                    }
+                    value={newChatModelName ?? ""}
+                  >
+                    <option value="">
+                      Default ({newChatEffective.model ?? "provider default"})
+                    </option>
+                    {newChatModelChoices
+                      .filter((choice) => choice !== newChatEffective.model)
+                      .map((choice) => (
+                        <option key={choice} value={choice}>
+                          {choice}
+                        </option>
+                      ))}
+                  </select>
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           {error ? <p className="form-error">{error}</p> : null}
         </form>

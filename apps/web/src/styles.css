@@ -1714,7 +1714,8 @@ select {
   min-height: calc(100vh - 126px);
   align-items: end;
   justify-items: center;
-  padding: clamp(96px, 18vh, 190px) 0 clamp(58px, 12vh, 118px);
+  /* Bottom-anchored (Oskar, dev.156): no dead space under the compose box. */
+  padding: clamp(96px, 18vh, 190px) 0 18px;
 }
 
 .simple-compose-panel {
@@ -5056,7 +5057,7 @@ select {
 
   .simple-compose-shell {
     min-height: calc(100vh - 86px);
-    padding: clamp(104px, 22vh, 180px) 0 clamp(36px, 9vh, 82px);
+    padding: clamp(104px, 22vh, 180px) 0 14px;
   }
 
   .simple-compose-panel {
