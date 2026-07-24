@@ -34,6 +34,9 @@
   LibraryRoutine,
   LibraryRoutineSummary,
   MethodDraft,
+  Mode,
+  CreateModeRequest,
+  UpdateModeRequest,
   Project,
   RoutineGalleryItem,
   RoutineJournalEntry,
@@ -64,6 +67,8 @@
   VaenyxThread,
   Workspace,
 } from "@vaenyx/contracts";
+
+export type { Mode } from "@vaenyx/contracts";
 
 interface ErrorResponse {
   error?: string;
@@ -880,6 +885,31 @@ export interface VisionStatus {
 
 export function fetchVisionStatus(): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/vision/status");
+}
+
+export function fetchModes(): Promise<Mode[]> {
+  return requestJson<Mode[]>("/v1/modes");
+}
+
+export function createMode(input: CreateModeRequest): Promise<Mode> {
+  return requestJson<Mode>("/v1/modes", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateMode(
+  modeId: string,
+  input: UpdateModeRequest,
+): Promise<Mode> {
+  return requestJson<Mode>(`/v1/modes/${modeId}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteMode(modeId: string): Promise<Mode> {
+  return requestJson<Mode>(`/v1/modes/${modeId}`, { method: "DELETE" });
 }
 
 export function setVisionEngine(

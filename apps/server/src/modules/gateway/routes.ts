@@ -37,6 +37,11 @@ import {
   LocalTtsStatusSchema,
   SetLocalVoiceRequestSchema,
   type SetLocalVoiceRequest,
+  ModeSchema,
+  CreateModeRequestSchema,
+  type CreateModeRequest,
+  UpdateModeRequestSchema,
+  type UpdateModeRequest,
   StopTurnRequestSchema,
   VisionStatusSchema,
   ConnectVisionRequestSchema,
@@ -222,6 +227,12 @@ import {
   saveImage,
   setVisionEngine,
 } from "../core/vision.js";
+import {
+  createMode,
+  deleteMode,
+  listModes,
+  updateMode,
+} from "../core/modes.js";
 import {
   createMethod,
   draftMethodSpec,
@@ -3705,6 +3716,114 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       return getVisionStatus(context.config.secretsDirectory);
+    },
+  );
+
+  // ── Custom Modes (M1): CRUD over mode definitions, Owner/User-Mode only ──
+  app.get(
+    "/v1/modes",
+    {
+      schema: {
+        response: { 200: Type.Array(ModeSchema), 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return listModes(context.database);
+    },
+  );
+
+  app.post<{ Body: CreateModeRequest }>(
+    "/v1/modes",
+    {
+      schema: {
+        body: CreateModeRequestSchema,
+        response: {
+          200: ModeSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return createMode(context.database, request.body);
+      } catch (error) {
+        if (error instanceof Error && error.message === "MODE_NAME_REQUIRED") {
+          return reply.code(400).send({ error: "A mode needs a name." });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.put<{ Body: UpdateModeRequest; Params: { id: string } }>(
+    "/v1/modes/:id",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        body: UpdateModeRequestSchema,
+        response: {
+          200: ModeSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return updateMode(context.database, request.params.id, request.body);
+      } catch (error) {
+        if (error instanceof Error && error.message === "MODE_NOT_FOUND") {
+          return reply.code(404).send({ error: "Mode not found." });
+        }
+        if (error instanceof Error && error.message === "MODE_NAME_REQUIRED") {
+          return reply.code(400).send({ error: "A mode needs a name." });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/modes/:id",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: ModeSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        // Content created inside the mode returns to User Mode first —
+        // nothing is lost or stranded (spec's fallback rule).
+        return deleteMode(context.database, request.params.id);
+      } catch (error) {
+        if (error instanceof Error && error.message === "MODE_NOT_FOUND") {
+          return reply.code(404).send({ error: "Mode not found." });
+        }
+        throw error;
+      }
     },
   );
 

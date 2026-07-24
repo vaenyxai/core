@@ -133,6 +133,10 @@ import {
   removeLocalTtsDownload,
   setLocalVoice,
   setVisionEngine,
+  fetchModes,
+  createMode,
+  deleteMode,
+  type Mode,
   type LocalTtsStatus,
   postPresenceHeartbeat,
   stopTurn,
@@ -3310,58 +3314,87 @@ const MODE_TEMPLATES = [
   },
 ];
 
-interface DraftMode {
-  id: string;
-  name: string;
-  rules: string;
-  lockSettings: boolean;
-  localOnly: boolean;
-  enterPin: string;
-  exitPin: string;
-}
-
-// Custom Mode interface — a front-end preview of the design (spec §6). Not wired
-// to a backend yet: modes added here live only in this session so the layout and
-// flow can be reviewed.
+// Custom Mode management (spec §6) — M1 wired: mode definitions persist in
+// the database and every chat/project/memory/task row carries a mode
+// ownership column. Switching INTO a mode (PIN gates, sandbox filtering)
+// lands in M2 — until then all content stays in User Mode.
 function ModesPanel() {
-  const [modes, setModes] = useState<DraftMode[]>([]);
+  const [modes, setModes] = useState<Mode[]>([]);
   const [name, setName] = useState("");
   const [rules, setRules] = useState("");
   const [lockSettings, setLockSettings] = useState(false);
   const [localOnly, setLocalOnly] = useState(false);
   const [enterPin, setEnterPin] = useState("");
   const [exitPin, setExitPin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function addMode(template?: { name: string; rules: string }) {
+  useEffect(() => {
+    void fetchModes()
+      .then(setModes)
+      .catch(() => undefined);
+  }, []);
+
+  async function addMode(template?: { name: string; rules: string }) {
     const draftName = template?.name ?? name.trim();
     if (!draftName) return;
-    setModes((current) => [
-      {
-        id: crypto.randomUUID(),
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await createMode({
         name: draftName,
         rules: template?.rules ?? rules.trim(),
-        lockSettings,
-        localOnly,
-        enterPin,
-        exitPin,
-      },
-      ...current,
-    ]);
-    if (!template) {
-      setName("");
-      setRules("");
-      setLockSettings(false);
-      setLocalOnly(false);
-      setEnterPin("");
-      setExitPin("");
+        ...(template
+          ? {}
+          : {
+              lockSettings,
+              localOnly,
+              ...(enterPin.trim() ? { enterPin: enterPin.trim() } : {}),
+              ...(exitPin.trim() ? { exitPin: exitPin.trim() } : {}),
+            }),
+      });
+      setModes((current) => [...current, created]);
+      if (!template) {
+        setName("");
+        setRules("");
+        setLockSettings(false);
+        setLocalOnly(false);
+        setEnterPin("");
+        setExitPin("");
+      }
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not save the mode.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeMode(modeId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteMode(modeId);
+      setModes((current) => current.filter((item) => item.id !== modeId));
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not remove the mode.",
+      );
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <div className="modes-layout">
       <p className="modes-preview-note">
-        Preview — this is the Custom Mode interface design. It is not wired to the
-        backend yet, so modes added here are not saved.
+        Modes are saved. Switching into a mode (PIN gates, its own sandboxed
+        chats and projects) is the next step — coming soon.
       </p>
 
       <section className="settings-card">
@@ -3385,8 +3418,9 @@ function ModesPanel() {
           {MODE_TEMPLATES.map((template) => (
             <button
               className="secondary-button"
+              disabled={busy}
               key={template.name}
-              onClick={() => addMode(template)}
+              onClick={() => void addMode(template)}
               type="button"
             >
               + {template.name}
@@ -3402,7 +3436,7 @@ function ModesPanel() {
           className="memory-form"
           onSubmit={(event) => {
             event.preventDefault();
-            addMode();
+            void addMode();
           }}
         >
           <label>
@@ -3458,10 +3492,11 @@ function ModesPanel() {
               value={exitPin}
             />
           </label>
-          <button className="primary-button" type="submit">
+          <button className="primary-button" disabled={busy} type="submit">
             Add mode
           </button>
         </form>
+        {error ? <p className="form-error">{error}</p> : null}
       </section>
 
       <section className="settings-card">
@@ -3485,11 +3520,8 @@ function ModesPanel() {
                   <strong>{mode.name}</strong>
                   <button
                     className="text-button"
-                    onClick={() =>
-                      setModes((current) =>
-                        current.filter((item) => item.id !== mode.id),
-                      )
-                    }
+                    disabled={busy}
+                    onClick={() => void removeMode(mode.id)}
                     type="button"
                   >
                     Remove
@@ -3503,10 +3535,10 @@ function ModesPanel() {
                   {mode.localOnly ? (
                     <span className="library-chip">Local only</span>
                   ) : null}
-                  {mode.enterPin ? (
+                  {mode.hasEnterPin ? (
                     <span className="library-chip">Enter PIN</span>
                   ) : null}
-                  {mode.exitPin ? (
+                  {mode.hasExitPin ? (
                     <span className="library-chip">Exit PIN · locked</span>
                   ) : null}
                 </div>
@@ -7845,6 +7877,7 @@ function SettingsPanel({
     | "notifications"
     | "backup"
     | "sharing"
+    | "modes"
     | "manual"
     | "legal"
     // A sign-in-page model button parked a connect intent: open on AI Settings
@@ -8059,6 +8092,13 @@ function SettingsPanel({
           type="button"
         >
           Sharing
+        </button>
+        <button
+          className={settingsTab === "modes" ? "active" : ""}
+          onClick={() => setSettingsTab("modes")}
+          type="button"
+        >
+          Modes
         </button>
         <button
           className={settingsTab === "manual" ? "active" : ""}
@@ -8509,6 +8549,7 @@ function SettingsPanel({
       {settingsTab === "notifications" ? <NotificationsPanel /> : null}
       {settingsTab === "backup" ? <BackupPanel /> : null}
       {settingsTab === "sharing" ? <SharingPanel /> : null}
+      {settingsTab === "modes" ? <ModesPanel /> : null}
       {settingsTab === "legal" ? (
       <section className="settings-card">
         <p className="eyebrow">{t("settings.legal.eyebrow")}</p>
@@ -13269,8 +13310,6 @@ function VaenyxWorkspace({
               void fetchLibraryRoutines().then(setLibraryRoutines);
             }}
           />
-        ) : screen === "modes" ? (
-          <ModesPanel />
         ) : screen === "scheduled" ? (
           <ScheduledPanel
             tasks={workspace.tasks}

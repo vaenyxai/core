@@ -935,6 +935,48 @@ export const StopTurnRequestSchema = Type.Object(
 
 // Vision: a photo in, useful text out (fridge shot → ingredient list). The
 // engine is auto-picked from the Owner's connected vision-capable models.
+// Custom Mode (spec §6): a neutral restricted sandbox definition. PINs are
+// write-only (requests carry them, responses only say whether one is set).
+export const ModeSchema = Type.Object(
+  {
+    id: Type.String(),
+    name: Type.String(),
+    rules: Type.String(),
+    lockSettings: Type.Boolean(),
+    localOnly: Type.Boolean(),
+    hasEnterPin: Type.Boolean(),
+    hasExitPin: Type.Boolean(),
+    createdAt: Type.String(),
+    updatedAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const CreateModeRequestSchema = Type.Object(
+  {
+    name: Type.String({ minLength: 1, maxLength: 60 }),
+    rules: Type.Optional(Type.String({ maxLength: 2000 })),
+    lockSettings: Type.Optional(Type.Boolean()),
+    localOnly: Type.Optional(Type.Boolean()),
+    enterPin: Type.Optional(Type.String({ maxLength: 20 })),
+    exitPin: Type.Optional(Type.String({ maxLength: 20 })),
+  },
+  { additionalProperties: false },
+);
+
+// PIN fields: absent = keep as is, empty string = clear, value = set anew.
+export const UpdateModeRequestSchema = Type.Object(
+  {
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
+    rules: Type.Optional(Type.String({ maxLength: 2000 })),
+    lockSettings: Type.Optional(Type.Boolean()),
+    localOnly: Type.Optional(Type.Boolean()),
+    enterPin: Type.Optional(Type.String({ maxLength: 20 })),
+    exitPin: Type.Optional(Type.String({ maxLength: 20 })),
+  },
+  { additionalProperties: false },
+);
+
 // Vision: a pointer at a connected vision-capable provider ("none" = camera
 // off). Keys live only in the Models connections.
 export const VisionStatusSchema = Type.Object(
@@ -1732,6 +1774,9 @@ export type ConnectVoiceOutputRequest = Static<
 export type SpeakRequest = Static<typeof SpeakRequestSchema>;
 export type LocalTtsStatus = Static<typeof LocalTtsStatusSchema>;
 export type SetLocalVoiceRequest = Static<typeof SetLocalVoiceRequestSchema>;
+export type Mode = Static<typeof ModeSchema>;
+export type CreateModeRequest = Static<typeof CreateModeRequestSchema>;
+export type UpdateModeRequest = Static<typeof UpdateModeRequestSchema>;
 export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
