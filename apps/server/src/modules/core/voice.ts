@@ -11,6 +11,10 @@ import { resolve } from "node:path";
 
 import { readProviderConnections } from "../models/connections.js";
 import { writeConnections } from "../models/provider-settings.js";
+import {
+  isLocalTtsInstalled,
+  synthesizeLocalSpeech,
+} from "./voice-local.js";
 
 const VOICE_BASE_URL = "https://api.groq.com/openai/v1";
 const DEFAULT_VOICE_MODEL = "whisper-large-v3-turbo";
@@ -60,20 +64,29 @@ export function getVoiceStatus(secretsDirectory: string): {
 // ── Voice output (TTS engine) ────────────────────────────────────────────────
 // "browser" = the device's own TTS (basic, free, no key). "gemini" = Gemini
 // TTS generated server-side into real audio files (natural voice; a Google AI
-// Studio key, reusable from the Models → Gemini connection).
+// Studio key, reusable from the Models → Gemini connection). "local" = Piper
+// running fully offline on this machine (v2b; one 150 MB download, no key).
 const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const DEFAULT_GEMINI_VOICE = "Kore";
 
-// Resolution order (Oskar's rule, dev.154): an explicit choice sticks (gemini
-// with a key, or browser chosen on purpose); with no choice at all, a
-// connected Gemini main model powers speech automatically.
-function resolveVoiceOutput(secretsDirectory: string): {
-  engine: "browser" | "gemini";
+export type VoiceOutputEngine = "browser" | "gemini" | "local";
+
+// Resolution order (Oskar's rule, dev.154): an explicit choice sticks (local
+// once installed, gemini with a key, or browser chosen on purpose); with no
+// choice at all, a connected Gemini main model powers speech automatically.
+function resolveVoiceOutput(
+  secretsDirectory: string,
+  dataDirectory: string,
+): {
+  engine: VoiceOutputEngine;
   apiKey: string | null;
   voice: string;
 } {
   const connections = readProviderConnections(secretsDirectory);
   const output = connections.voiceOutput;
+  if (output?.engine === "local" && isLocalTtsInstalled(dataDirectory)) {
+    return { engine: "local", apiKey: null, voice: "auto" };
+  }
   if (output?.engine === "gemini" && output.apiKey) {
     return {
       engine: "gemini",
@@ -91,12 +104,18 @@ function resolveVoiceOutput(secretsDirectory: string): {
   return { engine: "browser", apiKey: null, voice: DEFAULT_GEMINI_VOICE };
 }
 
-export function getVoiceOutput(secretsDirectory: string): {
-  engine: "browser" | "gemini";
+export function getVoiceOutput(
+  secretsDirectory: string,
+  dataDirectory: string,
+): {
+  engine: VoiceOutputEngine;
   connected: boolean;
   voice: string | null;
 } {
-  const resolved = resolveVoiceOutput(secretsDirectory);
+  const resolved = resolveVoiceOutput(secretsDirectory, dataDirectory);
+  if (resolved.engine === "local") {
+    return { engine: "local", connected: true, voice: "auto" };
+  }
   if (resolved.engine === "gemini") {
     return { engine: "gemini", connected: true, voice: resolved.voice };
   }
@@ -105,14 +124,23 @@ export function getVoiceOutput(secretsDirectory: string): {
 
 export function connectVoiceOutput(
   secretsDirectory: string,
-  input: { engine: "browser" | "gemini"; apiKey?: string; voice?: string },
+  dataDirectory: string,
+  input: { engine: VoiceOutputEngine; apiKey?: string; voice?: string },
 ): ReturnType<typeof getVoiceOutput> {
   const connections = readProviderConnections(secretsDirectory);
+  if (input.engine === "local") {
+    if (!isLocalTtsInstalled(dataDirectory)) {
+      throw new Error("LOCAL_TTS_NOT_INSTALLED");
+    }
+    connections.voiceOutput = { engine: "local" };
+    writeConnections(secretsDirectory, connections);
+    return getVoiceOutput(secretsDirectory, dataDirectory);
+  }
   if (input.engine === "browser") {
     // Explicit browser choice sticks — it must beat the Gemini auto-follow.
     connections.voiceOutput = { engine: "browser" };
     writeConnections(secretsDirectory, connections);
-    return getVoiceOutput(secretsDirectory);
+    return getVoiceOutput(secretsDirectory, dataDirectory);
   }
   // Gemini: bring a key, keep the one already stored (e.g. a voice change),
   // or reuse the Models → Gemini connection's key.
@@ -129,7 +157,17 @@ export function connectVoiceOutput(
     voice: input.voice?.trim() || DEFAULT_GEMINI_VOICE,
   };
   writeConnections(secretsDirectory, connections);
-  return getVoiceOutput(secretsDirectory);
+  return getVoiceOutput(secretsDirectory, dataDirectory);
+}
+
+// After a Remove-download, an engine pointing at "local" would silently fall
+// back anyway — reset it explicitly so the stored choice matches reality.
+export function resetVoiceOutputIfLocal(secretsDirectory: string): void {
+  const connections = readProviderConnections(secretsDirectory);
+  if (connections.voiceOutput?.engine === "local") {
+    delete connections.voiceOutput;
+    writeConnections(secretsDirectory, connections);
+  }
 }
 
 // Gemini TTS returns raw 16-bit mono PCM at 24 kHz; wrap it into a WAV file so
@@ -152,14 +190,18 @@ function wavFromPcm(pcm: Buffer, sampleRate = 24_000): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-// Text → saved WAV via Gemini TTS. Cached by (text, voice) hash so replaying a
-// bubble never pays for a second generation.
+// Text → saved WAV via the picked engine (Gemini TTS or the local Piper).
+// Cached by (engine, voice, text) hash so replaying a bubble never pays for a
+// second generation.
 export async function synthesizeSpeech(
   secretsDirectory: string,
   dataDirectory: string,
   text: string,
 ): Promise<string> {
-  const resolved = resolveVoiceOutput(secretsDirectory);
+  const resolved = resolveVoiceOutput(secretsDirectory, dataDirectory);
+  if (resolved.engine === "local") {
+    return synthesizeLocalSpeech(dataDirectory, text);
+  }
   if (resolved.engine !== "gemini" || !resolved.apiKey) {
     throw new Error("VOICE_OUTPUT_NOT_CONNECTED");
   }

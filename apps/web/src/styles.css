@@ -3584,6 +3584,33 @@ select {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* Local-voice download progress (Voice Output settings). */
+.local-tts-progress {
+  width: 100%;
+  max-width: 420px;
+  height: 8px;
+  margin: 6px 0 12px;
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.local-tts-progress::-webkit-progress-bar {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.local-tts-progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.local-tts-progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
 .settings-subhead {
   margin: 0 0 4px;
   font-size: 14px;

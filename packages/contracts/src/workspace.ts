@@ -838,7 +838,11 @@ export const TranscribeVoiceResponseSchema = Type.Object(
 // TTS (basic, keyless); "gemini" = server-generated natural voice.
 export const VoiceOutputStatusSchema = Type.Object(
   {
-    engine: Type.Union([Type.Literal("browser"), Type.Literal("gemini")]),
+    engine: Type.Union([
+      Type.Literal("browser"),
+      Type.Literal("gemini"),
+      Type.Literal("local"),
+    ]),
     connected: Type.Boolean(),
     voice: Type.Union([Type.String(), Type.Null()]),
   },
@@ -847,9 +851,31 @@ export const VoiceOutputStatusSchema = Type.Object(
 
 export const ConnectVoiceOutputRequestSchema = Type.Object(
   {
-    engine: Type.Union([Type.Literal("browser"), Type.Literal("gemini")]),
+    engine: Type.Union([
+      Type.Literal("browser"),
+      Type.Literal("gemini"),
+      Type.Literal("local"),
+    ]),
     apiKey: Type.Optional(Type.String({ maxLength: 500 })),
     voice: Type.Optional(Type.String({ maxLength: 100 })),
+  },
+  { additionalProperties: false },
+);
+
+// Local voice (offline Piper TTS, v2b): one ~150 MB download into
+// userdata/tts, then replies speak with zero cloud round-trips. `installed`
+// is re-checked from disk; the rest reports the in-flight download.
+export const LocalTtsStatusSchema = Type.Object(
+  {
+    installed: Type.Boolean(),
+    status: Type.Union([
+      Type.Literal("idle"),
+      Type.Literal("downloading"),
+      Type.Literal("ready"),
+      Type.Literal("error"),
+    ]),
+    progress: Type.Number(),
+    detail: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -1661,6 +1687,7 @@ export type ConnectVoiceOutputRequest = Static<
   typeof ConnectVoiceOutputRequestSchema
 >;
 export type SpeakRequest = Static<typeof SpeakRequestSchema>;
+export type LocalTtsStatus = Static<typeof LocalTtsStatusSchema>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;

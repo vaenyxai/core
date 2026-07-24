@@ -782,9 +782,16 @@ export function disconnectVoice(): Promise<VoiceStatus> {
 }
 
 export interface VoiceOutputStatus {
-  engine: "browser" | "gemini";
+  engine: "browser" | "gemini" | "local";
   connected: boolean;
   voice: string | null;
+}
+
+export interface LocalTtsStatus {
+  installed: boolean;
+  status: "idle" | "downloading" | "ready" | "error";
+  progress: number;
+  detail: string | null;
 }
 
 export function fetchVoiceOutput(): Promise<VoiceOutputStatus> {
@@ -792,7 +799,7 @@ export function fetchVoiceOutput(): Promise<VoiceOutputStatus> {
 }
 
 export function connectVoiceOutput(input: {
-  engine: "browser" | "gemini";
+  engine: "browser" | "gemini" | "local";
   apiKey?: string;
   voice?: string;
 }): Promise<VoiceOutputStatus> {
@@ -806,6 +813,23 @@ export function synthesizeSpeech(text: string): Promise<{ audioId: string }> {
   return requestJson<{ audioId: string }>("/v1/voice/speak", {
     method: "POST",
     body: JSON.stringify({ text }),
+  });
+}
+
+export function fetchLocalTts(): Promise<LocalTtsStatus> {
+  return requestJson<LocalTtsStatus>("/v1/voice/local");
+}
+
+export function installLocalTts(): Promise<LocalTtsStatus> {
+  return requestJson<LocalTtsStatus>("/v1/voice/local/install", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function removeLocalTtsDownload(): Promise<LocalTtsStatus> {
+  return requestJson<LocalTtsStatus>("/v1/voice/local", {
+    method: "DELETE",
   });
 }
 

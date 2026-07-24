@@ -129,6 +129,10 @@ import {
   fetchVoiceOutput,
   connectVoiceOutput,
   synthesizeSpeech,
+  fetchLocalTts,
+  installLocalTts,
+  removeLocalTtsDownload,
+  type LocalTtsStatus,
   postPresenceHeartbeat,
   stopTurn,
   type VoiceOutputStatus,
@@ -1151,7 +1155,7 @@ function VoiceBubble({
   text,
 }: {
   audioId?: string | null;
-  engine?: "browser" | "gemini";
+  engine?: "browser" | "gemini" | "local";
   text: string;
 }) {
   const [state, setState] = useState<
@@ -1177,7 +1181,8 @@ function VoiceBubble({
   async function ensureAudio(): Promise<HTMLAudioElement | null> {
     if (audioRef.current) return audioRef.current;
     let id = audioId ?? null;
-    if (!id && engine === "gemini") {
+    // Gemini and Local both generate server-side audio files.
+    if (!id && engine !== "browser") {
       const clean = cleanSpeechText(text).slice(0, 4000);
       if (!clean) return null;
       setState("loading");
@@ -1200,7 +1205,7 @@ function VoiceBubble({
   async function play() {
     stopReplySpeech();
     try {
-      if (!audioId && engine !== "gemini") {
+      if (!audioId && engine === "browser") {
         // Device TTS path, with pause/resume support.
         if (!("speechSynthesis" in window)) return;
         const clean = cleanSpeechText(text);
@@ -1615,10 +1620,11 @@ function VoicePanel() {
   const [vision, setVision] = useState<VisionStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [outputKey, setOutputKey] = useState("");
-  const [outputEngine, setOutputEngine] = useState<"browser" | "gemini">(
-    "browser",
-  );
+  const [outputEngine, setOutputEngine] = useState<
+    "browser" | "gemini" | "local"
+  >("browser");
   const [outputVoice, setOutputVoice] = useState("Kore");
+  const [localTts, setLocalTts] = useState<LocalTtsStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outputError, setOutputError] = useState<string | null>(null);
@@ -1631,13 +1637,40 @@ function VoicePanel() {
       .then((current) => {
         setOutput(current);
         setOutputEngine(current.engine);
-        if (current.voice) setOutputVoice(current.voice);
+        if (current.voice && current.engine === "gemini") {
+          setOutputVoice(current.voice);
+        }
       })
       .catch(() => undefined);
     void fetchVisionStatus()
       .then(setVision)
       .catch(() => undefined);
+    void fetchLocalTts()
+      .then(setLocalTts)
+      .catch(() => undefined);
   }, []);
+
+  // While the 150 MB local-voice download runs, poll for progress; the moment
+  // it lands, switch the engine over (that is what the download was for).
+  useEffect(() => {
+    if (localTts?.status !== "downloading") return;
+    const timer = window.setInterval(() => {
+      void fetchLocalTts()
+        .then((next) => {
+          setLocalTts(next);
+          if (next.installed && next.status === "ready") {
+            void connectVoiceOutput({ engine: "local" })
+              .then((applied) => {
+                setOutput(applied);
+                setOutputEngine(applied.engine);
+              })
+              .catch(() => undefined);
+          }
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [localTts?.status]);
 
   async function connect(reuseGroqKey: boolean) {
     setBusy(true);
@@ -1680,7 +1713,7 @@ function VoicePanel() {
         lang === "zh"
           ? "你好,我是 Vaenyx。这是当前音色的试听。"
           : "Hi, I'm Vaenyx — this is how the current voice sounds.";
-      if (outputEngine === "gemini") {
+      if (outputEngine !== "browser") {
         const { audioId } = await synthesizeSpeech(sample);
         const audio = new Audio(`/v1/voice/audio/${audioId}`);
         await audio.play();
@@ -1694,8 +1727,32 @@ function VoicePanel() {
     }
   }
 
+  async function startLocalDownload() {
+    setOutputError(null);
+    try {
+      setLocalTts(await installLocalTts());
+    } catch {
+      setOutputError("Could not start the download.");
+    }
+  }
+
+  async function removeLocalVoice() {
+    setBusy(true);
+    setOutputError(null);
+    try {
+      setLocalTts(await removeLocalTtsDownload());
+      const current = await fetchVoiceOutput();
+      setOutput(current);
+      setOutputEngine(current.engine);
+    } catch {
+      setOutputError("Could not remove the download.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function applyOutput(input: {
-    engine: "browser" | "gemini";
+    engine: "browser" | "gemini" | "local";
     apiKey?: string;
     voice?: string;
   }) {
@@ -1705,7 +1762,7 @@ function VoicePanel() {
       const next = await connectVoiceOutput(input);
       setOutput(next);
       setOutputEngine(next.engine);
-      if (next.voice) setOutputVoice(next.voice);
+      if (next.voice && next.engine === "gemini") setOutputVoice(next.voice);
       setOutputKey("");
     } catch (nextError) {
       setOutputError(
@@ -1804,17 +1861,19 @@ function VoicePanel() {
       <p className="settings-card-copy">
         The voice that reads replies — voice bubbles and the speaker toggle in
         chat both use it. A Gemini connection under Models powers this
-        automatically; choosing Browser here overrides that.
+        automatically; choosing Browser or Local Voice here overrides that.
       </p>
       <label className="chat-font-field">
         Engine
         <select
           className="task-select"
           onChange={(event) => {
-            const next = event.target.value as "browser" | "gemini";
+            const next = event.target.value as "browser" | "gemini" | "local";
             setOutputEngine(next);
             if (next === "browser") {
               void applyOutput({ engine: "browser" });
+            } else if (next === "local" && localTts?.installed) {
+              void applyOutput({ engine: "local" });
             }
           }}
           value={outputEngine}
@@ -1822,10 +1881,92 @@ function VoicePanel() {
           <option value="gemini">
             Gemini TTS — Recommended (Natural Voice, Free Key)
           </option>
+          <option value="local">
+            Local Voice — Offline, No Key (150 MB Download)
+          </option>
           <option value="browser">Browser — Basic, No Key Needed</option>
         </select>
       </label>
-      {outputEngine === "browser" ? (
+      {outputEngine === "local" ? (
+        <>
+          {localTts?.installed ? (
+            <>
+              <div className="model-card-head">
+                <span className="library-chip chip-published">
+                  {output?.engine === "local" ? "Active" : "Installed"}
+                </span>
+              </div>
+              <p className="settings-card-copy">
+                Speech is generated on this computer — nothing leaves it and
+                there is no per-use cost. The voice follows the reply's
+                language automatically: Chinese → Huayan, English → Amy.
+              </p>
+              <div className="model-card-actions">
+                {output?.engine !== "local" ? (
+                  <button
+                    className="primary-button"
+                    disabled={busy}
+                    onClick={() => void applyOutput({ engine: "local" })}
+                    type="button"
+                  >
+                    Use Local Voice
+                  </button>
+                ) : null}
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => void testVoice()}
+                  type="button"
+                >
+                  Test Voice
+                </button>
+                <button
+                  className="text-button"
+                  disabled={busy}
+                  onClick={() => void removeLocalVoice()}
+                  type="button"
+                >
+                  Remove Download
+                </button>
+              </div>
+            </>
+          ) : localTts?.status === "downloading" ? (
+            <>
+              <p className="settings-card-copy">
+                Downloading the speech engine and two voices (about 150 MB) —
+                this happens once. {localTts.progress}%
+                {localTts.detail ? ` · ${localTts.detail}` : ""}
+              </p>
+              <progress
+                className="local-tts-progress"
+                max={100}
+                value={localTts.progress}
+              />
+            </>
+          ) : (
+            <>
+              <p className="settings-card-copy">
+                A one-time download (about 150 MB) puts a neural voice on this
+                computer: fully offline, free forever, no key. Chinese and
+                English voices are included; the right one is picked per reply.
+              </p>
+              {localTts?.status === "error" && localTts.detail ? (
+                <p className="form-error">{localTts.detail}</p>
+              ) : null}
+              <div className="model-card-actions">
+                <button
+                  className="primary-button"
+                  disabled={busy}
+                  onClick={() => void startLocalDownload()}
+                  type="button"
+                >
+                  Download Local Voice (150 MB)
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      ) : outputEngine === "browser" ? (
         <>
           <p className="settings-card-copy">
             Using the device's built-in voice. Pick Gemini TTS above for a
@@ -3964,7 +4105,7 @@ function AskVaenyxPanel({
     stopReplySpeech();
     const token = {};
     currentReplyToken = token;
-    if (voiceOutput?.engine === "gemini") {
+    if (voiceOutput && voiceOutput.engine !== "browser") {
       try {
         const clean = cleanSpeechText(text).slice(0, 4000);
         if (!clean) return;
@@ -4729,7 +4870,8 @@ function AskVaenyxPanel({
         if (
           !wantsVoiceReply ||
           voicePrewarm ||
-          voiceOutput?.engine !== "gemini"
+          !voiceOutput ||
+          voiceOutput.engine === "browser"
         ) {
           return;
         }

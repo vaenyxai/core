@@ -34,6 +34,7 @@ import {
   ConnectVoiceOutputRequestSchema,
   SpeakRequestSchema,
   SpeakResponseSchema,
+  LocalTtsStatusSchema,
   StopTurnRequestSchema,
   VisionStatusSchema,
   VisionDescribeResponseSchema,
@@ -200,10 +201,16 @@ import {
   getVoiceOutput,
   getVoiceStatus,
   readVoiceAudio,
+  resetVoiceOutputIfLocal,
   saveVoiceAudio,
   synthesizeSpeech,
   transcribeVoice,
 } from "../core/voice.js";
+import {
+  getLocalTtsStatus,
+  removeLocalTts,
+  startLocalTtsInstall,
+} from "../core/voice-local.js";
 import {
   describeImage,
   getVisionStatus,
@@ -3864,7 +3871,10 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return getVoiceOutput(context.config.secretsDirectory);
+      return getVoiceOutput(
+        context.config.secretsDirectory,
+        context.config.dataDirectory,
+      );
     },
   );
 
@@ -3888,6 +3898,7 @@ export async function registerGatewayRoutes(
       try {
         return connectVoiceOutput(
           context.config.secretsDirectory,
+          context.config.dataDirectory,
           request.body,
         );
       } catch (error) {
@@ -3897,8 +3908,69 @@ export async function registerGatewayRoutes(
               "No key: paste a Google AI Studio key, or connect Gemini under Models first to reuse its key.",
           });
         }
+        if (
+          error instanceof Error &&
+          error.message === "LOCAL_TTS_NOT_INSTALLED"
+        ) {
+          return reply.code(400).send({
+            error: "Local voice is not installed yet — download it first.",
+          });
+        }
         throw error;
       }
+    },
+  );
+
+  // Local voice (offline Piper TTS): status / start the ~150 MB download /
+  // remove it again. The download runs in the background; the client polls.
+  app.get(
+    "/v1/voice/local",
+    {
+      schema: {
+        response: { 200: LocalTtsStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return getLocalTtsStatus(context.config.dataDirectory);
+    },
+  );
+
+  app.post(
+    "/v1/voice/local/install",
+    {
+      schema: {
+        response: { 200: LocalTtsStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      startLocalTtsInstall(context.config.dataDirectory);
+      return getLocalTtsStatus(context.config.dataDirectory);
+    },
+  );
+
+  app.delete(
+    "/v1/voice/local",
+    {
+      schema: {
+        response: { 200: LocalTtsStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      removeLocalTts(context.config.dataDirectory);
+      resetVoiceOutputIfLocal(context.config.secretsDirectory);
+      return getLocalTtsStatus(context.config.dataDirectory);
     },
   );
 
@@ -3933,7 +4005,8 @@ export async function registerGatewayRoutes(
         const message = error instanceof Error ? error.message : "";
         if (message === "VOICE_OUTPUT_NOT_CONNECTED") {
           return reply.code(400).send({
-            error: "Voice output is not set to Gemini — pick it in AI Settings.",
+            error:
+              "Voice output has no speech engine — pick Gemini or Local Voice in AI Settings.",
           });
         }
         return reply.code(502).send({ error: "Speech generation failed." });
