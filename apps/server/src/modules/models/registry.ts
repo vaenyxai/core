@@ -119,14 +119,26 @@ export function initModelRegistry(config: {
   // are the free-tier presets (2026-07-22): generous free quotas, no card.
   for (const preset of OPENAI_COMPATIBLE_PRESETS) {
     const connection = connections[preset.id];
-    if (!connection?.apiKey) continue;
+    // Keys pasted for the voice engines double as chat keys — the reverse of
+    // the auto-follow rule (Oskar, dev.158; same principle vision.ts already
+    // uses): the Voice Input entry is a Groq key by construction, and the
+    // Gemini voice-output key is a Google AI Studio key. One key, every use.
+    const borrowedKey =
+      preset.id === "groq"
+        ? connections.voice?.apiKey
+        : preset.id === "gemini" &&
+            connections.voiceOutput?.engine === "gemini"
+          ? connections.voiceOutput.apiKey
+          : undefined;
+    const apiKey = connection?.apiKey ?? borrowedKey;
+    if (!apiKey) continue;
     next.register(
       new OpenAICompatibleProvider({
         id: preset.id,
         name: preset.name,
-        baseUrl: connection.baseUrl ?? preset.baseUrl,
-        apiKey: connection.apiKey,
-        model: connection.model ?? preset.model,
+        baseUrl: connection?.baseUrl ?? preset.baseUrl,
+        apiKey,
+        model: connection?.model ?? preset.model,
         requiresKey: true,
       }),
     );

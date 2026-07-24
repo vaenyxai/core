@@ -11,10 +11,17 @@ import { resolve } from "node:path";
 
 import { readProviderConnections } from "../models/connections.js";
 import { writeConnections } from "../models/provider-settings.js";
+import { initModelRegistry } from "../models/registry.js";
 import {
   isLocalTtsInstalled,
   synthesizeLocalSpeech,
 } from "./voice-local.js";
+
+// Voice keys double as chat keys (registry borrows them), so any voice
+// connection change must re-register the model backends immediately.
+function refreshRegistry(secretsDirectory: string): void {
+  initModelRegistry({ secretsDirectory });
+}
 
 const VOICE_BASE_URL = "https://api.groq.com/openai/v1";
 const DEFAULT_VOICE_MODEL = "whisper-large-v3-turbo";
@@ -134,12 +141,14 @@ export function connectVoiceOutput(
     }
     connections.voiceOutput = { engine: "local" };
     writeConnections(secretsDirectory, connections);
+    refreshRegistry(secretsDirectory);
     return getVoiceOutput(secretsDirectory, dataDirectory);
   }
   if (input.engine === "browser") {
     // Explicit browser choice sticks — it must beat the Gemini auto-follow.
     connections.voiceOutput = { engine: "browser" };
     writeConnections(secretsDirectory, connections);
+    refreshRegistry(secretsDirectory);
     return getVoiceOutput(secretsDirectory, dataDirectory);
   }
   // Gemini: bring a key, keep the one already stored (e.g. a voice change),
@@ -157,6 +166,7 @@ export function connectVoiceOutput(
     voice: input.voice?.trim() || DEFAULT_GEMINI_VOICE,
   };
   writeConnections(secretsDirectory, connections);
+  refreshRegistry(secretsDirectory);
   return getVoiceOutput(secretsDirectory, dataDirectory);
 }
 
@@ -167,6 +177,7 @@ export function resetVoiceOutputIfLocal(secretsDirectory: string): void {
   if (connections.voiceOutput?.engine === "local") {
     delete connections.voiceOutput;
     writeConnections(secretsDirectory, connections);
+    refreshRegistry(secretsDirectory);
   }
 }
 
@@ -266,6 +277,7 @@ export function connectVoice(
     ...(input.model?.trim() ? { model: input.model.trim() } : {}),
   };
   writeConnections(secretsDirectory, connections);
+  refreshRegistry(secretsDirectory);
   return getVoiceStatus(secretsDirectory);
 }
 
@@ -277,6 +289,7 @@ export function disconnectVoice(secretsDirectory: string): {
   if ("voice" in connections) {
     delete connections.voice;
     writeConnections(secretsDirectory, connections);
+    refreshRegistry(secretsDirectory);
   }
   return { connected: false, model: null };
 }

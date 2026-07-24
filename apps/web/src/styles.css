@@ -1707,15 +1707,28 @@ textarea {
 select {
   min-height: 44px;
   padding: 0 12px;
+  /* A select's min-content width is its longest option ("Gemini TTS —
+     Recommended…"), and grid/flex tracks inherit that as a minimum — on a
+     phone that stretched the whole Settings page past the viewport. Let
+     selects shrink; the browser ellipsises the closed label. */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .simple-compose-shell {
   display: grid;
-  min-height: calc(100vh - 126px);
+  /* Bottom-anchored (Oskar, dev.156): the box hugs the viewport bottom.
+     58px = workspace-content top padding + its (reduced) bottom padding. */
+  min-height: calc(100dvh - 58px);
   align-items: end;
   justify-items: center;
-  /* Bottom-anchored (Oskar, dev.156): no dead space under the compose box. */
   padding: clamp(96px, 18vh, 190px) 0 18px;
+}
+
+/* The generous scroll clearance under normal pages would push the new-chat
+   box back up — drop it on the one view that bottom-anchors. */
+.workspace-content:has(.simple-compose-shell) {
+  padding-bottom: 12px;
 }
 
 .simple-compose-panel {
@@ -2545,6 +2558,7 @@ select {
 
 .composer-status {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 5px;
@@ -3554,6 +3568,13 @@ select {
   grid-template-columns: 1fr;
   gap: 18px;
   max-width: 720px;
+}
+
+/* Grid items refuse to shrink below their content's min-width by default;
+   one wide child (a long select option, an unbroken string) would widen the
+   whole settings column past a phone screen. */
+.settings-layout > * {
+  min-width: 0;
 }
 
 .settings-card,
@@ -5083,7 +5104,9 @@ select {
   }
 
   .simple-compose-shell {
-    min-height: calc(100vh - 86px);
+    /* 78px = mobile top padding (14) + hamburger row (52) + reduced bottom
+       padding (12); dvh tracks the real visible viewport on phones. */
+    min-height: calc(100dvh - 78px);
     padding: clamp(104px, 22vh, 180px) 0 14px;
   }
 
