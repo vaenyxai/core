@@ -536,6 +536,89 @@ export async function registerGatewayRoutes(
   const requireOwner = (request: Parameters<typeof authenticateOwner>[1]) =>
     authenticateOwner(context.database, request);
 
+  // Custom Mode M3 (spec §6, "lock settings"): with the flag on, a session
+  // inside that mode cannot reach ANY settings mutation — enforced here in
+  // one place, the kernel floor, regardless of what the UI shows. Reads
+  // stay open (the composer needs the provider list); App-Profile token
+  // reveals are blocked explicitly even though they are GETs. Logging out
+  // of the OWN session stays allowed; mode management routes have their own
+  // stricter any-mode guard.
+  const LOCKED_MUTATION_PREFIXES = [
+    "/v1/settings",
+    "/v1/models/",
+    "/v1/voice/connect",
+    "/v1/voice/output",
+    "/v1/voice/local",
+    "/v1/vision/engine",
+    "/v1/app-profiles",
+    "/v1/system/backup",
+    "/v1/system/restart",
+    "/v1/system/shutdown",
+    "/v1/auth/change-password",
+    "/v1/auth/logout-all",
+  ];
+  app.addHook("preHandler", async (request, reply) => {
+    const path = request.url.split("?")[0] ?? "";
+    const candidateMutation =
+      request.method !== "GET" &&
+      LOCKED_MUTATION_PREFIXES.some((prefix) => path.startsWith(prefix));
+    const candidateReveal =
+      path.startsWith("/v1/app-profiles/") && path.endsWith("/token");
+    if (!candidateMutation && !candidateReveal) return;
+    const owner = requireOwner(request);
+    if (!owner?.modeId) return;
+    const mode = findMode(context.database, owner.modeId);
+    if (!mode?.lockSettings) return;
+    return reply.code(403).send({
+      error: "Settings are locked in this mode.",
+    });
+  });
+
+  // Custom Mode sandbox hardening: direct-id access respects the mode
+  // boundary — a conversation, thread or task belonging to another mode is
+  // simply not found (404), exactly as if it did not exist. One hook covers
+  // every /:id route for the three content families.
+  app.addHook("preHandler", async (request, reply) => {
+    const path = request.url.split("?")[0] ?? "";
+    const conversationMatch = path.match(
+      /^\/v1\/ask-vaenyx\/conversations\/([^/]+)/,
+    );
+    const threadMatch = path.match(/^\/v1\/threads\/([^/]+)/);
+    const taskMatch = path.match(/^\/v1\/tasks\/([^/]+)/);
+    if (!conversationMatch && !threadMatch && !taskMatch) return;
+    const owner = requireOwner(request);
+    if (!owner) return; // the handler's own 401 handling runs
+    const sessionMode = owner.modeId ?? null;
+    const check = (
+      table: string,
+      id: string,
+      label: string,
+    ): { error: string } | null => {
+      const row = context.database.sqlite
+        .prepare(`SELECT mode_id FROM ${table} WHERE id = ?`)
+        .get(decodeURIComponent(id)) as
+        | { mode_id: string | null }
+        | undefined;
+      if (row && (row.mode_id ?? null) !== sessionMode) {
+        return { error: `${label} not found.` };
+      }
+      return null;
+    };
+    const denied =
+      (conversationMatch &&
+        check(
+          "ask_vaenyx_conversations",
+          conversationMatch[1] ?? "",
+          "Conversation",
+        )) ||
+      (threadMatch &&
+        check("vaenyx_threads", threadMatch[1] ?? "", "Thread")) ||
+      (taskMatch && check("tasks", taskMatch[1] ?? "", "Task"));
+    if (denied) {
+      return reply.code(404).send(denied);
+    }
+  });
+
   // Stream an Ask Vaenyx / Task reply as Server-Sent Events. Owner auth + body
   // validation run before this (normal Fastify); here we hijack the raw socket
   // because Fastify's serializer/onSend cannot describe an event stream. That

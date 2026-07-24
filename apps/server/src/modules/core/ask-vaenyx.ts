@@ -9,7 +9,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
-import { resolveProvider } from "../models/registry.js";
+import { getModelRegistry, resolveProvider } from "../models/registry.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
@@ -94,6 +94,10 @@ function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
 
 function getAskVaenyxFailureMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : "CODEX_UNKNOWN_ERROR";
+
+  if (code === "MODE_LOCAL_ONLY_UNAVAILABLE") {
+    return "This mode allows the local model only, and no local model is connected. The account owner can connect one under Models (Local model), or relax this mode's restriction.";
+  }
 
   if (code === "CODEX_NOT_INSTALLED") {
     return "Vaenyx Chat could not start because the independent Codex CLI is not installed. Run Vaenyx-Connect-Codex.cmd, then try again.";
@@ -596,6 +600,24 @@ export async function createAskVaenyxMessage(
 
   const baseContext = getConversationProjectContext(database, conversationId);
   let projectContext = baseContext;
+  // Custom Mode M3: a conversation inside a mode carries the mode's
+  // natural-language rules as standing instructions, and "local only"
+  // hard-forces the local model further down (code is the floor — the
+  // rules text can only make things stricter, never looser).
+  const modeRow = database.sqlite
+    .prepare(
+      `SELECT modes.name AS name, modes.rules AS rules,
+              modes.local_only AS local_only
+       FROM ask_vaenyx_conversations
+       JOIN modes ON modes.id = ask_vaenyx_conversations.mode_id
+       WHERE ask_vaenyx_conversations.id = ?`,
+    )
+    .get(conversationId) as
+    | { name: string; rules: string; local_only: number }
+    | undefined;
+  if (modeRow?.rules.trim()) {
+    projectContext = `Custom Mode rules — this conversation runs inside the restricted mode "${modeRow.name}". The account owner set these standing rules; they override any conflicting request made in this conversation: ${modeRow.rules.trim()}${projectContext ? `\n\n${projectContext}` : ""}`;
+  }
   if (options?.suggestRoutine) {
     const suggestion = options.suggestRoutine;
     projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner has a saved Routine "${suggestion.name}" — ${suggestion.description}. If it genuinely fits what they are asking, briefly offer it at the very end of your reply (for example: "Want me to use ${suggestion.name} for this?") and stop there. If it does not clearly fit, ignore this note entirely.`;
@@ -626,7 +648,17 @@ export async function createAskVaenyxMessage(
           model_name: string | null;
         }
       | undefined;
-    const provider = resolveProvider(settingsRow?.model_provider_id);
+    let provider = resolveProvider(settingsRow?.model_provider_id);
+    // "Local model only" (spec 建议 F): enforced in code, not by the rules
+    // text — the mode's chats can only ever reach the local backend, which
+    // also means no cloud calls and no web access for them.
+    if (modeRow?.local_only === 1) {
+      const localProvider = getModelRegistry().get("local");
+      if (!localProvider) {
+        throw new Error("MODE_LOCAL_ONLY_UNAVAILABLE");
+      }
+      provider = localProvider;
+    }
     // Phase B: a vision-direct backend sees the photo first-hand. The most
     // recent photo in the last few messages rides along too, so follow-up
     // questions about it ("what's the jar on the left?") keep working.
