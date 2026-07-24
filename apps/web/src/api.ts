@@ -70,6 +70,8 @@
 
 export type { Mode } from "@vaenyx/contracts";
 
+import { showErrorToast } from "./toast.js";
+
 interface ErrorResponse {
   error?: string;
 }
@@ -90,9 +92,16 @@ async function requestJson<T>(
 
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ErrorResponse;
-    throw new Error(
-      body.error ?? `Vaenyx request failed with ${response.status}.`,
-    );
+    const message =
+      body.error ?? `Vaenyx request failed with ${response.status}.`;
+    // Failed ACTIONS pop a global toast (Oskar, dev.169). Reads and auth
+    // checks stay quiet — background polls and the login flow handle their
+    // own states.
+    const method = (options.method ?? "GET").toUpperCase();
+    if (method !== "GET" && response.status !== 401) {
+      showErrorToast(message);
+    }
+    throw new Error(message);
   }
 
   return (await response.json()) as T;
@@ -910,6 +919,10 @@ export function updateMode(
 
 export function deleteMode(modeId: string): Promise<Mode> {
   return requestJson<Mode>(`/v1/modes/${modeId}`, { method: "DELETE" });
+}
+
+export function fetchModeThreads(modeId: string): Promise<VaenyxThread[]> {
+  return requestJson<VaenyxThread[]>(`/v1/modes/${modeId}/threads`);
 }
 
 export function switchMode(

@@ -569,15 +569,45 @@ export async function registerGatewayRoutes(
     if (!owner?.modeId) return;
     const mode = findMode(context.database, owner.modeId);
     if (!mode?.lockSettings) return;
+    notifyModeBlocked(
+      mode.name,
+      `A settings change was blocked in mode "${mode.name}" (${request.method} ${path}).`,
+    );
+    recordAudit(context.database, {
+      actorType: "owner",
+      actorId: owner.id,
+      actorName: owner.name,
+      action: "mode.settings.blocked",
+      decision: "denied",
+      reason: `Settings mutation blocked inside locked mode "${mode.name}": ${request.method} ${path}`,
+      resourceType: "mode",
+      resourceId: owner.modeId,
+    });
     return reply.code(403).send({
       error: "Settings are locked in this mode.",
     });
   });
 
+  // Custom Mode supervision events (spec §6, "must push"): a blocked action
+  // inside a mode notifies every device immediately — deliberately NOT
+  // presence-aware (the blocked device is the one actively viewing), and
+  // throttled so a hammering finger cannot flood the Owner's phone.
+  let lastModeBlockPushAt = 0;
+  const notifyModeBlocked = (modeName: string, body: string): void => {
+    const nowMs = Date.now();
+    if (nowMs - lastModeBlockPushAt < 60_000) return;
+    lastModeBlockPushAt = nowMs;
+    void sendPushToAllDevices(context.database, {
+      title: `Mode "${modeName}" hit a restriction`,
+      body,
+      url: "/",
+    }).catch(() => undefined);
+  };
+
   // Custom Mode sandbox hardening: direct-id access respects the mode
-  // boundary — a conversation, thread or task belonging to another mode is
-  // simply not found (404), exactly as if it did not exist. One hook covers
-  // every /:id route for the three content families.
+  // boundary — a conversation, thread or task belonging to ANOTHER mode is
+  // simply not found (404) for a session inside a mode. User Mode (null)
+  // passes everything: it is the god view the supervision window uses.
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?")[0] ?? "";
     const conversationMatch = path.match(
@@ -588,7 +618,8 @@ export async function registerGatewayRoutes(
     if (!conversationMatch && !threadMatch && !taskMatch) return;
     const owner = requireOwner(request);
     if (!owner) return; // the handler's own 401 handling runs
-    const sessionMode = owner.modeId ?? null;
+    if (!owner.modeId) return; // User Mode sees into every sandbox
+    const sessionMode = owner.modeId;
     const check = (
       table: string,
       id: string,
@@ -615,6 +646,21 @@ export async function registerGatewayRoutes(
         check("vaenyx_threads", threadMatch[1] ?? "", "Thread")) ||
       (taskMatch && check("tasks", taskMatch[1] ?? "", "Task"));
     if (denied) {
+      const mode = findMode(context.database, sessionMode);
+      notifyModeBlocked(
+        mode?.name ?? sessionMode,
+        `Mode "${mode?.name ?? sessionMode}" tried to open content outside its sandbox and was blocked.`,
+      );
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "mode.sandbox.blocked",
+        decision: "denied",
+        reason: `Cross-sandbox access blocked in mode "${mode?.name ?? sessionMode}": ${request.method} ${path}`,
+        resourceType: "mode",
+        resourceId: sessionMode,
+      });
       return reply.code(404).send(denied);
     }
   });
@@ -3853,6 +3899,37 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
       }
       return listModes(context.database);
+    },
+  );
+
+  // Supervision view window (spec §6, M4): from User Mode, list any mode's
+  // threads — the god view. PIN-free by design: the main account login IS
+  // the authority here.
+  app.get<{ Params: { id: string } }>(
+    "/v1/modes/:id/threads",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: Type.Array(VaenyxThreadSchema),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
+      }
+      if (!findMode(context.database, request.params.id)) {
+        return reply.code(404).send({ error: "Mode not found." });
+      }
+      return listVaenyxThreads(context.database, owner.id, request.params.id);
     },
   );
 

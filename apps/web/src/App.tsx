@@ -138,6 +138,7 @@ import {
   deleteMode,
   switchMode,
   exitMode,
+  fetchModeThreads,
   type Mode,
   type LocalTtsStatus,
   postPresenceHeartbeat,
@@ -174,6 +175,7 @@ import {
   updateVaenyxThreadTitle,
 } from "./api.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
+import { setToastListener, showErrorToast } from "./toast.js";
 import { useI18n } from "./i18n.js";
 import {
   getCodexAuthCopy,
@@ -2262,13 +2264,33 @@ function NotificationsPanel() {
     reloadDiagnostics();
     if (!supported) return;
     // Repair first (the browser may have silently dropped the subscription),
-    // then show the true state.
-    void healPushSubscription()
-      .then(() => pushWorkerReady())
-      .then((registration) => registration.pushManager.getSubscription())
-      .then((subscription) => setEnabled(Boolean(subscription)))
-      .then(() => reloadDiagnostics())
-      .catch(() => undefined);
+    // then show the true state — and when repair is impossible, say WHY
+    // instead of quietly showing Off (Oskar, dev.169: it kept turning off).
+    void (async () => {
+      await healPushSubscription().catch(() => false);
+      const registration = await pushWorkerReady().catch(() => null);
+      const subscription = registration
+        ? await registration.pushManager.getSubscription().catch(() => null)
+        : null;
+      setEnabled(Boolean(subscription));
+      reloadDiagnostics();
+      let wanted = false;
+      try {
+        wanted = window.localStorage.getItem(PUSH_WANTED_KEY) === "1";
+      } catch {
+        // Best-effort.
+      }
+      if (wanted && !subscription) {
+        const reason =
+          Notification.permission === "denied"
+            ? "Notifications were ON for this device, but the browser or system has BLOCKED them since — re-allow notifications for this site, then press Turn On again."
+            : Notification.permission === "default"
+              ? "Notifications were ON for this device, but the permission was reset — press Turn On to re-enable."
+              : "Notifications were ON for this device, but the subscription could not be repaired automatically — press Turn On again.";
+        setError(reason);
+        showErrorToast(reason);
+      }
+    })();
   }, [supported]);
 
   async function enable() {
@@ -3316,6 +3338,152 @@ const MODE_TEMPLATES = [
   },
 ];
 
+// Global error toasts (Oskar, dev.169): api.ts publishes every failed
+// mutation here; toasts stack top-center and dismiss on tap or timeout.
+function ToastHost() {
+  const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
+  useEffect(() => {
+    let nextId = 1;
+    setToastListener((text) => {
+      const id = nextId;
+      nextId += 1;
+      setToasts((current) => [...current.slice(-2), { id, text }]);
+      window.setTimeout(
+        () => setToasts((current) => current.filter((toast) => toast.id !== id)),
+        6000,
+      );
+    });
+    return () => setToastListener(null);
+  }, []);
+  if (toasts.length === 0) return null;
+  return (
+    <div className="toast-host">
+      {toasts.map((toast) => (
+        <button
+          className="toast-item"
+          key={toast.id}
+          onClick={() =>
+            setToasts((current) =>
+              current.filter((item) => item.id !== toast.id),
+            )
+          }
+          type="button"
+        >
+          {toast.text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Re-ask the Enter PIN whenever the app is (re)opened into a gated mode
+// (Oskar, dev.169): the session stays in its last mode across opens, but a
+// mode with an Enter PIN must be unlocked again each time the app starts.
+const MODE_PIN_SESSION_KEY = "vaenyx.modePinOk";
+
+function modePinVerifiedThisSession(modeId: string): boolean {
+  try {
+    return window.sessionStorage.getItem(MODE_PIN_SESSION_KEY) === modeId;
+  } catch {
+    return true;
+  }
+}
+
+export function markModePinVerified(modeId: string): void {
+  try {
+    window.sessionStorage.setItem(MODE_PIN_SESSION_KEY, modeId);
+  } catch {
+    // Best-effort.
+  }
+}
+
+function ModePinGate({
+  mode,
+  onVerified,
+}: {
+  mode: Mode;
+  onVerified: () => void;
+}) {
+  const [secret, setSecret] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function unlock() {
+    if (!secret.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await switchMode(mode.id, secret.trim());
+      markModePinVerified(mode.id);
+      onVerified();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : "Wrong PIN.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function leave() {
+    setBusy(true);
+    setError(null);
+    try {
+      // Without an exit PIN this returns straight to User Mode; with one,
+      // the typed secret must open the exit gate too.
+      await exitMode(secret.trim() || undefined);
+      window.location.reload();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : "Could not exit.",
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mode-gate-backdrop">
+      <div className="mode-gate-card">
+        <p className="eyebrow">Restricted Mode</p>
+        <h2>{mode.name}</h2>
+        <p className="settings-card-copy">
+          This device is in the mode "{mode.name}". Enter its PIN to
+          continue — the account password always works too.
+        </p>
+        <input
+          autoFocus
+          onChange={(event) => setSecret(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void unlock();
+          }}
+          placeholder="PIN Or Account Password"
+          type="password"
+          value={secret}
+        />
+        <div className="model-card-actions">
+          <button
+            className="primary-button"
+            disabled={busy || !secret.trim()}
+            onClick={() => void unlock()}
+            type="button"
+          >
+            Unlock
+          </button>
+          <button
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => void leave()}
+            type="button"
+          >
+            Exit To User Mode
+          </button>
+        </div>
+        {error ? <p className="form-error">{error}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 // The persistent "you are in a mode" marker (spec §6, 建议 A): always
 // visible while a session is switched into a Custom Mode, with the exit
 // gate built in. Exit PIN or the account password both open it.
@@ -3397,6 +3565,42 @@ function ModesPanel() {
   // Which mode's Enter is asking for its PIN right now (null = none).
   const [enterFor, setEnterFor] = useState<string | null>(null);
   const [enterSecret, setEnterSecret] = useState("");
+  // Supervision view window (M4): which mode is expanded, its thread list,
+  // and the messages of the thread being read. PIN-free from User Mode.
+  const [viewingModeId, setViewingModeId] = useState<string | null>(null);
+  const [viewThreads, setViewThreads] = useState<VaenyxThread[]>([]);
+  const [viewMessages, setViewMessages] = useState<AskVaenyxMessage[] | null>(
+    null,
+  );
+  const [viewThreadTitle, setViewThreadTitle] = useState("");
+
+  async function openModeView(modeId: string) {
+    if (viewingModeId === modeId) {
+      setViewingModeId(null);
+      setViewMessages(null);
+      return;
+    }
+    setViewingModeId(modeId);
+    setViewMessages(null);
+    try {
+      setViewThreads(await fetchModeThreads(modeId));
+    } catch {
+      setViewThreads([]);
+    }
+  }
+
+  async function openModeThread(thread: VaenyxThread) {
+    setViewThreadTitle(thread.title);
+    try {
+      if (thread.kind === "chat" && thread.conversationId) {
+        setViewMessages(await fetchAskVaenyxMessages(thread.conversationId));
+      } else if (thread.taskId) {
+        setViewMessages(await fetchTaskMessages(thread.taskId));
+      }
+    } catch {
+      setViewMessages([]);
+    }
+  }
 
   useEffect(() => {
     void fetchModes()
@@ -3415,6 +3619,9 @@ function ModesPanel() {
     setError(null);
     try {
       await switchMode(mode.id, secret);
+      // Entering counts as PIN-verified for this browser session; a fresh
+      // app open will ask again (ModePinGate).
+      markModePinVerified(mode.id);
       // A full reload re-fetches everything through the new mode's lens.
       window.location.reload();
     } catch (nextError) {
@@ -3690,9 +3897,57 @@ function ModesPanel() {
                     </button>
                   </div>
                 )}
-                <p className="library-note">
-                  Supervision: view window + push alerts to User Mode (coming).
-                </p>
+                <div className="model-card-actions">
+                  <button
+                    className="text-button"
+                    onClick={() => void openModeView(mode.id)}
+                    type="button"
+                  >
+                    {viewingModeId === mode.id
+                      ? "Hide Activity"
+                      : "View Activity"}
+                  </button>
+                </div>
+                {viewingModeId === mode.id ? (
+                  <div className="mode-view-window">
+                    {viewThreads.length === 0 ? (
+                      <p className="library-note">
+                        Nothing in this mode yet.
+                      </p>
+                    ) : (
+                      viewThreads.map((thread) => (
+                        <button
+                          className="mode-view-thread"
+                          key={thread.id}
+                          onClick={() => void openModeThread(thread)}
+                          type="button"
+                        >
+                          <span>{thread.title}</span>
+                          <small>
+                            {thread.kind === "task" ? "Task" : "Chat"}
+                          </small>
+                        </button>
+                      ))
+                    )}
+                    {viewMessages ? (
+                      <div className="mode-view-messages">
+                        <strong>{viewThreadTitle}</strong>
+                        {viewMessages.length === 0 ? (
+                          <p className="library-note">No messages.</p>
+                        ) : (
+                          viewMessages.map((message) => (
+                            <div
+                              className={`mode-view-message mode-view-${message.role}`}
+                              key={message.id}
+                            >
+                              <MarkdownMessage content={message.content} />
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>
@@ -7989,10 +8244,15 @@ function BackupPanel() {
 function SettingsPanel({
   settings,
   onUpdate,
+  sessionMode,
 }: {
   settings: InstanceSettings;
   systemStatus: SystemStatus | null;
   onUpdate: (settings: InstanceSettings) => void;
+  // Custom Mode M3: the mode this session is in (null = User Mode); with
+  // lockSettings the whole page is replaced by a locked notice (the server
+  // enforces the same rule — this is the honest UI on top of it).
+  sessionMode: Mode | null;
 }) {
   const { lang, setLang, t } = useI18n();
   const [instanceName, setInstanceName] = useState(settings.instanceName);
@@ -8203,6 +8463,21 @@ function SettingsPanel({
     }
   }
 
+  if (sessionMode?.lockSettings) {
+    return (
+      <div className="settings-layout">
+        <section className="settings-card">
+          <p className="eyebrow">Restricted Mode</p>
+          <h2>Settings Are Locked</h2>
+          <p className="settings-card-copy">
+            The mode "{sessionMode.name}" locks all settings. Exit to User
+            Mode (the badge in the corner) to change anything.
+          </p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="settings-layout">
       <nav aria-label="Settings sections" className="library-subtabs">
@@ -8241,13 +8516,15 @@ function SettingsPanel({
         >
           Sharing
         </button>
-        <button
-          className={settingsTab === "modes" ? "active" : ""}
-          onClick={() => setSettingsTab("modes")}
-          type="button"
-        >
-          Modes
-        </button>
+        {sessionMode ? null : (
+          <button
+            className={settingsTab === "modes" ? "active" : ""}
+            onClick={() => setSettingsTab("modes")}
+            type="button"
+          >
+            Modes
+          </button>
+        )}
         <button
           className={settingsTab === "manual" ? "active" : ""}
           onClick={() => setSettingsTab("manual")}
@@ -13078,9 +13355,24 @@ function VaenyxWorkspace({
   const appShellStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
   } as CSSProperties;
+  // Enter-PIN re-check on every app open (Oskar, dev.169): the session
+  // remembers its mode, but a gated mode asks for its PIN again each time
+  // the app starts on this device.
+  const [modePinOk, setModePinOk] = useState(
+    () =>
+      !workspace.mode?.hasEnterPin ||
+      modePinVerifiedThisSession(workspace.mode.id),
+  );
 
   return (
     <main className="app-shell" style={appShellStyle}>
+      <ToastHost />
+      {workspace.mode?.hasEnterPin && !modePinOk ? (
+        <ModePinGate
+          mode={workspace.mode}
+          onVerified={() => setModePinOk(true)}
+        />
+      ) : null}
       <button
         aria-label="Hard refresh"
         className="hard-refresh-button"
@@ -13473,6 +13765,7 @@ function VaenyxWorkspace({
         ) : screen === "settings" && settings ? (
           <SettingsPanel
             onUpdate={setSettings}
+            sessionMode={workspace.mode ?? null}
             settings={settings}
             systemStatus={systemStatus}
           />

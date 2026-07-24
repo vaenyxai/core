@@ -4108,6 +4108,101 @@ select {
   min-width: 0;
 }
 
+/* Global error toasts: stacked top-center, tap to dismiss. */
+.toast-host {
+  position: fixed;
+  z-index: 90;
+  top: calc(14px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  width: min(92vw, 460px);
+}
+
+.toast-item {
+  padding: 11px 16px;
+  border: 1px solid rgba(223, 147, 138, 0.5);
+  border-radius: 13px;
+  background: rgba(58, 34, 32, 0.96);
+  color: #f0d9d5;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
+}
+
+/* Full-screen Enter-PIN gate shown when the app opens into a gated mode. */
+.mode-gate-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(12, 12, 11, 0.92);
+  backdrop-filter: blur(6px);
+}
+
+.mode-gate-card {
+  display: grid;
+  gap: 12px;
+  width: min(92vw, 400px);
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #1c1b19;
+}
+
+/* Supervision view window inside a mode card (M4). */
+.mode-view-window {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.mode-view-thread {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mode-view-thread small {
+  color: var(--text-faint);
+}
+
+.mode-view-messages {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.mode-view-message {
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mode-view-message.mode-view-owner {
+  background: var(--accent-soft);
+}
+
 /* Persistent "you are in a mode" marker with its exit gate (spec §6). */
 .mode-badge {
   position: fixed;
