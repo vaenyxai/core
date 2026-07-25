@@ -1,7 +1,7 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-25.1** · effective from **2026-07-26** · verified **2026-07-25**
+> Schedule version **2026-07-25.2** · effective from **2026-07-26** · verified **2026-07-25**
 > Client **0.2.0-dev.173** · Server **vaenyx-core-cloud (migrations 0001-0003)**
 > Minimum legal set **v2.5** · minimum copy version **2.5**
 
@@ -140,10 +140,10 @@ Required gates: `legal.notice.modelConnect.cloud`, `legal.notice.modelConnect.lo
 
 ## Unverified items (stated as unverified, not as met)
 
-### Cloudflare data-processing terms — `external-unverified`
+### Cloudflare data-processing terms — `verified-with-caveat`
 
-- **Issue:** Not yet verified that the customer agreement in force incorporates a data processing addendum meeting the APP 8.1 standard stated in the Privacy Policy.
-- **Action required:** Verify the account's agreement and DPA incorporation; record subprocessor, security, breach-notification and deletion terms.
+- **Issue:** undefined
+- **Action required:** Re-check on material Cloudflare terms revisions. If certainty is needed, ask Cloudflare to confirm in writing that the DPA applies to personal information governed by the Australian Privacy Act.
 
 ### Operator mailbox — `external-unverified`
 
