@@ -152,7 +152,8 @@ Required gates: `legal.notice.community.discord`
 - **Countries:** United States
 - **Overseas basis:** APP 8.1 reasonable steps - CURRENTLY UNVERIFIED, see unverifiedItems.
 - **Retention:** No implemented deletion process. A fixed period is deliberately not stated (Core Privacy Policy clause 9.6).
-- **⚠ Production blocker:** This flow must not remain active at the Effective Date until the mailbox is moved to a provider under verified data-processing terms with an implemented retention process. After migration this entry must identify the actual provider, recipients, countries, safeguards and verified deletion rule. Disclosing the overseas handling is not treated as compliance with APP 8.1.
+- **Legal position:** Whether a contractual safeguard is legally required here is not settled. APP 8.1 binds an APP entity; a small business operator with annual turnover of $3 million or less is not an APP entity unless an exclusion applies. The Operator is a new company with no turnover, so the exemption is likely to apply — but that turns on two questions that have not been answered: (1) whether the Operator is a related body corporate of any organisation that is itself covered by the Privacy Act, which depends on the actual shareholding, not on shared directorship; and (2) whether any other exclusion applies. Independently of the answer, this Policy states that we apply the Australian Privacy Principles as our baseline whether or not they legally bind us, so the practical steps are taken either way.
+- **Planned steps:** Move the mailbox off consumer webmail to a business mailbox with two-factor authentication and restricted access; keep privacy@, abuse@ and security@ as aliases of it; ask senders not to include credentials, API keys or full conversations (already stated at every report entry point); delete correspondence that no longer needs to be kept. A signed data-processing agreement is the stronger form of the reasonable steps APP 8.1 would require, and remains the target — but APP 8.1 calls for steps reasonable in the circumstances, not one particular instrument.
 
 ### `flow.community.discord`
 
@@ -190,6 +191,6 @@ Required gates: `legal.notice.community.discord`
 
 ### Operator mailbox — `external-unverified`
 
-- **Issue:** hello@vaenyx.ai routes to a consumer Gmail account with no data-processing terms. Minimisation, the auto-reply notice and prompt triage supplement but do not replace enforceable contractual safeguards.
-- **Note:** Contrast with Cloudflare above: no equivalent verified position exists for the mailbox.
-- **Action required:** Move the mailbox to a service under data-processing terms, or re-establish the lawful footing for the flow.
+- **Issue:** Correspondence to hello@vaenyx.ai lands in a mailbox that is not under verified data-processing terms. No verified APP 8.1 contractual safeguard exists for this flow.
+- **Note:** Not treated as an absolute launch blocker. Whether APP 8.1 binds the Operator at all depends on the small-business-operator question recorded against this flow; and where it does bind, it requires reasonable steps in the circumstances rather than a specific contract. What is not acceptable either way is claiming a safeguard we do not have — hence this entry.
+- **Action required:** Answer the small-business-operator and related-body-corporate questions (a question for the Operator's accountant or a lawyer, not for this document). In parallel, move to a business mailbox and pursue a data-processing agreement; if one is obtained, record the actual provider, recipients, countries, safeguards and deletion rule here.
