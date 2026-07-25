@@ -1,6 +1,6 @@
 ﻿# Vaenyx — In-App Contextual Disclaimers (Copy Pack)
 
-> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set. Drafted with AI assistance and adopted by the Operator; it is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
+> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set, adopted by the Operator. It is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
 
 | Field | Value |
 |---|---|

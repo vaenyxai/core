@@ -1,6 +1,6 @@
 ﻿# Vaenyx — Contributor Agreement (Community Library)
 
-> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set. Drafted with AI assistance and adopted by the Operator; it is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
+> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set, adopted by the Operator. It is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
 
 **Effective date:** 26 July 2026 — *the acceptance-recording described in clause 17 is in operation.*
 **This Agreement is between you (the "Contributor", "you") and** Vae Foundry Pty Ltd (ACN 700 703 724), a proprietary limited company registered in Victoria, Australia (the "**Operator**", "**we**", "**us**"), the operator of the Vaenyx Community Library.

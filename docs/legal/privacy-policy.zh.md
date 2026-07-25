@@ -1,6 +1,6 @@
 # Vaenyx — 核心隐私政策(Core Privacy Policy)
 
-> **版本 3.0 —— 2026 年 7 月 26 日生效。** 本文件属于 Vaenyx 法律文件集,由 AI 协助起草并经运营方采用;仅供参考,不构成法律意见。文件集的结构见 [`README.md`](README.md);本次发布实际已建成的内容见 [`implementation-status.md`](implementation-status.md)。
+> **版本 3.0 —— 2026 年 7 月 26 日生效。** 本文件属于 Vaenyx 法律文件集,由运营方采用;仅供参考,不构成法律意见。文件集的结构见 [`README.md`](README.md);本次发布实际已建成的内容见 [`implementation-status.md`](implementation-status.md)。
 >
 > 本中文译本为与英文版逐条同步的完整译本;如有不一致,以英文版为准(见第 14.1 条),但第 13.4 条仍然适用 —— 英文优先不能成为中文告知不准确、不完整或过时的借口。
 
