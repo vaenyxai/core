@@ -24,15 +24,15 @@ this pack against `apps/web/src/i18n.tsx` (`node docs/legal/audit-copy.mjs`):
 
 | String | Change | Who was wrong |
 |---|---|---|
-| D1 `legal.disclaimer.community.install` | "It stays inactive until you enable it" → "It does nothing until you use it" | **This pack.** There is no enable toggle; installed content is declarative and simply sits there until used. |
+| D2 `legal.disclaimer.community.install` | "It stays inactive until you enable it" → "It does nothing until you use it" | **This pack.** There is no enable toggle; installed content is declarative and simply sits there until used. |
 | G1 `legal.notice.publish` | Adopts the shipped text (CC BY 4.0 grant + permanence sentence) | **This pack**, which had recorded only part of the shipped string. |
 | G3 `legal.notice.publish.signIn` | Adopts the shipped text (why a sign-in is needed) | **This pack**, same reason. |
 | H3 `legal.notice.restore` | "This can't be undone" → the shipped truth: a safety copy is taken first, so it can be undone | **This pack.** The earlier wording overstated the consequence. |
 
 Three strings still differ, and there the **app** is wrong; they ship at 2.6:
 
-- D1 — the app is missing the "does nothing until you use it" sentence.
-- F3 `legal.notice.modelConnect.local` — the app says the address "points at your own machine". A local-network address may point at a **different** machine; the pack wording says so and is the accurate one.
+- D2 — the app is missing the "does nothing until you use it" sentence.
+- F2 `legal.notice.modelConnect.local` — the app says the address "points at your own machine". A local-network address may point at a **different** machine; the pack wording says so and is the accurate one.
 - G3a `legal.consent.publish.overseas` — the app is missing the final sentence, "Consent will be obtained again if the recipient, purpose or consequences materially change." That sentence is a commitment about consent currency, not decoration.
 
 Because a consent-class string (G3a) changes, 2.6 re-triggers acceptance: the
