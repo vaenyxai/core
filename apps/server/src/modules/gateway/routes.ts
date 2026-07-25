@@ -5224,7 +5224,10 @@ export async function registerGatewayRoutes(
     // current factual description of information handling, so it must be readable
     // from inside the app alongside the Policy. Generated from
     // implementation-status.json by docs/legal/generate-status.mjs; English only.
-    "implementation-status": { en: "implementation-status.md" },
+    "implementation-status": {
+      en: "implementation-status.md",
+      zh: "implementation-status.zh.md",
+    },
     "contributor-agreement": {
       en: "contributor-agreement.md",
       zh: "contributor-agreement.zh.md",
