@@ -104,6 +104,14 @@ function Say {
   return $entry.en
 }
 
+# The answer to the language question. Anything that is not a clear "2" -
+# including no answer at all - means English, the documented default.
+function Get-LanguageChoice {
+  param($Answer)
+  if ("$Answer".Trim() -eq "2") { return "zh" }
+  return "en"
+}
+
 function Get-NodeMajor {
   param([string]$VersionText)
   if (-not $VersionText) { return 0 }
@@ -192,6 +200,16 @@ if ($SelfTest) {
   Assert-Equal "has-spaces" (Get-InstallPathWarning "C:\Program Files\Vaenyx") "a path with spaces is flagged"
   Assert-Equal "too-long" (Get-InstallPathWarning ("C:\" + ("x" * 130))) "an over-long path is flagged"
 
+  # The language question. A machine with no console answers $null, and that
+  # must mean English, not a crash - this is what broke the v0.2.0 release
+  # build, where the packaged setup died at the prompt (2026-07-26).
+  Assert-Equal "en" (Get-LanguageChoice $null) "no answer means English"
+  Assert-Equal "en" (Get-LanguageChoice "") "an empty answer means English"
+  Assert-Equal "en" (Get-LanguageChoice "1") "1 means English"
+  Assert-Equal "en" (Get-LanguageChoice "banana") "junk means English"
+  Assert-Equal "zh" (Get-LanguageChoice "2") "2 means Chinese"
+  Assert-Equal "zh" (Get-LanguageChoice " 2 ") "a padded 2 still means Chinese"
+
   # Language plumbing. A missing translation must degrade to English, never to
   # a blank line, and an unknown key must be visible rather than silent.
   $Script:Lang = "en"
@@ -258,8 +276,12 @@ if ($Language -eq "en" -or $Language -eq "zh") {
   Write-Host "  Choose a language / 选择语言" -ForegroundColor White
   Write-Host "    1) English (default)"
   Write-Host "    2) 中文"
-  $answer = Read-Host "  1 or 2"
-  if ($answer.Trim() -eq "2") { $Script:Lang = "zh" } else { $Script:Lang = "en" }
+  # Read-Host returns $null where there is no console to answer with (a CI
+  # runner, a scheduled task, output piped to a file). Never let the language
+  # question be the thing that stops an install.
+  $answer = $null
+  try { $answer = Read-Host "  1 or 2" } catch { $answer = $null }
+  $Script:Lang = Get-LanguageChoice $answer
 }
 
 Write-Host ""
