@@ -1,0 +1,102 @@
+name: Release
+
+# Builds the download the website links to, and attaches it to a GitHub
+# Release. Runs only when a version tag is pushed (or by hand), so it costs
+# nothing day to day.
+#
+# The website's Download button points at
+#   https://github.com/vaenyxai/core/releases/latest/download/vaenyx-setup.zip
+# which GitHub always resolves to the newest release. Publishing a release is
+# therefore the only step needed to ship an update -- nothing to re-upload,
+# nothing on the site to edit, and no way for the two to drift apart.
+#
+# Windows runner on purpose: the packaged .cmd launchers must carry CRLF line
+# endings, and the packaging script is the same one used locally
+# (scripts/Vaenyx-Make-Release-Zip.ps1), so what is tested is what ships.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A broken build must never become a download.
+      - name: Run checks
+        run: npm run check
+
+      - name: Build the download
+        shell: pwsh
+        run: ./scripts/Vaenyx-Make-Release-Zip.ps1
+
+      # Prove the artefact is installable before anyone can download it:
+      # extract it somewhere clean and run the real setup end to end, with the
+      # elevated step skipped (a CI runner has no business registering a
+      # boot task) on a port that cannot collide.
+      - name: Verify the download installs
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP "vaenyx-release-check"
+          Expand-Archive -Path "release/vaenyx-setup.zip" -DestinationPath $dest -Force
+          $app = Join-Path $dest "Vaenyx"
+          & "$app/scripts/Vaenyx-Setup.ps1" -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "setup self-test failed" }
+          & "$app/scripts/Vaenyx-Setup.ps1" -SkipAutostart -NoBrowser -Port 3111
+          if ($LASTEXITCODE -ne 0) { throw "setup failed on the packaged download" }
+          $status = Invoke-RestMethod "http://127.0.0.1:3111/v1/system/status" -TimeoutSec 20
+          if ($status.status -ne "ready") { throw "the installed instance never became ready" }
+          $bootstrap = Invoke-RestMethod "http://127.0.0.1:3111/v1/bootstrap/status" -TimeoutSec 20
+          if (-not $bootstrap.setupRequired) { throw "a fresh install should ask for owner setup" }
+          Write-Host "Packaged download installs and boots clean."
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            release/vaenyx-setup.zip
+            release/vaenyx-setup.zip.sha256
+          generate_release_notes: true
+          body: |
+            Download **vaenyx-setup.zip**, unzip it, and double-click
+            **Vaenyx-Setup.cmd** inside the `Vaenyx` folder.
+
+            Setup checks the computer, installs Node.js if it is missing,
+            fetches and builds Vaenyx, offers to start it with Windows, then
+            opens the first-run wizard. Everything stays on your machine.
+
+            Verify the download (optional): the SHA-256 is in
+            `vaenyx-setup.zip.sha256`.
+
+      - name: Keep the package as a build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaenyx-setup
+          path: |
+            release/vaenyx-setup.zip
+            release/vaenyx-setup.zip.sha256
+          retention-days: 14

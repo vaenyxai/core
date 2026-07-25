@@ -37,3 +37,6 @@ npm-debug.log*
 # Playwright UI smoke
 test-results/
 playwright-report/
+
+# Packaged download built by scripts/Vaenyx-Make-Release-Zip.ps1
+release/

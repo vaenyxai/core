@@ -51,6 +51,14 @@ try {
   Pop-Location
 }
 
+# Never ship a package inside the package. A previous build's output was once
+# committed by accident, which quietly doubled the download size.
+$nestedRelease = Join-Path $payload "release"
+if (Test-Path $nestedRelease) {
+  Remove-Item $nestedRelease -Recurse -Force
+  Write-Host "  Dropped a stale release/ folder from the payload."
+}
+
 # Normalise the launchers to CRLF. git archive writes whatever is in the
 # object database (LF), and a LF .cmd is a broken .cmd.
 $crlfCount = 0
