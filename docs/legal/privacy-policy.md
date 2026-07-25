@@ -1,301 +1,281 @@
-﻿# Vaenyx — Privacy Policy
+# Vaenyx — Core Privacy Policy
 
-> **FINAL v2.4 (2026-07-25).** v2.3 makes one alignment edit under clause 21.3's amend-to-match limb: community improvement sharing (clause 8.1) is stated as available "where available in your version" — the install-time sharing choice ships now, the upload capability ships later. v2.2 incorporates the second independent legal review round of 2026-07-07. v2.1 incorporated the independent legal review round of 2026-07-05. This Policy was prepared by Claude (an AI) in the style of senior Australian technology counsel and is adopted as part of the operative Vaenyx legal set under the operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not legal advice. A one-time professional review of the Contributor Agreement / publishing terms remains recommended before community publishing opens. **v2.4 (2026-07-25)** resolves every placeholder — the Operator is Vae Foundry Pty Ltd (ACN 700 703 724), registered in Victoria, Australia, and the effective date is 26 July 2026 — and amends the statements identified by the feature-existence check so that no capability is described as existing before it ships.
+> **FINAL v3.0 (2026-07-25).** v3.0 restructures this Policy into the three-layer architecture
+> adopted after the second independent review: this **Core Privacy Policy** states the principles,
+> rights and information-handling rules; **Part A of the dated Current Implementation and
+> Data-Handling Schedule** (`implementation-status.md`) states which data flows are actually active
+> and their current information, purposes, recipients, countries and retention; **Point-of-Use
+> Notices** are presented at or before each particular collection, use, disclosure or public-release
+> action. Provider names, endpoints, database details, current field lists, countries, retention
+> periods and capability status have been moved out of this Policy and into the Schedule, so that a
+> new capability within these existing principles and categories does not require this Policy to be
+> rewritten. Prepared by Claude (an AI) in the style of senior Australian technology counsel and
+> adopted under the operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not
+> legal advice.
 
 **Operator:** Vae Foundry Pty Ltd (ACN 700 703 724), of Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**")
-**Effective date:** 26 July 2026 *(clause 21.3 states which capabilities are and are not available as at this date)*
-**Contact:** hello@vaenyx.ai
+**Effective date:** 26 July 2026
+**Privacy contact:** hello@vaenyx.ai
 
 ---
 
-## 1. About this Policy
+## 1. Status and structure
 
-1.1 This Privacy Policy explains how we handle personal information in connection with **Vaenyx**, a free, self-hosted, local-first personal AI agent framework that you install and run on your own computer (the "**Software**"), and the optional community services that support it (the "**Community Services**", described in clause 2).
+1.1 This Core Privacy Policy explains how Vae Foundry Pty Ltd manages personal information in connection with Vaenyx and any online service that we operate.
 
-1.2 This Policy is structured around the **Australian Privacy Principles** ("**APPs**") in Schedule 1 to the *Privacy Act 1988* (Cth) (the "**Privacy Act**"). **We apply the APPs as our baseline standard whether or not the Privacy Act formally binds us**, and this Policy is written on that basis.
+1.2 We use the Australian Privacy Principles in Schedule 1 to the *Privacy Act 1988* (Cth) as our baseline standard whether or not a particular act or practice is legally subject to that Act.
 
-1.3 Vaenyx is architecturally unusual, and this Policy is deliberately blunt about the consequences: **most of your data never reaches us, because the Software runs on your device, not on our servers.** The corollary is equally important: some data flows — the ones you choose — go to third parties you connect, or become **public**. This Policy identifies each flow precisely.
+1.3 Our privacy information has three layers:
 
-1.4 This Policy should be read together with the Vaenyx Terms of Service and, if you publish content, the Contributor Agreement. Nothing in this Policy excludes, restricts or modifies any right you have under the *Australian Consumer Law* or any other law that cannot be excluded, restricted or modified by agreement.
+  (a) this Core Privacy Policy, which states the principles, rights and information-handling rules that apply across Vaenyx;
 
-## 2. Definitions
+  (b) **Part A of the dated Current Implementation and Data-Handling Schedule**, which identifies the data flows that are actually active and their current information, collection circumstances, purposes, recipients, overseas locations and retention rules; and
 
-In this Policy:
+  (c) **Point-of-Use Notices** presented at or before a particular collection, use, disclosure or public-release action.
 
-- "**Account Data**" means the information described in clause 6.2 that we hold about you if you sign in to publish.
-- "**Community Library**" means the public library of Methods and Routines published by users (shown in the product as "**Community**"), stored in a central public GitHub organisation repository operated by us (github.com/vaenyxai/community) and served to installs of the Software via a Cloudflare-hosted static index.
-- "**De-identified Improvement Pattern**" means a correction or improvement pattern derived from your use of a Method or Routine that has passed through the de-identification gate described in clause 8, so that it no longer contains information about an identifiable individual (for example, real names, amounts, addresses or file contents are removed or generalised before anything leaves your device).
-- "**Instance**" means your installed copy of the Software running on your own device.
-- "**Instance Data**" means the data your Instance stores locally, including chats, memories, files, project instruction windows, a Routine's Journal (inputs) and Gallery (results), raw corrections, Method Tokens, and your local (unpublished) library (shown in the product as the "**Library**").
-- "**Method**" means an atomic, declarative building block in the Vaenyx library model; "**Routine**" means a user-facing product composed of Methods and declarative orchestration. Library content is declarative-only (recipes and instructions, not runnable foreign code).
-- "**Merit**" means, if provided by the version of Vaenyx you use, the non-monetary creator-reputation record described in clause 10.5. As at the Effective Date, Merit is not provided (clause 10.5).
-- "**Personal information**" has the meaning given in the Privacy Act: information or an opinion about an identified individual, or an individual who is reasonably identifiable.
-- "**Publish Service**" means the operator-hosted publishing backend described in clauses 9.2 and 10.1, which runs as a Cloudflare Worker with a D1 database on Cloudflare's global edge network.
-- "**Published Content**" means a Method or Routine (including its metadata, and its de-identified examples if and when a version of the Software permits examples to be attached) that you have explicitly published to the Community Library.
-- "**Sensitive Categories**" means, for the purposes of the sharing controls in clause 8, content relating to health, to finance, or to family (including content relating to children), together with content in any category of **sensitive information** within the meaning of the Privacy Act (including racial or ethnic origin, political opinions or associations, religious or philosophical beliefs or affiliations, trade union or professional association membership, sexual orientation or practices, and criminal record) — all subject to the separate per-instance confirmation requirement in clause 8.4.
-- "**you**" means the individual who installs or uses the Software or interacts with the Community Services.
+1.4 The Current Implementation and Data-Handling Schedule is not part of the Terms of Service and does not promise that a capability exists or will be provided. Part A of that Schedule is incorporated into this Policy solely as the current factual description of our information-handling practices. Only a data flow expressly marked "active" for the version or service concerned describes an active Operator data flow.
 
-## 3. The architecture, in plain terms
+1.5 A reference in this Policy to handling that may occur if a capability is available does not state or promise that the capability exists. Current capability status is stated in the dated Schedule and product interface.
 
-3.1 **Local-first.** The Software runs on your own device. Its database (an SQLite file) and all Instance Data live on your device in a private data directory. We do not operate a server that receives, stores or processes your Instance Data. Apart from the channels described in clause 3.4 and the incidental request metadata described in clause 10.6, **we collect no personal information from your use of the Software**.
+1.6 Point-of-Use Notices supplement this Policy and do not reduce its protections. If a proposed data flow is broader than this Policy, the applicable Schedule entry or the notice presented to the individual, the broader flow must remain disabled until the materials and implementation are reconciled and any required consent is obtained.
 
-3.2 **No analytics or telemetry.** The Software contains **no analytics or usage-telemetry collection**. We do not receive crash reports, usage statistics, feature counters or device identifiers from your Instance; the only things our infrastructure receives from an Instance are the ordinary request metadata described in clauses 10.2 and 10.6, and the aggregate, non-identifying zone analytics inherent in operating the Cloudflare zones that serve the catalogue and our endpoints. Merit, thanks and ratings are not provided as at the Effective Date (clause 10.5). If Merit is introduced, it would be computed from accepted improvements, human thanks and ratings, and good standing — not from usage telemetry; any use-based signal would be anonymous and aggregate, and would be introduced only under the change process in clause 21.
+1.7 We make this Policy and the current Schedule available free of charge in an appropriate form. On request, we will take reasonable steps to provide this Policy in another reasonably requested form.
 
-3.3 **No training on your data — by us.** We never use your Instance Data, your prompts, or your Account Data to train AI models, and we do not permit others to do so on our behalf. One qualification matters enough to state here as well as in clause 11: a **cloud model provider you connect may use what you send it to train its models** under that provider's own settings and terms — review and adjust that provider's data controls (clause 11.2). That is the one configuration in which content derived from your Instance Data can end up in model training, and it is a flow between you and your chosen provider, not a use by us or on our behalf.
+## 2. Local information and Operator-held information
 
-3.4 **But data can leave your device by your choice.** We will not tell you that "nothing ever leaves your device", because that would not be true for every configuration. Data leaves your device only through the following channels, each of which operates only upon an affirmative act or choice of yours:
+2.1 Vaenyx is local-first. Information stored or processed only by an installation on a device controlled by its user is not collected or held by us merely because Vaenyx processed it locally.
 
-  (a) prompts and content sent to the **AI model provider(s) you connect** (clause 11);
-  (b) **remote access** you enable via Tailscale Funnel (clause 12);
-  (c) **De-identified Improvement Patterns** shared to the community under the sharing settings in clause 8 — this channel operates only after you make the **affirmative install-time sharing choice** described in clause 8.2, and **nothing is shared before you make that choice**;
-  (d) content and identity information when you **publish** to the Community Library (clauses 9 and 10);
-  (e) **backups** you direct to a destination of your choosing (clause 16);
-  (f) correspondence you send to us (clause 6.4); and
-  (g) **if and when thanks and ratings are available in your version** (they are not provided as at the Effective Date — clause 10.5), a **thanks or rating** you choose to submit for a community item (clauses 3.2 and 10.5) — the submission carries the item identifier and the thanks or rating itself, together with the ordinary request metadata described in clause 10.6; it requires no account and is not linked to an account unless you are signed in when you submit it.
+2.2 We collect or hold information from an installation only through an Active Data Flow identified in the Current Data-Handling Schedule.
 
-Each of these channels is described below, together with the controls you have over it.
+2.3 The Schedule distinguishes between:
 
-## 4. Information that stays on your device (and that we do not collect)
+  (a) **Local-Only Processing**, where information remains under the user's control and is not received by us;
 
-4.1 The following are stored on your device, are viewable and deletable by you, and are **not** collected by, transmitted to, or accessible to **us**. Whether any of it also leaves your device for a third party depends only on the channels in clause 3.4 — in particular, if you connect a **cloud model provider**, items (a) to (e) can form part of the model context sent to that provider (clause 11):
+  (b) **Operator Collection**, where information is received or held by infrastructure that we operate or control;
 
-  (a) your chats and conversation history;
-  (b) memories and anything you ask Vaenyx to remember, including the Vaenyx Me record (entries to which pass through your explicit approval gate before being adopted);
-  (c) files you provide to the Software;
-  (d) each Routine's Journal of inputs and Gallery of results;
-  (e) each project's two instruction windows — the manual window you write, and the automatic model-maintained summary of project-relevant preferences and facts (which you can view, edit and delete, and which is rewritten rather than appended to). Both windows are injected only into that project's model context (see clause 11 for where model context goes) and otherwise stay local;
-  (f) **raw corrections** you make to Methods and Routines, including real names, amounts and other identifying detail. Raw corrections live only in your local database and never enter any repository. Improvement of your **own** local copy of a Method or Routine is always-on and automatic, and shares nothing with us or the community; where the underlying chat or correction occurs in a conversation routed to a cloud model provider you connected, that conversation content reaches the provider under clause 11 like any other chat content;
-  (g) data received by your Instance from external applications through the local feedback endpoint (`POST /v1/library/methods/:id/feedback`). That endpoint is gated by a per-application Method Token `sendFeedback` permission — enabled by default for application tokens you issue, and able to be turned off per application — and it only ingests into your local store. Nothing received through it becomes a shared example without **both** de-identification **and** your explicit approval, regardless of your clause 8 sharing mode; and
-  (h) your private library of Methods and Routines you create or install (shown in the product as the **Library**). Everything you make defaults to your private library; content reaches the public Community Library only on your explicit publish action (clause 9).
+  (c) **User-Directed Third-Party Processing**, where the user directs their installation to communicate with an independent third party under that third party's terms; and
 
-4.2 Because we do not hold this information, we cannot access it, disclose it, produce it in response to legal process directed at us, or delete it for you. You control it directly on your device, including through the Software's viewing and deletion functions and your operating system.
+  (d) **Public Disclosure**, where an individual takes a specific action that makes identified material publicly accessible.
 
-## 5. Kinds of personal information we collect and hold (APP 3)
+2.4 The legal character of a data flow depends on how it actually operates, including who has possession or control of the information. Describing a provider as a contractor, processor or independent service does not by itself determine whether the flow is a collection, use or disclosure under the Privacy Act.
 
-5.1 We collect and hold **only** the following, and only in the circumstances stated:
+2.5 Where reasonable and practicable, individuals may interact with Vaenyx anonymously or by using a pseudonym. The Current Data-Handling Schedule identifies any Active Data Flow for which identification is required and explains why.
 
-  (a) **Account Data** (clause 6.2) — if and only if you sign in to publish;
-  (b) **Published Content** (clause 9) — if and only if you publish;
-  (c) **De-identified Improvement Patterns** (clause 8) — these are engineered **not** to be personal information; we treat the de-identification gate as a collection control, and clause 8.6 explains what to do if it ever fails — together with the minimal evidence metadata described in clause 8.3 that accompanies each shared example (likewise engineered to contain no personal information, and not directly identifying, though it may be linkable only in the limited circumstances that clause 8.3 states);
-  (d) **correspondence** (clause 6.4) — if you contact us;
-  (e) **incidental request metadata** (clause 10.6) — ordinary web-request metadata (such as IP address, timestamps, and technical metadata of the user-agent type, including user-agent strings and software or app version strings) that the Cloudflare infrastructure serving our endpoints — the improvement-sharing endpoint, the thanks/ratings channel (clause 3.4(g)), the Publish Service and the catalogue index — necessarily receives when your Instance contacts them (clauses 10.2 and 10.6);
-  (f) the **Merit record** (clause 10.5) — not collected as at the Effective Date; if and when Merit is provided, and if and only if you sign in and earn reputation entries: your account identifier and add-only reputation entries linked to your Published Content, fed by the thanks and ratings other users submit (clause 3.4(g)); and
-  (g) **Discord server moderation data** (clause 10.1) — if you join the official Vaenyx Discord server, which we administer: your Discord identity as the platform presents it to us, messages we act on as moderators, and our moderation actions concerning you — handled within Discord under Discord's terms.
+2.6 Information that is pseudonymous, hashed or not directly identifying is treated as personal information whenever an individual is reasonably identifiable from it alone or in combination with other information reasonably available to us.
 
-5.2 We do not collect government-related identifiers (such as tax file numbers or driver licence numbers), and we do not adopt, use or disclose any such identifier as our own identifier of you (APP 9).
+## 3. Kinds of personal information
 
-5.3 We do not seek to collect **sensitive information** within the meaning of the Privacy Act (such as health information). The Software's sharing controls are designed to keep Sensitive Categories on your device unless you separately and explicitly say otherwise (clause 8.4), and the Sensitive Categories are defined (clause 2) to cover **every category of sensitive information under the Privacy Act** — including racial or ethnic origin, political opinions, religious beliefs, sexual orientation and criminal record — as well as the product's own health, finance and family (including child-related) categories (finance and much family content are not Privacy Act sensitive information, but receive the same protection). The classifier that enforces clause 8.4 is automated and not infallible, so the safest setting for any sensitive content is the **review-each-item** or **off** mode (clause 8.2). Two health-specific product postures are also relevant: we publish **no official health Methods or Routines** (the seed library contains none, and we make no health claims), and before health-related content is used the Software requires a **one-time explicit acknowledgement** in addition to the persistent health disclaimer, with community health content additionally marked as not endorsed by us — these are product-safety measures and involve no collection of health information by us. If sensitive information reaches us embedded in something you chose to publish, clause 9 applies.
+3.1 The kinds of personal information that we currently collect and hold are the information fields identified in the Active Data Flows in the Current Data-Handling Schedule.
 
-5.4 **The Software is free.** There is no billing, no payment processing, and no collection of payment details. We collect no financial information about you.
+3.2 Depending on the Active Data Flow, those fields may fall within the following general categories:
 
-## 6. How we collect personal information; anonymity (APPs 2, 3 and 5)
+  (a) identity, account and contact information;
+  (b) authentication, session and access-control records;
+  (c) content and metadata deliberately submitted to an Operator Service or for public release;
+  (d) records evidencing an instruction, acknowledgement, consent, licence or other legal event;
+  (e) technical request, security and abuse-prevention information;
+  (f) support correspondence, reports, complaints and moderation records; and
+  (g) information generated or inferred from another category, but only where the Schedule identifies the generated or inferred information and its purpose.
 
-6.1 **Anonymity and pseudonymity.** You can download, install and fully use the Software — including using the Community Library — **without an account and without identifying yourself to us**. Identification is required only for publishing, because attribution and content responsibility require a verified identity — and even then, your verified identity is held by us privately, while your public attribution is a display name you set yourself (clause 9.2(b)).
+3.3 Listing a general category in clause 3.2 does not state that we currently collect every kind of information within it. The Active Data Flow entry controls the current factual description.
 
-6.2 **When you sign in to publish.** Publishing to the Community Library requires sign-in through an identity provider you choose — **Google or GitHub** (OAuth; we never receive your password). When you sign in, we collect and hold, in the Publish Service's database, the minimum needed for attribution, published-content management, Merit, moderation, and evidencing your acceptance of the Contributor Agreement:
+3.4 We collect personal information only where it is reasonably necessary for one or more of our functions or activities. We apply data minimisation and do not collect information merely because it may be technically available, convenient or potentially useful in the future.
 
-  (a) your identity provider, your account identifier with that provider, and the verified email address and account name it supplies — held **privately**, for de-duplication and enforcement (never published);
-  (b) your public **display name** — chosen by you explicitly at first publish and editable at any time; the first-publish flow pre-fills a generated pseudonym, **never your provider account name**, so your real name becomes your public byline only if you type it in yourself; this is the only identity element made public (clause 9.2(b));
-  (c) session records (an opaque session token with its creation and expiry times) while you are signed in;
-  (d) a server-side record of each acceptance of the Contributor Agreement made in the publish flow (the acceptance string's key name and copy version, the language it was rendered in, your account identifier, the identifier of the Contribution being published, and a timestamp), kept so that acceptance of the content licence can be evidenced;
-  (e) moderation records — a per-item publish ledger (item kind and identifier, version, content hash, display-name snapshot, commit reference, publish time, and any takedown time) and your account standing (including any ban flag); and
-  (f) the request logs described in clause 10.6.
+3.5 We do not intentionally solicit sensitive information unless an Active Data Flow expressly identifies:
 
-Your identity provider's own handling of your sign-in is governed by that provider's privacy policy (clause 13).
+  (a) the particular kind of sensitive information;
+  (b) the reasonably necessary function or activity;
+  (c) the individual to whom it relates; and
+  (d) the consent or statutory exception relied upon.
 
-6.3 **When you publish or share.** We collect Published Content when you explicitly publish (clause 9), and De-identified Improvement Patterns when the affirmative sharing choice and settings described in clause 8 permit an upload. In each case the collection happens because of an action or setting of yours, and this Policy — presented alongside the Terms of Service at install and available in the product — is our notification under APP 5 of the collection, its purposes, and the disclosures described in clauses 9, 13 and 14.
+3.6 If we receive unsolicited personal information, we will determine whether we could have collected it under APP 3. If we could not, we will destroy or de-identify it as soon as practicable where lawful and reasonable to do so.
 
-6.4 **When you contact us.** If you email hello@vaenyx.ai (for example, with a support question, an access or correction request, or a complaint), we collect the correspondence and your contact details in order to respond. Email to that address is delivered through **Cloudflare Email Routing** to an operator mailbox hosted by **Google (Gmail)** — a consumer mail service — and is processed **overseas** on those providers' infrastructure (the specific countries cannot practicably be listed and may change; the providers' primary corporate jurisdictions are the United States — this flow is listed in clause 13 and addressed in clause 14.2). We do not treat your act of emailing us as consent to that overseas handling. Instead, we take reasonable steps consistent with **APP 8.1** in how we operate the channel: we **minimise the personal information handled through it**, an **automatic reply** from the address notifies senders of the overseas handling, and we **triage correspondence promptly**. Help us keep the channel minimal: **do not include personal information beyond what is needed for us to act** — when reporting a de-identification failure under clause 8.6 or raising any matter that involves personal information, describe the material and where it appears rather than attaching the personal information itself; an item identifier or link is enough for us to act.
+## 4. How we collect information
 
-6.5 We collect personal information only directly from you (through the actions above and the request metadata described in clause 10.6) or, when you sign in to publish, from the identity provider you direct to supply the details in clause 6.2(a) — never from data brokers, public scraping or any other third-party source.
+4.1 We may collect personal information:
 
-## 7. Purposes of use and disclosure (APP 6)
+  (a) directly from an individual when they submit information or take an action;
+  (b) from an identity or other service that the individual directs to supply information to us;
+  (c) automatically as ordinary technical information generated when a device contacts infrastructure that we operate; or
+  (d) from another person where information is submitted about an individual, subject to APPs 3 and 4.
 
-7.1 We use and disclose the personal information in clause 5 only for the following purposes:
+4.2 For each Active Data Flow, the Current Data-Handling Schedule identifies the source, trigger, collection method, holding environment and whether information may be combined or linked with other information we hold.
 
-  (a) **operating the Community Library** — attributing, hosting, serving, versioning, safety-scanning, labelling, moderating and (where necessary) removing Published Content;
-  (b) **maintaining Merit** — recording creator reputation in accordance with clause 10.5;
-  (c) **improving shared Methods and Routines** — incorporating De-identified Improvement Patterns into the community versions of library content;
-  (d) **responding to you** — handling support requests, access and correction requests, and complaints;
-  (e) **safety and integrity** — enforcing the Terms of Service and Contributor Agreement, blocking look-alike names, revoking trusted-creator status on identity change, taking down published items, suspending or banning publishing accounts, and investigating abuse of the publishing pipeline; and
-  (f) **legal compliance** — where required or authorised by law.
+4.3 We collect personal information only by lawful and fair means and, where reasonable and practicable, directly from the individual concerned.
 
-7.2 We do not use or disclose your personal information for any secondary purpose unrelated to the above without your consent, except where permitted or required by law.
+4.4 Where a third party collects information on our behalf, we remain responsible for assessing the actual arrangement, including contractual control, overseas handling and whether the third party or we collect and hold the information.
 
-7.3 **No direct marketing (APP 7).** We do not use or disclose your personal information for direct marketing. We do not send marketing emails, and we do not sell, rent or trade personal information to anyone.
+## 5. Notice at collection
 
-## 8. Community improvement sharing (the "flywheel") — your choice and your controls
+5.1 At or before each material collection of personal information, or as soon as practicable afterwards where earlier notice is not practicable, we will provide or prominently link to a Point-of-Use Notice appropriate to that collection.
 
-8.1 The Software can, where community improvement sharing is available in your version, share De-identified Improvement Patterns with the community so that shared Methods and Routines improve for everyone. This clause describes exactly how the sharing choice works. Sharing operates only on the basis of an **affirmative choice you make at install** (clause 8.2): there is no pre-selected default, and **nothing is shared before you have made that choice**.
+5.2 The notice must identify, to the extent applicable:
 
-8.2 **The choice, and what it does and does not authorise.** The install-time choice is presented with no option pre-selected, refusing is as easy as accepting, and it can be changed at any time in Settings (Automatic / Review each item / Off). **A choice made before the upload capability is available records a preference only. When that capability first becomes available, it remains off until the Owner is shown the then-current information and makes a fresh affirmative choice.**
+  (a) Vae Foundry Pty Ltd and our contact details;
+  (b) the personal information collected and the source and circumstances of collection;
+  (c) any Australian law or court or tribunal order that requires or authorises the collection;
+  (d) the specific primary purpose of collection;
+  (e) whether providing the information is optional or required and the main consequence if it is not collected;
+  (f) the persons or sufficiently precise categories of persons to which we usually disclose that kind of information;
+  (g) whether overseas disclosure is likely and, if practicable, the countries in which recipients are likely to be located;
+  (h) where this Policy and the Current Data-Handling Schedule can be accessed; and
+  (i) how an individual may seek access or correction or make a privacy complaint.
 
-**This choice authorises only material that is de-identified in the public-release environment. It is not consent to collect, use or disclose identifiable personal information or sensitive information about the Owner or anyone else. A candidate that cannot be reliably de-identified must not be uploaded.**
+5.3 A general link to this Policy does not replace a collection-specific notice where this Policy and the applicable Schedule entry do not make the matters in clause 5.2 sufficiently apparent in the circumstances.
 
-**Evidence metadata is pseudonymous, not anonymous. While it can reasonably be linked with request logs or other information available to us, we treat it as personal information for collection, security, access, correction, overseas handling and retention.**
+## 6. Purpose, use and disclosure
 
-8.3 **What is shared.** The sharing gate is designed so that **only De-identified Improvement Patterns are uploaded, and your raw data is not**; clause 8.6 states what we will do in the event the gate ever fails. De-identification is applied at the sharing gate to **every** shared example, regardless of its source (including examples originating from the Operator's own applications). Separately, and independently of the gate, your raw corrections — with real names and amounts — are stored only in your local database and are never placed in any repository (clause 4.1(f)). Each shared example is accompanied by minimal **evidence metadata**, recorded server-side when the upload is accepted: the example's content hash; the version of the Terms of Service that had been accepted; the version of the sharing copy that had been accepted; an identifier for the sharing choice or grant event; a timestamp; a pseudonymous instance identifier (randomly generated, and **not directly identifying** — not derived from any personal information or device characteristic); the sharing mode in force (automatic, review-each-item or off); whether a Sensitive Category confirmation (clause 8.4) was given; and whether the upload came through the automatic path, the review-each-item path, or a Sensitive Category confirmation. This metadata is used **only to evidence the licence and consent attaching to that example (clauses 8.2 and 8.5) and to investigate abuse — not to identify or profile you**. It is engineered to contain no personal information; it is not directly identifying and may be linkable to you only in limited circumstances if combined with the short-retention request logs described in clause 10.6. We keep it only as long as needed to evidence the licence and consent and to handle abuse; we do not use it as a standing long-term identifier, we review the need to retain it periodically, and we delete or de-identify it once it is no longer needed for those purposes.
+6.1 We collect, hold, use and disclose personal information only for the primary purpose identified for the applicable Active Data Flow in the Current Data-Handling Schedule and Point-of-Use Notice.
 
-8.4 **Sensitive Categories are designed not to be shared automatically — an automated classifier enforces this, and it can err.** **Until community improvement sharing is available in your version (clause 8.1), no content of any kind leaves your Instance through it, so nothing in this clause can operate to share anything.** Where that capability is available in your version, the Software is designed never to share content in the Sensitive Categories (clause 2 — health, finance, family (including child-related) content, and every Privacy Act sensitive-information category) in any mode — including automatic mode — without a separate, explicit, per-instance confirmation from you. That protection is enforced by an **automated classifier**, which ships with the sharing capability and which, like the safeguards in clause 10.3, is **not infallible**: it can misclassify, and what it misses is not reviewed by a person. Review-each-item prevents automatic sharing; the classifier continues to flag candidates for the separate Sensitive Category confirmation. Off prevents every upload.
+6.2 Those purposes may fall within the following general classes:
 
-8.5 **Shared examples become public — and carry a public licence.** De-identified Improvement Patterns that are shared, and examples attached to Published Content, enter the public Community Library repository. Each sharer licenses their shared example to the public under the **Creative Commons Attribution 4.0 International licence (CC BY 4.0)**, in addition to the direct licence the sharer grants — under the Terms of Service (clause 7.4) for examples shared through the flywheel (including by users who never publish anything), and under the Contributor Agreement (clause 5) for publishers — in each case **to the extent of the sharer's rights** in the example. For flywheel sharers, those grants are given **by the making of the affirmative sharing choice described in clause 8.2** (or the per-item approval in review-each-item mode), and the evidence metadata in clause 8.3 exists to evidence them. Because shared examples are published without the sharer's name, the Terms of Service grant also includes an express moral-rights consent (Terms of Service clause 7.4) addressing publication without attribution and the alterations involved in de-identification — CC BY 4.0 itself does not license moral rights — and the Contributor Agreement (clause 6) contains the corresponding consent for publishers. Like the licence, these consents operate **only to the extent of the sharer's own position**: a moral-rights consent is effective only where the sharer is the author of the material, and neither the licence nor the consent can cover another person's work embedded in a shared example — so do not allow anything containing someone else's work (for example, text copied from a publication) to be shared, and read the CC BY 4.0 label on any shared example as granted **to the extent of the sharer's rights**, which is how it is given. Clause 8.6 is the reporting channel for copyright and moral-rights complaints as well as personal-information complaints. Clause 15 explains the retention consequences honestly, including the limits that public git history places on later deletion; the irrevocable character of CC BY 4.0 compounds those limits, because copies licensed while public remain licensed.
+  (a) performing an action or providing an Operator Service requested by the individual;
+  (b) authentication, access control, attribution and account administration;
+  (c) carrying out a deliberate publication or other user-directed disclosure;
+  (d) maintaining security, service integrity and abuse prevention;
+  (e) responding to support requests, reports, complaints, access requests and correction requests; and
+  (f) complying with law and establishing, exercising or defending legal rights.
 
-8.6 **If de-identification ever fails — and other content complaints — reporting open to anyone.** The de-identification gate is designed to remove information about identifiable individuals before anything leaves your device. If anyone — whether or not they use Vaenyx — believes that a shared example, or any Published Content, contains personal information about them or about someone else, or infringes their (or anyone's) copyright or moral rights, they may contact hello@vaenyx.ai (describing the material and where it appears, rather than attaching it — see clause 6.4); we will investigate and take corrective steps **promptly**, including removing the material from the current library and its index (subject to the git-history limits in clause 15.4). For **de-identification failures** — a shared example or Published Content carrying personal information the gate should have removed — reports are treated as priority takedown matters, with operational targets of **within 24 hours** for material creating a risk of serious harm and **within 7 days** otherwise. For other complaints (copyright, moral rights, content about a person, or anything else), we commit to prompt investigation and the same removal powers; where such a complaint is also a duly-made complaint that content is unlawful (including defamatory), or reports seriously harmful material of the kind regulated under Australian online-safety law, the takedown windows in Terms of Service clause 8.5 apply to it (action within 7 days, and a 24-hour target for the seriously harmful category); beyond those commitments we are a small operation and do not state a further numeric response time.
+6.3 A new purpose may be added to the Current Data-Handling Schedule without changing the Terms of Service only where, before the relevant handling begins:
 
-8.7 Improving your **own** local copy is a separate process, unaffected by your sharing settings: it is always-on, and it involves no sharing choice because the improvement process itself sends nothing to us or to the community. Where a correction occurs inside a chat routed to a cloud model provider, that chat content reaches the provider under clause 11 like any other chat content (see clause 4.1(f)).
+  (a) the purpose is described specifically enough to satisfy APPs 1 and 5;
+  (b) collection is permitted by APP 3;
+  (c) use or disclosure is permitted by APP 6;
+  (d) the handling remains within this Core Privacy Policy; and
+  (e) any required consent has been obtained.
 
-## 9. Publishing to the Community Library
+6.4 We will not use or disclose personal information for a secondary purpose unless:
 
-9.1 Publishing is always an explicit act. Nothing you create is published by default; your creations live in your private local library until you choose to publish a specific Method or Routine.
+  (a) the individual has given a current and specific consent;
+  (b) the individual would reasonably expect the use or disclosure and the secondary purpose is related to the primary purpose, or directly related where sensitive information is involved; or
+  (c) another exception permitted by the Privacy Act applies.
 
-9.2 When you publish:
+6.5 We do not treat acceptance of the Terms of Service, acknowledgement of this Policy, installation of an update or continued use as consent to an unrelated secondary purpose.
 
-  (a) the Method or Routine content, its metadata and version history, and its **de-identified** examples enter the **public** Community Library repository on GitHub (github.com/vaenyxai/community), where anyone in the world can view them;
-  (b) your **publishing identity** — a public display name you choose explicitly at first publish (pre-filled with a generated pseudonym, never your sign-in account name — clause 6.2(b) — and editable at any time) — is stamped into the published content's metadata **by the Publish Service at commit time**, so your Instance cannot forge a byline: the byline always matches the display name on your verified account. This does not by itself stop someone choosing a misleading display name — moderation and the ban powers in clause 7.1(e) address that. The byline is public; editing your display name applies to future publishes, while past published versions keep the byline they were published with until re-published; your verified identity is held privately by us under clause 6.2;
-  (c) the **Publish Service** receives the item's declarative files and your signed-in identity, validates the submission (declarative-only, path-safe, size-capped), and commits to the repository on your behalf using the service's own single repository credential. **Your Instance never holds a GitHub write token**; you never interact with GitHub directly; you do not need a GitHub account to publish (signing in with GitHub is an identity option, not a requirement, and having a GitHub account confers no advantage); and no raw correction data accompanies a publish — only the item's declarative files and de-identified examples leave your device;
-  (d) publication is immediate — there is no pre-publication human review queue; we rely instead on the content standards and publish-time warranties in the Contributor Agreement, automated validation, and the takedown and ban powers described in clause 7.1(e); and
-  (e) the published content is served to all installs of the Software via a Cloudflare-hosted static index (installs read Cloudflare only, never GitHub directly).
+6.6 We do not use or disclose personal information for direct marketing. Direct marketing must not begin without a specific revision of this Policy and compliance with APP 7.
 
-**Unsolicited personal information.** If a submission contains personal information we did not solicit, we quarantine it from publication and determine whether we could have collected it under APP 3. If not, we destroy or de-identify it as soon as practicable where lawful and reasonable. We do not treat the publisher's act as consent from any other individual.
+## 7. Consent and sensitive information
 
-9.3 **Do not publish personal information.** Published Content is public and worldwide. Do not include personal information about yourself or anyone else in a Method, Routine, name, description or example. The de-identification gate applies to examples, but you are responsible for the content you author (see the Contributor Agreement).
+7.1 Where we rely on consent, the request will be separate from general acceptance of the Terms of Service and will identify the particular information, purpose, recipient or class of recipient, and relevant consequences.
 
-9.4 You may publish recipe-and-schema only, keeping your tuned examples private on your device.
+7.2 Consent must be voluntary, informed, current and specific, and given by a person with capacity. No consent option is pre-selected. Declining must be as easy as accepting. A consent record must identify the wording and version shown, language, individual or profile concerned, grant event, scope and time of the choice.
 
-## 10. Community Services operated by us — what we hold and how it behaves
+7.3 Consent does not extend to an undefined future purpose, unidentified future recipient, materially different kind of information or materially different consequence.
 
-10.1 We operate: distribution of the Software; the central public GitHub organisation repository that stores Published Content (github.com/vaenyxai/community); the Cloudflare-hosted static index that serves the library catalogue to installs; the Publish Service, which authenticates publishers, holds Account Data, and commits on your behalf; the improvement-sharing endpoint that receives De-identified Improvement Pattern uploads (clause 10.6); and the Merit record. Community **discussion** takes place on **Discord**, a third-party platform that you join and use under Discord's own terms and privacy policy. The Discord **platform** is not operated by us and is not a Community Service, and we do not operate a community forum; the official Vaenyx Discord **server**, however, is created and administered by us under Discord's platform terms — as administrator we handle the moderation data that role involves (clause 5.1(g)), and complaints about content posted in that server may be sent to hello@vaenyx.ai.
+7.4 If consent is withdrawn, we will cease relying on it for future handling to which the withdrawal applies. Withdrawal does not undo handling already lawfully carried out or require removal from locations outside our possession or control.
 
-10.2 Reading the library requires no account (clause 6.1). When your Instance fetches the catalogue from Cloudflare, the Software attaches no account identifier, device identifier or telemetry to the request; but because we operate the Cloudflare zone that serves the catalogue, the ordinary request metadata the request carries reaches infrastructure under our account, exactly as clause 10.6 describes for our other endpoints, and it receives the same treatment (security, abuse-prevention and operational purposes only; retention no longer than 30 days; no identification or profiling except as clause 10.6 states). Cloudflare's own infrastructure logging is additionally governed by Cloudflare's privacy policy (clause 13).
+7.5 We collect sensitive information only where it is reasonably necessary for our functions or activities and:
 
-10.3 We apply safety measures to the Community Library, which may include content-hash-bound trust, pinned model versions, per-version automated safety scorecards, look-alike-name blocking, time-gated trusted-creator status, inert-until-enabled installs with per-action capability scoping, and immutable versioning. These measures are **safeguards, not guarantees**, and they involve no collection of personal information from users who merely install content.
+  (a) the individual to whom the sensitive information relates has given a current and specific consent; or
+  (b) a permitted statutory exception applies.
 
-10.4 Community content is not endorsed by us as professional advice. The product's automated-check label, "**Verified**", indicates only that an item passed our automated format and static checks — **no person has individually reviewed it** — and wherever the label is displayed, the label surface itself carries that qualification (for example, "Verified — automated checks only"), as the Terms of Service state (its clauses 2 and 8.4). We do not label community content with any other word implying human review or endorsement unless a person acting for us has actually reviewed that item. "Community" items are used at your discretion.
+7.6 One person's consent does not authorise collection, use, disclosure or publication of identifiable personal information or sensitive information about another person.
 
-10.5 **Merit, thanks and ratings.** **As at the Effective Date, we do not collect, compute or hold Merit, thanks or ratings. If any of those features is introduced, this Policy and the point-of-collection notice will be updated before collection begins.** The following describes Merit if and when it is provided. Merit is a **non-monetary creator-reputation record only**. It has no cash value; it cannot be bought, sold, transferred or redeemed; it is not a currency, a security or a financial product; it is add-only with no public downvotes; and there is no spend operation. Earning Merit requires a verified login (clause 6.2) because reputation must attach to a verified identity. The Merit record we hold about you consists of your account identifier and add-only reputation entries linked to your Published Content (clause 5.1(f)); the thanks and ratings that feed it reach us through the submission channel described in clause 3.4(g), and submitting a thanks or rating requires no account. **Merit associated with your publishing identity is designed to be displayed publicly alongside your Published Content in the Community Library** (where available in your version) — signalling creator reputation to other users is its purpose.
+7.7 A consent concerning de-identified material does not authorise disclosure of material that remains personal information. A candidate that cannot be reliably de-identified must not be treated as authorised by a de-identified-material consent.
 
-10.6 **Request metadata received by our endpoints.** When your Instance uploads a De-identified Improvement Pattern to our improvement-sharing endpoint, submits a thanks or rating (clause 3.4(g)), contacts the Publish Service, or fetches the catalogue index (clause 10.2), that request — like any web request — necessarily delivers ordinary request metadata (including your IP address, timestamps, and technical metadata of the user-agent type, such as user-agent strings and software or app version strings) to the Cloudflare infrastructure serving the endpoint. We log such metadata only for security, abuse-prevention and operational purposes; we retain those logs for no longer than **30 days**; and we do not use them to identify or profile you, or to link a sharer to their shared patterns, **except where necessary to investigate or prevent abuse of an endpoint or of the publishing pipeline** (clause 7.1(e)).
+## 8. Overseas handling and disclosure
 
-## 11. AI model providers you connect (your choice, their terms)
+8.1 For each Active Data Flow involving an overseas recipient, the Current Data-Handling Schedule identifies:
 
-11.1 The Software's model backend is **pluggable**, built on a provider interface and registry. You may connect **one or more** providers of your choice: a third-party **cloud** provider — currently OpenAI (including via Codex CLI ChatGPT-subscription sign-in), Anthropic (Claude), or Google (Gemini) — or any **OpenAI-compatible endpoint**, including **local** model runtimes (for example, Ollama or LM Studio) that run entirely on your own device. Where available in your version, and as described in the product documentation for your version, you can set a default provider in Settings and choose a provider (and, where supported, a tier) for a particular chat; the provider used is recorded with the conversation on your device. API credentials you enter are stored in a local secrets file on your device and are never sent to us.
+  (a) the information;
+  (b) the recipient and its role;
+  (c) the purpose;
+  (d) the likely country or countries, where practicable;
+  (e) whether the handling is considered a use, disclosure, public disclosure or user-directed third-party flow; and
+  (f) the APP 8 basis relied upon.
 
-11.2 **If you connect a cloud provider, your prompts and relevant context leave your device and go directly to that provider.** This includes chat content and injected context such as the project instruction windows described in clause 4.1(e), for the chats routed to that provider. That data flow is between you and the provider, under **the provider's own privacy policy and terms and at your cost**. Depending on your provider, account type, region and settings, **the provider may use what you send to it for model improvement or training**. Review and adjust the provider's data controls before sending sensitive content; the no-training commitment in clause 3.3 binds us, not the provider you connect. **Vaenyx does not sit in the middle:** your prompts do not pass through, and are not received, logged or stored by, any server of ours.
+8.2 Unless an exception applies, before disclosing personal information to an overseas recipient we will take reasonable steps in the circumstances to ensure that the recipient does not breach the APPs in relation to the information. Depending on the circumstances, those steps may include appropriate contractual restrictions, equivalent obligations for subprocessors, security requirements, breach notification, access and correction support, return or deletion requirements, and proportionate monitoring.
 
-11.3 **If you use a local model**, model execution happens on your own device and your prompts do not leave it through the model channel.
+8.3 **We will not represent that an APP 8.1 contractual safeguard exists until the applicable contract and operational arrangement have been verified.** The Current Data-Handling Schedule identifies any flow for which that verification is outstanding.
 
-11.4 Choose and review your provider yourself. We do not control, and are not responsible for, a provider's collection, use, retention or disclosure practices. The in-app connect flow reminds you of this at the point of connection.
+8.4 Where we rely on APP 8.2(b), we will obtain a separate, recorded consent before disclosure. The consent request must identify the particular kind of personal information, the same overseas recipient, the same purpose and the practical consequences. It must expressly explain that:
 
-## 12. Remote access (Tailscale Funnel)
+  (a) APP 8.1 **will not** apply to the disclosure;
+  (b) we will not be accountable under the Privacy Act for handling by the overseas recipient that would otherwise breach the APPs; and
+  (c) the individual will not be able to seek redress from us under the Privacy Act for that handling.
 
-12.1 Remote access to your Instance is optional and is provided via **Tailscale Funnel**, a third-party service. To provide this integration, the Software may install a bundled Tailscale client on your machine (including a Windows service) or may invoke a client you have installed yourself; any such client is a third-party component governed by Tailscale's own licence and terms, and the Third-Party Notices document states the arrangement that actually ships (as at this version: not bundled — you install the official Tailscale client yourself). You sign in with **your own** free Tailscale account; your use of Tailscale is governed by Tailscale's terms and privacy policy.
+8.5 An APP 8.2(b) consent may cover repeated disclosure of the same kind of information to the same recipient for the same purpose. It does not cover an undefined future recipient, purpose or category of information.
 
-12.2 **Funnel relays are designed not to decrypt your traffic.** As at the Effective Date, Tailscale's published Funnel design states that TLS terminates on your own machine and Funnel relays do not decrypt your traffic; this is a third-party fact that may change. On that design, Tailscale's relay infrastructure carries encrypted traffic it cannot read. Enabling remote access makes your Instance reachable over the internet under your Tailscale account — the access-control and account-security consequences of that are yours to manage.
+8.6 Public internet publication must be described as public and accessible worldwide. Naming the infrastructure host does not remove the need to disclose the public audience and practical limits on withdrawal.
 
-12.3 We receive no data from your use of remote access. Any future remote-access option operated on our own infrastructure is not covered by this Policy and will require a material revision of it (clause 21) before launch.
+8.7 A flow initiated directly by a user to a third-party service may be described separately from an Operator disclosure, but its legal classification depends on the actual technical and contractual arrangement.
 
-## 13. Third-party service providers and recipients
+## 9. Retention and deletion
 
-13.1 The following third parties are involved in the specific data flows described in this Policy. In each case, the linked provider's own privacy policy governs its handling. Each provider processes data on its own global infrastructure; the specific countries involved cannot practicably be listed and may change — the providers' own privacy policies and data-processing documentation (including, for Cloudflare, its published data processing addendum) state their processing locations:
+9.1 The Current Data-Handling Schedule states the implemented retention rule for each Active Data Flow, including any fixed period, event-based trigger, backup deletion lag, public-history limitation and documented legal-hold exception.
 
-| Provider | Role | What it handles |
-|---|---|---|
-| **GitHub** (GitHub, Inc., USA) | Hosts the **public warehouse** — the Community Library repository (github.com/vaenyxai/community), where Published Content and your chosen public byline appear **publicly** — and the framework source code repository; optional identity provider for publishing sign-in (you authenticate directly with GitHub, which then supplies us the limited profile data in clause 6.2(a)) | Published Content, including public attribution metadata; de-identified shared examples; your GitHub sign-in, if you choose GitHub (clause 6.2) |
-| **Cloudflare** (Cloudflare, Inc., USA) | **Infrastructure provider in a processor-style role**: serves the static library index/catalogue to installs; hosts the Publish Service (a Cloudflare Worker with a D1 database) and the improvement-sharing endpoint on Cloudflare's global edge network — under our customer agreement with Cloudflare, which incorporates Cloudflare's data processing addendum | Account Data (clause 6.2); Merit record (clause 10.5); evidence metadata (clause 8.3); endpoint request metadata and logs (clause 10.6); ordinary web-request metadata from catalogue fetches (clause 10.2) |
-| **Google** (Google LLC, USA) | Optional identity provider for publishing sign-in (you authenticate directly with Google, which then supplies us the limited profile data in clause 6.2(a)) | Your Google sign-in, if you choose Google; supplies us the Account Data elements in clause 6.2(a) |
-| **Cloudflare Email Routing → Google (Gmail)** (Cloudflare, Inc. and Google LLC, USA) | Deliver email sent to hello@vaenyx.ai to the operator mailbox | Correspondence you send us (clause 6.4), including support requests, access/correction requests, complaints and clause 8.6 reports |
-| **Discord** (Discord Inc., USA) | Hosts the official community discussion server, which we administer (clause 10.1) | Member identities, messages and moderation data within Discord, under Discord's own terms (clauses 5.1(g), 10.1) |
-| **Tailscale** (Tailscale Inc., Canada/USA) | Optional remote access, under your own account | Encrypted relay traffic which, on Tailscale's published Funnel design, its relays do not decrypt (clause 12) |
-| **Your chosen model provider(s)** (for example OpenAI, Anthropic or Google, USA) | AI model backend(s) you connect | Your prompts and context, sent directly by your Instance (clause 11) |
-| **Local model runtime** (for example Ollama or LM Studio; optional, on your device) | Local model execution | Runs locally; no data flow to us or, through the model channel, to anyone |
+9.2 We take reasonable steps to destroy or de-identify personal information when:
 
-13.2 We do not use any other analytics, advertising, tracking or data-enrichment providers.
+  (a) we no longer need it for a purpose permitted by the APPs;
+  (b) it is not contained in a Commonwealth record; and
+  (c) retention is not required by or under an Australian law or a court or tribunal order.
 
-## 14. Overseas disclosure (APP 8)
+9.3 We do not collect information "just in case" and do not retain it indefinitely merely because storage is available.
 
-14.1 **Where personal information may go.** Personal information may be handled overseas through: (a) Cloudflare infrastructure; (b) identity-provider sign-in and our resulting collection; (c) GitHub public publication; (d) email correspondence handled through Cloudflare Email Routing and our contracted mailbox provider; and (e) Discord moderation undertaken on Discord's platform. Likely locations include the United States and other countries in the providers' current subprocessor networks; Published Content is disclosed worldwide.
+9.4 Public material may remain in copies, forks, mirrors, caches, repository history or devices outside our control after removal from an operator-controlled service. That consequence must be disclosed before publication. We will not promise complete erasure where we cannot deliver it.
 
-  (a) **Cloudflare — our infrastructure provider.** The Publish Service — which holds Account Data (clause 6.2), the Merit record (clause 10.5), the evidence metadata (clause 8.3) and the request logs described in clause 10.6 — and the endpoints described in clauses 10.2 and 10.6 run on **Cloudflare's global edge network**. Cloudflare acts in a **processor-style role**, handling this data on our behalf under our customer agreement with Cloudflare, which incorporates Cloudflare's data processing addendum;
+9.5 A legal hold or active dispute may extend a retention period only to the extent reasonably required. The reason, scope and review date must be documented.
 
-  (b) **Google / GitHub — sign-in.** When you sign in to publish, you authenticate **directly with the identity provider you choose**, under that provider's own terms and privacy policy; the provider then supplies **to us** the limited profile data described in clause 6.2(a). That supply is a **collection by us**, not an overseas disclosure by us; the provider's own handling of your sign-in is its own (clause 13); and
+9.6 **We do not state a fixed deletion period unless the corresponding deletion process has been implemented and verified.**
 
-  (c) **GitHub — the public warehouse.** If you publish, your Published Content and your chosen public byline enter the public Community Library repository hosted by GitHub, where they are **public worldwide by design** (clause 9).
+## 10. Quality and security
 
-Processing in these flows occurs on Cloudflare's global edge network and on GitHub and Google infrastructure. The specific countries involved cannot practicably be listed and may change; the providers' primary corporate jurisdictions are the **United States**, and their own privacy policies and data-processing documentation (clause 13.1) state their processing locations. Correspondence you send to hello@vaenyx.ai is likewise handled overseas (Cloudflare Email Routing and a Google-hosted consumer mailbox — clauses 6.4 and 13), as is the request metadata described in clauses 10.2 and 10.6 (Cloudflare).
+10.1 We take reasonable steps to ensure that personal information we collect, use or disclose is accurate, up-to-date, complete and relevant, having regard to the purpose of the handling.
 
-14.2 **APP 8 footing for each flow.** For flows (a) and (d) (**Cloudflare infrastructure and our contracted mailbox provider**), we make personal information available only under enforceable written terms that limit processing to our instructions and stated purposes, impose equivalent duties on subprocessors, require appropriate security and breach notification, support access, correction, return and deletion, and permit us to monitor material compliance. Where the arrangement constitutes an overseas disclosure, we take these steps for **APP 8.1** and remain accountable under **section 16C** where applicable. Minimisation, notice and retention controls supplement, but do not replace, those contractual safeguards. **Status at the Effective Date: we have not yet completed verification that the customer agreement in force with each of those providers incorporates data-processing terms meeting this standard, and the mailbox is a consumer service without such terms. Until that verification is complete and, where necessary, the mailbox is moved to a service under data-processing terms, we do not represent that this standard is met for those flows; we rely on minimisation, prompt triage and the overseas-handling notice in clause 6.4 in the meantime.**
+10.2 We take reasonable steps appropriate to the nature and risk of the information to protect personal information we hold from misuse, interference, loss, unauthorised access, modification and disclosure.
 
-For flow (b) (**identity-provider sign-in**), what reaches us is an inbound collection by us, not a disclosure by us. For flow (c) (**GitHub public publication**), we rely on your express consent under **APP 8.2(b)**, obtained in the sign-in and publish flow itself before Account Data is first collected. That consent screen states plainly: if the Privacy Act applies to us and you give that consent, **APP 8.1 will not apply** to that disclosure, we will not be accountable under the Privacy Act for GitHub's handling of that information, and you will not be able to seek redress from us under the Privacy Act for it — other laws or rights may still apply. Publishing is optional. Withdrawal blocks future publication but cannot reverse information already made public. We will obtain consent again if the recipient, purpose or consequences materially change. For flow (e) (**Discord moderation**), moderation is undertaken on Discord's own platform under Discord's terms; Discord is not our service provider and we do not disclose Account Data to it.
+10.3 Those steps include, as appropriate to the Active Data Flow, data minimisation, access restriction, credential separation, secure configuration, encryption, logging, retention controls, supplier assessment, incident response and testing. This clause does not promise that a system is perfectly secure or disclose security details that would increase risk.
 
-14.3 Data flows generated by your own Instance directly with third parties — your model provider (clause 11) and Tailscale (clause 12) — are disclosures by **you** or flows generated by your Instance, not disclosures by us, and may involve overseas handling under those providers' policies. Request metadata reaching the Cloudflare zones we operate — including catalogue fetches (clause 10.2) — is not in that category: we treat it as metadata we collect and hold (clauses 5.1(e) and 10.6), held on the Cloudflare infrastructure described in clause 14.1(a), under the flow (a) APP 8.1 reasonable-steps approach stated in clause 14.2.
+10.4 Where we use a service provider, we assess the actual contractual and operational safeguards rather than relying only on the provider's marketing description.
 
-## 15. Retention and deletion
+10.5 If a data breach involving personal information we hold may be an eligible data breach, we will assess and respond in accordance with the Notifiable Data Breaches scheme to the extent it applies.
 
-15.1 **Instance Data:** retained on your device for as long as you keep it. Deletion is in your hands, through the Software's deletion functions, your backup practices, and your operating system. We hold nothing to delete.
+## 11. Access, correction and complaints
 
-15.2 **Account Data:** retained while you have Published Content. **At the Effective Date, we do not operate an automatic 90-day purge for accounts that have never published.** Session tokens cease to authenticate 30 days after creation, but expired session rows may remain until manually deleted. We will not represent that an automated deletion period applies until the required records and deletion process are implemented and verified. You may ask us to delete your Account Data at any time (clause 17.1), except moderation records (including any ban flag) retained under clause 6.2(e) to prevent re-registration abuse (you can also simply ask sooner, clause 17). Session records expire and are not kept beyond their operational life; endpoint request logs are kept no longer than 30 days (clause 10.6). If you ask us to delete your account (clause 17), we will delete or de-identify your Account Data, except to the extent retention is required to comply with law or to maintain the integrity of moderation records (for example, a ban record retained to prevent re-registration abuse). Enforcement records retained for that integrity purpose are kept in **minimal form** — a hashed identity-provider identifier and the reason for the action — are **reviewed periodically (at least every two years)**, and are **deleted or de-identified once no longer needed** for integrity enforcement. Where your Published Content remains in the library, the public attribution on it in the current library and Cloudflare index will be **removed or replaced with a neutral, de-identified placeholder** (subject to the git-history limits in clause 15.4), and any linkage needed to keep the public record internally consistent (for example, between versions and the Merit record) will be maintained only through a **de-identified internal identifier**.
+11.1 An individual may request access to, or correction of, personal information we hold about them by contacting hello@vaenyx.ai. We may take reasonable steps to verify identity before acting.
 
-15.3 **Correspondence:** retained as long as reasonably necessary to handle the matter and for a reasonable period afterwards for record-keeping. Correspondence is deleted or de-identified within 24 months after the matter closes unless a documented legal hold or active dispute requires longer retention.
+11.2 We will respond within a reasonable period. Where reasonable and practicable, we will provide access in the manner requested. If that manner is not reasonable and practicable, we will consult the individual and take reasonable steps to provide access in another way that meets both parties' needs.
 
-15.4 **Published Content and shared examples — an honest statement about public history.** The Community Library is a public git repository. Git preserves history: even after content is removed from the current version of the library and from the Cloudflare index (so that installs no longer see or fetch it), **prior versions may persist in the repository's public history, in forks or clones made by others, and in copies already downloaded to other users' devices** — none of which we can reach. If you ask us to remove Published Content or a shared example, we will remove it from the current library and index, and where the circumstances justify it (for example, a de-identification failure under clause 8.6) we will also take reasonable steps to rewrite or purge repository history; but we cannot promise complete erasure of something that has been public, and we will not pretend otherwise. Publish accordingly.
+11.3 We do not charge for making an access or correction request, correcting information or associating a correction statement. Any charge for providing access will be reasonable, not excessive and disclosed before access is provided.
 
-15.5 We destroy or de-identify personal information we hold when it is no longer needed for a purpose in clause 7 and retention is not required by law (APP 11.2), subject to clause 15.4.
+11.4 We may refuse access only where a ground permitted by APP 12 applies. If we refuse access or correction, we will give written reasons except to the extent it would be unreasonable to do so, and explain available complaint mechanisms.
 
-15.6 **Evidence metadata (clause 8.3):** the minimal evidence metadata recorded server-side with each accepted shared example is kept **only as long as needed** to evidence the licence and consent attaching to that example and to investigate or handle abuse. It is not retained as a standing long-term identifier; the need to retain it is **reviewed periodically**; and it is **deleted or de-identified once it is no longer needed** for those purposes.
+11.5 If we refuse to correct information, the individual may ask us to associate a statement that they consider the information inaccurate, out-of-date, incomplete, irrelevant or misleading. We will take reasonable steps to make the statement apparent to users of the information within a reasonable period and without charge.
 
-## 16. Backups (a local feature, described for completeness)
+11.6 If we correct personal information that we previously disclosed to another APP entity, we will, at the individual's request, take reasonable steps to notify that entity of the correction unless it is unlawful or impracticable to do so.
 
-16.1 The Software includes a per-user backup feature: manual snapshots of your whole Instance (database plus library) with a restore-point list, and — where available in your version, and as described in the product documentation for your version — scheduled snapshots, a **destination you choose** (by default a local folder, or another disk, USB drive or NAS), **optional encryption**, and keep-most-recent-N retention.
+11.7 Privacy complaints may be sent to hello@vaenyx.ai. We will acknowledge, investigate and respond within a reasonable period. Where the Privacy Act applies, an individual who is not satisfied may complain to the Office of the Australian Information Commissioner.
 
-16.2 Backups are closed snapshot files. You may choose to point your own cloud-sync service at your backup folder; if you do, the resulting data flow is between you and your cloud provider under that provider's terms, and we recommend enabling backup encryption (where available) first. The **live** database must never be placed inside any cloud-sync scope; the Software's backup design exists precisely so that snapshots, not the live database, are what you sync.
+## 12. Automated decisions
 
-16.3 We receive nothing from the backup feature.
+12.1 If we arrange for a computer program to use personal information to make, or do something substantially and directly related to making, a decision that could reasonably be expected to significantly affect an individual's rights or interests, the Current Data-Handling Schedule will identify:
 
-## 17. Access and correction (APPs 12 and 13)
+  (a) the kinds of personal information used;
+  (b) the kinds of decisions made solely by the program; and
+  (c) the kinds of decisions for which the program does something substantially and directly related to making the decision.
 
-17.1 **Instance Data:** you already have complete access — it is on your device, and the Software provides viewing, editing and deletion functions (including for memories, the automatic project summary window, and Vaenyx Me entries).
+12.2 If no such arrangement is active, the Schedule will state "None". A planned or technically possible automated process is not active until it has been implemented and verified.
 
-17.2 **How we handle access and correction.** We will give access in the manner you request if it is reasonable and practicable. If we cannot, we will consult you and take reasonable steps to provide access in another way that meets both parties' needs. We respond within a reasonable period, with a target of 30 days. We do not charge for making a correction request, correcting information or associating a statement; any charge for providing access will be reasonable, not excessive and disclosed in advance.
+## 13. Changes and release control
 
-17.3 **Refusal, reasons and statements.** We may refuse access only on an applicable APP 12.3 ground. If we refuse access or correction, we will give written reasons, except to the extent unreasonable to do so, and explain available complaint mechanisms. If we refuse correction, you may ask us to associate with the information a statement that you consider it inaccurate, out-of-date, incomplete, irrelevant or misleading; we will take reasonable steps to make that statement apparent to users, within a reasonable period and without charge. Clause 15.4 is not a basis to refuse access or correction.
+13.1 A new product capability does not require a change to the Terms of Service merely because it is new. Before a capability begins a new or materially expanded collection, use, disclosure, overseas transfer, retention practice or automated decision:
 
-17.4 **Data quality (APP 10):** the personal information we hold is limited and sourced directly from your identity provider and your own publishing acts, which keeps it inherently current; your public display name is self-serve editable, and if your sign-in account details change, your attribution can be updated on request.
+  (a) the applicable Current Data-Handling Schedule entry must be created or updated;
+  (b) the relevant Point-of-Use Notice must be implemented and verified against the actual data flow;
+  (c) any required consent must be obtained and recorded; and
+  (d) this Core Privacy Policy must be updated if the handling falls outside its existing principles or categories.
 
-## 18. Security (APP 11)
+13.2 A materially expanded flow remains disabled until clause 13.1 is satisfied. Continued use, installation of an update or acceptance of the Terms of Service is not consent to that expansion.
 
-18.1 **Your device:** the security of Instance Data depends on your own device, operating system, accounts and network practices. The Software supports this with a local-only default posture (the server binds to your machine; remote access is off unless you enable it), the inert-until-enabled treatment of installed community content, capability scoping, and optional backup encryption (where available).
+13.3 We identify this Policy and each Schedule version by its effective date, retain an archive of prior versions and make the current versions available free of charge.
 
-18.2 **What we hold:** for Account Data, Merit and the publishing pipeline, we apply reasonable technical and organisational safeguards, including minimum-necessary collection, single-purpose restricted credentials held only by the Publish Service (installed copies of the Software never hold a repository write credential), and reliance on the platform security of the providers in clause 13.
+13.4 English and Chinese versions must be updated together. An English-prevails provision does not excuse a misleading, incomplete or outdated notice displayed in Chinese.
 
-18.3 No system is perfectly secure, and we do not represent otherwise. If we become aware of a data breach involving personal information we hold that is likely to result in serious harm, we will assess and notify in accordance with the Notifiable Data Breaches scheme under the Privacy Act to the extent it applies to us, and will otherwise act in the spirit of that scheme.
+## 14. Language
 
-## 19. Complaints — including to the OAIC
+14.1 This Policy is drafted in English; a Chinese translation is provided. The English version prevails to the extent of any inconsistency, subject to clause 13.4.
 
-19.1 If you believe we have mishandled your personal information or breached the APPs, please complain to us first at hello@vaenyx.ai with enough detail for us to investigate. We will acknowledge your complaint promptly, investigate, and respond with our findings and any proposed remedy — our target is within 30 days.
-
-19.2 If you are not satisfied with our response, then — to the extent the Privacy Act applies to us (a question we would not contest lightly, and the APP-baseline commitment in clause 1.2 stands either way) — you may complain to the **Office of the Australian Information Commissioner (OAIC)**:
-
-- Website: [www.oaic.gov.au](https://www.oaic.gov.au)
-- Phone: 1300 363 992
-- Post: GPO Box 5288, Sydney NSW 2001, Australia
-
-19.3 If you are outside Australia, your local data protection authority may also be able to assist. This Policy is drafted for Australian law; nothing in it limits any right you have under the applicable law of your jurisdiction that cannot be excluded.
-
-## 20. Age
-
-20.1 Vaenyx is a general-audience product intended for use by adults aged **18 years or over**. The Software and the Community Services are not directed at persons under 18, and we do not knowingly collect personal information from anyone under 18 through the Community Services. A parent or guardian who believes we hold such information may contact hello@vaenyx.ai and we will delete it. Children's information handled locally by an adult user on their own device is Instance Data under clause 4 and does not reach us.
-
-## 21. Changes to this Policy
-
-21.1 We may update this Policy from time to time. Material changes will be made available in the product and in the public repository, with an updated effective date. Where a change would materially expand what we collect, how we use it, or how we disclose it, the expanded flow will remain **off for you until you agree to or enable it in the product** — we will not treat continued use as acceptance of a materially expanded collection or disclosure.
-
-21.2 This Policy is published in English and Chinese; the English version prevails to the extent of any inconsistency.
-
-21.3 **Feature status at the Effective Date.** As at 26 July 2026, the install-time sharing choice and Settings selector are available, but no community-improvement sharing engine or improvement-sharing endpoint is enabled, and no improvement pattern is uploaded. External-application feedback is stored locally only; no de-identification, Owner-preview or external-sharing flow for that feedback is available. Clauses describing uploads, shared-example evidence records or the improvement-sharing endpoint apply only if and when that capability becomes available in your version. A choice recorded before that capability is available is a preference only and does not authorise a later upload. Before the first upload, the capability will remain off until you are shown the then-current information and make a fresh affirmative choice.
-
-## 22. Contact
-
-22.1 Privacy officer / privacy contact: Vae Foundry Pty Ltd, hello@vaenyx.ai.
+**Privacy contact:** hello@vaenyx.ai
 
 ---
 
