@@ -79,7 +79,7 @@
 
 ## 4. Connected Third-Party Software and Services (Not Included in Vaenyx)
 
-**Release scope as at the Effective Date.** This release provides no community-sharing upload, Example attachment, de-identification or preview, or Merit. A current sharing setting is a local preference only and authorises no upload, licence or moral-rights consent. A later capability remains off until marked active, safeguarded, noticed and separately chosen.
+**Release scope as at the Effective Date.** This release provides no community-sharing upload, Example attachment, de-identification or preview, or Merit. A current community-sharing setting records a local preference only and sends nothing to the Operator. If a later version provides community improvement sharing, it remains off until the applicable safeguards and notices are in place and the user makes a fresh affirmative choice. Merit and an improvement-sharing endpoint are Operator Services only if and while the Schedule marks the relevant capability active.
 
 4.1 The software and services in this Section 4 are **not** part of the Vaenyx codebase and are **not** covered by any Vaenyx licence or by these notices, except as expressly stated. Each is provided by its own operator or maintainers, is governed by **its own terms of service, licence, and privacy policy**, and — where applicable — carries **its own fees, which are payable by you to that provider**. Vaenyx itself is free and has no billing; any cost that arises from a Connected Software or Service is a matter between you and that provider. Whether and how you use each Connected Software or Service is your decision.
 

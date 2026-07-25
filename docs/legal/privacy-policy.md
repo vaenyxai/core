@@ -229,11 +229,13 @@
 
 11.4 We may refuse access only where a ground permitted by APP 12 applies. If we refuse access or correction, we will give written reasons except to the extent it would be unreasonable to do so, and explain available complaint mechanisms.
 
-11.5 If we refuse to correct information, the individual may ask us to associate a statement that they consider the information inaccurate, out-of-date, incomplete, irrelevant or misleading. We will take reasonable steps to make the statement apparent to users of the information within a reasonable period and without charge.
+11.5 We will take reasonable steps to correct personal information we hold if, having regard to a purpose for which it is held, we are satisfied that it is inaccurate, out-of-date, incomplete, irrelevant or misleading. That duty applies whether we become aware of the problem independently or following a request.
 
-11.6 If we correct personal information that we previously disclosed to another APP entity, we will, at the individual's request, take reasonable steps to notify that entity of the correction unless it is unlawful or impracticable to do so.
+11.6 If we refuse to correct information, the individual may ask us to associate a statement that they consider the information inaccurate, out-of-date, incomplete, irrelevant or misleading. We will take reasonable steps to make the statement apparent to users of the information within a reasonable period and without charge.
 
-11.7 Privacy complaints may be sent to hello@vaenyx.ai. We will acknowledge, investigate and respond within a reasonable period. Where the Privacy Act applies, an individual who is not satisfied may complain to the Office of the Australian Information Commissioner.
+11.7 If we correct personal information that we previously disclosed to another APP entity, we will, at the individual's request, take reasonable steps to notify that entity of the correction unless it is unlawful or impracticable to do so.
+
+11.8 Privacy complaints may be sent to hello@vaenyx.ai. We will acknowledge, investigate and respond within a reasonable period. Where the Privacy Act applies, an individual who is not satisfied may complain to the Office of the Australian Information Commissioner.
 
 ## 12. Automated decisions
 
