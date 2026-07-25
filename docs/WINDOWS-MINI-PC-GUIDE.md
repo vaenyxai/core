@@ -150,7 +150,7 @@ You may point your own cloud-sync service at the *backup folder* if you want an
 off-site copy. Never sync the live `userdata\db` folder itself.
 
 Moving to a new computer works the same way: back up on the old PC, install on
-the new one, restore. See [MIGRATE-TO-NEW-PC.zh-CN.md](MIGRATE-TO-NEW-PC.zh-CN.md).
+the new one, restore. See [MIGRATE-TO-NEW-PC.md](MIGRATE-TO-NEW-PC.md).
 
 ## Using It From Your Phone
 

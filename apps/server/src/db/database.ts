@@ -15,6 +15,24 @@ import type { AppConfig } from "../config.js";
 
 const PENDING_RESTORE_FLAG = "pending-restore.flag";
 
+// The Owner can point backups at another drive; that choice lives in
+// userdata/config/backup.json. Read here without importing the backup module,
+// which is not available this early in boot.
+function readConfiguredBackupDestination(config: AppConfig): string | null {
+  try {
+    const raw = readFileSync(
+      resolve(config.dataDirectory, "..", "config", "backup.json"),
+      "utf8",
+    );
+    const parsed = JSON.parse(raw) as { destination?: unknown };
+    return typeof parsed.destination === "string" && parsed.destination.trim()
+      ? parsed.destination
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 // If the owner asked to restore a backup, apply it here — BEFORE the database is
 // opened — so restore.mjs can safely swap vaenyx.db and the library on disk with
 // nothing holding the file. The marker is consumed first so a failed restore
@@ -38,8 +56,33 @@ function applyPendingRestore(config: AppConfig): void {
 
   if (!id || id.includes("..") || !/^[A-Za-z0-9._-]+$/.test(id)) return;
 
-  const backupFolder = resolve(config.backupsDirectory, id);
-  if (!existsSync(resolve(backupFolder, "vaenyx.db"))) return;
+  // The chosen backup may sit in the owner's configured destination rather
+  // than the default folder, so look through the same roots the Backup page
+  // listed it from - otherwise picking a backup from an external drive
+  // restored nothing at all.
+  const candidateRoots = [
+    config.backupsDirectory,
+    resolve(config.dataDirectory, "..", "backups"),
+    readConfiguredBackupDestination(config),
+  ].filter((root): root is string => Boolean(root));
+
+  // An ENCRYPTED backup has no loose vaenyx.db - everything lives inside
+  // backup.vbak, which restore.mjs unpacks. Requiring the database here meant
+  // the Owner confirmed a restore, Vaenyx restarted, and nothing happened,
+  // with no error anywhere. For a recovery feature that is the worst possible
+  // failure mode.
+  let backupFolder: string | null = null;
+  for (const root of candidateRoots) {
+    const candidate = resolve(root, id);
+    if (
+      existsSync(resolve(candidate, "vaenyx.db")) ||
+      existsSync(resolve(candidate, "backup.vbak"))
+    ) {
+      backupFolder = candidate;
+      break;
+    }
+  }
+  if (!backupFolder) return;
 
   const script = resolve(config.repositoryRoot, "scripts", "restore.mjs");
   if (!existsSync(script)) return;
