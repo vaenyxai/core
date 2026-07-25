@@ -66,7 +66,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "disclaimer.merit":
       "Merit is a reputation record — no cash value, can't be bought, sold, or exchanged; not a currency or security.",
     "disclaimer.remote":
-      "Remote access uses Tailscale (a third party) under their terms; you sign in with your own account.",
+      "Remote access is optional and runs through a third-party service using your own account with that provider, under their terms. Third-Party Notices names the provider used by this version.",
     "disclaimer.model":
       "Connecting a cloud model (e.g. OpenAI, Gemini) follows that provider's terms and any costs are yours. A local model (e.g. Ollama) runs on your own machine.",
     "disclaimer.confirmTitle": "Before you use this",
@@ -74,7 +74,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.legal.eyebrow": "Legal",
     "settings.legal.title": "Legal",
     "settings.legal.copy":
-      "Plain-language placeholders for now — formal Terms, Privacy, and other documents will be linked here once finalised.",
+      "The short notes below summarise the legal position in plain language. The documents linked at the bottom of this page are the ones that actually govern, and the Schedule states what this release actually does.",
     "settings.legal.docsPending":
       "Terms of Service · Privacy Policy · Contributor Agreement — coming",
     "settings.backup.tab": "Backup",
@@ -261,7 +261,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "disclaimer.merit":
       "Merit 是信誉记录,无现金价值、不可买卖 / 兑换,不是货币、证券或理财产品。",
     "disclaimer.remote":
-      "使用 Tailscale(第三方)提供远程连接,受其条款约束;你用自己的账号登录。",
+      "远程访问是可选的,通过第三方服务实现,用你自己在该服务商的账号登录,受其条款约束。本版本使用哪一家,见《第三方声明》。",
     "disclaimer.model":
       "连接云模型(如 OpenAI / Gemini)受其条款约束、费用由你承担;本地模型(如 Ollama)在你自己机器上运行。",
     "disclaimer.confirmTitle": "使用前请知悉",
@@ -269,7 +269,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.legal.eyebrow": "法律",
     "settings.legal.title": "法律",
     "settings.legal.copy":
-      "目前是大白话占位 —— 正式的服务条款、隐私政策等文档定稿后会链接到这里。",
+      "下面几行用大白话概括法律要点。真正具有约束力的是本页底部链接的文件;本次发布实际做了什么,以明细表所载为准。",
     "settings.legal.docsPending": "服务条款 · 隐私政策 · 贡献者协议 —— 待定",
     "settings.backup.tab": "备份",
     "settings.backup.eyebrow": "数据保护",
