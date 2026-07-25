@@ -8,7 +8,7 @@
 | Governing law | Victoria, Australia |
 | Contact | hello@vaenyx.ai |
 | Effective | 26 July 2026 |
-| Copy pack version | `legal.copyVersion = "2.5"` |
+| Copy pack version | `legal.copyVersion = "2.6"` |
 
 Placeholders — all resolved 2026-07-25:
 - **Operator** = **Vae Foundry Pty Ltd (ACN 700 703 724)**, incorporated 25 July 2026.
@@ -16,6 +16,28 @@ Placeholders — all resolved 2026-07-25:
 - **Effective date** = **26 July 2026** (set at v2.4, after the feature-existence amendments).
 
 ---
+
+## 0. What changed at copy version 2.6
+
+Four strings were corrected against the shipped build, after a verbatim audit of
+this pack against `apps/web/src/i18n.tsx` (`node docs/legal/audit-copy.mjs`):
+
+| String | Change | Who was wrong |
+|---|---|---|
+| D1 `legal.disclaimer.community.install` | "It stays inactive until you enable it" → "It does nothing until you use it" | **This pack.** There is no enable toggle; installed content is declarative and simply sits there until used. |
+| G1 `legal.notice.publish` | Adopts the shipped text (CC BY 4.0 grant + permanence sentence) | **This pack**, which had recorded only part of the shipped string. |
+| G3 `legal.notice.publish.signIn` | Adopts the shipped text (why a sign-in is needed) | **This pack**, same reason. |
+| H3 `legal.notice.restore` | "This can't be undone" → the shipped truth: a safety copy is taken first, so it can be undone | **This pack.** The earlier wording overstated the consequence. |
+
+Three strings still differ, and there the **app** is wrong; they ship at 2.6:
+
+- D1 — the app is missing the "does nothing until you use it" sentence.
+- F3 `legal.notice.modelConnect.local` — the app says the address "points at your own machine". A local-network address may point at a **different** machine; the pack wording says so and is the accurate one.
+- G3a `legal.consent.publish.overseas` — the app is missing the final sentence, "Consent will be obtained again if the recipient, purpose or consequences materially change." That sentence is a commitment about consent currency, not decoration.
+
+Because a consent-class string (G3a) changes, 2.6 re-triggers acceptance: the
+install-time acceptance card and the health acknowledgement are shown again, and
+the publish service's accepted-copy floor moves to 2.6.
 
 ## 1. Purpose and Scope
 
@@ -178,8 +200,8 @@ Placeholders — all resolved 2026-07-25:
 
 **D2 — `legal.disclaimer.community.install`**
 - **Placement:** Install confirmation dialog for any community item, above the install button.
-- **EN:** "Created by a community member. It has not been reviewed as professional advice — use it at your own discretion. It stays inactive until you enable it."
-- **ZH:** "由社区成员制作,未经专业建议层面的审核——请自行斟酌使用。安装后保持未启用状态,直到你手动启用。"
+- **EN:** "Created by a community member. It has not been reviewed as professional advice — use it at your own discretion. It does nothing until you use it."
+- **ZH:** "由社区成员制作,未经专业建议层面的审核——请自行斟酌使用。你不主动使用,它就不会做任何事。"
 - **Behaviour:** Point-of-action (every community install). The final sentence reflects the inert-by-default safety property and must not be removed while that property holds.
 
 **D3 — `legal.disclaimer.community.verifiedMeaning`**
@@ -260,8 +282,8 @@ Placeholders — all resolved 2026-07-25:
 *Architecture (locked 2026-07-03; service built 2026-07-04): publishing goes through the operator's central publish service (a Cloudflare Worker with a D1 database). **The engine de-identifies attached examples on-device before anything is uploaded** — this is what makes G1's locality sentence true, and it is the condition on which the Schedule may mark on-device de-identification active (Core Privacy Policy clause 7.7). The app then sends the declarative content plus the user's signed-in identity; the service alone holds the single GitHub bot token, validates the submission (enforcing de-identification as a backstop: non-conforming submissions are rejected, not silently rewritten server-side), commits to the public warehouse repository (github.com/vaenyxai/community) and records Merit. Publishing is auto-publish with reactive operator takedown and ban. Users never need a GitHub account; having one gives no advantage beyond being a sign-in option.*
 
 **G1 — `legal.notice.publish`**
-- **EN:** "No local examples or raw corrections are included in the current publish submission. If you find personal information in Published Content, report it to hello@vaenyx.ai."
-- **ZH:** "当前的发布提交不包含任何本地示例或原始纠错。若你在已发布内容中发现个人信息，请发信至 hello@vaenyx.ai 举报。"
+- **EN:** "Publishing makes this Method or Routine public, credited to your display name and licensed to everyone under the Creative Commons Attribution 4.0 licence. No local examples or raw corrections are included in the current publish submission. Publication is permanent in copies beyond our reach. If you find personal information in Published Content, report it to hello@vaenyx.ai."
+- **ZH:** "发布会使该 Method 或 Routine 公开,署上你的显示名称,并依 Creative Commons Attribution 4.0 许可授予所有人。当前的发布提交不包含任何本地示例或原始纠错。就我们无法触及的副本而言,发布是永久的。若你在已发布内容中发现个人信息,请发信至 hello@vaenyx.ai 举报。"
 - **Behaviour:** Shown in the publish confirmation dialog. Must not describe stripping, de-identification or an exact preview of examples — the current publish path sends only recipe, schema, manifest and metadata files.
 
 **G2 — `legal.notice.publish.contributorTerms`**
@@ -276,8 +298,8 @@ Placeholders — all resolved 2026-07-25:
 - **Behaviour:** Must be ticked on every publish; never pre-ticked. Recorded server-side with key name, copy version, language, account id, contribution id and timestamp.
 
 **G3 — `legal.notice.publish.signIn`**
-- **EN:** "Vaenyx stores only what is currently needed for authentication, attribution, managing your published content, moderation and evidencing your publish-time acceptance."
-- **ZH:** "Vaenyx 仅存储当前所需的信息：身份验证、署名、管理你已发布的内容、内容管理，以及留存你发布时的接受记录。"
+- **EN:** "Publishing needs a sign-in with Google or GitHub so your work can be credited to you. Vaenyx stores only what is currently needed for authentication, attribution, managing your published content, moderation and evidencing your publish-time acceptance."
+- **ZH:** "发布需要用 Google 或 GitHub 登录,以便你的作品能署名给你。Vaenyx 仅存储当前所需的信息:身份验证、署名、管理你已发布的内容、内容管理,以及留存你发布时的接受记录。"
 - **Behaviour:** Shown in the sign-in step. Must not mention Merit while Merit is not provided.
 
 **G3a — `legal.consent.publish.overseas`** *(APP 8.2(b) overseas-disclosure consent — the operative condition in Core Privacy Policy clauses 8.4 to 8.6)*
@@ -316,9 +338,9 @@ Placeholders — all resolved 2026-07-25:
 
 **H3 — `legal.notice.restore`**
 - **Placement:** Restore confirmation dialog, above the restore button.
-- **EN:** "Restoring replaces your current data with this backup. This can't be undone."
-- **ZH:** "恢复将用此备份替换当前数据,且无法撤销。"
-- **Behaviour:** Point-of-action (every restore); confirm button `legal.notice.restore.confirm` — **EN:** "Restore and Replace" / **ZH:** "恢复并替换".
+- **EN:** "Vaenyx will restart to restore this snapshot (about 30 seconds). Your current data is saved as an automatic safety copy first, so you can undo it."
+- **ZH:** "Vaenyx 会重启以还原这个快照(约 30 秒)。会先把你当前的数据自动存成一份安全副本,可反悔。"
+- **Behaviour:** Point-of-action (every restore); confirm button `legal.notice.restore.confirm` — **EN:** "Restore and Replace" / **ZH:** "恢复并替换". **Corrected at copy version 2.6:** the earlier text said the restore could not be undone. The shipped implementation takes an automatic safety copy of the current data before replacing it, so the earlier wording overstated the consequence. The strings currently ship under the keys `settings.backup.restoreTitle` / `settings.backup.restoreWarn` / `settings.backup.restore`; they move to the `legal.notice.restore` keys so the copy audit can see them.
 
 ### Part I — Settings
 

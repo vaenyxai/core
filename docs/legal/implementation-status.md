@@ -2,8 +2,10 @@
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
 > Schedule version **2026-07-25.2** · effective from **2026-07-26** · verified **2026-07-25**
-> Client **0.2.0-dev.173** · Server **vaenyx-core-cloud (migrations 0001-0003)**
+> Client **0.2.0-dev.180** · Server **vaenyx-core-cloud (migrations 0001-0003)**
 > Legal set **v3.0** · minimum legal set **v3.0** · minimum copy version **2.5**
+
+**Copy version 2.6 is drafted but not yet shipped.** Copy pack 2.6 is drafted and corrects four strings against the shipped build; three strings still differ in the app (D1 inert sentence, F3 local-model address wording, G3a consent-currency sentence). Until 2.6 ships, the shipped copy version remains 2.5 and the publish service floor stays at 2.5.
 
 ## Status of this Schedule
 
