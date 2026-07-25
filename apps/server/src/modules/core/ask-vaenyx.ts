@@ -607,14 +607,24 @@ export async function createAskVaenyxMessage(
   const modeRow = database.sqlite
     .prepare(
       `SELECT modes.name AS name, modes.rules AS rules,
-              modes.local_only AS local_only
+              modes.local_only AS local_only, modes.agent_name AS agent_name
        FROM ask_vaenyx_conversations
        JOIN modes ON modes.id = ask_vaenyx_conversations.mode_id
        WHERE ask_vaenyx_conversations.id = ?`,
     )
     .get(conversationId) as
-    | { name: string; rules: string; local_only: number }
+    | {
+        name: string;
+        rules: string;
+        local_only: number;
+        agent_name: string;
+      }
     | undefined;
+  // A mode may name its own assistant (spec §6): tell the model who it is
+  // here, so the name in the UI and the voice in the replies agree.
+  if (modeRow?.agent_name.trim()) {
+    projectContext = `In this conversation you are called "${modeRow.agent_name.trim()}". Answer to that name.${projectContext ? `\n\n${projectContext}` : ""}`;
+  }
   if (modeRow?.rules.trim()) {
     projectContext = `Custom Mode rules — this conversation runs inside the restricted mode "${modeRow.name}". The account owner set these standing rules; they override any conflicting request made in this conversation: ${modeRow.rules.trim()}${projectContext ? `\n\n${projectContext}` : ""}`;
   }

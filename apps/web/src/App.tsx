@@ -143,7 +143,12 @@ import {
   switchMode,
   exitMode,
   fetchModeThreads,
+  fetchDeviceModes,
+  setDeviceMode,
+  forgetDeviceMode,
+  applyDeviceMode,
   type Mode,
+  type DeviceMode,
   type LocalTtsStatus,
   postPresenceHeartbeat,
   stopTurn,
@@ -1658,6 +1663,8 @@ function VoicePanel() {
   >("none");
   const [outputVoice, setOutputVoice] = useState("Kore");
   const [localTts, setLocalTts] = useState<LocalTtsStatus | null>(null);
+  // Deleting the local voice throws away a 150 MB download — ask first.
+  const [confirmRemoveLocal, setConfirmRemoveLocal] = useState(false);
   const [localEnVoice, setLocalEnVoice] = useState("en_US-amy-medium");
   const [localZhVoice, setLocalZhVoice] = useState("zh_CN-huayan-medium");
   const [busy, setBusy] = useState(false);
@@ -2014,14 +2021,37 @@ function VoicePanel() {
                 >
                   Test Chinese
                 </button>
-                <button
-                  className="text-button"
-                  disabled={busy}
-                  onClick={() => void removeLocalVoice()}
-                  type="button"
-                >
-                  Remove Download
-                </button>
+                {confirmRemoveLocal ? (
+                  <>
+                    <button
+                      className="text-button danger"
+                      disabled={busy}
+                      onClick={() => {
+                        setConfirmRemoveLocal(false);
+                        void removeLocalVoice();
+                      }}
+                      type="button"
+                    >
+                      Really Remove (150 MB)
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() => setConfirmRemoveLocal(false)}
+                      type="button"
+                    >
+                      Keep
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() => setConfirmRemoveLocal(true)}
+                    type="button"
+                  >
+                    Remove Download
+                  </button>
+                )}
               </div>
             </>
           ) : localTts?.status === "downloading" ? (
@@ -3424,6 +3454,47 @@ function ToastHost() {
   );
 }
 
+// This browser's device id (spec §6 device pairing): a stable random id in
+// localStorage, so the Owner can say "this device opens in mode X".
+const DEVICE_ID_KEY = "vaenyx.deviceId";
+const DEVICE_APPLIED_KEY = "vaenyx.deviceModeApplied";
+
+function deviceId(): string {
+  try {
+    const existing = window.localStorage.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(DEVICE_ID_KEY, created);
+    return created;
+  } catch {
+    return "unknown-device";
+  }
+}
+
+// A human label so the Owner can tell devices apart in the Modes list.
+function deviceLabel(): string {
+  const agent = navigator.userAgent;
+  const platform = /Android/i.test(agent)
+    ? "Android"
+    : /iPhone|iPad|iPod/i.test(agent)
+      ? "iPhone/iPad"
+      : /Mac/i.test(agent)
+        ? "Mac"
+        : /Windows/i.test(agent)
+          ? "Windows"
+          : "Device";
+  const browser = /Edg\//.test(agent)
+    ? "Edge"
+    : /Chrome\//.test(agent)
+      ? "Chrome"
+      : /Safari\//.test(agent)
+        ? "Safari"
+        : /Firefox\//.test(agent)
+          ? "Firefox"
+          : "Browser";
+  return `${platform} · ${browser}`;
+}
+
 // Re-ask the Enter PIN whenever the app is (re)opened into a gated mode
 // (Oskar, dev.169): the session stays in its last mode across opens, but a
 // mode with an Enter PIN must be unlocked again each time the app starts.
@@ -3480,6 +3551,11 @@ function ModePinGate({
       // Without an exit PIN this returns straight to User Mode; with one,
       // the typed secret must open the exit gate too.
       await exitMode(secret.trim() || undefined);
+      try {
+        window.sessionStorage.setItem(DEVICE_APPLIED_KEY, "exited");
+      } catch {
+        // Best-effort.
+      }
       window.location.reload();
     } catch (nextError) {
       setError(
@@ -3544,6 +3620,13 @@ function ModeBadge({ mode }: { mode: Mode }) {
     setError(null);
     try {
       await exitMode(withSecret);
+      // An explicit exit wins over this device's default for the rest of
+      // the session — otherwise the reload would drop straight back in.
+      try {
+        window.sessionStorage.setItem(DEVICE_APPLIED_KEY, "exited");
+      } catch {
+        // Best-effort.
+      }
       window.location.reload();
     } catch (nextError) {
       setError(
@@ -3650,6 +3733,9 @@ function ModesPanel() {
     }
   }
 
+  const thisDeviceId = deviceId();
+  const [devices, setDevices] = useState<DeviceMode[]>([]);
+
   useEffect(() => {
     void fetchModes()
       .then(setModes)
@@ -3660,7 +3746,42 @@ function ModesPanel() {
             : "Could not load modes.",
         ),
       );
+    void fetchDeviceModes()
+      .then(setDevices)
+      .catch(() => undefined);
   }, []);
+
+  async function applyDeviceDefault(id: string, modeId: string | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      setDevices(await setDeviceMode(id, { modeId }));
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not set the device's mode.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function forgetDevice(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      setDevices(await forgetDeviceMode(id));
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not forget the device.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function enterMode(mode: Mode, secret?: string) {
     setBusy(true);
@@ -3728,10 +3849,16 @@ function ModesPanel() {
   const [editRules, setEditRules] = useState("");
   const [editLockSettings, setEditLockSettings] = useState(false);
   const [editLocalOnly, setEditLocalOnly] = useState(false);
+  const [editAgentName, setEditAgentName] = useState("");
+  const [editDigest, setEditDigest] = useState<"off" | "daily" | "weekly">(
+    "off",
+  );
   const [editEnterPin, setEditEnterPin] = useState("");
   const [editExitPin, setEditExitPin] = useState("");
   const [editClearEnterPin, setEditClearEnterPin] = useState(false);
   const [editClearExitPin, setEditClearExitPin] = useState(false);
+  // Deleting a mode takes its sandbox with it — ask first (Oskar, dev.171).
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
   function startEdit(mode: Mode) {
     setEditFor(mode.id);
@@ -3739,6 +3866,8 @@ function ModesPanel() {
     setEditRules(mode.rules);
     setEditLockSettings(mode.lockSettings);
     setEditLocalOnly(mode.localOnly);
+    setEditAgentName(mode.agentName);
+    setEditDigest(mode.digestCadence);
     setEditEnterPin("");
     setEditExitPin("");
     setEditClearEnterPin(false);
@@ -3754,6 +3883,8 @@ function ModesPanel() {
         rules: editRules,
         lockSettings: editLockSettings,
         localOnly: editLocalOnly,
+        agentName: editAgentName.trim(),
+        digestCadence: editDigest,
         ...(editClearEnterPin
           ? { enterPin: "" }
           : editEnterPin.trim()
@@ -3785,6 +3916,7 @@ function ModesPanel() {
     setError(null);
     try {
       await deleteMode(modeId);
+      setConfirmRemove(null);
       setModes((current) => current.filter((item) => item.id !== modeId));
     } catch (nextError) {
       setError(
@@ -3908,6 +4040,60 @@ function ModesPanel() {
       </section>
 
       <section className="settings-card">
+        <p className="eyebrow">Paired devices</p>
+        <h2>Which Mode Each Device Opens In</h2>
+        <p className="settings-card-copy">
+          A device set to open in a mode lands there every time the app
+          starts. Combined with that mode's Exit PIN, the device stays in it.
+        </p>
+        {devices.length === 0 ? (
+          <p className="library-note">No other devices have opened Vaenyx yet.</p>
+        ) : (
+          <div className="modes-list">
+            {devices.map((device) => (
+              <article className="modes-card" key={device.deviceId}>
+                <div className="modes-card-head">
+                  <strong>
+                    {device.label}
+                    {device.deviceId === thisDeviceId ? " · This Device" : ""}
+                  </strong>
+                  <button
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() => void forgetDevice(device.deviceId)}
+                    type="button"
+                  >
+                    Forget
+                  </button>
+                </div>
+                <label className="chat-font-field">
+                  Opens in
+                  <select
+                    className="task-select"
+                    disabled={busy}
+                    onChange={(event) =>
+                      void applyDeviceDefault(
+                        device.deviceId,
+                        event.target.value || null,
+                      )
+                    }
+                    value={device.modeId ?? ""}
+                  >
+                    <option value="">User Mode (no restriction)</option>
+                    {modes.map((mode) => (
+                      <option key={mode.id} value={mode.id}>
+                        {mode.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="settings-card">
         <div className="section-title">
           <div>
             <p className="eyebrow">Restricted sandboxes</p>
@@ -3937,14 +4123,34 @@ function ModesPanel() {
                     >
                       {editFor === mode.id ? "Cancel" : "Edit"}
                     </button>
-                    <button
-                      className="text-button"
-                      disabled={busy}
-                      onClick={() => void removeMode(mode.id)}
-                      type="button"
-                    >
-                      Remove
-                    </button>
+                    {confirmRemove === mode.id ? (
+                      <>
+                        <button
+                          className="text-button danger"
+                          disabled={busy}
+                          onClick={() => void removeMode(mode.id)}
+                          type="button"
+                        >
+                          Really Remove
+                        </button>
+                        <button
+                          className="text-button"
+                          onClick={() => setConfirmRemove(null)}
+                          type="button"
+                        >
+                          Keep
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="text-button"
+                        disabled={busy}
+                        onClick={() => setConfirmRemove(mode.id)}
+                        type="button"
+                      >
+                        Remove
+                      </button>
+                    )}
                   </span>
                 </div>
                 {editFor === mode.id ? (
@@ -3985,6 +4191,33 @@ function ModesPanel() {
                         type="checkbox"
                       />
                       Local model only (also blocks network)
+                    </label>
+                    <label>
+                      Agent name in this mode — blank uses the main one
+                      <input
+                        maxLength={100}
+                        onChange={(event) =>
+                          setEditAgentName(event.target.value)
+                        }
+                        placeholder="Vaenyx"
+                        value={editAgentName}
+                      />
+                    </label>
+                    <label>
+                      Activity summary to User Mode
+                      <select
+                        className="task-select"
+                        onChange={(event) =>
+                          setEditDigest(
+                            event.target.value as "off" | "daily" | "weekly",
+                          )
+                        }
+                        value={editDigest}
+                      >
+                        <option value="off">Off</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
                     </label>
                     <label>
                       Enter PIN — blank keeps the current one
@@ -7715,6 +7948,10 @@ function ModelsPanel() {
   // rest live behind one "Add a Model" dropdown whose pick expands its form.
   const [addTargetId, setAddTargetId] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Disconnecting drops a stored key — ask first (Oskar, dev.171).
+  const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(
+    null,
+  );
   // A sign-in-page model button parked a connect intent: open that provider's
   // add form once, then clear the intent so later visits open normally.
   const [connectTarget] = useState<string | null>(() =>
@@ -8030,14 +8267,37 @@ function ModelsPanel() {
                   >
                     {editingId === provider.id ? "Close" : "Edit"}
                   </button>
-                  <button
-                    className="text-button"
-                    disabled={busy === provider.id}
-                    onClick={() => void disconnect(provider)}
-                    type="button"
-                  >
-                    Disconnect
-                  </button>
+                  {confirmDisconnect === provider.id ? (
+                    <>
+                      <button
+                        className="text-button danger"
+                        disabled={busy === provider.id}
+                        onClick={() => {
+                          setConfirmDisconnect(null);
+                          void disconnect(provider);
+                        }}
+                        type="button"
+                      >
+                        Really Disconnect
+                      </button>
+                      <button
+                        className="text-button"
+                        onClick={() => setConfirmDisconnect(null)}
+                        type="button"
+                      >
+                        Keep
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="text-button"
+                      disabled={busy === provider.id}
+                      onClick={() => setConfirmDisconnect(provider.id)}
+                      type="button"
+                    >
+                      Disconnect
+                    </button>
+                  )}
                 </>
               ) : null}
             </div>
@@ -8680,160 +8940,60 @@ function SettingsPanel({
     }
   }
 
-  if (sessionMode?.lockSettings) {
-    // Locked mode keeps the harmless personal preferences (Oskar, dev.170):
-    // theme, chat text, language, agent name. Everything structural is gone
-    // from the UI and blocked server-side.
-    return (
-      <div className="settings-layout">
-        <section className="settings-card">
-          <p className="eyebrow">Restricted Mode</p>
-          <h2>Personalize</h2>
-          <p className="settings-card-copy">
-            The mode "{sessionMode.name}" locks the rest of the settings —
-            these personal preferences stay available.
-          </p>
-          <h3 className="settings-subhead">Theme</h3>
-          <ThemeSelect
-            onChange={(id) => {
-              applyTheme(id);
-              setTheme(id);
-            }}
-            value={theme}
-          />
-          <div className="settings-card-divider" />
-          <h3 className="settings-subhead">Chat Text</h3>
-          <div className="chat-font-controls">
-            <label className="chat-font-field">
-              Size
-              <select
-                className="task-select"
-                onChange={(event) => {
-                  setChatFontSize(event.target.value);
-                  applyChatFont(event.target.value, chatFontFamily);
-                }}
-                value={chatFontSize}
-              >
-                {CHAT_FONT_SIZES.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="chat-font-field">
-              Font
-              <select
-                className="task-select"
-                onChange={(event) => {
-                  setChatFontFamily(event.target.value);
-                  applyChatFont(chatFontSize, event.target.value);
-                }}
-                value={chatFontFamily}
-              >
-                {CHAT_FONT_FAMILIES.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="settings-card-divider" />
-          <h3 className="settings-subhead">{t("settings.language.title")}</h3>
-          <div className="lang-toggle">
-            <button
-              className={`lang-toggle-option ${lang === "en" ? "active" : ""}`}
-              onClick={() => setLang("en")}
-              type="button"
-            >
-              {t("settings.language.english")}
-            </button>
-            <button
-              className={`lang-toggle-option ${lang === "zh" ? "active" : ""}`}
-              onClick={() => setLang("zh")}
-              type="button"
-            >
-              {t("settings.language.chinese")}
-            </button>
-          </div>
-          <div className="settings-card-divider" />
-          <h3 className="settings-subhead">Agent Name</h3>
-          <label className="chat-font-field">
-            Agent Name
-            <input
-              maxLength={100}
-              onChange={(event) => {
-                setAgentName(event.target.value);
-                setSaved(false);
-              }}
-              value={agentName}
-            />
-          </label>
-          <div className="model-card-actions">
-            <button
-              className="secondary-button"
-              onClick={() =>
-                void updateSettings({
-                  instanceName: settings.instanceName,
-                  agentName,
-                }).then((updated) => {
-                  onUpdate(updated);
-                  setSaved(true);
-                })
-              }
-              type="button"
-            >
-              Save
-            </button>
-          </div>
-          {saved ? <p className="saved-note">Saved.</p> : null}
-        </section>
-      </div>
-    );
-  }
+  // A lockSettings mode keeps only the harmless personal preferences and the
+  // read-only documents (Oskar, dev.171). Everything else disappears from the
+  // UI; the server hook is still the floor underneath.
+  const locked = sessionMode?.lockSettings ?? false;
+  const activeTab =
+    locked && !["user", "manual", "legal"].includes(settingsTab)
+      ? "user"
+      : settingsTab;
 
   return (
     <div className="settings-layout">
       <nav aria-label="Settings sections" className="library-subtabs">
         <button
-          className={settingsTab === "user" ? "active" : ""}
+          className={activeTab === "user" ? "active" : ""}
           onClick={() => setSettingsTab("user")}
           type="button"
         >
           User Settings
         </button>
-        <button
-          className={settingsTab === "ai" ? "active" : ""}
-          onClick={() => setSettingsTab("ai")}
-          type="button"
-        >
-          AI Settings
-        </button>
-        <button
-          className={settingsTab === "notifications" ? "active" : ""}
-          onClick={() => setSettingsTab("notifications")}
-          type="button"
-        >
-          Notifications
-        </button>
-        <button
-          className={settingsTab === "backup" ? "active" : ""}
-          onClick={() => setSettingsTab("backup")}
-          type="button"
-        >
-          {t("settings.backup.tab")}
-        </button>
-        <button
-          className={settingsTab === "sharing" ? "active" : ""}
-          onClick={() => setSettingsTab("sharing")}
-          type="button"
-        >
-          Sharing
-        </button>
+        {locked ? null : (
+          <>
+            <button
+              className={activeTab === "ai" ? "active" : ""}
+              onClick={() => setSettingsTab("ai")}
+              type="button"
+            >
+              AI Settings
+            </button>
+            <button
+              className={activeTab === "notifications" ? "active" : ""}
+              onClick={() => setSettingsTab("notifications")}
+              type="button"
+            >
+              Notifications
+            </button>
+            <button
+              className={activeTab === "backup" ? "active" : ""}
+              onClick={() => setSettingsTab("backup")}
+              type="button"
+            >
+              {t("settings.backup.tab")}
+            </button>
+            <button
+              className={activeTab === "sharing" ? "active" : ""}
+              onClick={() => setSettingsTab("sharing")}
+              type="button"
+            >
+              Sharing
+            </button>
+          </>
+        )}
         {sessionMode ? null : (
           <button
-            className={settingsTab === "modes" ? "active" : ""}
+            className={activeTab === "modes" ? "active" : ""}
             onClick={() => setSettingsTab("modes")}
             type="button"
           >
@@ -8841,31 +9001,38 @@ function SettingsPanel({
           </button>
         )}
         <button
-          className={settingsTab === "manual" ? "active" : ""}
+          className={activeTab === "manual" ? "active" : ""}
           onClick={() => setSettingsTab("manual")}
           type="button"
         >
           Manual
         </button>
         <button
-          className={settingsTab === "legal" ? "active" : ""}
+          className={activeTab === "legal" ? "active" : ""}
           onClick={() => setSettingsTab("legal")}
           type="button"
         >
           {t("settings.legal.title")}
         </button>
       </nav>
-      {settingsTab === "manual" ? (
+      {locked ? (
+        <p className="modes-preview-note">
+          You are in the mode "{sessionMode?.name}" — it locks everything
+          except these personal preferences. Exit to User Mode (the badge at
+          the top) to change the rest.
+        </p>
+      ) : null}
+      {activeTab === "manual" ? (
       <section className="settings-card">
         <p className="eyebrow">{t("settings.manual.eyebrow")}</p>
         <h2>{t("settings.manual.title")}</h2>
         <HelpContent />
       </section>
       ) : null}
-      {settingsTab === "user" ? (
+      {activeTab === "user" ? (
       <section className="settings-card">
-        <p className="eyebrow">Appearance</p>
-        <h2>Appearance</h2>
+        <p className="eyebrow">Personal</p>
+        <h2>Appearance &amp; Name</h2>
         <h3 className="settings-subhead">Theme</h3>
         <p className="settings-card-copy">
           Pick a color theme for Vaenyx. Your choice is saved on this device.
@@ -8937,9 +9104,44 @@ function SettingsPanel({
             {t("settings.language.chinese")}
           </button>
         </div>
+        <div className="settings-card-divider" />
+        <h3 className="settings-subhead">Agent Name</h3>
+        <p className="settings-card-copy">
+          What your assistant is called in conversations. A Custom Mode can
+          carry its own name — set that on the mode itself.
+        </p>
+        <label className="chat-font-field">
+          Agent Name
+          <input
+            maxLength={100}
+            onChange={(event) => {
+              setAgentName(event.target.value);
+              setSaved(false);
+            }}
+            value={agentName}
+          />
+        </label>
+        <div className="model-card-actions">
+          <button
+            className="secondary-button"
+            onClick={() =>
+              void updateSettings({
+                instanceName: settings.instanceName,
+                agentName,
+              }).then((updated) => {
+                onUpdate(updated);
+                setSaved(true);
+              })
+            }
+            type="button"
+          >
+            Save
+          </button>
+        </div>
+        {saved ? <p className="saved-note">Saved.</p> : null}
       </section>
       ) : null}
-      {settingsTab === "user" ? (
+      {activeTab === "user" && !locked ? (
       <section className="settings-card">
         <p className="eyebrow">Account</p>
         <h2>Account &amp; power</h2>
@@ -9076,7 +9278,7 @@ function SettingsPanel({
         ) : null}
       </section>
       ) : null}
-      {settingsTab === "ai" ? (
+      {activeTab === "ai" ? (
       <section className="settings-card">
         <p className="eyebrow">Visible identity</p>
         <h2>Identity</h2>
@@ -9102,22 +9304,9 @@ function SettingsPanel({
               value={instanceName}
             />
           </label>
-          <label>
-            Agent Name
-            <input
-              maxLength={100}
-              onChange={(event) => {
-                setAgentName(event.target.value);
-                setSaved(false);
-              }}
-              placeholder="Vaenyx"
-              required
-              value={agentName}
-            />
-          </label>
           <p className="settings-card-copy">
-            Agent Name is what your assistant is called in conversations.
-            Default: Vaenyx.
+            The name of this Vaenyx install. Your assistant's name lives in
+            User Settings.
           </p>
           <button className="primary-button" type="submit">
             Save
@@ -9126,7 +9315,7 @@ function SettingsPanel({
         </form>
       </section>
       ) : null}
-      {settingsTab === "ai" ? (
+      {activeTab === "ai" ? (
       <section className="settings-card">
         <p className="eyebrow">Provider Auth</p>
         <h2>OpenAI / Codex connection</h2>
@@ -9284,13 +9473,13 @@ function SettingsPanel({
         </details>
       </section>
       ) : null}
-      {settingsTab === "ai" ? <ModelsPanel /> : null}
-      {settingsTab === "ai" ? <VoicePanel /> : null}
-      {settingsTab === "notifications" ? <NotificationsPanel /> : null}
-      {settingsTab === "backup" ? <BackupPanel /> : null}
-      {settingsTab === "sharing" ? <SharingPanel /> : null}
-      {settingsTab === "modes" ? <ModesPanel /> : null}
-      {settingsTab === "legal" ? (
+      {activeTab === "ai" ? <ModelsPanel /> : null}
+      {activeTab === "ai" ? <VoicePanel /> : null}
+      {activeTab === "notifications" ? <NotificationsPanel /> : null}
+      {activeTab === "backup" ? <BackupPanel /> : null}
+      {activeTab === "sharing" ? <SharingPanel /> : null}
+      {activeTab === "modes" ? <ModesPanel /> : null}
+      {activeTab === "legal" ? (
       <section className="settings-card">
         <p className="eyebrow">{t("settings.legal.eyebrow")}</p>
         <h2>{t("settings.legal.title")}</h2>
@@ -13678,6 +13867,27 @@ function VaenyxWorkspace({
       !workspace.mode?.hasEnterPin ||
       modePinVerifiedThisSession(workspace.mode.id),
   );
+  // Device pairing + default mode (spec §6): register this device so the
+  // Owner can see it, then land in its default mode on app open. Skipped
+  // for the rest of a session in which the Owner explicitly exited, so
+  // fixing a device's setting is always possible.
+  useEffect(() => {
+    const id = deviceId();
+    void setDeviceMode(id, { label: deviceLabel() }).catch(() => undefined);
+    if (workspace.mode) return;
+    let exited = false;
+    try {
+      exited = window.sessionStorage.getItem(DEVICE_APPLIED_KEY) === "exited";
+    } catch {
+      // Best-effort.
+    }
+    if (exited) return;
+    void applyDeviceMode(id)
+      .then((result) => {
+        if (result.modeId) window.location.reload();
+      })
+      .catch(() => undefined);
+  }, [workspace.mode]);
 
   return (
     <main className="app-shell" style={appShellStyle}>
@@ -13700,7 +13910,6 @@ function VaenyxWorkspace({
       {systemStatus?.version ? (
         <span className="version-badge">v{systemStatus.version}</span>
       ) : null}
-      {workspace.mode ? <ModeBadge mode={workspace.mode} /> : null}
       {updateAvailable ? (
         <button
           className="update-banner"
@@ -13713,7 +13922,10 @@ function VaenyxWorkspace({
       <aside className={`sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`}>
         <div className="brand sidebar-brand">
           <span className="brand-mark">V</span>
-          <span>Vaenyx</span>
+          <span>{workspace.mode?.agentName?.trim() || "Vaenyx"}</span>
+          {/* The mode marker sits with the identity it belongs to (Oskar,
+              dev.171) instead of floating over the sign-out row. */}
+          {workspace.mode ? <ModeBadge mode={workspace.mode} /> : null}
         </div>
 
         <nav aria-label="Vaenyx navigation">

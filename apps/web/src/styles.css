@@ -4203,22 +4203,32 @@ select {
   background: var(--accent-soft);
 }
 
-/* Persistent "you are in a mode" marker with its exit gate (spec §6). */
+/* Persistent "you are in a mode" marker with its exit gate (spec §6), in
+   the sidebar header beside the name. */
 .mode-badge {
-  position: fixed;
-  z-index: 55;
-  left: calc(10px + env(safe-area-inset-left));
-  bottom: calc(40px + env(safe-area-inset-bottom));
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  padding: 6px 11px;
+  flex-wrap: wrap;
+  margin-left: auto;
+  padding: 4px 8px;
   border: 1px solid var(--accent);
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+}
+
+.sidebar-brand {
+  flex-wrap: wrap;
+}
+
+.mode-badge-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mode-badge button {
@@ -4280,6 +4290,12 @@ select {
 .modes-card-buttons {
   display: flex;
   gap: 12px;
+}
+
+/* Second press of a destructive action. */
+.text-button.danger {
+  color: #df938a;
+  font-weight: 700;
 }
 
 .modes-card p {

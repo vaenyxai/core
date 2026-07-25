@@ -47,6 +47,10 @@ import {
   ExitModeRequestSchema,
   type ExitModeRequest,
   PushPrefsSchema,
+  DeviceModeSchema,
+  SetDeviceModeRequestSchema,
+  type SetDeviceModeRequest,
+  ApplyDeviceModeResponseSchema,
   StopTurnRequestSchema,
   VisionStatusSchema,
   ConnectVisionRequestSchema,
@@ -239,9 +243,13 @@ import {
   createMode,
   deleteMode,
   findMode,
+  forgetDevice,
+  getDeviceDefaultMode,
   getModeRowById,
+  listDeviceModes,
   listModes,
   modePinMatches,
+  setDeviceMode,
   updateMode,
 } from "../core/modes.js";
 import {
@@ -3909,6 +3917,123 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
       }
       return listModes(context.database);
+    },
+  );
+
+  // ── Device default mode (spec §6) ──────────────────────────────────────
+  // Every device keeps its own id; the Owner sets which mode it opens into.
+  // Listing/setting is User-Mode-only; applying is not, so a device that is
+  // meant to stay in a mode lands there on every open.
+  app.get(
+    "/v1/mode/devices",
+    {
+      schema: {
+        response: {
+          200: Type.Array(DeviceModeSchema),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
+      }
+      return listDeviceModes(context.database);
+    },
+  );
+
+  app.put<{ Body: SetDeviceModeRequest; Params: { id: string } }>(
+    "/v1/mode/devices/:id",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        body: SetDeviceModeRequestSchema,
+        response: {
+          200: Type.Array(DeviceModeSchema),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      // Registering this device (label only, no mode change) is allowed from
+      // anywhere; choosing a device's default mode is a User-Mode setting.
+      if (owner.modeId && request.body.modeId !== undefined) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
+      }
+      try {
+        return setDeviceMode(context.database, request.params.id, request.body);
+      } catch (error) {
+        if (error instanceof Error && error.message === "MODE_NOT_FOUND") {
+          return reply.code(404).send({ error: "Mode not found." });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/v1/mode/devices/:id",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: Type.Array(DeviceModeSchema),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
+      }
+      return forgetDevice(context.database, request.params.id);
+    },
+  );
+
+  // Apply this device's default on app open. No PIN here — entering a
+  // restricted mode only ever REMOVES privileges; the Enter PIN gate still
+  // runs in the UI, and leaving is what the exit PIN guards.
+  app.post<{ Params: { id: string } }>(
+    "/v1/mode/devices/:id/apply",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: ApplyDeviceModeResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (owner.modeId) {
+        return { modeId: owner.modeId };
+      }
+      const modeId = getDeviceDefaultMode(context.database, request.params.id);
+      if (!modeId || !findMode(context.database, modeId)) {
+        return { modeId: null };
+      }
+      setSessionMode(context.database, request, modeId);
+      return { modeId };
     },
   );
 

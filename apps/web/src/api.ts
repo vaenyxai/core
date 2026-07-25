@@ -37,6 +37,8 @@
   Mode,
   CreateModeRequest,
   UpdateModeRequest,
+  DeviceMode,
+  SetDeviceModeRequest,
   Project,
   RoutineGalleryItem,
   RoutineJournalEntry,
@@ -68,7 +70,7 @@
   Workspace,
 } from "@vaenyx/contracts";
 
-export type { Mode } from "@vaenyx/contracts";
+export type { Mode, DeviceMode } from "@vaenyx/contracts";
 
 import { showErrorToast } from "./toast.js";
 
@@ -936,6 +938,35 @@ export function updatePushPrefs(input: PushPrefs): Promise<PushPrefs> {
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export function fetchDeviceModes(): Promise<DeviceMode[]> {
+  return requestJson<DeviceMode[]>("/v1/mode/devices");
+}
+
+export function setDeviceMode(
+  deviceId: string,
+  input: SetDeviceModeRequest,
+): Promise<DeviceMode[]> {
+  return requestJson<DeviceMode[]>(`/v1/mode/devices/${deviceId}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function forgetDeviceMode(deviceId: string): Promise<DeviceMode[]> {
+  return requestJson<DeviceMode[]>(`/v1/mode/devices/${deviceId}`, {
+    method: "DELETE",
+  });
+}
+
+export function applyDeviceMode(
+  deviceId: string,
+): Promise<{ modeId: string | null }> {
+  return requestJson<{ modeId: string | null }>(
+    `/v1/mode/devices/${deviceId}/apply`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
 }
 
 export function fetchModeThreads(modeId: string): Promise<VaenyxThread[]> {

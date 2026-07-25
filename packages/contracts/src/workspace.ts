@@ -633,6 +633,12 @@ export const TaskRunSchema = Type.Object(
 
 // Custom Mode (spec §6): a neutral restricted sandbox definition. PINs are
 // write-only (requests carry them, responses only say whether one is set).
+const DigestCadenceSchema = Type.Union([
+  Type.Literal("off"),
+  Type.Literal("daily"),
+  Type.Literal("weekly"),
+]);
+
 export const ModeSchema = Type.Object(
   {
     id: Type.String(),
@@ -642,6 +648,9 @@ export const ModeSchema = Type.Object(
     localOnly: Type.Boolean(),
     hasEnterPin: Type.Boolean(),
     hasExitPin: Type.Boolean(),
+    // Empty = this mode uses the instance-wide Agent Name.
+    agentName: Type.String(),
+    digestCadence: DigestCadenceSchema,
     createdAt: Type.String(),
     updatedAt: Type.String(),
   },
@@ -656,6 +665,8 @@ export const CreateModeRequestSchema = Type.Object(
     localOnly: Type.Optional(Type.Boolean()),
     enterPin: Type.Optional(Type.String({ maxLength: 20 })),
     exitPin: Type.Optional(Type.String({ maxLength: 20 })),
+    agentName: Type.Optional(Type.String({ maxLength: 100 })),
+    digestCadence: Type.Optional(DigestCadenceSchema),
   },
   { additionalProperties: false },
 );
@@ -669,6 +680,37 @@ export const UpdateModeRequestSchema = Type.Object(
     localOnly: Type.Optional(Type.Boolean()),
     enterPin: Type.Optional(Type.String({ maxLength: 20 })),
     exitPin: Type.Optional(Type.String({ maxLength: 20 })),
+    agentName: Type.Optional(Type.String({ maxLength: 100 })),
+    digestCadence: Type.Optional(DigestCadenceSchema),
+  },
+  { additionalProperties: false },
+);
+
+// A paired device and the mode it opens into (null = User Mode).
+export const DeviceModeSchema = Type.Object(
+  {
+    deviceId: Type.String(),
+    label: Type.String(),
+    modeId: Type.Union([Type.String(), Type.Null()]),
+    modeName: Type.Union([Type.String(), Type.Null()]),
+    updatedAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const SetDeviceModeRequestSchema = Type.Object(
+  {
+    modeId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    label: Type.Optional(Type.String({ maxLength: 80 })),
+  },
+  { additionalProperties: false },
+);
+
+// Applying a device default on app open: the session lands in that mode
+// (the Enter PIN gate, if any, still runs in the UI afterwards).
+export const ApplyDeviceModeResponseSchema = Type.Object(
+  {
+    modeId: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -1812,6 +1854,8 @@ export type SetLocalVoiceRequest = Static<typeof SetLocalVoiceRequestSchema>;
 export type Mode = Static<typeof ModeSchema>;
 export type CreateModeRequest = Static<typeof CreateModeRequestSchema>;
 export type UpdateModeRequest = Static<typeof UpdateModeRequestSchema>;
+export type DeviceMode = Static<typeof DeviceModeSchema>;
+export type SetDeviceModeRequest = Static<typeof SetDeviceModeRequestSchema>;
 export type SwitchModeRequest = Static<typeof SwitchModeRequestSchema>;
 export type ExitModeRequest = Static<typeof ExitModeRequestSchema>;
 export type PushPrefs = Static<typeof PushPrefsSchema>;

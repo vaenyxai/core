@@ -14,6 +14,7 @@ import { initPushService } from "./modules/core/push.js";
 import { reconcileInterruptedTasks, runDueTasks } from "./modules/core/tasks.js";
 import { runScheduledBackupIfDue } from "./modules/core/backup-schedule.js";
 import { autoScanVaenyxMe } from "./modules/core/vaenyx-me.js";
+import { runDueModeDigests } from "./modules/core/modes.js";
 import { registerGatewayRoutes } from "./modules/gateway/routes.js";
 import { renewSessionOnUse } from "./modules/guard/auth.js";
 
@@ -71,6 +72,13 @@ export async function buildApp(
         info: (message) => app.log.info(message),
         error: (message) => app.log.error(message),
       });
+    } catch (error) {
+      app.log.error(error);
+    }
+    try {
+      // Custom Mode supervision digests (spec §6): one summary per period
+      // for any mode that asked for one.
+      runDueModeDigests(database);
     } catch (error) {
       app.log.error(error);
     }
