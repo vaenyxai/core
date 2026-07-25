@@ -1,17 +1,6 @@
 # Vaenyx — Core Privacy Policy
 
-> **FINAL v3.0 (2026-07-25).** v3.0 restructures this Policy into the three-layer architecture
-> adopted after the second independent review: this **Core Privacy Policy** states the principles,
-> rights and information-handling rules; **Part A of the dated Current Implementation and
-> Data-Handling Schedule** (`implementation-status.md`) states which data flows are actually active
-> and their current information, purposes, recipients, countries and retention; **Point-of-Use
-> Notices** are presented at or before each particular collection, use, disclosure or public-release
-> action. Provider names, endpoints, database details, current field lists, countries, retention
-> periods and capability status have been moved out of this Policy and into the Schedule, so that a
-> new capability within these existing principles and categories does not require this Policy to be
-> rewritten. Prepared by Claude (an AI) in the style of senior Australian technology counsel and
-> adopted under the operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not
-> legal advice.
+> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set. Drafted with AI assistance and adopted by the Operator; it is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
 
 **Operator:** Vae Foundry Pty Ltd (ACN 700 703 724), of Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**")
 **Effective date:** 26 July 2026
@@ -107,7 +96,7 @@
 
 ## 5. Notice at collection
 
-5.1 At or before each material collection of personal information, or as soon as practicable afterwards where earlier notice is not practicable, we will provide or prominently link to a Point-of-Use Notice appropriate to that collection.
+5.1 At or before each collection of personal information, or as soon as practicable afterwards where earlier notice is not practicable, we will give or link a notice stating the information, source, purpose, optionality and consequence, recipients, overseas countries, and links for retention, access, correction and complaints.
 
 5.2 The notice must identify, to the extent applicable:
 
@@ -276,6 +265,3 @@
 14.1 This Policy is drafted in English; a Chinese translation is provided. The English version prevails to the extent of any inconsistency, subject to clause 13.4.
 
 **Privacy contact:** hello@vaenyx.ai
-
----
-

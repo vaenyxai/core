@@ -1,6 +1,6 @@
 ﻿# Vaenyx — Contributor Agreement (Community Library)
 
-> **FINAL v2.4 (2026-07-25).** v2.2 incorporates the second independent legal review round of 2026-07-07. v2.1 incorporates the independent legal review round of 2026-07-05. Prepared by Claude (an AI) in the style of senior Australian technology counsel, and adopted as part of the operative Vaenyx legal set under the Operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not legal advice. **Of the whole legal set, this is the one document for which a one-time professional review remains recommended before community publishing opens.** **v2.4 (2026-07-25)** resolves every placeholder: the Operator is Vae Foundry Pty Ltd (ACN 700 703 724), registered in Victoria, Australia, and the effective date is 26 July 2026.
+> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set. Drafted with AI assistance and adopted by the Operator; it is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
 
 **Effective date:** 26 July 2026 — *the acceptance-recording described in clause 17 is in operation.*
 **This Agreement is between you (the "Contributor", "you") and** Vae Foundry Pty Ltd (ACN 700 703 724), a proprietary limited company registered in Victoria, Australia (the "**Operator**", "**we**", "**us**"), the operator of the Vaenyx Community Library.
@@ -17,6 +17,8 @@
 
 1.4 **Each Publish Is a Separate Acceptance.** This Agreement (as in force at the time) applies separately to each Contribution you publish, including each new version.
 
+1.5 **Release scope as at the Effective Date.** This release provides no community-sharing upload, Example attachment, de-identification or preview, or Merit. A current sharing setting is a local preference only and authorises no upload, licence or moral-rights consent. A later capability remains off until marked active, safeguarded, noticed and separately chosen. Accordingly, a clause of this Agreement that describes Examples, sharing uploads or Merit has no present application, and takes effect only if and when the relevant capability is marked active in the Schedule.
+
 ## 2. Definitions
 
 - "**Method**" — an atomic, declarative building block published to the Library.
@@ -30,7 +32,7 @@
 
 ## 3. Who May Publish (Identity)
 
-3.1 **Verified Login Required.** Publishing requires a verified sign-in with a Google or GitHub account. Using the Library requires no account; publishing does. You do not need a GitHub account to publish — GitHub is offered only as a sign-in option and confers no other advantage. Your public byline is a display name you set yourself: the first-publish flow requires you to choose it explicitly and pre-fills a generated pseudonym — never your sign-in account name — so your real name becomes your byline only if you enter it yourself; it is editable at any time for future publishes (Privacy Policy clauses 6.2(b) and 9.2(b)). **Your byline is public, and permanent in copies beyond our reach** — forks, mirrors, and installed copies (clauses 8.1–8.2 and 10.4); our own repository's history can be corrected only in the exceptional cases in clause 10.4(c). If your display name is your real name when you publish, your real name will be published, stamped into public git history, and carried in CC BY 4.0 attribution worldwide — check your display name before your first publish. What remains private is your verified sign-in identity — provider, account identifier, and email; we store only the minimum account information needed for attribution, published-content management, de-duplication, enforcement, and Merit, as described in the Privacy Policy.
+3.1 **Verified Login Required.** Publishing requires a verified sign-in with a Google or GitHub account. Using the Library requires no account; publishing does. You do not need a GitHub account to publish — GitHub is offered only as a sign-in option and confers no other advantage. Your public byline is a display name you set yourself: the first-publish flow requires you to choose it explicitly and pre-fills a generated pseudonym — never your sign-in account name — so your real name becomes your byline only if you enter it yourself; it is editable at any time for future publishes (see the Schedule entries `flow.publication.signin` and `flow.publication.submission`). **Your byline is public, and permanent in copies beyond our reach** — forks, mirrors, and installed copies (clauses 8.1–8.2 and 10.4); our own repository's history can be corrected only in the exceptional cases in clause 10.4(c). If your display name is your real name when you publish, your real name will be published, stamped into public git history, and carried in CC BY 4.0 attribution worldwide — check your display name before your first publish. What remains private is your verified sign-in identity — provider, account identifier, and email; we store only the minimum account information needed for attribution, published-content management, de-duplication, enforcement, and Merit, as described in the Privacy Policy.
 
 3.2 **Age.** Vaenyx is a general-audience product for people 18 or older. You must be at least 18 and able to enter a binding agreement to publish.
 
@@ -154,9 +156,7 @@ Our own repository's git history is not routinely rewritten on removal, but in e
 
 For an indemnity claim, we will notify you promptly, give you the option to participate in the defence at your own cost, not admit liability or settle without your consent, which must not be unreasonably withheld or delayed, and take reasonable steps to mitigate loss.
 
-12.3 **Cap.** Your total aggregate liability to us under or in connection with this Agreement, including under this clause and for breach of a Contributor Warranty, is capped at AUD $10,000 for all claims arising from the same or substantially related facts or circumstances.
-
-The cap does not apply to fraud, wilful misconduct, knowing infringement of a third party's rights, or knowing inclusion of another person's personal information.
+12.3 **Cap — single and combined with the Terms of Service.** No indemnity or warranty damages apply to an innocent breach. The caps are the single combined Terms of Service clause 15.2 caps: AUD $10,000 per related event and AUD $20,000 per Contract Year; amounts under either document count under both. The caps do not apply to fraud, wilful misconduct, knowing infringement of a third party's rights, or knowing inclusion of another person's personal information.
 
 12.4 **Australian Consumer Law.** Nothing in this clause limits any consumer guarantee, right or remedy that cannot lawfully be excluded, restricted or modified, or limits the Operator's liability under clauses 14 to 16 of the Terms of Service.
 
@@ -197,6 +197,3 @@ The publish step presents a warranty confirmation that you must actively confirm
 and that you have read this Agreement, that all of the warranties in clause 7 are true for the Contribution being published, and that you accept this Agreement. The publish step does not complete unless your acceptance is recorded server-side (account identifier, Agreement version, timestamp, and the Contribution's identifier), as described in the Privacy Policy, so that acceptance of this Agreement and the content licences — including the clause 6 moral-rights consent — can be evidenced for each Contribution.
 
 **Contact:** hello@vaenyx.ai
-
----
-

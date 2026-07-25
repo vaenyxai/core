@@ -1,6 +1,6 @@
 # Vaenyx 商标政策(Trademark Policy)
 
-> **定稿 v2.4(2026-07-25)。** v2.3 落实 2026-07-11 的全开源决定:第 4.1 条以现在时表述 MIT 发布,第 4.2 条引用 LICENSE 文件对品牌资产的明确排除。v2.1 并入 2026-07-05 的独立法律 review 轮。本政策由 Claude(一个 AI)按澳大利亚资深科技法律顾问的行文风格拟备,并依运营者记录在案的精简法务决定(DECISIONS.md,2026-07-05)被采纳为 Vaenyx 现行有效法律文件集的一部分。本政策不构成法律意见。仍建议在社区发布功能开放之前,对贡献者协议(Contributor Agreement)进行一次性的专业审阅。**v2.4(2026-07-25)** 落定全部占位符:运营方为 Vae Foundry Pty Ltd(ACN 700 703 724),注册于澳大利亚 Victoria,生效日期为 2026 年 7 月 26 日。
+> **版本 3.0 —— 2026 年 7 月 26 日生效。** 本文件属于 Vaenyx 法律文件集,由 AI 协助起草并经运营方采用;仅供参考,不构成法律意见。文件集的结构见 [`README.md`](README.md);本次发布实际已建成的内容见 [`implementation-status.md`](implementation-status.md)。
 >
 > 本中文译本仅供参考;两个版本如有出入,以英文版为准(见第 15.5 条)。/ This Chinese translation is for convenience only; the English version prevails.
 
@@ -184,6 +184,3 @@
 ## 16. 联系方式
 
 问题与许可申请:hello@vaenyx.ai。
-
----
-

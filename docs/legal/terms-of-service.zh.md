@@ -1,6 +1,6 @@
 ﻿# Vaenyx — 服务条款与最终用户许可协议
 
-> **定稿 v2.4(2026-07-25)。** v2.3 落实 2026-07-11 的全开源决定(DECISIONS.md):代码许可条款(4.2)改为现在时,对应随本软件分发的 MIT LICENSE 文件;原"私有组件"条款(4.3、17.3)被替换——不再存在私有许可的 Vaenyx 组件;存续清单相应调整。v2.2 纳入 2026-07-07 的第二轮独立法律 review。v2.1 纳入 2026-07-05 的独立法律审阅轮。由 Claude(一个 AI)按澳大利亚资深科技法律顾问的风格拟就,并依运营者记录在案的精简法务决定(DECISIONS.md,2026-07-05)被采纳为 Vaenyx 现行法律文件集的一部分。本文件不构成法律意见。在社区发布功能开放之前,仍建议对贡献者协议进行一次性的专业审阅。**v2.4(2026-07-25)** 落定全部占位符——运营方为 Vae Foundry Pty Ltd(ACN 700 703 724),注册于澳大利亚 Victoria,生效日期为 2026 年 7 月 26 日——并依功能存在性核验修订相关表述,使任何能力在实际交付前均不被描述为已存在。
+> **版本 3.0 —— 2026 年 7 月 26 日生效。** 本文件属于 Vaenyx 法律文件集,由 AI 协助起草并经运营方采用;仅供参考,不构成法律意见。文件集的结构见 [`README.md`](README.md);本次发布实际已建成的内容见 [`implementation-status.md`](implementation-status.md)。
 
 > 本中文译本为与当前英文版本同步的工作译本(working translation),已同步至 v2.3;如有任何不一致,以英文版为准;专业双语审阅仍待进行。/ This Chinese translation is a working translation synced to the current version; the English version prevails to the extent of any inconsistency; a professional bilingual review remains open.
 
@@ -340,6 +340,3 @@
 ## 20. 联系方式
 
 有关本条款的问题、内容举报及法律通知:Vae Foundry Pty Ltd,hello@vaenyx.ai。
-
----
-

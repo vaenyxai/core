@@ -1,6 +1,6 @@
 # Vaenyx Trademark Policy
 
-> **FINAL v2.4 (2026-07-25).** v2.3 implements the full open-source decision of 2026-07-11: clause 4.1 states the MIT release in the present tense, and clause 4.2 references the LICENSE file's express brand-asset exclusion. v2.1 incorporates the independent legal review round of 2026-07-05. Prepared by Claude (an AI) in the style of senior Australian technology counsel and adopted as part of the operative Vaenyx legal set under the operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not legal advice. A one-time professional review of the Contributor Agreement remains recommended before community publishing opens. **v2.4 (2026-07-25)** resolves every placeholder: the Operator is Vae Foundry Pty Ltd (ACN 700 703 724), registered in Victoria, Australia, and the effective date is 26 July 2026.
+> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set. Drafted with AI assistance and adopted by the Operator; it is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
 
 **Effective date:** 26 July 2026
 **Trademark owner:** the current Operator (as identified in the Vaenyx Terms of Service)
@@ -182,6 +182,3 @@ Except as expressly permitted by clause 5, and without our prior written permiss
 ## 16. Contact
 
 Questions and permission requests: hello@vaenyx.ai.
-
----
-
