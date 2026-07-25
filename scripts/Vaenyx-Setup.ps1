@@ -1,4 +1,4 @@
-# Vaenyx one-shot setup (onboarding spec section 3 v1).
+﻿# Vaenyx one-shot setup (onboarding spec section 3 v1).
 #
 # The whole install in one double-click: check the machine, install Node if it
 # is missing, fetch dependencies, build, register the autostart watchdog, start
@@ -17,7 +17,9 @@ param(
   [switch]$SkipNodeInstall,
   [switch]$NoBrowser,
   [int]$Port = 3000,
-  [switch]$SelfTest
+  [switch]$SelfTest,
+  # en or zh. Unset means ask; the answer also becomes the app's language.
+  [string]$Language = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,6 +34,75 @@ $FallbackNodeVersion = "v24.18.0"
 $TaskName = "VaenyxAutostart"
 
 # -- Pure helpers (covered by -SelfTest) ----
+
+# ---- Language ----------------------------------------------------------
+# Every user-facing line goes through Say. Keys with no Chinese entry fall
+# back to English rather than printing nothing.
+$Script:Lang = "en"
+$Messages = @{
+  "path.cloud"      = @{ en = "This folder is inside a cloud-synced drive (OneDrive/Dropbox/Google Drive)."; zh = "这个文件夹在云同步盘里(OneDrive/Dropbox/Google Drive)。" }
+  "path.cloud.why"  = @{ en = "Vaenyx keeps a live database here; cloud sync will corrupt it."; zh = "Vaenyx 会在这里放一个正在使用的数据库,云同步会把它弄坏。" }
+  "path.cloud.fix"  = @{ en = "Move the folder somewhere like C:\Vaenyx and run this again."; zh = "把文件夹移到 C:\Vaenyx 这类位置,然后重新运行。" }
+  "path.long"       = @{ en = "This folder path is very long, which breaks the install on Windows."; zh = "这个路径太长,Windows 上会导致安装失败。" }
+  "path.long.fix"   = @{ en = "Move the folder somewhere short, like C:\Vaenyx, and run this again."; zh = "把文件夹移到短一点的位置(如 C:\Vaenyx),然后重新运行。" }
+  "path.spaces"     = @{ en = "This folder path contains spaces. It usually works, but C:\Vaenyx is safer."; zh = "路径里有空格。通常没问题,但放在 C:\Vaenyx 更稳妥。" }
+  "notvaenyx"       = @{ en = "This does not look like a Vaenyx folder (apps\server is missing)."; zh = "这看起来不是 Vaenyx 文件夹(缺少 apps\server)。" }
+  "notvaenyx.fix"   = @{ en = "Unzip the whole download and run Vaenyx-Setup.cmd from inside it."; zh = "请把下载的压缩包整个解压,再从里面运行 Vaenyx-Setup.cmd。" }
+  "step1"           = @{ en = "[1/6] Checking this computer"; zh = "[1/6] 检查这台电脑" }
+  "step2"           = @{ en = "[2/6] Making sure Node.js 24 or newer is installed"; zh = "[2/6] 确认已安装 Node.js 24 或更新版本" }
+  "step3"           = @{ en = "[3/6] Downloading what Vaenyx needs (a few minutes on first run)"; zh = "[3/6] 下载 Vaenyx 需要的组件(首次需要几分钟)" }
+  "step4"           = @{ en = "[4/6] Preparing Vaenyx"; zh = "[4/6] 准备 Vaenyx" }
+  "step5"           = @{ en = "[5/6] Starting Vaenyx with Windows"; zh = "[5/6] 让 Vaenyx 随 Windows 启动" }
+  "step6"           = @{ en = "[6/6] Starting Vaenyx"; zh = "[6/6] 启动 Vaenyx" }
+  "unblocked"       = @{ en = "Downloaded files unblocked."; zh = "已解除下载文件的封锁。" }
+  "unblock.fail"    = @{ en = "Could not unblock the downloaded files; continuing."; zh = "无法解除下载文件封锁,继续。" }
+  "curl.missing"    = @{ en = "Windows curl.exe was not found; Vaenyx-Start.cmd needs it later."; zh = "没找到 Windows 自带的 curl.exe,之后 Vaenyx-Start.cmd 会用到。" }
+  "node.found"      = @{ en = "Node.js found:"; zh = "已安装 Node.js:" }
+  "node.missing"    = @{ en = "Node.js is not installed yet."; zh = "尚未安装 Node.js。" }
+  "node.ok"         = @{ en = "Node.js is new enough."; zh = "Node.js 版本足够新。" }
+  "node.old"        = @{ en = "Node.js is too old. Vaenyx needs 24 or newer."; zh = "Node.js 版本过旧,Vaenyx 需要 24 或更新。" }
+  "node.install"    = @{ en = "Installing the official Node.js LTS. Windows will ask for permission."; zh = "正在安装官方的 Node.js LTS,Windows 会请求授权。" }
+  "node.winget"     = @{ en = "Using the Windows package manager (winget)..."; zh = "使用 Windows 包管理器(winget)安装..." }
+  "node.done"       = @{ en = "Node.js installed."; zh = "Node.js 安装完成。" }
+  "node.download"   = @{ en = "Downloading Node.js (about 30 MB)..."; zh = "正在下载 Node.js(约 30 MB)..." }
+  "node.dl.fail"    = @{ en = "The Node.js download failed. Check the internet connection and run this again."; zh = "Node.js 下载失败。请检查网络后重新运行。" }
+  "node.inst.fail"  = @{ en = "Node.js could not be installed (permission was declined, or the installer failed)."; zh = "Node.js 安装失败(可能是拒绝了授权,或安装程序出错)。" }
+  "node.manual"     = @{ en = "You can install it yourself from https://nodejs.org and run this again."; zh = "你也可以自己去 https://nodejs.org 安装,然后重新运行。" }
+  "node.notfound"   = @{ en = "Node.js still cannot be found after installing."; zh = "安装之后仍然找不到 Node.js。" }
+  "node.reboot"     = @{ en = "Restart the computer and run Vaenyx-Setup.cmd again."; zh = "请重启电脑,然后重新运行 Vaenyx-Setup.cmd。" }
+  "deps.retry"      = @{ en = "That did not finish. Trying once more..."; zh = "这一步没完成,再试一次..." }
+  "deps.failed"     = @{ en = "The download failed twice."; zh = "下载连续失败两次。" }
+  "deps.net"        = @{ en = "This step needs a working internet connection. Check it and run Vaenyx-Setup.cmd again."; zh = "这一步需要正常的网络连接。检查网络后重新运行 Vaenyx-Setup.cmd。" }
+  "deps.ok"         = @{ en = "Everything downloaded."; zh = "组件下载完成。" }
+  "build.failed"    = @{ en = "Vaenyx could not be prepared."; zh = "Vaenyx 准备失败。" }
+  "build.ok"        = @{ en = "Ready to run."; zh = "已准备就绪。" }
+  "log.at"          = @{ en = "The full log is at"; zh = "完整日志在" }
+  "auto.skipped"    = @{ en = "Skipped (asked for with -SkipAutostart)."; zh = "已跳过(使用了 -SkipAutostart)。" }
+  "auto.missing"    = @{ en = "Vaenyx-Service-Run.cmd is missing; skipping the autostart step."; zh = "缺少 Vaenyx-Service-Run.cmd,跳过自启设置。" }
+  "auto.ask"        = @{ en = "Windows will ask for permission once - this is the only step that needs it."; zh = "Windows 会请求一次授权 —— 整个安装只有这一步需要。" }
+  "auto.why"        = @{ en = "It registers Vaenyx to start with the computer and restart itself if it stops."; zh = "用于让 Vaenyx 随电脑启动,并在意外退出时自动拉起。" }
+  "auto.ok"         = @{ en = "Vaenyx will now start with Windows."; zh = "Vaenyx 之后会随 Windows 一起启动。" }
+  "auto.fail"       = @{ en = "The autostart step did not finish."; zh = "自启设置没有完成。" }
+  "auto.still"      = @{ en = "Vaenyx still works - start it with Vaenyx-Start.cmd."; zh = "Vaenyx 仍然可用 —— 用 Vaenyx-Start.cmd 启动即可。" }
+  "auto.declined"   = @{ en = "Permission was declined, so Vaenyx will not start with Windows."; zh = "授权被拒绝,Vaenyx 不会随 Windows 启动。" }
+  "auto.later"      = @{ en = "You can set that up later by right-clicking Vaenyx-Install-Autostart.cmd and choosing Run as administrator."; zh = "以后可以右键 Vaenyx-Install-Autostart.cmd 选「以管理员身份运行」来设置。" }
+  "run.already"     = @{ en = "Vaenyx is already running."; zh = "Vaenyx 已经在运行。" }
+  "run.ok"          = @{ en = "Vaenyx is running."; zh = "Vaenyx 已启动。" }
+  "run.fail"        = @{ en = "Vaenyx did not start."; zh = "Vaenyx 没能启动。" }
+  "run.diag"        = @{ en = "Run Vaenyx-Diagnose.cmd, or look at the error log in"; zh = "请运行 Vaenyx-Diagnose.cmd,或查看错误日志:" }
+  "ready"           = @{ en = "Vaenyx is ready."; zh = "Vaenyx 已就绪。" }
+  "ready.open"      = @{ en = "Open this in your browser and follow the short setup:"; zh = "在浏览器打开下面的地址,按提示完成设置:" }
+  "ready.noauto"    = @{ en = "Note: Vaenyx will not start with Windows yet."; zh = "提示:Vaenyx 目前不会随 Windows 启动。" }
+  "stopped"         = @{ en = "Setup stopped:"; zh = "安装中止:" }
+}
+
+function Say {
+  param([string]$Key)
+  $entry = $Messages[$Key]
+  if (-not $entry) { return $Key }
+  if ($Script:Lang -eq "zh" -and $entry.zh) { return $entry.zh }
+  return $entry.en
+}
 
 function Get-NodeMajor {
   param([string]$VersionText)
@@ -120,6 +191,47 @@ if ($SelfTest) {
   Assert-Equal "" (Get-InstallPathWarning "C:\Vaenyx") "a short plain path is fine"
   Assert-Equal "has-spaces" (Get-InstallPathWarning "C:\Program Files\Vaenyx") "a path with spaces is flagged"
   Assert-Equal "too-long" (Get-InstallPathWarning ("C:\" + ("x" * 130))) "an over-long path is flagged"
+
+  # Language plumbing. A missing translation must degrade to English, never to
+  # a blank line, and an unknown key must be visible rather than silent.
+  $Script:Lang = "en"
+  Assert-Equal "Setup stopped:" (Say "stopped") "Say speaks English by default"
+  $Script:Lang = "zh"
+  Assert-Equal "安装中止:" (Say "stopped") "Say speaks Chinese when asked"
+  $Messages["selftest.enonly"] = @{ en = "English only" }
+  Assert-Equal "English only" (Say "selftest.enonly") "Say falls back to English"
+  Assert-Equal "selftest.missing" (Say "selftest.missing") "Say shows an unknown key"
+  $Script:Lang = "en"
+
+  $blank = 0
+  $untranslated = 0
+  foreach ($key in $Messages.Keys) {
+    if (-not $Messages[$key].en) { $blank = $blank + 1 }
+    if ($key -ne "selftest.enonly" -and -not $Messages[$key].zh) {
+      $untranslated = $untranslated + 1
+    }
+  }
+  Assert-Equal 0 $blank "every message has English text"
+  Assert-Equal 0 $untranslated "every message has Chinese text"
+
+  # Every key this script asks for must exist, or the user sees a raw key.
+  $selfText = [System.IO.File]::ReadAllText($PSCommandPath)
+  $missingKeys = @()
+  foreach ($use in [regex]::Matches($selfText, '\(Say "([^"]+)"\)')) {
+    $key = $use.Groups[1].Value
+    if ($key.StartsWith("selftest.")) { continue }
+    if (-not $Messages.ContainsKey($key)) { $missingKeys += $key }
+  }
+  Assert-Equal "" ($missingKeys -join ",") "every key used by the script exists"
+
+  # Windows PowerShell accepts typographic quotes as string delimiters, so one
+  # inside a message is a parse error, not a character. This file broke on
+  # exactly that once (dev.180).
+  Assert-Equal $false ($selfText -match "[\u2018\u2019\u201c\u201d]") "no typographic quotes in the script"
+  # And the file must keep its UTF-8 BOM, or 5.1 reads the Chinese as cp1252.
+  $selfBytes = [System.IO.File]::ReadAllBytes($PSCommandPath)
+  Assert-Equal "239,187,191" ($selfBytes[0..2] -join ",") "the script keeps its UTF-8 BOM"
+
   Write-Host ""
   if ($failures -gt 0) {
     Write-Bad "$failures self-test check(s) failed."
@@ -136,12 +248,31 @@ Set-Location $root
 
 Write-Host ""
 Write-Host "  Vaenyx Setup" -ForegroundColor White
-Write-Host "  Your own private AI, running on this computer." -ForegroundColor DarkGray
-Write-Host "  Folder: $root" -ForegroundColor DarkGray
+
+# Language first, before anything else is printed: the rest of the install
+# speaks it, and the app opens in it too (Oskar, dev.180). Enter = English.
+if ($Language -eq "en" -or $Language -eq "zh") {
+  $Script:Lang = $Language
+} else {
+  Write-Host ""
+  Write-Host "  Choose a language / 选择语言" -ForegroundColor White
+  Write-Host "    1) English (default)"
+  Write-Host "    2) 中文"
+  $answer = Read-Host "  1 or 2"
+  if ($answer.Trim() -eq "2") { $Script:Lang = "zh" } else { $Script:Lang = "en" }
+}
+
+Write-Host ""
+if ($Script:Lang -eq "zh") {
+  Write-Host "  属于你自己的 AI,运行在这台电脑上。" -ForegroundColor DarkGray
+} else {
+  Write-Host "  Your own private AI, running on this computer." -ForegroundColor DarkGray
+}
+Write-Host "  $root" -ForegroundColor DarkGray
 
 if (-not (Test-Path (Join-Path $root "apps\server\package.json"))) {
-  Write-Bad "This does not look like a Vaenyx folder (apps\server is missing)."
-  Write-Info "Unzip the whole download and run Vaenyx-Setup.cmd from inside it."
+  Write-Bad (Say "notvaenyx")
+  Write-Info (Say "notvaenyx.fix")
   exit 1
 }
 
@@ -150,74 +281,90 @@ if (-not (Test-Path $logDirectory)) {
   New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 }
 $setupLog = Join-Path $logDirectory "setup.log"
+
+# Hand the language choice to the app, so the browser does not open in a
+# different language from the one the install just spoke. Only a default:
+# whatever the Owner picks in Settings wins from then on.
+try {
+  $configDirectory = Join-Path $root "userdata\config"
+  if (-not (Test-Path $configDirectory)) {
+    New-Item -ItemType Directory -Path $configDirectory -Force | Out-Null
+  }
+  [System.IO.File]::WriteAllText(
+    (Join-Path $configDirectory "language.json"),
+    "{ ""language"": ""$($Script:Lang)"" }`r`n",
+    (New-Object System.Text.UTF8Encoding($false)))
+} catch {
+  # The app simply defaults to English if this cannot be written.
+}
 try { Start-Transcript -Path $setupLog -Append | Out-Null } catch { }
 
 $failed = $false
 try {
   # Files that arrive inside a downloaded zip are marked "from the internet"
   # and PowerShell refuses to run them. Clear that mark on our own scripts.
-  Write-Head "[1/6] Checking this computer"
+  Write-Head (Say "step1")
   try {
     Get-ChildItem -Path $root -Filter *.cmd -File | Unblock-File -ErrorAction SilentlyContinue
     Get-ChildItem -Path (Join-Path $root "scripts") -File | Unblock-File -ErrorAction SilentlyContinue
-    Write-Good "Downloaded files unblocked."
+    Write-Good (Say "unblocked")
   } catch {
-    Write-Warn "Could not unblock the downloaded files; continuing."
+    Write-Warn (Say "unblock.fail")
   }
 
   $pathWarning = Get-InstallPathWarning $root
   if ($pathWarning -eq "cloud-synced") {
-    Write-Bad "This folder is inside a cloud-synced drive (OneDrive/Dropbox/Google Drive)."
-    Write-Info "Vaenyx keeps a live database here; cloud sync will corrupt it."
-    Write-Info "Move the folder somewhere like C:\Vaenyx and run this again."
+    Write-Bad (Say "path.cloud")
+    Write-Info (Say "path.cloud.why")
+    Write-Info (Say "path.cloud.fix")
     throw "cloud-synced install path"
   }
   if ($pathWarning -eq "too-long") {
-    Write-Bad "This folder path is very long, which breaks the install on Windows."
-    Write-Info "Move the folder somewhere short, like C:\Vaenyx, and run this again."
+    Write-Bad (Say "path.long")
+    Write-Info (Say "path.long.fix")
     throw "install path too long"
   }
   if ($pathWarning -eq "has-spaces") {
-    Write-Warn "This folder path contains spaces. It usually works, but C:\Vaenyx is safer."
+    Write-Warn (Say "path.spaces")
   }
 
   $windows = [Environment]::OSVersion.Version
   Write-Info "Windows $($windows.Major).$($windows.Minor) build $($windows.Build), $(Get-NodeArch)."
   if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
-    Write-Warn "Windows curl.exe was not found; Vaenyx-Start.cmd needs it later."
+    Write-Warn (Say "curl.missing")
   }
 
   if (Get-Command node.exe -ErrorAction SilentlyContinue) {
     $nodeVersionText = & node.exe --version
-    Write-Info "Node.js found: $nodeVersionText"
+    Write-Info "$(Say 'node.found') $nodeVersionText"
   } else {
     $nodeVersionText = ""
-    Write-Info "Node.js is not installed yet."
+    Write-Info (Say "node.missing")
   }
   $nodeMajor = Get-NodeMajor $nodeVersionText
 
   # -- 1. Node ----
-  Write-Head "[2/6] Making sure Node.js $MinimumNodeMajor or newer is installed"
+  Write-Head (Say "step2")
   if ($nodeMajor -ge $MinimumNodeMajor) {
-    Write-Good "Node.js $nodeVersionText is new enough."
+    Write-Good "$nodeVersionText - $(Say 'node.ok')"
   } elseif ($SkipNodeInstall) {
     Write-Bad "Node.js $MinimumNodeMajor or newer is required and -SkipNodeInstall was passed."
     throw "node too old and install skipped"
   } else {
     if ($nodeMajor -gt 0) {
-      Write-Info "Node.js $nodeVersionText is too old. Vaenyx needs $MinimumNodeMajor or newer."
+      Write-Info "$nodeVersionText - $(Say 'node.old')"
     }
-    Write-Info "Installing the official Node.js LTS. Windows will ask for permission."
+    Write-Info (Say "node.install")
 
     $installed = $false
     if (Get-Command winget.exe -ErrorAction SilentlyContinue) {
-      Write-Info "Using the Windows package manager (winget)..."
+      Write-Info (Say "node.winget")
       try {
         $wingetArguments = "install --id OpenJS.NodeJS.LTS -e --silent --accept-source-agreements --accept-package-agreements"
         $wingetProcess = Start-Process -FilePath "winget.exe" -ArgumentList $wingetArguments -Verb RunAs -Wait -PassThru
         if ($wingetProcess.ExitCode -eq 0) {
           $installed = $true
-          Write-Good "Node.js installed."
+          Write-Good (Say "node.done")
         } else {
           Write-Warn "winget could not install Node.js (code $($wingetProcess.ExitCode)); trying the direct download."
         }
@@ -237,14 +384,14 @@ try {
       }
       $msiUrl = Get-NodeMsiUrl $nodeVersion (Get-NodeArch)
       $msiPath = Join-Path $env:TEMP "node-$nodeVersion-$(Get-NodeArch).msi"
-      Write-Info "Downloading Node.js $nodeVersion (about 30 MB)..."
+      Write-Info (Say "node.download")
       try {
         Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath -UseBasicParsing -TimeoutSec 600
       } catch {
-        Write-Bad "The Node.js download failed. Check the internet connection and run this again."
+        Write-Bad (Say "node.dl.fail")
         throw "node download failed"
       }
-      Write-Info "Installing Node.js. Windows will ask for permission..."
+      Write-Info (Say "node.install")
       try {
         $msiProcess = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$msiPath`" /qn /norestart" -Verb RunAs -Wait -PassThru
         if ($msiProcess.ExitCode -ne 0) {
@@ -252,12 +399,12 @@ try {
           throw "node install failed"
         }
       } catch {
-        Write-Bad "Node.js could not be installed (permission was declined, or the installer failed)."
-        Write-Info "You can install it yourself from https://nodejs.org and run this again."
+        Write-Bad (Say "node.inst.fail")
+        Write-Info (Say "node.manual")
         throw "node install failed"
       }
       Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
-      Write-Good "Node.js installed."
+      Write-Good (Say "node.done")
     }
 
     # A fresh install is not on this window's PATH yet - reload it.
@@ -280,8 +427,8 @@ try {
     }
   }
   if (-not $nodeExe) {
-    Write-Bad "Node.js still cannot be found after installing."
-    Write-Info "Restart the computer and run Vaenyx-Setup.cmd again."
+    Write-Bad (Say "node.notfound")
+    Write-Info (Say "node.reboot")
     throw "node not found after install"
   }
   $npmCmd = Join-Path (Split-Path $nodeExe -Parent) "npm.cmd"
@@ -309,42 +456,42 @@ try {
   Write-Good "Using Node.js $finalNodeVersion with npm $npmVersion."
 
   # -- 2. Dependencies ----
-  Write-Head "[3/6] Downloading what Vaenyx needs (a few minutes on first run)"
+  Write-Head (Say "step3")
   & $npmCmd ci
   if ($LASTEXITCODE -ne 0) {
-    Write-Warn "That did not finish. Trying once more..."
+    Write-Warn (Say "deps.retry")
     & $npmCmd ci
   }
   if ($LASTEXITCODE -ne 0) {
-    Write-Bad "The download failed twice."
-    Write-Info "This step needs a working internet connection. Check it and run Vaenyx-Setup.cmd again."
-    Write-Info "The full log is at $setupLog"
+    Write-Bad (Say "deps.failed")
+    Write-Info (Say "deps.net")
+    Write-Info "$(Say 'log.at') $setupLog"
     throw "npm ci failed"
   }
-  Write-Good "Everything downloaded."
+  Write-Good (Say "deps.ok")
 
   # -- 3. Build ----
-  Write-Head "[4/6] Preparing Vaenyx"
+  Write-Head (Say "step4")
   & $npmCmd run build
   if ($LASTEXITCODE -ne 0) {
-    Write-Bad "Vaenyx could not be prepared."
-    Write-Info "The full log is at $setupLog"
+    Write-Bad (Say "build.failed")
+    Write-Info "$(Say 'log.at') $setupLog"
     throw "build failed"
   }
-  Write-Good "Ready to run."
+  Write-Good (Say "build.ok")
 
   # -- 4. Autostart ----
-  Write-Head "[5/6] Starting Vaenyx with Windows"
+  Write-Head (Say "step5")
   $autostartRegistered = $false
   if ($SkipAutostart) {
-    Write-Info "Skipped (asked for with -SkipAutostart)."
+    Write-Info (Say "auto.skipped")
   } else {
     $runner = Join-Path $root "Vaenyx-Service-Run.cmd"
     if (-not (Test-Path $runner)) {
-      Write-Warn "Vaenyx-Service-Run.cmd is missing; skipping the autostart step."
+      Write-Warn (Say "auto.missing")
     } else {
-      Write-Info "Windows will ask for permission once - this is the only step that needs it."
-      Write-Info "It registers Vaenyx to start with the computer and restart itself if it stops."
+      Write-Info (Say "auto.ask")
+      Write-Info (Say "auto.why")
       # Single-quoted concatenation on purpose: the schtasks /TR value needs
       # literal \" escapes, and building that inside a double-quoted
       # PowerShell string is where quoting goes to die.
@@ -355,20 +502,20 @@ try {
         $taskProcess = Start-Process -FilePath "cmd.exe" -ArgumentList $schtasksArguments -Verb RunAs -Wait -PassThru
         if ($taskProcess.ExitCode -eq 0) {
           $autostartRegistered = $true
-          Write-Good "Vaenyx will now start with Windows."
+          Write-Good (Say "auto.ok")
         } else {
-          Write-Warn "The autostart step did not finish (code $($taskProcess.ExitCode))."
-          Write-Info "Vaenyx still works - start it with Vaenyx-Start.cmd."
+          Write-Warn "$(Say 'auto.fail') (code $($taskProcess.ExitCode))"
+          Write-Info (Say "auto.still")
         }
       } catch {
-        Write-Warn "Permission was declined, so Vaenyx will not start with Windows."
-        Write-Info "You can set that up later by right-clicking Vaenyx-Install-Autostart.cmd and choosing Run as administrator."
+        Write-Warn (Say "auto.declined")
+        Write-Info (Say "auto.later")
       }
     }
   }
 
   # -- 5. Start + open ----
-  Write-Head "[6/6] Starting Vaenyx"
+  Write-Head (Say "step6")
   $statusUrl = "http://127.0.0.1:$Port/v1/system/status"
 
   function Test-VaenyxUp {
@@ -382,7 +529,7 @@ try {
   }
 
   if (Test-VaenyxUp $statusUrl) {
-    Write-Good "Vaenyx is already running."
+    Write-Good (Say "run.already")
   } else {
     if (-not $autostartRegistered) {
       # No watchdog (skipped or declined): start the server directly, the same
@@ -419,10 +566,10 @@ try {
       if (Test-VaenyxUp $statusUrl) { $ready = $true; break }
     }
     if ($ready) {
-      Write-Good "Vaenyx is running."
+      Write-Good (Say "run.ok")
     } else {
-      Write-Bad "Vaenyx did not start."
-      Write-Info "Look at $logDirectory\vaenyx-error.log, or run Vaenyx-Diagnose.cmd."
+      Write-Bad (Say "run.fail")
+      Write-Info "$(Say 'run.diag') $logDirectory"
       throw "server did not become ready"
     }
   }
@@ -433,17 +580,17 @@ try {
   }
 
   Write-Host ""
-  Write-Host "  Vaenyx is ready." -ForegroundColor Green
-  Write-Host "  Open $appUrl in your browser and follow the short setup." -ForegroundColor White
+  Write-Host "  $(Say 'ready')" -ForegroundColor Green
+  Write-Host "  $(Say 'ready.open') $appUrl" -ForegroundColor White
   if (-not $autostartRegistered -and -not $SkipAutostart) {
-    Write-Host "  Note: Vaenyx will not start with Windows yet." -ForegroundColor Yellow
+    Write-Host "  $(Say 'ready.noauto')" -ForegroundColor Yellow
   }
   Write-Host ""
 } catch {
   $failed = $true
   Write-Host ""
-  Write-Bad "Setup stopped: $($_.Exception.Message)"
-  Write-Info "The full log is at $setupLog"
+  Write-Bad "$(Say 'stopped') $($_.Exception.Message)"
+  Write-Info "$(Say 'log.at') $setupLog"
   Write-Host ""
 } finally {
   try { Stop-Transcript | Out-Null } catch { }

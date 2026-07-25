@@ -9,10 +9,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+
+import { fetchSystemStatus } from "./api.js";
 
 export type Lang = "en" | "zh";
 
@@ -420,8 +423,33 @@ interface I18nValue {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
+function hasStoredLang(): boolean {
+  try {
+    const stored = window.localStorage.getItem(LANG_STORAGE_KEY);
+    return stored === "en" || stored === "zh";
+  } catch {
+    return false;
+  }
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(readStoredLang);
+
+  // First open on a device that has never chosen: follow the language the
+  // installer spoke. Never overrides a choice the Owner has made.
+  useEffect(() => {
+    if (hasStoredLang()) return;
+    let active = true;
+    void fetchSystemStatus()
+      .then((status) => {
+        if (!active || !status.installLanguage) return;
+        setLangState(status.installLanguage);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const setLang = useCallback((next: Lang) => {
     setLangState(next);

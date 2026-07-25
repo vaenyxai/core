@@ -8905,6 +8905,19 @@ function UpdatePanel() {
     }
   }
 
+  // A git checkout can never take a release package, so say that up front
+  // instead of offering a button that will refuse (Oskar, dev.180).
+  if (status?.developerInstall) {
+    return (
+      <p className="settings-card-copy">
+        This Vaenyx is version <strong>{status.currentVersion}</strong>, and
+        this copy is managed with git — it updates with <strong>git pull</strong>,
+        not by unpacking a release over itself. The one-press updater is for
+        installs made with Vaenyx-Setup.cmd.
+      </p>
+    );
+  }
+
   const label =
     step === "checking"
       ? "Checking…"
@@ -8931,8 +8944,16 @@ function UpdatePanel() {
         </p>
       ) : null}
       {note ? <p className="saved-note">{note}</p> : null}
-      {status?.detail && status.phase === "error" ? (
-        <p className="form-error">{status.detail}</p>
+      {/* "Nothing published yet" is information, not a failure - only real
+          errors get the red treatment. */}
+      {status?.detail ? (
+        <p
+          className={
+            status.phase === "error" ? "form-error" : "settings-card-copy"
+          }
+        >
+          {status.detail}
+        </p>
       ) : null}
       <div className="model-card-actions">
         <button
@@ -14556,6 +14577,11 @@ function VaenyxWorkspace({
 const LEGAL_DOCS: Array<{ name: string; en: string; zh: string }> = [
   { name: "terms-of-service", en: "Terms of Service", zh: "服务条款" },
   { name: "privacy-policy", en: "Privacy Policy", zh: "隐私政策" },
+  {
+    name: "implementation-status",
+    en: "Implementation and Data-Handling Schedule",
+    zh: "当前实现与数据处理明细表",
+  },
   {
     name: "contributor-agreement",
     en: "Contributor Agreement",

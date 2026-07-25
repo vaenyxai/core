@@ -9,6 +9,7 @@ describe("SystemStatusSchema", () => {
       Value.Check(SystemStatusSchema, {
         name: "Vaenyx",
         version: "0.1.0",
+        installLanguage: "zh",
         status: "ready",
         mode: "test",
         database: {

@@ -61,11 +61,14 @@ if (Test-Path $nestedRelease) {
 
 # Normalise the launchers to CRLF. git archive writes whatever is in the
 # object database (LF), and a LF .cmd is a broken .cmd.
+# .ps1 keeps a UTF-8 BOM: Windows PowerShell 5.1 reads a BOM-less script as the
+# ANSI codepage, which turns the Chinese setup messages into parse errors.
 $crlfCount = 0
 foreach ($file in Get-ChildItem -Path $payload -Recurse -File -Include *.cmd, *.ps1) {
   $text = [System.IO.File]::ReadAllText($file.FullName)
   $normalised = ($text -replace "`r`n", "`n") -replace "`n", "`r`n"
-  [System.IO.File]::WriteAllText($file.FullName, $normalised, (New-Object System.Text.UTF8Encoding($false)))
+  $wantsBom = $file.Extension -eq ".ps1"
+  [System.IO.File]::WriteAllText($file.FullName, $normalised, (New-Object System.Text.UTF8Encoding($wantsBom)))
   $crlfCount = $crlfCount + 1
 }
 Write-Host "  CRLF-normalised $crlfCount launcher script(s)."

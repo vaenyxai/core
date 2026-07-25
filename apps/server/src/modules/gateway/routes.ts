@@ -905,7 +905,10 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return getUpdateStatus(context.config.version);
+      return getUpdateStatus(
+        context.config.version,
+        context.config.repositoryRoot,
+      );
     },
   );
 
@@ -921,7 +924,10 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return checkForUpdate(context.config.version);
+      return checkForUpdate(
+        context.config.version,
+        context.config.repositoryRoot,
+      );
     },
   );
 
@@ -5214,6 +5220,11 @@ export async function registerGatewayRoutes(
       zh: "terms-of-service.zh.md",
     },
     "privacy-policy": { en: "privacy-policy.md", zh: "privacy-policy.zh.md" },
+    // The dated Schedule. Part A is incorporated into the Privacy Policy as the
+    // current factual description of information handling, so it must be readable
+    // from inside the app alongside the Policy. Generated from
+    // implementation-status.json by docs/legal/generate-status.mjs; English only.
+    "implementation-status": { en: "implementation-status.md" },
     "contributor-agreement": {
       en: "contributor-agreement.md",
       zh: "contributor-agreement.zh.md",

@@ -1045,6 +1045,9 @@ export const UpdateStatusSchema = Type.Object(
     ]),
     detail: Type.Union([Type.String(), Type.Null()]),
     notes: Type.Union([Type.String(), Type.Null()]),
+    // A copy managed with git updates by pulling, not by unpacking a release
+    // over itself. Surfaced so the panel can say so BEFORE it tries anything.
+    developerInstall: Type.Boolean(),
   },
   { additionalProperties: false },
 );

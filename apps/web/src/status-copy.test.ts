@@ -21,6 +21,7 @@ describe("getStatusCopy", () => {
       getStatusCopy({
         name: "Vaenyx",
         version: "0.1.0",
+        installLanguage: null,
         status: "ready",
         mode: "test",
         database: {

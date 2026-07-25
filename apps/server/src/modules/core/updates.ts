@@ -27,7 +27,11 @@ import { pipeline } from "node:stream/promises";
 
 import type { UpdateStatus } from "@vaenyx/contracts";
 
+// Overridable so the whole update path (check, download, checksum, unpack,
+// stage) can be rehearsed against a local stand-in release before a real one
+// exists. Unset in normal use.
 const RELEASE_API =
+  process.env.VAENYX_UPDATE_API ??
   "https://api.github.com/repos/vaenyxai/core/releases/latest";
 const ASSET_NAME = "vaenyx-setup.zip";
 const HASH_ASSET_NAME = "vaenyx-setup.zip.sha256";
@@ -79,9 +83,18 @@ export function compareVersions(left: string, right: string): number {
   return a.preRelease > b.preRelease ? 1 : -1;
 }
 
-export function getUpdateStatus(currentVersion: string): UpdateStatus {
+export function isDeveloperInstall(repositoryRoot: string): boolean {
+  return existsSync(resolve(repositoryRoot, ".git"));
+}
+
+export function getUpdateStatus(
+  currentVersion: string,
+  repositoryRoot: string,
+): UpdateStatus {
+  const developerInstall = isDeveloperInstall(repositoryRoot);
   const updateAvailable = Boolean(
-    state.availableVersion &&
+    !developerInstall &&
+      state.availableVersion &&
       compareVersions(state.availableVersion, currentVersion) > 0,
   );
   return {
@@ -91,6 +104,7 @@ export function getUpdateStatus(currentVersion: string): UpdateStatus {
     phase: state.phase,
     detail: state.detail,
     notes: state.notes,
+    developerInstall,
   };
 }
 
@@ -123,7 +137,17 @@ async function fetchLatestRelease(): Promise<ReleaseInfo> {
 
 export async function checkForUpdate(
   currentVersion: string,
+  repositoryRoot: string,
 ): Promise<UpdateStatus> {
+  // Do not even ask GitHub on a git checkout: this copy cannot take a release
+  // package, so a "new version available" would be a lie with a broken button
+  // attached.
+  if (isDeveloperInstall(repositoryRoot)) {
+    state.phase = "idle";
+    state.detail =
+      "This copy of Vaenyx is managed with git, so it updates with git pull.";
+    return getUpdateStatus(currentVersion, repositoryRoot);
+  }
   state.phase = "checking";
   state.detail = null;
   try {
@@ -132,14 +156,17 @@ export async function checkForUpdate(
     state.notes = release.body?.slice(0, 2000) ?? null;
     state.phase = "idle";
   } catch (error) {
-    state.phase = "error";
     const message = error instanceof Error ? error.message : "";
-    state.detail =
-      message === "UPDATE_NO_RELEASE"
-        ? "No published release to update to yet."
-        : "Could not reach GitHub to check for updates.";
+    if (message === "UPDATE_NO_RELEASE") {
+      // Not an error: there is simply nothing published yet.
+      state.phase = "idle";
+      state.detail = "No published release to update to yet.";
+    } else {
+      state.phase = "error";
+      state.detail = "Could not reach GitHub to check for updates.";
+    }
   }
-  return getUpdateStatus(currentVersion);
+  return getUpdateStatus(currentVersion, repositoryRoot);
 }
 
 async function downloadTo(url: string, destination: string): Promise<void> {
@@ -186,7 +213,7 @@ export async function stageUpdate(config: {
   repositoryRoot: string;
 }): Promise<UpdateStatus> {
   if (state.phase === "downloading" || state.phase === "staged") {
-    return getUpdateStatus(config.version);
+    return getUpdateStatus(config.version, config.repositoryRoot);
   }
   // A developer install is managed by git, and a zip update would fight with
   // it - overwriting tracked files and quietly burying uncommitted work. Say
@@ -195,7 +222,7 @@ export async function stageUpdate(config: {
     state.phase = "error";
     state.detail =
       "This copy of Vaenyx is managed with git, so it updates with git pull instead. Downloading a release over it would overwrite your working copy.";
-    return getUpdateStatus(config.version);
+    return getUpdateStatus(config.version, config.repositoryRoot);
   }
   state.phase = "downloading";
   state.detail = "Downloading the update...";
@@ -209,7 +236,7 @@ export async function stageUpdate(config: {
     if (compareVersions(state.availableVersion, config.version) <= 0) {
       state.phase = "idle";
       state.detail = "Already up to date.";
-      return getUpdateStatus(config.version);
+      return getUpdateStatus(config.version, config.repositoryRoot);
     }
     const asset = release.assets?.find((item) => item.name === ASSET_NAME);
     if (!asset) {
@@ -276,5 +303,5 @@ export async function stageUpdate(config: {
             ? "The downloaded package was incomplete, so it was discarded."
             : "The update could not be downloaded.";
   }
-  return getUpdateStatus(config.version);
+  return getUpdateStatus(config.version, config.repositoryRoot);
 }
