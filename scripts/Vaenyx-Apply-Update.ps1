@@ -98,18 +98,19 @@ function Write-Log {
   Add-Content -LiteralPath $log -Value $line
 }
 
-$source = $pending.source
-if (-not $source -or -not (Test-Path $source)) {
-  Write-Log "Update $($pending.version): the staged files are gone; nothing applied."
+# Second line of defence, checked before anything else is even looked at: the
+# server refuses to stage an update on a git checkout, but if a pending marker
+# ever reaches one another way, stop here rather than mirror release files
+# over someone's working copy.
+if (Test-Path (Join-Path $root ".git")) {
+  Write-Log "Skipped: this is a git checkout, which updates with git pull."
   Remove-Item $pendingFile -Force -ErrorAction SilentlyContinue
   exit 0
 }
 
-# Second line of defence: the server refuses to stage an update on a git
-# checkout, but if a pending marker ever reaches one anyway, stop here rather
-# than overwrite someone's working copy.
-if (Test-Path (Join-Path $root ".git")) {
-  Write-Log "Skipped: this is a git checkout, which updates with git pull."
+$source = $pending.source
+if (-not $source -or -not (Test-Path $source)) {
+  Write-Log "Update $($pending.version): the staged files are gone; nothing applied."
   Remove-Item $pendingFile -Force -ErrorAction SilentlyContinue
   exit 0
 }
