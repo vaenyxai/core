@@ -8841,7 +8841,13 @@ function BackupPanel() {
 // download + verify, then restart to let the watchdog swap it in.
 function UpdatePanel() {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
-  const [busy, setBusy] = useState(false);
+  // One button, one press (Oskar, dev.178): check, download, verify, install,
+  // restart, come back. The Owner should never have to know there were five
+  // steps, or be left holding a "now press Restart" instruction.
+  const [step, setStep] = useState<
+    "idle" | "checking" | "downloading" | "restarting"
+  >("idle");
+  const [note, setNote] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchUpdateStatus()
@@ -8849,61 +8855,95 @@ function UpdatePanel() {
       .catch(() => undefined);
   }, []);
 
-  async function run(action: () => Promise<UpdateStatus>) {
-    setBusy(true);
+  async function updateNow() {
+    setNote(null);
+    setStep("checking");
     try {
-      setStatus(await action());
+      const checked = await checkForUpdate();
+      setStatus(checked);
+      if (checked.phase === "error") {
+        setStep("idle");
+        return;
+      }
+      if (!checked.updateAvailable) {
+        setNote("You are on the latest version.");
+        setStep("idle");
+        return;
+      }
+
+      setStep("downloading");
+      const staged = await downloadUpdate();
+      setStatus(staged);
+      if (staged.phase !== "staged") {
+        setStep("idle");
+        return;
+      }
+
+      // Restart is part of the same press: the watchdog swaps the new version
+      // in while the server is down, then this page reloads onto it.
+      setStep("restarting");
+      await restartVaenyx();
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        await new Promise((wait) => setTimeout(wait, 3000));
+        try {
+          const response = await fetch("/health");
+          if (response.ok) {
+            window.location.reload();
+            return;
+          }
+        } catch {
+          // Still installing and restarting.
+        }
+      }
+      setNote(
+        "Vaenyx is taking longer than usual to come back. It is finishing the update — refresh this page in a minute.",
+      );
+      setStep("idle");
     } catch {
-      // The global toast already told the Owner.
-    } finally {
-      setBusy(false);
+      // api.ts already raised a toast with the reason.
+      setStep("idle");
     }
   }
 
-  const staged = status?.phase === "staged";
+  const label =
+    step === "checking"
+      ? "Checking…"
+      : step === "downloading"
+        ? "Downloading…"
+        : step === "restarting"
+          ? "Installing and restarting…"
+          : status?.updateAvailable && status.availableVersion
+            ? `Update To ${status.availableVersion}`
+            : "Check For Updates";
+
   return (
     <>
       <p className="settings-card-copy">
         This Vaenyx is version <strong>{status?.currentVersion ?? "…"}</strong>.
         {status?.updateAvailable && status.availableVersion
           ? ` Version ${status.availableVersion} is available.`
-          : " Updates are downloaded here and checked against their published checksum before anything is replaced."}
+          : " One press checks for a new version, downloads it, verifies it against its published checksum, installs it and restarts — your data, settings and connected models are untouched, and the previous version comes back automatically if anything goes wrong."}
       </p>
-      {status?.detail ? (
-        <p className={status.phase === "error" ? "form-error" : "saved-note"}>
-          {status.detail}
+      {step === "restarting" ? (
+        <p className="settings-card-copy">
+          Installing. Vaenyx will restart and this page will reload on its own
+          — leave it open.
         </p>
+      ) : null}
+      {note ? <p className="saved-note">{note}</p> : null}
+      {status?.detail && status.phase === "error" ? (
+        <p className="form-error">{status.detail}</p>
       ) : null}
       <div className="model-card-actions">
         <button
-          className="secondary-button"
-          disabled={busy}
-          onClick={() => void run(checkForUpdate)}
+          className="primary-button"
+          disabled={step !== "idle"}
+          onClick={() => void updateNow()}
           type="button"
         >
-          {busy && status?.phase === "checking"
-            ? "Checking…"
-            : "Check For Updates"}
+          {label}
         </button>
-        {status?.updateAvailable && !staged ? (
-          <button
-            className="primary-button"
-            disabled={busy}
-            onClick={() => void run(downloadUpdate)}
-            type="button"
-          >
-            {busy ? "Downloading…" : "Download Update"}
-          </button>
-        ) : null}
       </div>
-      {staged ? (
-        <p className="settings-card-copy">
-          The update is downloaded and verified. Press <strong>Restart
-          Vaenyx</strong> below to finish installing it — your data, settings
-          and connected models are untouched, and Vaenyx puts the previous
-          version back automatically if anything goes wrong.
-        </p>
-      ) : null}
     </>
   );
 }

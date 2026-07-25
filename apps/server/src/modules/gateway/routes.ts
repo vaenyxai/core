@@ -951,6 +951,7 @@ export async function registerGatewayRoutes(
       return stageUpdate({
         dataDirectory: context.config.dataDirectory,
         version: context.config.version,
+        repositoryRoot: context.config.repositoryRoot,
       });
     },
   );

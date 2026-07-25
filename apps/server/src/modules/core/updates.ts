@@ -183,8 +183,18 @@ function extract(zipPath: string, into: string): Promise<void> {
 export async function stageUpdate(config: {
   dataDirectory: string;
   version: string;
+  repositoryRoot: string;
 }): Promise<UpdateStatus> {
   if (state.phase === "downloading" || state.phase === "staged") {
+    return getUpdateStatus(config.version);
+  }
+  // A developer install is managed by git, and a zip update would fight with
+  // it - overwriting tracked files and quietly burying uncommitted work. Say
+  // so instead of doing damage.
+  if (existsSync(resolve(config.repositoryRoot, ".git"))) {
+    state.phase = "error";
+    state.detail =
+      "This copy of Vaenyx is managed with git, so it updates with git pull instead. Downloading a release over it would overwrite your working copy.";
     return getUpdateStatus(config.version);
   }
   state.phase = "downloading";

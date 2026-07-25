@@ -105,6 +105,15 @@ if (-not $source -or -not (Test-Path $source)) {
   exit 0
 }
 
+# Second line of defence: the server refuses to stage an update on a git
+# checkout, but if a pending marker ever reaches one anyway, stop here rather
+# than overwrite someone's working copy.
+if (Test-Path (Join-Path $root ".git")) {
+  Write-Log "Skipped: this is a git checkout, which updates with git pull."
+  Remove-Item $pendingFile -Force -ErrorAction SilentlyContinue
+  exit 0
+}
+
 Write-Log "Applying update $($pending.version) from $source"
 
 # Before mirroring anything: prove the staged tree is a real Vaenyx package.
