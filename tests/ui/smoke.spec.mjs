@@ -1,10 +1,11 @@
 // First-run UI smoke: the whole happy path a brand-new user walks, in a real
 // browser against the production build — owner setup, the install acceptance
-// gate (forced flywheel choice), workspace, Library, Community. A guardrail so
-// UI refactors cannot silently break the install experience.
+// gate (forced flywheel choice), the connect-a-model step, workspace, Library,
+// Community. A guardrail so UI refactors cannot silently break the install
+// experience.
 import { expect, test } from "@playwright/test";
 
-test("first run: owner setup → acceptance gate → Library and Community", async ({
+test("first run: owner setup → acceptance gate → model step → Library and Community", async ({
   page,
 }) => {
   await page.goto("/");
@@ -29,6 +30,17 @@ test("first run: owner setup → acceptance gate → Library and Community", asy
   await expect(cont).toBeEnabled();
   await cont.click();
 
+  // Connect-a-model step (onboarding spec section 4, step 3). It MUST appear
+  // on an install with no working backend, and it MUST be skippable — the
+  // spec is explicit that it never hard-locks the app.
+  await expect(
+    page.getByRole("heading", { name: "Connect your first model" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByRole("button", { name: "Sign In With ChatGPT" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+
   // Workspace loads into the chat portal; the sidebar Settings button opens
   // the admin area whose tab row holds Library and Community side by side.
   const settingsButton = page.locator(".sidebar-settings-button");
@@ -50,6 +62,11 @@ test("first run: owner setup → acceptance gate → Library and Community", asy
   await communityNav.click();
   // The intro paragraph that states the Community-vs-Library difference.
   await expect(
-    page.getByText("Community is the shared catalogue", { exact: false }),
+    page.getByText("published by people everywhere", { exact: false }),
+  ).toBeVisible();
+  // And the community disclaimer, which must never again imply that a person
+  // reviews "Verified" items (legal v2.4 corrected exactly that overclaim).
+  await expect(
+    page.getByText("automated checks passed", { exact: false }),
   ).toBeVisible();
 });

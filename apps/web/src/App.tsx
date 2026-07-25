@@ -3454,6 +3454,21 @@ function ToastHost() {
   );
 }
 
+// Mode PINs are local convenience locks, not account credentials — a real
+// password field made every browser offer to SAVE them (Oskar, dev.173).
+// A text input masked in CSS looks the same, keeps the numeric keypad on
+// phones, and no password manager touches it.
+const PIN_INPUT_PROPS = {
+  type: "text" as const,
+  className: "pin-input",
+  inputMode: "numeric" as const,
+  autoComplete: "off" as const,
+  spellCheck: false,
+  "data-lpignore": "true",
+  "data-1p-ignore": "",
+  "data-form-type": "other",
+};
+
 // This browser's device id (spec §6 device pairing): a stable random id in
 // localStorage, so the Owner can say "this device opens in mode X".
 const DEVICE_ID_KEY = "vaenyx.deviceId";
@@ -3575,13 +3590,13 @@ function ModePinGate({
           continue — the account password always works too.
         </p>
         <input
+          {...PIN_INPUT_PROPS}
           autoFocus
           onChange={(event) => setSecret(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") void unlock();
           }}
           placeholder="PIN Or Account Password"
-          type="password"
           value={secret}
         />
         <div className="model-card-actions">
@@ -3641,13 +3656,13 @@ function ModeBadge({ mode }: { mode: Mode }) {
       {asking ? (
         <span className="mode-badge-exit">
           <input
+            {...PIN_INPUT_PROPS}
             autoFocus
             onChange={(event) => setSecret(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") void leave(secret);
             }}
             placeholder="PIN Or Password"
-            type="password"
             value={secret}
           />
           <button onClick={() => void leave(secret)} type="button">
@@ -4063,7 +4078,7 @@ function ModesPanel() {
           <label>
             Enter PIN (optional)
             <input
-              inputMode="numeric"
+              {...PIN_INPUT_PROPS}
               onChange={(event) => setEnterPin(event.target.value)}
               placeholder="Leave blank for none"
               value={enterPin}
@@ -4072,7 +4087,7 @@ function ModesPanel() {
           <label>
             Exit PIN (optional — locks the mode)
             <input
-              inputMode="numeric"
+              {...PIN_INPUT_PROPS}
               onChange={(event) => setExitPin(event.target.value)}
               placeholder="Leave blank for none"
               value={exitPin}
@@ -4290,8 +4305,8 @@ function ModesPanel() {
                     <label>
                       Enter PIN — blank keeps the current one
                       <input
+                        {...PIN_INPUT_PROPS}
                         disabled={editClearEnterPin}
-                        inputMode="numeric"
                         onChange={(event) =>
                           setEditEnterPin(event.target.value)
                         }
@@ -4316,8 +4331,8 @@ function ModesPanel() {
                     <label>
                       Exit PIN — blank keeps the current one
                       <input
+                        {...PIN_INPUT_PROPS}
                         disabled={editClearExitPin}
-                        inputMode="numeric"
                         onChange={(event) => setEditExitPin(event.target.value)}
                         placeholder={mode.hasExitPin ? "Unchanged" : "None set"}
                         value={editExitPin}
@@ -4363,8 +4378,9 @@ function ModesPanel() {
                 {enterFor === mode.id ? (
                   <div className="modes-enter-row">
                     <input
+                      {...PIN_INPUT_PROPS}
                       autoFocus
-                      className="method-rename-input"
+                      className={`method-rename-input ${PIN_INPUT_PROPS.className}`}
                       onChange={(event) => setEnterSecret(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
@@ -4373,7 +4389,6 @@ function ModesPanel() {
                         }
                       }}
                       placeholder="Enter PIN (Or Account Password)"
-                      type="password"
                       value={enterSecret}
                     />
                     <button
@@ -5006,6 +5021,7 @@ function AskVaenyxPanel({
   onCreateTask,
   onDraftConversationStarted,
   onLibraryRefresh,
+  onOpenSettings,
   onRequestedConversationHandled,
   onWorkspaceRefresh,
   requestedConversationId,
@@ -5019,6 +5035,8 @@ function AskVaenyxPanel({
   libraryRoutines: LibraryRoutineSummary[];
   focusedTaskId: string | null;
   onConversationsChange: (conversations: AskVaenyxConversation[]) => void;
+  // Used by the "Connect a model" hint when nothing can answer yet.
+  onOpenSettings: () => void;
   onCreateTask: (
     content: string,
     sourceChatId?: string | null,
@@ -5217,6 +5235,11 @@ function AskVaenyxPanel({
   // Connected model backends, for the composer's provider picker. Fetched once;
   // an empty/failed fetch just hides the picker (Codex-only stays the default).
   const [chatProviders, setChatProviders] = useState<ModelProviderInfo[]>([]);
+  // Whether ANY backend can actually answer. Codex is always "connected"
+  // even with no CLI installed, so only `healthy` tells the truth — without
+  // this the composer used to show a confident "ChatGPT" chip on an install
+  // with nothing connected at all.
+  const [hasUsableModel, setHasUsableModel] = useState(true);
   useEffect(() => {
     let active = true;
     void fetchModelProviders()
@@ -5224,6 +5247,9 @@ function AskVaenyxPanel({
         if (active) {
           setChatProviders(
             result.providers.filter((provider) => provider.connected),
+          );
+          setHasUsableModel(
+            result.providers.some((provider) => provider.healthy),
           );
         }
       })
@@ -6428,7 +6454,17 @@ function AskVaenyxPanel({
             </button>
           </div>
 
-          {chatProviders.length > 1 ? (
+          {!hasUsableModel ? (
+            <div className="composer-status">
+              <button
+                className="composer-connect-hint"
+                onClick={onOpenSettings}
+                type="button"
+              >
+                {lang === "zh" ? "先连一个模型 →" : "Connect a model →"}
+              </button>
+            </div>
+          ) : chatProviders.length > 1 ? (
             // Identical to the conversation composer's picker row (Oskar,
             // dev.159): backend · model version · reasoning level.
             <div className="composer-status">
@@ -7091,10 +7127,20 @@ function AskVaenyxPanel({
                     </option>
                   ))}
               </select>
-            ) : (
+            ) : hasUsableModel ? (
               <span className="composer-model">
                 {chatProviders[0]?.name ?? "ChatGPT"}
               </span>
+            ) : (
+              // Skipped the first-run step (or the model stopped working):
+              // say so honestly and go straight to where it is fixed.
+              <button
+                className="composer-connect-hint"
+                onClick={onOpenSettings}
+                type="button"
+              >
+                {lang === "zh" ? "先连一个模型 →" : "Connect a model →"}
+              </button>
             )}
             {(() => {
               // "Model within the provider": a second picker with a curated
@@ -14230,6 +14276,7 @@ function VaenyxWorkspace({
               void fetchLibraryMethods().then(setLibraryMethods);
               void fetchLibraryRoutines().then(setLibraryRoutines);
             }}
+            onOpenSettings={() => openScreen("settings")}
             onRequestedConversationHandled={() =>
               setRequestedConversationId(null)
             }
@@ -14552,6 +14599,312 @@ function InstallAcceptanceGate({ children }: { children: ReactNode }) {
   );
 }
 
+// First-run step 3 (onboarding spec section 4): connect a model. The Owner
+// has an app that cannot answer anything until one backend is reachable, so
+// this asks once, right after the legal step — but it NEVER hard-locks: Skip
+// is always one tap away and the composer then carries the reminder.
+//
+// Order is deliberate for a non-technical owner: the ChatGPT sign-in needs no
+// key at all, then the free-tier keys, then everything else in Settings.
+const MODEL_STEP_DONE_KEY = "vaenyx.modelStepDone";
+
+const WIZARD_KEY_PROVIDERS = [
+  { id: "gemini", label: "Google Gemini", note: "Free tier, no card" },
+  { id: "groq", label: "Groq", note: "Free tier, very fast" },
+  { id: "openai", label: "OpenAI", note: "Paid API key" },
+  { id: "anthropic", label: "Claude", note: "Paid API key" },
+];
+
+function ModelConnectStep({ onDone }: { onDone: () => void }) {
+  const { lang, t } = useI18n();
+  const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
+  const [choice, setChoice] = useState<string>("gemini");
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [codexWaiting, setCodexWaiting] = useState(false);
+  const [codexUrl, setCodexUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchModelProviders()
+      .then((result) => setProviders(result.providers))
+      .catch(() => undefined);
+  }, []);
+
+  const zh = lang === "zh";
+  const keyUrl = CONNECTABLE_MODELS.find(
+    (model) => model.id === choice,
+  )?.keyUrl;
+
+  function finish() {
+    try {
+      window.localStorage.setItem(MODEL_STEP_DONE_KEY, "1");
+    } catch {
+      // Best-effort; the gate simply asks again next launch.
+    }
+    onDone();
+  }
+
+  // Same flow as the Models panel (dev.111): the server drives the official
+  // Codex CLI login and we poll until the provider reports healthy.
+  async function signInCodex() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url, detail } = await startCodexLogin();
+      if (detail) setError(detail);
+      if (!url) {
+        setBusy(false);
+        return;
+      }
+      setCodexUrl(url);
+      setCodexWaiting(true);
+      window.open(url, "_blank", "noopener");
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const result = await fetchModelProviders().catch(() => null);
+        const codex = result?.providers.find(
+          (provider) => provider.id === "codex",
+        );
+        if (codex?.healthy) {
+          finish();
+          return;
+        }
+      }
+      setError(
+        zh
+          ? "还没检测到登录完成。登录后可以直接点“稍后再说”,连接会自动生效。"
+          : "Sign-in has not completed yet. You can press Skip — it will connect on its own once finished.",
+      );
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not start the sign-in.",
+      );
+    } finally {
+      setBusy(false);
+      setCodexWaiting(false);
+    }
+  }
+
+  async function connectKey() {
+    if (!apiKey.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await connectModelProvider(choice, {
+        apiKey: apiKey.trim(),
+      });
+      const connected = result.providers.find(
+        (provider) => provider.id === choice,
+      );
+      if (!connected?.healthy) {
+        setError(
+          connected?.detail ??
+            (zh ? "这个 key 没能连上。" : "That key did not connect."),
+        );
+        return;
+      }
+      await setDefaultModelProvider(choice).catch(() => undefined);
+      finish();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not connect that model.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const codexProvider = providers.find((provider) => provider.id === "codex");
+
+  return (
+    <main className="acceptance-screen">
+      <div className="acceptance-card">
+        <span className="brand-mark">V</span>
+        <h2>{zh ? "连接第一个模型" : "Connect your first model"}</h2>
+        <p className="settings-card-copy">
+          {zh
+            ? "Vaenyx 本身不含 AI 模型 —— 它替你调用你自己的模型账号。选一个就能开始,以后随时能改或加。"
+            : "Vaenyx has no AI model of its own — it uses an account you control. Pick one to get started; you can change or add more later."}
+        </p>
+
+        <section className="wizard-option">
+          <strong>{zh ? "① 用 ChatGPT 登录" : "1. Sign in with ChatGPT"}</strong>
+          <p className="settings-card-copy">
+            {zh
+              ? "有 ChatGPT 订阅就选这个:不用 API key,浏览器登录一次即可。"
+              : "Best if you have a ChatGPT subscription: no API key, just one browser sign-in."}
+          </p>
+          {codexProvider?.healthy ? (
+            <span className="library-chip chip-published">
+              {zh ? "已连接" : "Connected"}
+            </span>
+          ) : (
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() => void signInCodex()}
+              type="button"
+            >
+              {codexWaiting
+                ? zh
+                  ? "等待登录完成…"
+                  : "Waiting For Sign-In..."
+                : zh
+                  ? "用 ChatGPT 登录"
+                  : "Sign In With ChatGPT"}
+            </button>
+          )}
+          {codexUrl ? (
+            <a
+              className="model-key-link"
+              href={codexUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {zh ? "没弹出窗口?点这里打开登录页 ↗" : "No window? Open the sign-in page ↗"}
+            </a>
+          ) : null}
+        </section>
+
+        <section className="wizard-option">
+          <strong>{zh ? "② 粘一个 API key" : "2. Paste an API key"}</strong>
+          <p className="settings-card-copy">
+            {zh
+              ? "Gemini 和 Groq 有免费额度,不用信用卡。"
+              : "Gemini and Groq have a free tier and need no credit card."}
+          </p>
+          <label className="chat-font-field">
+            {zh ? "选择" : "Provider"}
+            <select
+              className="task-select"
+              onChange={(event) => {
+                setChoice(event.target.value);
+                setApiKey("");
+                setError(null);
+              }}
+              value={choice}
+            >
+              {WIZARD_KEY_PROVIDERS.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.label} — {provider.note}
+                </option>
+              ))}
+            </select>
+          </label>
+          {keyUrl ? (
+            <a
+              className="model-key-link"
+              href={keyUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {zh ? "去拿一个 API key ↗" : "Get an API key ↗"}
+            </a>
+          ) : null}
+          <input
+            autoComplete="off"
+            className="method-rename-input"
+            onChange={(event) => setApiKey(event.target.value)}
+            placeholder={zh ? "粘贴 API key" : "Paste the API key"}
+            type="password"
+            value={apiKey}
+          />
+          {/* F1 / TPN n.3: the third-party notice must render on every
+              surface where a cloud model is connected. */}
+          <p className="context-disclaimer">
+            {t("legal.notice.modelConnect.cloud")}
+          </p>
+          <button
+            className="primary-button"
+            disabled={busy || !apiKey.trim()}
+            onClick={() => void connectKey()}
+            type="button"
+          >
+            {zh ? "连接" : "Connect"}
+          </button>
+        </section>
+
+        {error ? <p className="form-error">{error}</p> : null}
+
+        <button
+          className="text-button"
+          disabled={busy}
+          onClick={finish}
+          type="button"
+        >
+          {zh ? "稍后再说" : "Skip for now"}
+        </button>
+        <p className="acceptance-fine">
+          {zh
+            ? "跳过也能逛遍界面。设置 → AI Settings → Models 里随时能连。"
+            : "Skipping is fine — you can look around, and connect later in Settings → AI Settings → Models."}
+        </p>
+      </div>
+    </main>
+  );
+}
+
+// Gate around the workspace: show the connect step once, on an install that
+// has no working model yet. Fails OPEN on any error or slow reply, exactly
+// like the acceptance gate — a provider-list hiccup must never strand the
+// Owner on a wizard.
+function ModelConnectGate({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState<boolean | null>(() => {
+    try {
+      return window.localStorage.getItem(MODEL_STEP_DONE_KEY) === "1"
+        ? true
+        : null;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    if (ready !== null) return;
+    let settled = false;
+    const settle = (value: boolean) => {
+      if (!settled) {
+        settled = true;
+        setReady(value);
+      }
+    };
+    const timer = window.setTimeout(() => settle(true), 8000);
+    void fetchModelProviders()
+      .then((result) => {
+        // `connected` is true for Codex even with no CLI installed; only
+        // `healthy` means a model can actually answer.
+        const usable = result.providers.some((provider) => provider.healthy);
+        if (usable) {
+          try {
+            window.localStorage.setItem(MODEL_STEP_DONE_KEY, "1");
+          } catch {
+            // Best-effort.
+          }
+        }
+        settle(usable);
+      })
+      .catch(() => settle(true))
+      .finally(() => window.clearTimeout(timer));
+    return () => window.clearTimeout(timer);
+  }, [ready]);
+
+  if (ready === null) {
+    return (
+      <main className="loading-screen">
+        <span className="brand-mark">V</span>
+        <p>Loading…</p>
+      </main>
+    );
+  }
+  if (ready) return <>{children}</>;
+  return <ModelConnectStep onDone={() => setReady(true)} />;
+}
+
 // The install-time acceptance screen: A1 (AI notice), A3 (flywheel forced choice —
 // no option pre-selected; "Keep Sharing On (Recommended)" is visually prominent but
 // never pre-ticked; decline is one equally-accessible tap), then A2 (the Continue
@@ -14713,12 +15066,14 @@ export function App() {
 
   return (
     <InstallAcceptanceGate>
-      <VaenyxWorkspace
-        onLogout={logout}
-        onWorkspaceChange={setWorkspace}
-        systemStatus={systemStatus}
-        workspace={workspace}
-      />
+      <ModelConnectGate>
+        <VaenyxWorkspace
+          onLogout={logout}
+          onWorkspaceChange={setWorkspace}
+          systemStatus={systemStatus}
+          workspace={workspace}
+        />
+      </ModelConnectGate>
     </InstallAcceptanceGate>
   );
 }
