@@ -4077,9 +4077,12 @@ select {
   margin-top: 12px;
 }
 
-/* A checkbox row — the global input sizing (width 100%, height 46px) must
-   not stretch the checkbox into a giant block. */
-.modes-toggle {
+/* A checkbox row: box and text on ONE line. The selector has to outrank
+   `.memory-form label { display: grid }`, which otherwise stacks them
+   (Oskar, dev.172), and the global input sizing must not blow the box up. */
+.modes-toggle,
+.memory-form label.modes-toggle,
+.settings-card label.modes-toggle {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -4088,7 +4091,9 @@ select {
   font-weight: 500;
 }
 
-.modes-toggle input {
+.modes-toggle input,
+.memory-form label.modes-toggle input,
+.settings-card label.modes-toggle input {
   width: 18px;
   height: 18px;
   min-height: 0;
@@ -4210,10 +4215,14 @@ select {
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   margin-left: auto;
   padding: 4px 8px;
+  /* Rounded pill while collapsed; the PIN prompt makes it a small panel
+     that must stay inside the sidebar (Oskar, dev.172). */
   border: 1px solid var(--accent);
-  border-radius: 999px;
+  border-radius: 14px;
   background: var(--accent-soft);
   color: var(--accent);
   font-size: 11px;
@@ -4222,10 +4231,11 @@ select {
 
 .sidebar-brand {
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .mode-badge-name {
-  max-width: 120px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4246,19 +4256,28 @@ select {
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
 }
 
 .mode-badge-exit input {
-  width: 150px;
-  height: 30px;
+  flex: 1 1 90px;
+  width: auto;
+  min-width: 0;
+  height: 28px;
   min-height: 0;
   padding: 0 9px;
   font-size: 12px;
 }
 
 .mode-badge-error {
+  flex-basis: 100%;
+  width: 100%;
   color: #df938a;
   font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .modes-list {

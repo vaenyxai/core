@@ -234,7 +234,7 @@ export function listDeviceModes(database: DatabaseHandle): DeviceMode[] {
 export function setDeviceMode(
   database: DatabaseHandle,
   deviceId: string,
-  input: { modeId?: string | null; label?: string },
+  input: { modeId?: string | null; label?: string; register?: boolean },
 ): DeviceMode[] {
   if (input.modeId && !findMode(database, input.modeId)) {
     throw new Error("MODE_NOT_FOUND");
@@ -242,7 +242,11 @@ export function setDeviceMode(
   const existing = database.sqlite
     .prepare("SELECT label, mode_id FROM device_modes WHERE device_id = ?")
     .get(deviceId) as { label: string; mode_id: string | null } | undefined;
-  const label = input.label?.trim() || existing?.label || "Device";
+  // A device re-registering on open keeps whatever name the Owner gave it.
+  const label =
+    input.register && existing?.label
+      ? existing.label
+      : input.label?.trim() || existing?.label || "Device";
   const modeId =
     input.modeId === undefined ? (existing?.mode_id ?? null) : input.modeId;
   database.sqlite

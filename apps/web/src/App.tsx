@@ -3691,6 +3691,8 @@ function ModesPanel() {
   const [localOnly, setLocalOnly] = useState(false);
   const [enterPin, setEnterPin] = useState("");
   const [exitPin, setExitPin] = useState("");
+  const [newAgentName, setNewAgentName] = useState("");
+  const [newDigest, setNewDigest] = useState<"off" | "daily" | "weekly">("off");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Which mode's Enter is asking for its PIN right now (null = none).
@@ -3735,6 +3737,23 @@ function ModesPanel() {
 
   const thisDeviceId = deviceId();
   const [devices, setDevices] = useState<DeviceMode[]>([]);
+  // Draft names per device; committed on blur/Enter.
+  const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
+
+  async function renameDevice(id: string) {
+    const next = (deviceNames[id] ?? "").trim();
+    const current = devices.find((device) => device.deviceId === id);
+    if (!next || !current || next === current.label) return;
+    try {
+      setDevices(await setDeviceMode(id, { label: next }));
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not rename the device.",
+      );
+    }
+  }
 
   useEffect(() => {
     void fetchModes()
@@ -3817,6 +3836,8 @@ function ModesPanel() {
           : {
               lockSettings,
               localOnly,
+              agentName: newAgentName.trim(),
+              digestCadence: newDigest,
               ...(enterPin.trim() ? { enterPin: enterPin.trim() } : {}),
               ...(exitPin.trim() ? { exitPin: exitPin.trim() } : {}),
             }),
@@ -3827,6 +3848,8 @@ function ModesPanel() {
         setRules("");
         setLockSettings(false);
         setLocalOnly(false);
+        setNewAgentName("");
+        setNewDigest("off");
         setEnterPin("");
         setExitPin("");
       }
@@ -4015,6 +4038,29 @@ function ModesPanel() {
             Local model only (also blocks network)
           </label>
           <label>
+            Agent name in this mode (optional)
+            <input
+              maxLength={100}
+              onChange={(event) => setNewAgentName(event.target.value)}
+              placeholder="Blank uses the main name"
+              value={newAgentName}
+            />
+          </label>
+          <label>
+            Activity summary to User Mode
+            <select
+              className="task-select"
+              onChange={(event) =>
+                setNewDigest(event.target.value as "off" | "daily" | "weekly")
+              }
+              value={newDigest}
+            >
+              <option value="off">Off</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </label>
+          <label>
             Enter PIN (optional)
             <input
               inputMode="numeric"
@@ -4066,6 +4112,28 @@ function ModesPanel() {
                     Forget
                   </button>
                 </div>
+                {/* Two Android phones look identical without a name of
+                    their own (Oskar, dev.172). */}
+                <label className="chat-font-field">
+                  Name this device
+                  <input
+                    onBlur={() => void renameDevice(device.deviceId)}
+                    onChange={(event) =>
+                      setDeviceNames((current) => ({
+                        ...current,
+                        [device.deviceId]: event.target.value,
+                      }))
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void renameDevice(device.deviceId);
+                      }
+                    }}
+                    placeholder="Kitchen tablet"
+                    value={deviceNames[device.deviceId] ?? device.label}
+                  />
+                </label>
                 <label className="chat-font-field">
                   Opens in
                   <select
@@ -13873,7 +13941,9 @@ function VaenyxWorkspace({
   // fixing a device's setting is always possible.
   useEffect(() => {
     const id = deviceId();
-    void setDeviceMode(id, { label: deviceLabel() }).catch(() => undefined);
+    void setDeviceMode(id, { label: deviceLabel(), register: true }).catch(
+      () => undefined,
+    );
     if (workspace.mode) return;
     let exited = false;
     try {

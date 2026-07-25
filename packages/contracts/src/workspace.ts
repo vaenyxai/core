@@ -702,6 +702,9 @@ export const SetDeviceModeRequestSchema = Type.Object(
   {
     modeId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     label: Type.Optional(Type.String({ maxLength: 80 })),
+    // true = the automatic registration a device does on every open: it
+    // must never overwrite a name the Owner typed.
+    register: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
