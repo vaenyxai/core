@@ -56,7 +56,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "Not financial or tax advice — check important decisions with a professional.",
     "disclaimer.legal": "Not legal advice.",
     "disclaimer.community":
-      "Community Methods/Routines are made by other users and aren't vetted by Vaenyx as professional advice. Verified items are reviewed; community items are at your discretion.",
+      "Community Methods/Routines are made by other users and aren't vetted by Vaenyx as professional advice. 'Verified' means automated checks passed — not that a person reviewed it; community items are at your discretion.",
     "disclaimer.merit":
       "Merit is a reputation record — no cash value, can't be bought, sold, or exchanged; not a currency or security.",
     "disclaimer.remote":
@@ -245,7 +245,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "disclaimer.finance": "不是财务 / 税务建议,重要决定请咨询专业人士。",
     "disclaimer.legal": "不是法律意见。",
     "disclaimer.community":
-      "社区 Method / Routine 由其他用户制作,Vaenyx 不对其内容作为专业建议背书;认证档已过审,社区档自行斟酌。",
+      "社区 Method / Routine 由其他用户制作,Vaenyx 不对其内容作为专业建议背书;「Verified」仅表示已通过自动检查,并非有人逐条审核,社区档请自行斟酌。",
     "disclaimer.merit":
       "Merit 是信誉记录,无现金价值、不可买卖 / 兑换,不是货币、证券或理财产品。",
     "disclaimer.remote":

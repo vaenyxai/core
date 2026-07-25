@@ -1,12 +1,12 @@
 ﻿# Vaenyx — Terms of Service & End User Licence Agreement
 
-> **FINAL v2.3 (2026-07-13).** v2.3 implements the full open-source decision of 2026-07-11 (DECISIONS.md): the code licence clause (4.2) is converted to present tense against the MIT LICENSE file now distributed with the Software, the former private-components clauses (4.3, 17.3) are replaced — no privately licensed Vaenyx components exist — and the survival list is adjusted accordingly. v2.2 incorporates the second independent legal review round of 2026-07-07. v2.1 incorporates the independent legal review round of 2026-07-05. Prepared by Claude (an AI) in the style of senior Australian technology counsel, and adopted as part of the operative Vaenyx legal document set under the operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). This document is not legal advice. A one-time professional review of the Contributor Agreement remains recommended before community publishing opens. Three placeholders — [OPERATOR ENTITY], [STATE], [EFFECTIVE DATE] — remain in this document and resolve mechanically at incorporation and launch, as noted where each first appears.
+> **FINAL v2.4 (2026-07-25).** v2.3 implements the full open-source decision of 2026-07-11 (DECISIONS.md): the code licence clause (4.2) is converted to present tense against the MIT LICENSE file now distributed with the Software, the former private-components clauses (4.3, 17.3) are replaced — no privately licensed Vaenyx components exist — and the survival list is adjusted accordingly. v2.2 incorporates the second independent legal review round of 2026-07-07. v2.1 incorporates the independent legal review round of 2026-07-05. Prepared by Claude (an AI) in the style of senior Australian technology counsel, and adopted as part of the operative Vaenyx legal document set under the operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). This document is not legal advice. A one-time professional review of the Contributor Agreement remains recommended before community publishing opens. **v2.4 (2026-07-25)** resolves every placeholder — the Operator is Vae Foundry Pty Ltd (ACN 700 703 724), registered in Victoria, Australia, and the effective date is 26 July 2026 — and amends the statements identified by the feature-existence check so that no capability is described as existing before it ships.
 
-**Effective date:** [EFFECTIVE DATE] *([EFFECTIVE DATE] is set when both the install-time acceptance flow and the health acknowledgement gate described in clause 12.3 are live in the shipped build; these Terms take effect only from that presentation.)*
-**Operator:** [OPERATOR ENTITY] ("**we**", "**us**", "**our**", the "**Operator**") *([OPERATOR ENTITY] resolves to the dedicated Australian proprietary limited company decided on 2026-07-03, to be incorporated before external launch; until incorporation the project is operated by its individual proprietor.)*
+**Effective date:** 26 July 2026. These Terms take effect from the install-time acceptance flow in which they are first presented; that flow and the clause 12.3 health acknowledgement gate are live in the shipped build.
+**Operator:** Vae Foundry Pty Ltd (ACN 700 703 724), a proprietary limited company registered in Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**").
 **Contact:** hello@vaenyx.ai
 
-These Terms of Service and End User Licence Agreement (the "**Terms**"; the document may be referred to, including in the product and in the other Vaenyx legal documents, as the "**Terms of Service**") are a legally binding agreement between you and [OPERATOR ENTITY] governing your download, installation and use of the Vaenyx software and your use of the limited online services we operate in connection with it. Please read them carefully. Key points are summarised in plain English at the start of some clauses; the full clause text governs.
+These Terms of Service and End User Licence Agreement (the "**Terms**"; the document may be referred to, including in the product and in the other Vaenyx legal documents, as the "**Terms of Service**") are a legally binding agreement between you and Vae Foundry Pty Ltd governing your download, installation and use of the Vaenyx software and your use of the limited online services we operate in connection with it. Please read them carefully. Key points are summarised in plain English at the start of some clauses; the full clause text governs.
 
 ---
 
@@ -289,7 +289,7 @@ This clause 14.2 does not apply where the goods or services are of a kind ordina
 
 ## 19. General
 
-19.1 **Governing law and jurisdiction.** These Terms are governed by the laws of [STATE], Australia. *([STATE] resolves to the operating company's state or territory of registration on incorporation.)* Each party submits to the non-exclusive jurisdiction of the courts of [STATE] and the courts competent to hear appeals from them. Nothing in this clause limits any non-excludable right you have to bring proceedings under the consumer protection laws of the place where you live.
+19.1 **Governing law and jurisdiction.** These Terms are governed by the laws of Victoria, Australia. *(Victoria resolves to the operating company's state or territory of registration on incorporation.)* Each party submits to the non-exclusive jurisdiction of the courts of Victoria and the courts competent to hear appeals from them. Nothing in this clause limits any non-excludable right you have to bring proceedings under the consumer protection laws of the place where you live.
 
 19.2 **Severability.** If any provision of these Terms is void, unenforceable or illegal, it is severed to the minimum extent necessary, or read down where possible, and the remainder of these Terms continues in force.
 
@@ -309,6 +309,7 @@ This clause 14.2 does not apply where the goods or services are of a kind ordina
 
 ## 20. Contact
 
-Questions about these Terms, content reports, and legal notices: [OPERATOR ENTITY], hello@vaenyx.ai.
+Questions about these Terms, content reports, and legal notices: Vae Foundry Pty Ltd, hello@vaenyx.ai.
 
 ---
+

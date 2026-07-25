@@ -1,9 +1,9 @@
 ﻿# Vaenyx — Contributor Agreement (Community Library)
 
-> **FINAL v2.2 (2026-07-07).** v2.2 incorporates the second independent legal review round of 2026-07-07. v2.1 incorporates the independent legal review round of 2026-07-05. Prepared by Claude (an AI) in the style of senior Australian technology counsel, and adopted as part of the operative Vaenyx legal set under the Operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not legal advice. **Of the whole legal set, this is the one document for which a one-time professional review remains recommended before community publishing opens.** The three remaining placeholders — [OPERATOR ENTITY], [STATE], [EFFECTIVE DATE] — resolve mechanically at incorporation and launch, as noted where each first appears.
+> **FINAL v2.4 (2026-07-25).** v2.2 incorporates the second independent legal review round of 2026-07-07. v2.1 incorporates the independent legal review round of 2026-07-05. Prepared by Claude (an AI) in the style of senior Australian technology counsel, and adopted as part of the operative Vaenyx legal set under the Operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not legal advice. **Of the whole legal set, this is the one document for which a one-time professional review remains recommended before community publishing opens.** **v2.4 (2026-07-25)** resolves every placeholder: the Operator is Vae Foundry Pty Ltd (ACN 700 703 724), registered in Victoria, Australia, and the effective date is 26 July 2026.
 
-**Effective date:** [EFFECTIVE DATE] — *set when community publishing opens; community publishing does not open before the acceptance-recording described in clause 17 is in operation.*
-**This Agreement is between you (the "Contributor", "you") and** [OPERATOR ENTITY] (the "**Operator**", "**we**", "**us**"), the operator of the Vaenyx Community Library. *[OPERATOR ENTITY] resolves to the dedicated Australian proprietary limited company decided on 2026-07-03, to be incorporated before external launch; until incorporation the project is operated by its individual proprietor.*
+**Effective date:** 26 July 2026 — *the acceptance-recording described in clause 17 is in operation.*
+**This Agreement is between you (the "Contributor", "you") and** Vae Foundry Pty Ltd (ACN 700 703 724), a proprietary limited company registered in Victoria, Australia (the "**Operator**", "**we**", "**us**"), the operator of the Vaenyx Community Library.
 
 ---
 
@@ -169,7 +169,7 @@ We may update this Agreement from time to time. The version in force when you pu
 
 ## 16. General
 
-16.1 **Governing Law.** This Agreement is governed by the laws of [STATE], Australia — the same governing law as the Vaenyx Terms of Service — and the parties submit to the non-exclusive jurisdiction of the courts of that place, without limiting any non-excludable rights you have where you live. *[STATE] resolves to the state or territory of registration of the operator company described at the head of this Agreement.*
+16.1 **Governing Law.** This Agreement is governed by the laws of Victoria, Australia — the same governing law as the Vaenyx Terms of Service — and the parties submit to the non-exclusive jurisdiction of the courts of that place, without limiting any non-excludable rights you have where you live. *Victoria resolves to the state or territory of registration of the operator company described at the head of this Agreement.*
 
 16.2 **Relationship to the Terms of Service.** This Agreement supplements the Terms of Service for publishing activity. If they conflict in relation to a Contribution, this Agreement prevails for that Contribution — except that: (a) the licence text in Terms of Service clause 7.4, and its de-identification-failure scope limitation (mirrored in clause 5.3 of this Agreement), govern examples shared under that clause and prevail over this Agreement as to licence scope; and (b) nothing in this Agreement weakens that scope limitation (as applied to published content by Terms of Service clause 8.6(e)) or the takedown commitments in Terms of Service clause 8.5.
 
@@ -194,3 +194,4 @@ and that you have read this Agreement, that all of the warranties in clause 7 ar
 **Contact:** hello@vaenyx.ai
 
 ---
+

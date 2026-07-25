@@ -1,12 +1,12 @@
 # Vaenyx Trademark Policy
 
-> **FINAL v2.3 (2026-07-13).** v2.3 implements the full open-source decision of 2026-07-11: clause 4.1 states the MIT release in the present tense, and clause 4.2 references the LICENSE file's express brand-asset exclusion. v2.1 incorporates the independent legal review round of 2026-07-05. Prepared by Claude (an AI) in the style of senior Australian technology counsel and adopted as part of the operative Vaenyx legal set under the operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not legal advice. A one-time professional review of the Contributor Agreement remains recommended before community publishing opens. Three placeholders — [OPERATOR ENTITY], [STATE], [EFFECTIVE DATE] — resolve mechanically at incorporation and launch.
+> **FINAL v2.4 (2026-07-25).** v2.3 implements the full open-source decision of 2026-07-11: clause 4.1 states the MIT release in the present tense, and clause 4.2 references the LICENSE file's express brand-asset exclusion. v2.1 incorporates the independent legal review round of 2026-07-05. Prepared by Claude (an AI) in the style of senior Australian technology counsel and adopted as part of the operative Vaenyx legal set under the operator's recorded lean-legal decision (DECISIONS.md, 2026-07-05). It is not legal advice. A one-time professional review of the Contributor Agreement remains recommended before community publishing opens. **v2.4 (2026-07-25)** resolves every placeholder: the Operator is Vae Foundry Pty Ltd (ACN 700 703 724), registered in Victoria, Australia, and the effective date is 26 July 2026.
 
-**Effective date:** [EFFECTIVE DATE]
+**Effective date:** 26 July 2026
 **Trademark owner:** the current Operator (as identified in the Vaenyx Terms of Service)
 **Contact:** hello@vaenyx.ai
 
-*Placeholder resolution: **[OPERATOR ENTITY]** resolves to the dedicated Australian proprietary limited company (decided 2026-07-03) to be incorporated before external launch; until incorporation the project is operated by its individual proprietor, and references in this Policy to the Operator mean that proprietor. On incorporation, the Vaenyx Marks and any trade mark applications or registrations for them will be held by, or assigned to, the company (clauses 3.1–3.2). **[STATE]** (clause 15.1) resolves to that company's state or territory of registration. **[EFFECTIVE DATE]** is set when this Policy is first published with the product and website.*
+*The Operator is **Vae Foundry Pty Ltd (ACN 700 703 724)**, a proprietary limited company registered in **Victoria**, Australia (incorporated 25 July 2026), which holds the Vaenyx Marks and any trade mark applications or registrations for them (clauses 3.1–3.2).*
 
 ---
 
@@ -33,9 +33,9 @@
 
 ## 3. Ownership and Legal Status of the Marks
 
-3.1 The Vaenyx Marks are owned by the current Operator (as identified in the Terms of Service). On incorporation of [OPERATOR ENTITY], the Vaenyx Marks, and any trade mark applications or registrations for them, will be held by (or assigned to) that company. All goodwill arising from use of the Vaenyx Marks under this Policy, or under any permission we grant, accrues solely to us.
+3.1 The Vaenyx Marks are owned by the current Operator (as identified in the Terms of Service). On incorporation of Vae Foundry Pty Ltd, the Vaenyx Marks, and any trade mark applications or registrations for them, will be held by (or assigned to) that company. All goodwill arising from use of the Vaenyx Marks under this Policy, or under any permission we grant, accrues solely to us.
 
-3.2 **Registration status.** As at this version (v2.1, 2026-07-05), the Vaenyx Marks are **not yet registered**. An Australian trade mark application under the *Trade Marks Act 1995* (Cth) will be filed with IP Australia around the time of external launch — in the name of [OPERATOR ENTITY] if it has been incorporated by the time of filing, or otherwise in the name of the individual proprietor and subsequently assigned to [OPERATOR ENTITY]. Until registration is granted, we use the ™ symbol with the Vaenyx Marks where any symbol is used, and we do not use the ® symbol. This Policy is drafted to operate both **before and after registration**:
+3.2 **Registration status.** As at this version (v2.1, 2026-07-05), the Vaenyx Marks are **not yet registered**. An Australian trade mark application under the *Trade Marks Act 1995* (Cth) will be filed with IP Australia around the time of external launch — in the name of Vae Foundry Pty Ltd if it has been incorporated by the time of filing, or otherwise in the name of the individual proprietor and subsequently assigned to Vae Foundry Pty Ltd. Until registration is granted, we use the ™ symbol with the Vaenyx Marks where any symbol is used, and we do not use the ® symbol. This Policy is drafted to operate both **before and after registration**:
   (a) **before registration**, we rely on any **common law rights** we have acquired, or acquire, in the Vaenyx Marks through use and reputation as they accrue — including, where the necessary reputation exists, the tort of passing off — and on the prohibitions on misleading or deceptive conduct in the Australian Consumer Law (Schedule 2 of the *Competition and Consumer Act 2010* (Cth)); and
   (b) **upon registration**, we will additionally rely on our registered rights, and this Policy will continue to apply without amendment.
 
@@ -171,7 +171,7 @@ Except as expressly permitted by clause 5, and without our prior written permiss
 
 ## 15. General
 
-15.1 This Policy is governed by the laws of [STATE], Australia.
+15.1 This Policy is governed by the laws of Victoria, Australia.
 
 15.2 Nothing in this Policy excludes, restricts, or modifies any right or remedy you have under the Australian Consumer Law or any other law that cannot lawfully be excluded, restricted, or modified.
 
@@ -186,3 +186,4 @@ Except as expressly permitted by clause 5, and without our prior written permiss
 Questions and permission requests: hello@vaenyx.ai.
 
 ---
+
