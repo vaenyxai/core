@@ -8812,7 +8812,8 @@ function BackupPanel() {
           onClose={() => setConfirmId(null)}
           title={t("settings.backup.restoreTitle")}
         >
-          <p className="settings-card-copy">{t("settings.backup.restoreWarn")}</p>
+          {/* H3 (copy pack): point-of-action restore notice + confirm label. */}
+          <p className="settings-card-copy">{t("legal.notice.restore")}</p>
           <div className="modal-actions">
             <button
               className="text-button"
@@ -8827,7 +8828,7 @@ function BackupPanel() {
               onClick={() => void handleRestore(confirmId)}
               type="button"
             >
-              {t("settings.backup.restore")}
+              {t("legal.notice.restore.confirm")}
             </button>
           </div>
         </Modal>
@@ -11383,7 +11384,7 @@ function CreateRoutinePanel({
 // (health is highest-risk). Tags are free-form hashtags; match by substring.
 // Mirrors i18n `legal.copyVersion` (copy pack clause 6.4): bumping it re-fires
 // version-gated acknowledgements. Keep the two in step.
-const LEGAL_COPY_VERSION = "2.5";
+const LEGAL_COPY_VERSION = "2.6";
 
 // Sign-in page model buttons: the chosen provider id is parked here, then the
 // workspace opens Settings → Models and highlights that provider's connect
@@ -12182,6 +12183,57 @@ function CommunityArea({
   );
 }
 
+// D4 (copy pack): the report channel has to be reachable from every community
+// item, or the takedown discipline in the Terms has nothing to trigger it from
+// inside the app. On-demand: the notice travels with this control.
+function CommunityReportLink({
+  kind,
+  name,
+}: {
+  kind: "routine" | "method";
+  name: string;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const label =
+    kind === "routine"
+      ? t("community.report.routine")
+      : t("community.report.method");
+
+  return (
+    <>
+      <button className="text-button" onClick={() => setOpen(true)} type="button">
+        {label}
+      </button>
+      {open ? (
+        <Modal onClose={() => setOpen(false)} title={label}>
+          <p className="settings-card-copy">
+            {t("legal.notice.community.report")}
+          </p>
+          <div className="modal-actions">
+            <button
+              className="text-button"
+              onClick={() => setOpen(false)}
+              type="button"
+            >
+              {t("routine.confirm.cancel")}
+            </button>
+            <a
+              className="primary-button"
+              href={`mailto:hello@vaenyx.ai?subject=${encodeURIComponent(
+                `Report: ${name}`,
+              )}`}
+              onClick={() => setOpen(false)}
+            >
+              {t("community.report.email")}
+            </a>
+          </div>
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+
 function CataloguePanel({
   kind,
   installedIds,
@@ -12325,25 +12377,27 @@ function CataloguePanel({
                   {routine.mode === "accumulate" ? "Accumulate" : "One-shot"}
                   {routine.owner ? ` · by ${routine.owner}` : ""}
                 </small>
-                <button
-                  className="primary-button"
-                  disabled={isInstalled || installing === routine.id}
-                  onClick={() =>
-                    setConfirmingInstall({
-                      id: routine.id,
-                      kind: "routine",
-                      name: routine.name,
-                    })
-                  }
-                  style={{ marginTop: "0.75rem", alignSelf: "flex-start" }}
-                  type="button"
-                >
-                  {isInstalled
-                    ? "Installed"
-                    : installing === routine.id
-                      ? "Installing…"
-                      : "Install"}
-                </button>
+                <div className="library-card-actions">
+                  <button
+                    className="primary-button"
+                    disabled={isInstalled || installing === routine.id}
+                    onClick={() =>
+                      setConfirmingInstall({
+                        id: routine.id,
+                        kind: "routine",
+                        name: routine.name,
+                      })
+                    }
+                    type="button"
+                  >
+                    {isInstalled
+                      ? "Installed"
+                      : installing === routine.id
+                        ? "Installing…"
+                        : "Install"}
+                  </button>
+                  <CommunityReportLink kind="routine" name={routine.name} />
+                </div>
               </div>
             );
           })}
@@ -12373,25 +12427,27 @@ function CataloguePanel({
                   v{method.version}
                   {method.owner ? ` · by ${method.owner}` : ""}
                 </small>
-                <button
-                  className="primary-button"
-                  disabled={isInstalled || installing === method.id}
-                  onClick={() =>
-                    setConfirmingInstall({
-                      id: method.id,
-                      kind: "method",
-                      name: method.name,
-                    })
-                  }
-                  style={{ marginTop: "0.75rem", alignSelf: "flex-start" }}
-                  type="button"
-                >
-                  {isInstalled
-                    ? "Installed"
-                    : installing === method.id
-                      ? "Installing…"
-                      : "Install"}
-                </button>
+                <div className="library-card-actions">
+                  <button
+                    className="primary-button"
+                    disabled={isInstalled || installing === method.id}
+                    onClick={() =>
+                      setConfirmingInstall({
+                        id: method.id,
+                        kind: "method",
+                        name: method.name,
+                      })
+                    }
+                    type="button"
+                  >
+                    {isInstalled
+                      ? "Installed"
+                      : installing === method.id
+                        ? "Installing…"
+                        : "Install"}
+                  </button>
+                  <CommunityReportLink kind="method" name={method.name} />
+                </div>
               </div>
             );
           })}

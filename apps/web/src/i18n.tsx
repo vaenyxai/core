@@ -1,4 +1,4 @@
-﻿// Lightweight in-app i18n: a language state (en/zh) + a string lookup table.
+// Lightweight in-app i18n: a language state (en/zh) + a string lookup table.
 // Real-time switch (React context re-renders), per-device memory (localStorage,
 // like the theme), default English. UI strings migrate into STRINGS gradually —
 // any key not yet translated falls back to English, then to the key itself, so
@@ -32,6 +32,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "community.intro":
       "Methods and Routines published by people everywhere. Installing one copies it into your own Library.",
     "library.tierCommunity": "Community",
+    "community.report.routine": "Report This Routine",
+    "community.report.method": "Report This Method",
+    "community.report.email": "Email hello@vaenyx.ai",
     "title.modes": "Modes",
     "title.settings": "General",
     "title.vaenyx-me": "Vaenyx Me",
@@ -114,8 +117,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.routinesLabel": "Routines",
     "settings.backup.dbOnly": "Database only",
     "settings.backup.restoreTitle": "Restore this backup?",
-    "settings.backup.restoreWarn":
-      "Vaenyx will restart to restore this snapshot (about 30 seconds). Your current data is saved as an automatic safety copy first, so you can undo it.",
     "settings.backup.restoring":
       "Restoring… Vaenyx is restarting. Reload this page in about 30 seconds.",
     "settings.backup.cancel": "Cancel",
@@ -149,7 +150,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "routine.confirm.onePerLine": "One per line",
     "routine.confirm.run": "Looks right — run",
     "routine.confirm.cancel": "Cancel",
-    "legal.copyVersion": "2.5",
+    "legal.copyVersion": "2.6",
     "legal.disclaimer.aiGeneral.composer":
       "AI can make mistakes. Check important information.",
     "legal.disclaimer.community.browse":
@@ -197,17 +198,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.methodToken.feedback":
       "This allows the app holding this token to send corrections into My Library on this device. Corrections stay on this device; a correction can only become a shared community example after it is de-identified and you explicitly approve it — corrections from apps are never shared automatically, whatever your Sharing setting.",
     "legal.notice.publish":
-      "Publishing makes this Method or Routine public, credited to your display name and licensed to everyone under the Creative Commons Attribution 4.0 licence. No local examples or raw corrections are included in the current publish submission. Publication is permanent in copies beyond our reach. If you find personal information in Published Content, report it to hello@vaenyx.ai.",
+      "Publishing is optional. When you select Publish, Vae Foundry Pty Ltd (hello@vaenyx.ai) collects the declarative item files, your account identifier and chosen public byline, and versioned records of your Contributor Agreement acceptance, warranty confirmation and overseas-publication consent. We use them to publish, attribute, manage and moderate the item and to evidence the applicable rights and choices. Cloudflare, Inc. processes the submission for us on global infrastructure, and GitHub, Inc. in the United States receives only the public item files and byline for worldwide hosting. No local examples or raw corrections are included. Publication is permanent in copies beyond our reach, and the item is licensed to everyone under the Creative Commons Attribution 4.0 licence. Without this information the item will not be published. See the Core Privacy Policy and the Current Implementation and Data-Handling Schedule for retention, access, correction and complaints.",
     "legal.notice.publish.contributorTerms":
       "By publishing you agree to the Contributor Agreement. Your acceptance is recorded against your publisher account.",
     "legal.consent.publish.warranty":
       "I confirm that I have the rights needed to publish this item, that it contains nothing malicious or harmful, that the Contributor Agreement's warranties are true for this item, and that I give the moral-rights consent in clause 6 for this Contribution.",
     "legal.notice.publish.signIn":
-      "Publishing needs a sign-in with Google or GitHub so your work can be credited to you. Vaenyx stores only what is currently needed for authentication, attribution, managing your published content, moderation and evidencing your publish-time acceptance.",
+      "Before sign-in: Vae Foundry Pty Ltd (hello@vaenyx.ai) will receive from Google or GitHub the provider name, stable provider user ID, email and any available account handle; you separately choose your public byline. We create and store account, session and publish-acceptance records with Cloudflare, Inc. on global infrastructure, for authentication, attribution, moderation, security and managing your Published Content. Publishing is optional — without signing in you can browse the Community, but you cannot publish. See the Core Privacy Policy and the Current Implementation and Data-Handling Schedule for recipients, countries, retention, access, correction and complaints.",
     "legal.consent.publish.overseas":
-      "I consent to Vaenyx disclosing the content I publish and the public byline I choose to GitHub, Inc. in the United States for hosting in the public, worldwide Community Library. If the Privacy Act applies to Vaenyx and I give this consent, APP 8.1 will not apply to this disclosure. If GitHub handles that information in a way that would breach the APPs, Vaenyx will not be accountable under the Privacy Act for that handling and I will not be able to seek redress from Vaenyx under the Privacy Act for it. Other laws or rights may still apply. Publishing is optional. Withdrawal blocks future publication but cannot reverse information already made public.",
+      "I consent to Vaenyx disclosing the content I publish and the public byline I choose to GitHub, Inc. in the United States for hosting in the public, worldwide Community Library. If the Privacy Act applies to Vaenyx and I give this consent, APP 8.1 will not apply to this disclosure. If GitHub handles that information in a way that would breach the APPs, Vaenyx will not be accountable under the Privacy Act for that handling and I will not be able to seek redress from Vaenyx under the Privacy Act for it. Other laws or rights may still apply. Publishing is optional. Withdrawal blocks future publication but cannot reverse information already made public. Consent will be obtained again if the recipient, purpose or consequences materially change.",
     "legal.disclaimer.community.install":
-      "Created by a community member. It has not been reviewed as professional advice — use it at your own discretion.",
+      "Created by a community member. It has not been reviewed as professional advice — use it at your own discretion. It does nothing until you use it.",
+    "legal.notice.community.report":
+      "Report content that is unsafe, infringing, misleading or contains personal information: hello@vaenyx.ai. Vae Foundry Pty Ltd collects directly from you your email address and the report details you choose to provide, and uses them for triage, investigation, response and legal compliance. Reporting is optional, but without enough information to identify the item and explain the issue we may be unable to act. Reports are handled by email on overseas servers — include only what's needed. The current providers, countries and retention rule are stated in the Current Implementation and Data-Handling Schedule; the Core Privacy Policy explains access, correction and complaints.",
+    "legal.notice.restore":
+      "Vaenyx will restart to restore this snapshot (about 30 seconds). Your current data is saved as an automatic safety copy first, so you can undo it.",
+    "legal.notice.restore.confirm": "Restore and Replace",
     "legal.consent.flywheel.settingsNote":
       "This version does not upload improvement patterns. This setting records a preference only. If community improvement sharing becomes available, it will remain off until you are shown current information and make a fresh affirmative choice.",
     "legal.notice.modelConnect.local":
@@ -225,6 +231,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "community.intro":
       "大家发布的 Method 和 Routine 都在这里,安装即复制进你自己的资源库。",
     "library.tierCommunity": "社区",
+    "community.report.routine": "举报此 Routine",
+    "community.report.method": "举报此 Method",
+    "community.report.email": "发邮件到 hello@vaenyx.ai",
     "title.modes": "模式",
     "title.settings": "通用",
     "title.vaenyx-me": "Vaenyx Me",
@@ -302,8 +311,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.routinesLabel": "个 Routine",
     "settings.backup.dbOnly": "仅数据库",
     "settings.backup.restoreTitle": "还原这个备份?",
-    "settings.backup.restoreWarn":
-      "Vaenyx 会重启以还原这个快照(约 30 秒)。会先把你当前的数据自动存成一份安全副本,可反悔。",
     "settings.backup.restoring": "还原中… Vaenyx 正在重启。约 30 秒后刷新本页。",
     "settings.backup.cancel": "取消",
     "settings.backup.error": "出了点问题,请重试。",
@@ -336,7 +343,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "routine.confirm.onePerLine": "一行一个",
     "routine.confirm.run": "没问题,运行",
     "routine.confirm.cancel": "取消",
-    "legal.copyVersion": "2.5",
+    "legal.copyVersion": "2.6",
     "legal.disclaimer.aiGeneral.composer": "AI 可能出错,重要信息请自行核对。",
     "legal.disclaimer.community.browse":
       "社区 Method 与 Routine 由社区成员制作,Vaenyx 不为其背书,也不构成专业建议;'Verified' 仅表示已通过自动检查。",
@@ -383,17 +390,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.methodToken.feedback":
       "开启后,持有此 Token 的应用可以把修正写入本设备上的 My Library。修正只保留在本设备;任何修正要成为社区共享示例,都必须先经脱敏处理并获得你的明确批准——来自应用的修正绝不会自动分享,无论你的 Sharing 设置如何。",
     "legal.notice.publish":
-      "发布会使该 Method 或 Routine 公开,署上你的显示名称,并依 Creative Commons Attribution 4.0 许可授予所有人。当前的发布提交不包含任何本地示例或原始纠错。就我们无法触及的副本而言,发布是永久的。若你在已发布内容中发现个人信息,请发信至 hello@vaenyx.ai 举报。",
+      "发布是可选的。当你点击发布时,Vae Foundry Pty Ltd(hello@vaenyx.ai)会收集该条目的声明式文件、你的账户标识符与你选定的公开署名,以及你对《贡献者协议》的接受、保证确认与海外发布同意的带版本记录。我们用这些信息来发布、署名、管理与审核该条目,并留存相关权利与选择的证据。Cloudflare, Inc. 在全球基础设施上代我们处理该提交;美国的 GitHub, Inc. 仅接收公开的条目文件与署名,用于面向全球的托管。提交中不包含任何本地示例或原始纠错。就我们无法触及的副本而言,发布是永久的;该条目依 Creative Commons Attribution 4.0 许可授予所有人。缺少上述信息则无法完成发布。留存、查阅、更正与投诉事宜,见《核心隐私政策》与《当前实现与数据处理明细表》。",
     "legal.notice.publish.contributorTerms":
       "发布即表示你同意《贡献者协议》。此确认将记录在你的发布者账号下。",
     "legal.consent.publish.warranty":
       "我确认:我拥有发布本项所需的权利;本项不含任何恶意或有害内容;《贡献者协议》的各项保证就本项均属属实;并且我就本项贡献内容给予第 6 条所述的精神权利同意。",
     "legal.notice.publish.signIn":
-      "发布需要用 Google 或 GitHub 登录,以便你的作品能署名给你。Vaenyx 仅存储当前所需的信息:身份验证、署名、管理你已发布的内容、内容管理,以及留存你发布时的接受记录。",
+      "登录前请注意:Vae Foundry Pty Ltd(hello@vaenyx.ai)将从 Google 或 GitHub 接收服务商名称、稳定的服务商用户 ID、邮箱,以及可获得的账户名;你的公开署名由你另行选择。我们会在全球基础设施上,通过 Cloudflare, Inc. 创建并存储账户、会话与发布接受记录,用于身份验证、署名、内容管理、安全与管理你已发布的内容。发布是可选的——不登录也可以浏览社区,但无法发布。接收方、国家、留存、查阅、更正与投诉事宜,见《核心隐私政策》与《当前实现与数据处理明细表》。",
     "legal.consent.publish.overseas":
-      "我同意 Vaenyx 将我发布的内容及我选定的公开署名披露给美国的 GitHub, Inc.,以存放于面向全球的公开社区库。若《隐私法》适用于 Vaenyx 且我作出本同意,APP 8.1 将不适用于该项披露。若 GitHub 以违反 APPs 的方式处理该信息,Vaenyx 就该处理不在《隐私法》项下承担责任,我也无法就此依《隐私法》向 Vaenyx 寻求救济。其他法律或权利仍可能适用。发布是可选的。撤回同意可阻止今后的发布,但无法撤回已公开的信息。",
+      "我同意 Vaenyx 将我发布的内容及我选定的公开署名披露给美国的 GitHub, Inc.,以存放于面向全球的公开社区库。若《隐私法》适用于 Vaenyx 且我作出本同意,APP 8.1 将不适用于该项披露。若 GitHub 以违反 APPs 的方式处理该信息,Vaenyx 就该处理不在《隐私法》项下承担责任,我也无法就此依《隐私法》向 Vaenyx 寻求救济。其他法律或权利仍可能适用。发布是可选的。撤回同意可阻止今后的发布,但无法撤回已公开的信息。若接收方、目的或后果发生实质变化,将重新取得同意。",
     "legal.disclaimer.community.install":
-      "由社区成员制作,未经专业建议层面的审核——请自行斟酌使用。",
+      "由社区成员制作,未经专业建议层面的审核——请自行斟酌使用。你不主动使用,它就不会做任何事。",
+    "legal.notice.community.report":
+      "举报不安全、侵权、误导或含个人信息的内容:hello@vaenyx.ai。Vae Foundry Pty Ltd 会直接从你处收集你的邮箱地址与你选择提供的举报内容,用于分流、调查、答复与遵守法律。举报是可选的;但若信息不足以定位该条目并说明问题,我们可能无法处理。举报邮件在海外服务器上处理——请只写必要信息。当前的服务商、国家与留存规则载于《当前实现与数据处理明细表》;查阅、更正与投诉事宜见《核心隐私政策》。",
+    "legal.notice.restore":
+      "Vaenyx 会重启以还原这个快照(约 30 秒)。会先把你当前的数据自动存成一份安全副本,可反悔。",
+    "legal.notice.restore.confirm": "恢复并替换",
     "legal.consent.flywheel.settingsNote":
       "本版本不会上传任何改进模式。此处只是记录一项偏好。若将来提供社区改进分享,它依旧保持关闭,直到向你展示当时的说明并由你重新做出一次肯定性选择。",
     "legal.notice.modelConnect.local":

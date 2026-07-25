@@ -3769,6 +3769,16 @@ select {
   font-size: 10px;
 }
 
+/* Install + the D4 report link sit on one row under each community card. */
+.library-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
 .library-chip {
   flex-shrink: 0;
   padding: 3px 9px;
