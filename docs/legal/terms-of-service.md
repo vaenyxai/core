@@ -358,7 +358,7 @@ The indemnity is reduced proportionately to the extent the loss was caused or co
 
 19.7 **Notices.** We give notices through the product interface, the source repository, or (for publisher account holders) the contact details associated with your account. You may contact us at hello@vaenyx.ai.
 
-19.8 **Language.** These Terms are drafted in English. Translations (including the Chinese version) are provided for convenience only; **the English version prevails** to the extent of any inconsistency.
+19.8 **Language.** These Terms are drafted in English and **the English version prevails** to the extent of any inconsistency. A translation we publish is not merely decorative: we will update the English and Chinese versions together, and the English-prevails rule does not excuse a misleading, incomplete or outdated translation (this mirrors Core Privacy Policy clause 13.4).
 
 19.9 **Interpretation.** Headings are for convenience only. "Including" means "including without limitation". A reference to a statute includes its amendments and replacements.
 
