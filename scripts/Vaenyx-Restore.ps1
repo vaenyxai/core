@@ -1,8 +1,32 @@
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$backupRoots = @(
-  (Join-Path $projectRoot "private\backups"),
-  (Join-Path $projectRoot "backups")
-)
+
+# Ask the app where backups actually live instead of keeping a second copy of
+# that logic here. The hardcoded list this replaces still pointed at
+# private\backups and backups, so on a current install (userdata\backups, plus
+# whatever destination the owner configured) this script reported "No backups
+# folder exists yet" while the backups sat right there.
+$backupRoots = @()
+try {
+  Push-Location $projectRoot
+  $rootsOutput = & node.exe --input-type=module -e "import { backupRoots } from './scripts/lib/paths.mjs'; console.log(JSON.stringify(backupRoots));" 2>$null
+  Pop-Location
+  # -join matters: node's output arrives as an array of lines, and piping that
+  # straight into ConvertFrom-Json yields an array nested inside an array,
+  # which then unrolls in confusing ways further down.
+  $rootsJson = ($rootsOutput -join "").Trim()
+  if ($LASTEXITCODE -eq 0 -and $rootsJson) {
+    $backupRoots = [string[]](ConvertFrom-Json $rootsJson)
+  }
+} catch {
+  # Fall through to the built-in list below.
+}
+if ($backupRoots.Count -eq 0) {
+  $backupRoots = @(
+    (Join-Path $projectRoot "userdata\backups"),
+    (Join-Path $projectRoot "private\backups"),
+    (Join-Path $projectRoot "backups")
+  )
+}
 
 $running = Get-CimInstance Win32_Process |
   Where-Object {
@@ -32,7 +56,13 @@ $backups = @(
   foreach ($backupsDirectory in $backupRoots) {
     if (Test-Path $backupsDirectory) {
       Get-ChildItem -LiteralPath $backupsDirectory -Directory |
-        Where-Object { Test-Path (Join-Path $_.FullName "vaenyx.db") }
+        Where-Object {
+          # An encrypted backup has no loose vaenyx.db - everything is inside
+          # backup.vbak. Filtering on the database alone hid every encrypted
+          # backup from this picker, even though restore.mjs unpacks them.
+          (Test-Path (Join-Path $_.FullName "vaenyx.db")) -or
+          (Test-Path (Join-Path $_.FullName "backup.vbak"))
+        }
     }
   }
 ) | Sort-Object LastWriteTime -Descending

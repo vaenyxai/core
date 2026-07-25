@@ -73,24 +73,37 @@ jobs:
           if (-not $bootstrap.setupRequired) { throw "a fresh install should ask for owner setup" }
           Write-Host "Packaged download installs and boots clean."
 
+      # Published with the GitHub CLI, which is preinstalled on the runner.
+      # No third-party action gets write access to this repository's releases
+      # - for a project whose whole promise is "you can audit what runs on
+      # your machine", the supply chain of its own download matters.
       - name: Publish the release
-        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            release/vaenyx-setup.zip
-            release/vaenyx-setup.zip.sha256
-          generate_release_notes: true
-          body: |
-            Download **vaenyx-setup.zip**, unzip it, and double-click
-            **Vaenyx-Setup.cmd** inside the `Vaenyx` folder.
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          Download **vaenyx-setup.zip**, unzip it, and double-click
+          **Vaenyx-Setup.cmd** inside the ``Vaenyx`` folder.
 
-            Setup checks the computer, installs Node.js if it is missing,
-            fetches and builds Vaenyx, offers to start it with Windows, then
-            opens the first-run wizard. Everything stays on your machine.
+          Setup checks the computer, installs Node.js if it is missing,
+          fetches and builds Vaenyx, offers to start it with Windows, then
+          opens the first-run wizard. Your notes, chats and files stay on
+          that computer; what you send to a connected cloud model goes to
+          that provider.
 
-            Verify the download (optional): the SHA-256 is in
-            `vaenyx-setup.zip.sha256`.
+          Optional check: the SHA-256 of the download is in
+          ``vaenyx-setup.zip.sha256``.
+          "@
+          $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
+          Set-Content -Path $notesFile -Value $notes -Encoding utf8
+          gh release create "$env:GITHUB_REF_NAME" `
+            release/vaenyx-setup.zip `
+            release/vaenyx-setup.zip.sha256 `
+            --title "Vaenyx $env:GITHUB_REF_NAME" `
+            --notes-file "$notesFile" `
+            --generate-notes
 
       - name: Keep the package as a build artefact
         uses: actions/upload-artifact@v4
