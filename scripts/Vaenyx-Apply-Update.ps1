@@ -209,7 +209,9 @@ try {
 Remove-Item $pendingFile -Force -ErrorAction SilentlyContinue
 if ($applied) {
   cmd.exe /c rmdir /s /q "$rollback" | Out-Null
-  $staged = Join-Path $root "userdata\updates\staged"
-  if (Test-Path $staged) { cmd.exe /c rmdir /s /q "$staged" | Out-Null }
+  # The whole working folder goes, not just the staged tree: the downloaded
+  # checksum file has no use once the update is in.
+  $updates = Join-Path $root "userdata\updates"
+  if (Test-Path $updates) { cmd.exe /c rmdir /s /q "$updates" | Out-Null }
 }
 exit 0
