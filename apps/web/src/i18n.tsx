@@ -33,6 +33,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "community.intro":
       "Methods and Routines published by people everywhere. Installing one copies it into your own Library.",
     "library.tierCommunity": "Community",
+    "community.discord.link": "Join the community on Discord →",
     "community.report.routine": "Report This Routine",
     "community.report.method": "Report This Method",
     "community.report.email": "Email hello@vaenyx.ai",
@@ -203,6 +204,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "I consent to Vaenyx disclosing the content I publish and the public byline I choose to GitHub, Inc. in the United States for hosting in the public, worldwide Community Library. If the Privacy Act applies to Vaenyx and I give this consent, APP 8.1 will not apply to this disclosure. If GitHub handles that information in a way that would breach the APPs, Vaenyx will not be accountable under the Privacy Act for that handling and I will not be able to seek redress from Vaenyx under the Privacy Act for it. Other laws or rights may still apply. Publishing is optional. Withdrawal blocks future publication but cannot reverse information already made public. Consent will be obtained again if the recipient, purpose or consequences materially change.",
     "legal.disclaimer.community.install":
       "Created by a community member. It has not been reviewed as professional advice — use it at your own discretion. It does nothing until you use it.",
+    "legal.notice.community.discord":
+      "Community discussion happens on Discord, a third-party platform under its own terms. If you join or post in the official Vaenyx server, Discord collects and stores your account details, posts and technical data, and Vae Foundry Pty Ltd administrators can access and use your Discord profile, posts and moderation records to operate and moderate the server. Participation is optional. The Discord platform itself is not operated by Vaenyx. See the Core Privacy Policy and the Current Implementation and Data-Handling Schedule for retention, access, correction and complaints.",
     "legal.notice.community.report":
       "Report content that is unsafe, infringing, misleading or contains personal information: hello@vaenyx.ai. Vae Foundry Pty Ltd collects directly from you your email address and the report details you choose to provide, and uses them for triage, investigation, response and legal compliance. Reporting is optional, but without enough information to identify the item and explain the issue we may be unable to act. Reports are handled by email on overseas servers — include only what's needed. The current providers, countries and retention rule are stated in the Current Implementation and Data-Handling Schedule; the Core Privacy Policy explains access, correction and complaints.",
     "legal.notice.restore":
@@ -228,6 +231,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "community.intro":
       "大家发布的 Method 和 Routine 都在这里,安装即复制进你自己的资源库。",
     "library.tierCommunity": "社区",
+    "community.discord.link": "在 Discord 上加入社区 →",
     "community.report.routine": "举报此 Routine",
     "community.report.method": "举报此 Method",
     "community.report.email": "发邮件到 hello@vaenyx.ai",
@@ -391,6 +395,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "我同意 Vaenyx 将我发布的内容及我选定的公开署名披露给美国的 GitHub, Inc.,以存放于面向全球的公开社区库。若《隐私法》适用于 Vaenyx 且我作出本同意,APP 8.1 将不适用于该项披露。若 GitHub 以违反 APPs 的方式处理该信息,Vaenyx 就该处理不在《隐私法》项下承担责任,我也无法就此依《隐私法》向 Vaenyx 寻求救济。其他法律或权利仍可能适用。发布是可选的。撤回同意可阻止今后的发布,但无法撤回已公开的信息。若接收方、目的或后果发生实质变化,将重新取得同意。",
     "legal.disclaimer.community.install":
       "由社区成员制作,未经专业建议层面的审核——请自行斟酌使用。你不主动使用,它就不会做任何事。",
+    "legal.notice.community.discord":
+      "社区讨论在 Discord 上进行。Discord 是第三方平台,受其自身条款约束。若你加入官方 Vaenyx 服务器或在其中发帖,Discord 会收集并存储你的账户信息、帖子与技术数据;Vae Foundry Pty Ltd 的管理员可以访问并使用你的 Discord 资料、帖子与管理记录,以运营和管理该服务器。参与是可选的。Discord 平台本身并非由 Vaenyx 运营。留存、查阅、更正与投诉事宜,见《核心隐私政策》与《当前实现与数据处理明细表》。",
     "legal.notice.community.report":
       "举报不安全、侵权、误导或含个人信息的内容:hello@vaenyx.ai。Vae Foundry Pty Ltd 会直接从你处收集你的邮箱地址与你选择提供的举报内容,用于分流、调查、答复与遵守法律。举报是可选的;但若信息不足以定位该条目并说明问题,我们可能无法处理。举报邮件在海外服务器上处理——请只写必要信息。当前的服务商、国家与留存规则载于《当前实现与数据处理明细表》;查阅、更正与投诉事宜见《核心隐私政策》。",
     "legal.notice.restore":

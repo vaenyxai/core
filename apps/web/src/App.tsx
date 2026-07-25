@@ -12174,6 +12174,18 @@ function CommunityArea({
         <p className="context-disclaimer">
           {t("legal.disclaimer.community.browse")}
         </p>
+        {/* D5 (copy pack): the notice travels with the link, so it is rendered
+            here and not behind a click. vaenyx.ai/discord is a redirect the
+            operator controls — a changed invite is one line on the website,
+            never an app release. */}
+        <p className="settings-card-copy">
+          <a href="https://vaenyx.ai/discord" rel="noopener" target="_blank">
+            {t("community.discord.link")}
+          </a>
+        </p>
+        <p className="context-disclaimer">
+          {t("legal.notice.community.discord")}
+        </p>
       </section>
       <nav aria-label="Community sections" className="library-subtabs">
         <button
