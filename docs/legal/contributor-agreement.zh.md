@@ -1,6 +1,6 @@
 ﻿# Vaenyx — 贡献者协议(社区 Library)
 
-> **版本 3.0 —— 2026 年 7 月 26 日生效。** 本文件属于 Vaenyx 法律文件集,由运营方采用;仅供参考,不构成法律意见。文件集的结构见 [`README.md`](README.md);本次发布实际已建成的内容见 [`implementation-status.md`](implementation-status.md)。
+> **定稿 v3.0(2026-07-25)。** 本文件属于 Vaenyx 法律文件集 v3.0;当前的功能状态与数据流事实,仅载于带日期的《当前实现与数据处理明细表》。本文件仅供参考,不构成法律意见。
 >
 > 本中文译本仅供参考;以英文版为准。/ This Chinese translation is for convenience only; the English version prevails.
 

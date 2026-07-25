@@ -57,6 +57,10 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 
 **`feature.community-sharing.preference-ui`** — Records a local preference only. Not consent to any upload. See gate.community-sharing.initial.
 
+**`feature.community-sharing.upload-engine`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance.
+
+**`feature.community-sharing.upload-endpoint`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance.
+
 **`feature.community-sharing.sensitive-category-gate`** — Ships with the upload capability, not before it.
 
 **`feature.community-sharing.server-evidence-record`** — D1 table flywheel_evidence exists (migration 0003) but nothing writes to it, because no upload path exists.

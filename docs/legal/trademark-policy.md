@@ -1,6 +1,6 @@
 # Vaenyx Trademark Policy
 
-> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set, adopted by the Operator. It is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
+> **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Effective date:** 26 July 2026
 **Trademark owner:** the current Operator (as identified in the Vaenyx Terms of Service)

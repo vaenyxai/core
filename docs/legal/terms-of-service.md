@@ -1,6 +1,6 @@
 ﻿# Vaenyx — Terms of Service & End User Licence Agreement
 
-> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set, adopted by the Operator. It is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
+> **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Effective date:** 26 July 2026. These Terms take effect from the install-time acceptance flow in which they are first presented; that flow and the clause 12.3 health acknowledgement gate are live in the shipped build.
 **Operator:** Vae Foundry Pty Ltd (ACN 700 703 724), a proprietary limited company registered in Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**").
@@ -9,6 +9,20 @@
 These Terms of Service and End User Licence Agreement (the "**Terms**"; the document may be referred to, including in the product and in the other Vaenyx legal documents, as the "**Terms of Service**") are a legally binding agreement between you and Vae Foundry Pty Ltd governing your download, installation and use of the Vaenyx software and your use of the limited online services we operate in connection with it. Please read them carefully. Key points are summarised in plain English at the start of some clauses; the full clause text governs.
 
 ---
+
+## 0. In plain terms
+
+*This summary is here so you know what you are agreeing to. It is **not** part of the
+Terms and does not change them — where the two differ, the Terms below govern.*
+
+- **Vaenyx is free and runs on your own computer.** We do not host it, cannot see inside it, and do not want your data.
+- **What you make is yours.** Your chats, notes and Methods stay on your machine unless you deliberately send them somewhere.
+- **If you connect an outside AI model, your chats go to that provider**, under your account and their terms — not through us. A local model keeps everything on your machine.
+- **Publishing is the one thing that goes public**, and only if you choose it. What you publish is public permanently in copies we cannot reach.
+- **Community sharing and Merit do not exist in this release.** Any setting about them records a preference and nothing more.
+- **AI gets things wrong.** Nothing it produces is professional advice — medical, legal, financial or otherwise.
+- **We are a small operator and this is free**, so liability is capped — but the caps are mutual, and your rights under Australian Consumer Law are untouched.
+- **What is actually built today** is listed in the Current Implementation and Data-Handling Schedule, not here.
 
 ## 1. Acceptance and Eligibility
 
@@ -20,7 +34,7 @@ These Terms of Service and End User Licence Agreement (the "**Terms**"; the docu
 
 1.4 **Organisational use.** If you accept these Terms on behalf of an organisation, you represent that you are authorised to bind that organisation, and "you" includes that organisation. The licence in clause 4 extends to that organisation's internal use.
 
-1.5 **Presentation at install.** These Terms are presented at installation. You may also be asked to record a local preference about a capability that is **not available in the current release**. That preference is not a consent: it does not enable sharing, does not authorise an upload, and grants no licence and no moral-rights consent (see clause 7.4). Accepting these Terms and recording that preference are distinct steps.
+1.5 **Presentation at install.** These Terms are presented at installation. You may also be asked to record a local preference about a capability that is not available in this release; recording it is not a consent (clause 3.0(e)). Accepting these Terms and recording that preference are distinct steps.
 
 ## 2. Definitions
 
@@ -62,9 +76,9 @@ In these Terms:
 
 3.1 **Free, self-hosted software.** Vaenyx is a free, self-hosted, local-first personal AI agent framework. You install it and run it on your own computer. We charge nothing for it, and the Software contains no billing functionality.
 
-3.2 **We do not host your Instance.** We supply software and the limited Operator Services. We do not operate or monitor your Instance and have no remote access to it. We receive information from your Instance only through an Active Data Flow identified in the Schedule. A preference recorded locally does not activate a data flow and does not cause information to reach us.
+3.2 **We do not host your Instance.** We supply software and the limited Operator Services. We do not operate or monitor your Instance and have no remote access to it. We receive information from your Instance only through an Active Data Flow identified in the Schedule, and a locally recorded preference is not one.
 
-3.3 **Local-first, honestly stated.** Your Data is stored on your device; we do not reach into your Instance to collect it, and information reaches us only through an Active Data Flow identified in the Schedule. The Software's model backend is pluggable: if you connect a cloud AI model provider, the content you send in chats goes to **that provider** under **your** relationship with it (clause 6), not to us; if you run a local model, that content stays on your own machine.
+3.3 **Where your chats go.** The Software's model backend is pluggable. If you connect a cloud AI model provider, the content you send in chats — including context the Software assembles, such as memories and project summaries — goes to **that provider** under **your** relationship with it (clause 6), not to us. If you run a local model, it stays on your own machine.
 
 3.4 **Configurable restricted modes.** The Software may include, where available in your version, functionally neutral restricted-mode features (such as Custom Mode) that let the owner of an Instance limit what a given mode can access — for example allow/deny lists, time limits, entry and exit PINs, and per-mode sandboxed content — as described in the product documentation for your version. How you configure and use these features on your own Instance is your own decision and your own responsibility.
 
@@ -142,31 +156,11 @@ Which providers, options and endpoints apply to your version is a factual matter
 
 7.3 **Local improvement.** The Software may automatically use Your Data to improve **your own** Instance (for example, refining your own copies of Methods and maintaining local, owner-viewable and owner-editable summaries used as model context). This processing happens entirely on your device and shares nothing.
 
-7.4 **Community sharing (the "flywheel").** Community-improvement sharing is **not available in the current release**. A sharing preference recorded at installation or in Settings is a local preference only: it authorises no upload, grants no licence and gives no moral-rights consent. If a later release provides sharing, it must remain off until the Schedule marks it active, the then-current Point-of-Use Notice is shown, and a fresh affirmative choice is recorded. Only material actually shared after that fresh choice is governed by paragraphs (a) to (d) below, and any licence and moral-rights consent required for it must be presented and recorded at that activation or at the per-item confirmation. Where sharing has become available and occurs on that basis:
+7.4 **Community sharing (the "flywheel").** Sharing is not available in this release (clause 3.0(e)). A sharing preference recorded now is a local preference: it authorises no upload and grants no licence and no moral-rights consent.
 
-  (a) sharing is designed so that only de-identified improvement patterns — not your raw data — leave your device: de-identification is applied on your device to every example before it is sent. De-identification and classification are automated processes and, like all automated processes, are imperfect: they reduce risk but cannot guarantee that no personal information will ever pass through. If the de-identification gate fails and personal information is shared, we will remove that material from the operator-controlled warehouse as described in clause 8.5 and will notify known mirrors and request its removal; the licences granted under this clause never extended to that personal information (see the de-identification-failure paragraph of this clause 7.4); Core Privacy Policy clause 9.4 describes the full handling protocol and cannot reduce these commitments;
+  If a later release provides sharing, it stays off until the Schedule marks it active, and we will not enable it for you until we have presented the terms that would then apply — what leaves your device, how sensitive content is handled, that shared material becomes public and effectively permanent, the licences you would grant, and any moral-rights consent — and you have separately accepted them. That acceptance is a material amendment within clause 18.1A: continued use, or installing an update, will not be treated as agreement to it.
 
-  (b) content our automated classifier identifies as falling within the Sensitive Categories — health, finance, and family (including child-related) content, together with every Privacy Act sensitive-information category, as defined in clause 2 of these Terms — is not shared automatically and requires your separate, explicit confirmation; content the classifier cannot confidently classify is held for your review rather than shared automatically. The classifier is automated and imperfect and may misclassify content; content it misses receives the de-identification protection in clause 7.4(a) but will not have received this confirmation step. The Privacy Policy may describe the Sensitive Categories in more detail but can never narrow them or remove this confirmation requirement;
-
-  (c) shared examples become public as part of the Community Library, and that publication may be effectively permanent (clause 8.6); and
-
-  (d) **licence for shared examples.** So that content that becomes public in the Community Library is licensed, by your affirmative act of turning sharing on (or, for an example confirmed through review-each, by that confirmation) you grant, for each example shared under this clause and from the moment it is shared, the following licences — set out in full here so that their scope is fixed by the version of these Terms you accepted and cannot be broadened by any other document:
-
-    (i) to us, a non-exclusive, perpetual, irrevocable, worldwide, royalty-free licence to host, store, reproduce, adapt (including by de-identification, format normalisation and combination with other material), publish, distribute and communicate the shared example as part of the Community Library and the Operator Services;
-
-    (ii) to each person who receives the shared example through the Community Library, a non-exclusive, perpetual, worldwide, royalty-free licence to use, reproduce and adapt it for use with the Software; and
-
-    (iii) to the public, the Creative Commons Attribution 4.0 International public licence (**CC BY 4.0**).
-
-  These licences correspond to the licences that clause 5 of the Contributor Agreement grants in respect of a published Contribution, and they apply whether or not you ever publish content or accept the Contributor Agreement; if the Contributor Agreement's licence text differs from the text above, the text above governs examples shared under this clause. These licences are irrevocable; their scope is limited only as stated in the de-identification-failure paragraph of this clause (they never extended to material you had no right to license) and they operate alongside the CC BY 4.0 terms.
-
-  **Rights in shared examples.** You warrant that each example shared under this clause from your own use of your Instance is derived from content in which you hold the rights needed to grant these licences. Automatic sharing applies only to your own use of your Instance: for use of your Instance by any other person you permit under clause 1.3, the sharing setting is review-each or off unless you positively confirm, for that person's use, that you hold the rights needed to grant these licences over content derived from it (including any moral rights consent required from that person). You must not enable automatic sharing for another person's use without that confirmation, and any example you confirm through review-each is warranted by you on the same basis as your own.
-
-  **Moral rights consent.** For the purposes of Part IX of the *Copyright Act 1968* (Cth), including section 195AWA, you expressly consent in writing — in relation to works of the following particular description: improvement examples derived from your use of Methods and Routines through your Instance, in the de-identified form generated by the Software for sharing under this clause, in each case of which you are an author — to those works being reproduced, published, communicated and adapted without attribution of authorship, and with the alterations involved in de-identification, format normalisation and combination with other material, in each case by us and by anyone acting under a licence granted under this clause or clause 8.6(e). This consent is presented, and your acknowledgement of it recorded, at the install-time sharing choice (clause 1.5) as a step separate from your acceptance of these Terms, and it is restated at each review-each confirmation in respect of the specific examples then shared. For Contributions you publish, the corresponding moral rights consent is given as part of each publish step under the Contributor Agreement (clause 8.6(c)), not under this paragraph.
-
-  **De-identification failure — scope of licences.** No licence granted under this clause (or under clause 8.6(e)) ever extended to third-party personal information, or to any other material, that the sharer had no right to license: each licence operates only on what the sharer could lawfully grant. If shared or published material is found to contain personal information in breach of clause 7.4(a), we will act under clause 8.5 to remove it from the operator-controlled warehouse and will notify known mirrors and request its removal. Nothing in this paragraph revokes, or qualifies the irrevocability of, any licence over material that was validly licensed.
-
-  Because no creator identification is supplied with shared examples, CC BY 4.0's requirement to retain creator attribution has nothing to operate on; the licence's other conditions — retaining the licence notice and licence URI, and indicating modifications — continue to apply to anyone who reshares the material.
+  No licence granted under these Terms ever extends to third-party personal information, or to any other material you did not hold the rights to license. If such material becomes public through a failure of a de-identification control we operate, no licence attaches to it, we will remove it under clause 8.5, and we will notify known mirrors and request its removal.
 
 7.5 **Publishing account data.** You do not need any account to use the Software or the Community Library. If you choose to publish, we store only the account information identified in the Schedule and reasonably necessary for authentication, attribution, management and moderation of your published content, security, and evidencing your publish-time acceptance. Your public byline is a display name you choose and can edit; your verified sign-in identity is not published.
 
@@ -194,7 +188,7 @@ Which providers, options and endpoints apply to your version is a factual matter
 
   (d) **is not pre-moderated**: your item goes live on publication, subject to the automated checks in (b) and to our reactive moderation and takedown powers (clause 8.5); and
 
-  (e) **licenses the published content publicly.** Only content actually included in a publication submission is licensed on publication. On publication, that content is licensed to the public under **CC BY 4.0**, in addition to the direct licences in clause 5 of the Contributor Agreement. Downstream forks, mirrors and reuse may rely on the CC BY 4.0 licence, which is irrevocable per its terms. As stated in the de-identification-failure paragraph of clause 7.4, no licence granted on publication ever extended to third-party personal information or other material you had no right to license; if published material is found to contain personal information in breach of the de-identification design, we will act under clause 8.5 to remove it and will notify known mirrors.
+  (e) **licenses the published content publicly.** Only content actually included in a publication submission is licensed on publication. On publication, that content is licensed to the public under **CC BY 4.0**, in addition to the direct licences in clause 5 of the Contributor Agreement. Downstream forks, mirrors and reuse may rely on the CC BY 4.0 licence, which is irrevocable per its terms. No licence granted on publication ever extends to third-party personal information or other material you had no right to license; if published material is found to contain personal information in breach of the de-identification design, we will act under clause 8.5 to remove it and will notify known mirrors.
 
   **Published content becomes public, and publication may be effectively permanent:** published content and shared examples may be retained in version history, forks, mirrors, caches and user installations, and removal from the Community Library cannot guarantee deletion of all copies (clause 8.5; see also Contributor Agreement clause 10.4 and Core Privacy Policy clauses 7.7, 9.4 and 11).
 
@@ -336,7 +330,7 @@ The indemnity is reduced proportionately to the extent the loss was caused or co
 
 17.4 **Effect on your Instance.** Termination of Operator Services access does not disable your Instance or delete Your Data: the Software on your own hardware remains yours to run under the licence terms that apply to it (clauses 4.2 and 17.3), subject to these Terms.
 
-17.5 **Survival.** Clauses 2, 4.4–4.6, 7.1, 7.4 (in respect of examples shared before termination, including its licences, warranty, moral rights consent and de-identification-failure paragraph), 9, 11, 12, 13, 14, 15, 16, 17.3, 17.5 and 19, and any other provision that by its nature should survive, survive termination.
+17.5 **Survival.** Clauses 2, 4.4–4.6, 7.1, 7.4 (its third paragraph, and any terms separately accepted under it before termination), 9, 11, 12, 13, 14, 15, 16, 17.3, 17.5 and 19, and any other provision that by its nature should survive, survive termination.
 
 ## 18. Changes to the Software and to these Terms
 

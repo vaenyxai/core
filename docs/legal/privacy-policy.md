@@ -1,12 +1,24 @@
 # Vaenyx — Core Privacy Policy
 
-> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set, adopted by the Operator. It is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
+> **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Operator:** Vae Foundry Pty Ltd (ACN 700 703 724), of Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**")
 **Effective date:** 26 July 2026
 **Privacy contact:** hello@vaenyx.ai
 
 ---
+
+## 0. In plain terms
+
+*A summary, so you know where you stand. It is **not** part of this Policy — the
+clauses below govern.*
+
+- **Vaenyx runs on your computer, and what it stores there is not "collected" by us.** We only ever hold information that reaches us through a flow listed in the Schedule.
+- **Today there are four such flows**, and only one of them involves anything you write: publishing, which you choose. The others are signing in to publish, ordinary technical request data, and emailing us.
+- **If you connect an outside AI model, that provider receives your chats** under your own account with them. We are not in that path.
+- **We do not train on your data, do not sell it, and do not send you marketing.**
+- **You can ask what we hold, ask us to fix it, or complain** — hello@vaenyx.ai, free of charge.
+- **We do not state a deletion period we have not built.** Where a purge does not exist yet, the Schedule says so plainly rather than promising it.
 
 ## 1. Status and structure
 

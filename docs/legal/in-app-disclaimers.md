@@ -1,6 +1,6 @@
 ﻿# Vaenyx — In-App Contextual Disclaimers (Copy Pack)
 
-> **Version 3.0 — effective 26 July 2026.** Part of the Vaenyx legal set, adopted by the Operator. It is provided for your information and is not legal advice. See [`README.md`](README.md) for how the set fits together, and [`implementation-status.md`](implementation-status.md) for what is actually built in this release.
+> **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 | Field | Value |
 |---|---|
@@ -365,6 +365,38 @@ the publish service's accepted-copy floor moves to 2.6.
 - **Behaviour:** Point-of-action (each enable) and on-demand beside the toggle. The locality statement is scoped and true by design — the feedback endpoint only ingests into the local store. External-app corrections carry an **unconditional Owner-approval gate** (locked 2026-07-05, independent review): regardless of the Settings sharing mode — including Automatic — a correction that arrived through a Method Token is queued for the Owner's explicit approval after de-identification and never auto-shares. The "never shared automatically" claim is origin-based (the token channel is deterministic), so it is a structural gate statement permitted by clause 3.7, not a detector-dependent category claim (clauses 3.2, 3.7).
 
 ---
+
+### Part J — The Legal Settings Page
+
+*This page is a plain-language summary of the legal position, shown above the links
+to the documents themselves. It was written before the document set existed and was
+never brought into this pack, so it drifted: at copy version 2.6 it still called the
+documents "placeholders … coming", described **Merit** as though it existed, and named
+**Tailscale** as the remote-access provider. Both product facts belong in the Schedule
+and the Third-Party Notices, not in a legal summary. These strings are now part of this
+pack and are covered by `audit-copy.mjs`.*
+
+**J1 — `settings.legal.copy`** *(intro line under the "Legal" heading)*
+- **EN:** "The short notes below summarise the legal position in plain language. The documents linked at the bottom of this page are the ones that actually govern, and the Schedule states what this release actually does."
+- **ZH:** "下面几行用大白话概括法律要点。真正具有约束力的是本页底部链接的文件;本次发布实际做了什么,以明细表所载为准。"
+- **Behaviour:** Persistent. Must not describe itself as a placeholder: the documents are final and are linked on this page.
+
+**J2 — `settings.legal.docsPending`** — **retire this string.** It reads "Terms of Service · Privacy Policy · Contributor Agreement — coming". They are not coming; they are shipped and linked. Delete the key rather than reword it, so nothing can render it again.
+
+**J3 — `disclaimer.merit`** — **must not render.** Merit is `not-built` in the Schedule, and Terms of Service clause 9.1 states it is not provided at the Effective Date. A summary line describing how Merit works implies it exists. Remove the line from the page; keep the string in this pack for the day the Schedule marks Merit active.
+- **EN (held, do not render):** "Merit is a reputation record — no cash value, can't be bought, sold, or exchanged; not a currency or security."
+- **ZH (held, do not render):** "Merit 是信誉记录,无现金价值、不可买卖 / 兑换,不是货币、证券或理财产品。"
+
+**J4 — `disclaimer.remote`**
+- **EN:** "Remote access is optional and runs through a third-party service using your own account with that provider, under their terms. Third-Party Notices names the provider used by this version."
+- **ZH:** "远程访问是可选的,通过第三方服务实现,用你自己在该服务商的账号登录,受其条款约束。本版本使用哪一家,见《第三方声明》。"
+- **Behaviour:** Persistent. Naming the provider here would put a changeable vendor fact into the legal layer; the Schedule and Third-Party Notices carry it instead.
+
+**J5 — `disclaimer.model`** *(unchanged in substance; examples are appropriate at a point of use)*
+- **EN:** "Connecting a cloud model (e.g. OpenAI, Gemini) follows that provider's terms and any costs are yours. A local model (e.g. Ollama) runs on your own machine."
+- **ZH:** "连接云模型(如 OpenAI / Gemini)受其条款约束、费用由你承担;本地模型(如 Ollama)在你自己机器上运行。"
+
+**J6 — `disclaimer.community`, `disclaimer.ai`, `disclaimer.health`, `disclaimer.finance`, `disclaimer.legal`** — already accurate; listed here so the audit covers them.
 
 ## 5. Placement Summary Matrix
 
