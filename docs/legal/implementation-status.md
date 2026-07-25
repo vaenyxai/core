@@ -2,10 +2,8 @@
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
 > Schedule version **2026-07-25.2** · effective from **2026-07-26** · verified **2026-07-25**
-> Client **0.2.0-dev.180** · Server **vaenyx-core-cloud (migrations 0001-0003)**
-> Legal set **v3.0** · minimum legal set **v3.0** · minimum copy version **2.5**
-
-**Copy version 2.6 is drafted but not yet shipped.** Copy pack 2.6 is drafted and corrects four strings against the shipped build; three strings still differ in the app (D1 inert sentence, F3 local-model address wording, G3a consent-currency sentence). Until 2.6 ships, the shipped copy version remains 2.5 and the publish service floor stays at 2.5.
+> Client **0.2.0-dev.184** · Server **vaenyx-core-cloud (migrations 0001-0003)**
+> Legal set **v3.0** · minimum legal set **v3.0** · minimum copy version **2.6**
 
 ## Status of this Schedule
 
@@ -47,8 +45,8 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 | `feature.community.thanks` | **not-built** | — | none |
 | `feature.community.ratings` | **not-built** | — | none |
 | `ops.account.session-expiry` | **active** | — | — |
-| `ops.account.expired-session-purge` | **not-built** | — | — |
-| `ops.account.never-published-purge` | **not-built** | — | — |
+| `ops.account.expired-session-purge` | **active** | — | — |
+| `ops.account.never-published-purge` | **active** | — | — |
 | `ops.account.deletion-route` | **manual-only** | — | — |
 | `feature.model-provider.connect` | **active** | yes | none |
 | `feature.backup` | **active** | no | none |
@@ -75,9 +73,11 @@ Evidence: apps/server/src/modules/core/publish.ts collectMethodFiles; core-cloud
 **`ops.account.session-expiry`** — Sessions carry expires_at and cease to authenticate after it passes.
 Evidence: core-cloud src/store.ts sessions table + expiry check
 
-**`ops.account.expired-session-purge`** — Expired session rows are not deleted by any job.
+**`ops.account.expired-session-purge`** — Expired session rows are deleted 30 days after they expire, by a daily scheduled sweep. The 30 days is a grace period only, to leave room to answer "why was I signed out"; an expired session authenticates nothing from the moment it expires.
+Evidence: core-cloud src/retention.ts SESSION_GRACE_DAYS + deleteExpiredSessionsBefore; scheduled handler in src/index.ts; cron "17 3 * * *"
 
-**`ops.account.never-published-purge`** — The users table has no last_sign_in_at, so a 90-day since-last-sign-in purge cannot be implemented as previously described.
+**`ops.account.never-published-purge`** — An account that has never published anything and has not signed in for 90 days is deleted by the same daily sweep. Two deliberate exemptions: an account with Published Content is kept, because the byline and the acceptance evidence have to stay attached to it; and a banned account is kept, because deleting it would let a banned identity return by signing up again. Deleting an account cascades to its sessions and its acceptance records. The ban ledger has no foreign key to the account, so an enforcement record survives deletion by design.
+Evidence: core-cloud src/retention.ts DORMANT_ACCOUNT_DAYS + store.ts deleteDormantUnpublishedUsers (banned_at IS NULL, COALESCE(last_sign_in_at, created_at) < cutoff, id NOT IN published_items); migration 0004 adds last_sign_in_at, refreshed at sign-in
 
 **`ops.account.deletion-route`** — No automated deletion route exists. Requests to hello@vaenyx.ai are actioned by the Operator directly against D1.
 
@@ -90,6 +90,25 @@ Required gates: `legal.notice.modelConnect.cloud`, `legal.notice.modelConnect.lo
 
 **`feature.community.discord`** — The official Vaenyx Discord server is live and administered by the Operator. Participation is optional and requires a Discord account, which Vaenyx never requires. The in-product notice for this surface is copy pack string D5; it must ship wherever the product links to the server.
 Required gates: `legal.notice.community.discord`
+
+## Point-of-use copy
+
+Copy version **2.6** · consent floor **2.6**
+
+Two versions are tracked separately. The copy version moves whenever any string changes and is what gets recorded against an acknowledgement, so a record always says which text the person was shown. The consent floor moves only when a consent-class string changes in substance, and only the floor re-asks anyone. The last substantive consent change was 2.6.
+
+**Drafted but not shipped.** These strings exist in the copy pack and are not missing from the product — the surface they belong to does not exist.
+
+| String | Why it is not shipped |
+|---|---|
+| `legal.disclaimer.community.verifiedMeaning` | No Verified badge exists in the product. |
+| `legal.notice.community.discord` | The product does not link to the Discord server. The server itself is live and is recorded as flow.community.discord; this string ships if and when a link appears in the product. |
+| `legal.disclaimer.merit` | Merit is not built. |
+| `legal.disclaimer.merit.creatorPage` | Merit is not built. |
+| `legal.notice.remoteAccess.status` | There is no remote-access panel in the product. |
+| `legal.consent.flywheel.sensitiveAsk` | Community sharing is not built, so there is no sensitive-content gate to consent to. |
+
+**Limit of the copy audit.** The copy audit compares the copy pack against the app's string table. It does not check that a string is actually rendered on a surface, so "matches verbatim" means the wording is right, not that the wording is on screen. A string can sit in the table with no interface using it.
 
 ---
 
@@ -124,7 +143,7 @@ Required gates: `legal.notice.community.discord`
 - **Primary purpose:** Authentication, attribution, managing published content, moderation, evidencing publish-time acceptance.
 - **Recipients:** Vae Foundry Pty Ltd; Cloudflare, Inc. (D1 storage)
 - **Countries:** global edge network
-- **Retention:** No automatic purge is implemented. Expired session rows are not yet deleted and an account that has never published is not yet deleted; both are recorded as not-built (ops.account.expired-session-purge, ops.account.never-published-purge) and are production blockers rather than described practices. For a publishing account, only records reasonably necessary to manage Published Content, evidence licences or defend claims are retained.
+- **Retention:** Expired session rows are deleted 30 days after expiry. An account that has never published and has not signed in for 90 days is deleted, together with its sessions and acceptance records. An account with Published Content is kept while that content stands, because attribution and the record of what was accepted depend on it; a banned account is kept so that a ban cannot be escaped by signing up again. Both rules run on a daily scheduled sweep.
 
 ### `flow.infrastructure.request-metadata`
 

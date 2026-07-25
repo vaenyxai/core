@@ -2,10 +2,8 @@
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
 > 明细表版本 **2026-07-25.2** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-25**
-> 客户端 **0.2.0-dev.180** · 服务端 **vaenyx-core-cloud (migrations 0001-0003)**
-> 法律文件集 **v3.0** · 最低法律文件集 **v3.0** · 最低文案版本 **2.5**
-
-**文案版本 2.6 已起草但尚未上线。**
+> 客户端 **0.2.0-dev.184** · 服务端 **vaenyx-core-cloud (migrations 0001-0003)**
+> 法律文件集 **v3.0** · 最低法律文件集 **v3.0** · 最低文案版本 **2.6**
 
 ## 本明细表的地位
 
@@ -47,8 +45,8 @@
 | `feature.community.thanks` | **not-built** | — | 无 |
 | `feature.community.ratings` | **not-built** | — | 无 |
 | `ops.account.session-expiry` | **active** | — | — |
-| `ops.account.expired-session-purge` | **not-built** | — | — |
-| `ops.account.never-published-purge` | **not-built** | — | — |
+| `ops.account.expired-session-purge` | **active** | — | — |
+| `ops.account.never-published-purge` | **active** | — | — |
 | `ops.account.deletion-route` | **manual-only** | — | — |
 | `feature.model-provider.connect` | **active** | 是 | 无 |
 | `feature.backup` | **active** | 否 | 无 |
@@ -75,9 +73,11 @@
 **`ops.account.session-expiry`** — 会话带有 expires_at,过期后不再通过身份验证。
 实现证据: core-cloud src/store.ts sessions table + expiry check
 
-**`ops.account.expired-session-purge`** — 没有任何任务删除过期的会话记录。
+**`ops.account.expired-session-purge`** — 过期的会话记录在到期 30 天后由每日定时清理删除。这 30 天只是缓冲期,用于回答「我为什么被登出了」;会话自到期那一刻起就不再通过任何身份验证。
+实现证据: core-cloud src/retention.ts SESSION_GRACE_DAYS + deleteExpiredSessionsBefore; scheduled handler in src/index.ts; cron "17 3 * * *"
 
-**`ops.account.never-published-purge`** — users 表没有 last_sign_in_at 字段,因此无法按此前所述实现「末次登录后 90 天清理」。
+**`ops.account.never-published-purge`** — 从未发布过任何内容、且已 90 天未登录的账户,由同一个每日清理删除。有两项有意的豁免:有已发布内容的账户予以保留,因为署名与接受证据必须挂在该账户上;被封禁的账户予以保留,否则删号就能让被封身份重新注册回来。删除账户会级联删除其会话与接受记录。封禁台账与账户之间有意不设外键,因此执法记录在账户删除后仍然存续。
+实现证据: core-cloud src/retention.ts DORMANT_ACCOUNT_DAYS + store.ts deleteDormantUnpublishedUsers (banned_at IS NULL, COALESCE(last_sign_in_at, created_at) < cutoff, id NOT IN published_items); migration 0004 adds last_sign_in_at, refreshed at sign-in
 
 **`ops.account.deletion-route`** — 不存在自动删除通道。发往 hello@vaenyx.ai 的请求由运营方直接在 D1 上处理。
 
@@ -90,6 +90,25 @@
 
 **`feature.community.discord`** — 官方 Vaenyx Discord 服务器已上线,由运营方管理。参与是可选的,且需要 Discord 账户 —— Vaenyx 本身从不要求该账户。本界面的应用内告知为文案包字符串 D5;凡产品链接到该服务器之处,均须一并呈示。
 必需的门槛: `legal.notice.community.discord`
+
+## 点位文案
+
+最低文案版本 **2.6** · 同意门槛 **2.6**
+
+两个版本号分开跟踪。**文案版本**在任何字符串改动时都会上升,并被记录在每一次确认里,因此记录总能说明当事人当时看到的是哪一版文字。**同意门槛**只在同意类字符串发生实质变化时上升,而且只有它会重新打扰用户。最近一次实质性的同意变化是 2.6。
+
+**已起草但尚未上线。以下字符串存在于文案包中,并不是产品漏做了 —— 它们所属的界面本身不存在。**
+
+| 字符串 | 为什么尚未上线 |
+|---|---|
+| `legal.disclaimer.community.verifiedMeaning` | 产品中不存在 Verified 徽章。 |
+| `legal.notice.community.discord` | 产品中没有指向 Discord 服务器的入口。服务器本身是运行中的,已记为 flow.community.discord;一旦产品中出现入口,本字符串即须上线。 |
+| `legal.disclaimer.merit` | Merit 尚未建成。 |
+| `legal.disclaimer.merit.creatorPage` | Merit 尚未建成。 |
+| `legal.notice.remoteAccess.status` | 产品中没有远程访问面板。 |
+| `legal.consent.flywheel.sensitiveAsk` | 社区分享尚未建成,因此不存在需要同意的敏感内容关卡。 |
+
+**文案审计的局限。** 文案审计比对的是文案包与 app 的字符串表。它不检查某个字符串是否真的被渲染在某个界面上,所以「逐字一致」只说明措辞正确,不说明它出现在屏幕上。字符串可以躺在表里而没有任何界面使用它。
 
 ---
 
@@ -124,7 +143,7 @@
 - **主要目的:** 身份验证、署名、管理已发布内容、内容管理、留证发布时的接受。
 - **接收方:** Vae Foundry Pty Ltd; Cloudflare, Inc.(D1 存储)
 - **国家:** 全球边缘网络
-- **留存:** 尚未实现任何自动清理。过期会话行尚未被删除,从未发布过的账户也尚未被删除;二者均记为 not-built(ops.account.expired-session-purge、ops.account.never-published-purge),属上线阻断项,而非已在执行的做法。就发布账户而言,仅保留为管理已发布内容、留证许可或抗辩主张所合理必需的记录。
+- **留存:** 过期的会话记录在到期 30 天后删除。从未发布过、且已 90 天未登录的账户会被删除,连同其会话与接受记录一并删除。有已发布内容的账户在该内容存续期间予以保留,因为署名与「接受了什么」的记录都依赖于它;被封禁的账户予以保留,以免通过重新注册规避封禁。两条规则均由每日定时清理执行。
 
 ### `flow.infrastructure.request-metadata`
 
