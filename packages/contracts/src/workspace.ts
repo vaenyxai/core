@@ -1028,6 +1028,27 @@ export const StopTurnRequestSchema = Type.Object(
 
 // Vision: a photo in, useful text out (fridge shot → ingredient list). The
 // engine is auto-picked from the Owner's connected vision-capable models.
+// Update Now (onboarding spec section 5 v2): a zip-installed instance has no
+// git, so the app fetches, verifies and stages the newest published release
+// itself. `phase` drives the button's wording.
+export const UpdateStatusSchema = Type.Object(
+  {
+    currentVersion: Type.String(),
+    availableVersion: Type.Union([Type.String(), Type.Null()]),
+    updateAvailable: Type.Boolean(),
+    phase: Type.Union([
+      Type.Literal("idle"),
+      Type.Literal("checking"),
+      Type.Literal("downloading"),
+      Type.Literal("staged"),
+      Type.Literal("error"),
+    ]),
+    detail: Type.Union([Type.String(), Type.Null()]),
+    notes: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 // App-level notification categories (Oskar, dev.170): which kinds of
 // events push. Per-device on/off is just the system permission.
 export const PushPrefsSchema = Type.Object(
@@ -1862,6 +1883,7 @@ export type SetDeviceModeRequest = Static<typeof SetDeviceModeRequestSchema>;
 export type SwitchModeRequest = Static<typeof SwitchModeRequestSchema>;
 export type ExitModeRequest = Static<typeof ExitModeRequestSchema>;
 export type PushPrefs = Static<typeof PushPrefsSchema>;
+export type UpdateStatus = Static<typeof UpdateStatusSchema>;
 export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;

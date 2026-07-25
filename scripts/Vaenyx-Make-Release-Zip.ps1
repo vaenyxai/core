@@ -96,7 +96,18 @@ if (-not (Test-Path $OutputDirectory)) {
 }
 $zipPath = Join-Path $OutputDirectory "vaenyx-setup.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-Compress-Archive -Path $payload -DestinationPath $zipPath -CompressionLevel Optimal
+# tar.exe (bsdtar, shipped with Windows 10+), NOT Compress-Archive: on
+# Windows PowerShell 5.1 the latter writes BACKSLASHES as the in-zip path
+# separator, which Windows tolerates but every mac/Linux unzip does not --
+# they produce one flat pile of files called "Vaenyx\apps\...". For a public
+# download that has to be a correct zip.
+Push-Location $staging
+try {
+  & tar.exe -a -c -f "$zipPath" "Vaenyx"
+  if ($LASTEXITCODE -ne 0) { throw "packing the zip failed ($LASTEXITCODE)" }
+} finally {
+  Pop-Location
+}
 
 $hash = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash
 $sizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)

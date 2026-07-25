@@ -64,13 +64,14 @@
   UpdateProjectRequest,
   UpdateVaenyxThreadProjectRequest,
   UpdateVaenyxThreadStatusRequest,
+  UpdateStatus,
   UpdateVaenyxThreadTitleRequest,
   VaenyxMeCandidate,
   VaenyxThread,
   Workspace,
 } from "@vaenyx/contracts";
 
-export type { Mode, DeviceMode } from "@vaenyx/contracts";
+export type { Mode, DeviceMode, UpdateStatus } from "@vaenyx/contracts";
 
 import { showErrorToast } from "./toast.js";
 
@@ -927,6 +928,24 @@ export interface PushPrefs {
   chat: boolean;
   scheduled: boolean;
   mode: boolean;
+}
+
+export function fetchUpdateStatus(): Promise<UpdateStatus> {
+  return requestJson<UpdateStatus>("/v1/system/update");
+}
+
+export function checkForUpdate(): Promise<UpdateStatus> {
+  return requestJson<UpdateStatus>("/v1/system/update/check", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function downloadUpdate(): Promise<UpdateStatus> {
+  return requestJson<UpdateStatus>("/v1/system/update/download", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 export function fetchPushPrefs(): Promise<PushPrefs> {

@@ -41,6 +41,13 @@ test("first run: owner setup → acceptance gate → model step → Library and 
   ).toBeVisible();
   await page.getByRole("button", { name: "Skip for now" }).click();
 
+  // Completion page (spec section 4, step 4): what to try, and the phone
+  // option. It must never be a dead end.
+  await expect(
+    page.getByRole("heading", { name: "You're set up" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Start Using Vaenyx" }).click();
+
   // Workspace loads into the chat portal; the sidebar Settings button opens
   // the admin area whose tab row holds Library and Community side by side.
   const settingsButton = page.locator(".sidebar-settings-button");

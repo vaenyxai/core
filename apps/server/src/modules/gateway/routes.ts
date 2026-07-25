@@ -47,6 +47,7 @@ import {
   ExitModeRequestSchema,
   type ExitModeRequest,
   PushPrefsSchema,
+  UpdateStatusSchema,
   DeviceModeSchema,
   SetDeviceModeRequestSchema,
   type SetDeviceModeRequest,
@@ -232,6 +233,11 @@ import {
   removeLocalTts,
   startLocalTtsInstall,
 } from "../core/voice-local.js";
+import {
+  checkForUpdate,
+  getUpdateStatus,
+  stageUpdate,
+} from "../core/updates.js";
 import {
   describeImage,
   getVisionStatus,
@@ -880,6 +886,72 @@ export async function registerGatewayRoutes(
       return {
         message: "Vaenyx is restarting — back in a few seconds.",
       };
+    },
+  );
+
+  // ── Update Now (onboarding spec section 5 v2) ──────────────────────────
+  // A zip-installed instance has no git remote, so the app updates itself:
+  // check GitHub for the newest release, download + verify it here, and let
+  // the watchdog swap it in after this process exits.
+  app.get(
+    "/v1/system/update",
+    {
+      schema: {
+        response: { 200: UpdateStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return getUpdateStatus(context.config.version);
+    },
+  );
+
+  app.post(
+    "/v1/system/update/check",
+    {
+      schema: {
+        response: { 200: UpdateStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return checkForUpdate(context.config.version);
+    },
+  );
+
+  // Downloads, verifies and stages. Deliberately does NOT restart: the Owner
+  // presses Restart when it suits them, and the watchdog applies it then.
+  app.post(
+    "/v1/system/update/download",
+    {
+      schema: {
+        response: { 200: UpdateStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "system.update.download",
+        decision: "allowed",
+        reason: "Owner asked Vaenyx to download the latest release.",
+        resourceType: "system",
+      });
+      return stageUpdate({
+        dataDirectory: context.config.dataDirectory,
+        version: context.config.version,
+      });
     },
   );
 

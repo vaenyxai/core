@@ -40,6 +40,14 @@ if not errorlevel 1 (
   ping -n 11 127.0.0.1 >nul
   goto loop
 )
+REM A staged update is applied HERE, with the server down, so nothing being
+REM replaced is in use. The script takes a rollback snapshot first and puts
+REM the old version back if anything fails; it exits immediately when there
+REM is nothing pending.
+if exist "userdata\config\update-pending.json" (
+  echo [%date% %time%] Applying staged update >> "userdata\logs\vaenyx-service.log"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Vaenyx-Apply-Update.ps1"
+)
 echo [%date% %time%] Starting Vaenyx server >> "userdata\logs\vaenyx-service.log"
 node apps\server\dist\index.js >> "userdata\logs\vaenyx.log" 2>> "userdata\logs\vaenyx-error.log"
 echo [%date% %time%] Vaenyx server exited (code %ERRORLEVEL%), restarting in 5s >> "userdata\logs\vaenyx-service.log"

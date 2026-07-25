@@ -38,6 +38,13 @@ if not exist "node_modules" (
   echo [1/4] Dependencies already installed.
 )
 
+REM A staged update is applied here, before anything is built or started, so
+REM the files being replaced are not in use. No-op when nothing is pending.
+if exist "userdata\config\update-pending.json" (
+  echo [1b/4] Finishing a downloaded update...
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Vaenyx-Apply-Update.ps1"
+)
+
 echo [2/4] Building Vaenyx production files...
 call npm run build
 if errorlevel 1 goto :failed

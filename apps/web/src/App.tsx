@@ -122,6 +122,10 @@ import {
   sendTestPush,
   fetchPushPrefs,
   updatePushPrefs,
+  fetchUpdateStatus,
+  checkForUpdate,
+  downloadUpdate,
+  type UpdateStatus,
   type PushPrefs,
   type PushDiagnostics,
   fetchVisionStatus,
@@ -8832,6 +8836,78 @@ function BackupPanel() {
   );
 }
 
+// Settings -> User Settings -> Updates. An instance installed from the zip
+// has no git remote, so this is the only way it can move forward: check,
+// download + verify, then restart to let the watchdog swap it in.
+function UpdatePanel() {
+  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void fetchUpdateStatus()
+      .then(setStatus)
+      .catch(() => undefined);
+  }, []);
+
+  async function run(action: () => Promise<UpdateStatus>) {
+    setBusy(true);
+    try {
+      setStatus(await action());
+    } catch {
+      // The global toast already told the Owner.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const staged = status?.phase === "staged";
+  return (
+    <>
+      <p className="settings-card-copy">
+        This Vaenyx is version <strong>{status?.currentVersion ?? "…"}</strong>.
+        {status?.updateAvailable && status.availableVersion
+          ? ` Version ${status.availableVersion} is available.`
+          : " Updates are downloaded here and checked against their published checksum before anything is replaced."}
+      </p>
+      {status?.detail ? (
+        <p className={status.phase === "error" ? "form-error" : "saved-note"}>
+          {status.detail}
+        </p>
+      ) : null}
+      <div className="model-card-actions">
+        <button
+          className="secondary-button"
+          disabled={busy}
+          onClick={() => void run(checkForUpdate)}
+          type="button"
+        >
+          {busy && status?.phase === "checking"
+            ? "Checking…"
+            : "Check For Updates"}
+        </button>
+        {status?.updateAvailable && !staged ? (
+          <button
+            className="primary-button"
+            disabled={busy}
+            onClick={() => void run(downloadUpdate)}
+            type="button"
+          >
+            {busy ? "Downloading…" : "Download Update"}
+          </button>
+        ) : null}
+      </div>
+      {staged ? (
+        <p className="settings-card-copy">
+          The update is downloaded and verified. Press <strong>Restart
+          Vaenyx</strong> below to finish installing it — your data, settings
+          and connected models are untouched, and Vaenyx puts the previous
+          version back automatically if anything goes wrong.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 function SettingsPanel({
   settings,
   onUpdate,
@@ -9284,6 +9360,9 @@ function SettingsPanel({
         >
           {loggingOutAll ? "Signing out..." : "Sign out all devices"}
         </button>
+        <div className="settings-card-divider" />
+        <h3 className="settings-subhead">Updates</h3>
+        <UpdatePanel />
         <div className="settings-card-divider" />
         <h3 className="settings-subhead">Restart Vaenyx</h3>
         <p className="settings-card-copy">
@@ -14624,6 +14703,8 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [codexWaiting, setCodexWaiting] = useState(false);
   const [codexUrl, setCodexUrl] = useState<string | null>(null);
+  // Step 4: the completion page, shown after connecting or skipping.
+  const [finished, setFinished] = useState(false);
 
   useEffect(() => {
     void fetchModelProviders()
@@ -14642,7 +14723,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
     } catch {
       // Best-effort; the gate simply asks again next launch.
     }
-    onDone();
+    setFinished(true);
   }
 
   // Same flow as the Models panel (dev.111): the server drives the official
@@ -14720,6 +14801,61 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   }
 
   const codexProvider = providers.find((provider) => provider.id === "codex");
+
+  // Step 4 of the first run (onboarding spec section 4): one screen that
+  // points at something to try and at the phone/remote option, so the Owner
+  // is never dropped into an empty app wondering what it is for.
+  if (finished) {
+    return (
+      <main className="acceptance-screen">
+        <div className="acceptance-card">
+          <span className="brand-mark">V</span>
+          <h2>{zh ? "都设好了" : "You're set up"}</h2>
+          <p className="settings-card-copy">
+            {zh
+              ? "Vaenyx 已经在这台电脑上运行。你的对话、笔记和文件都留在本机;发给已连接的云端模型的内容会去到那家服务商。"
+              : "Vaenyx is running on this computer. Your chats, notes and files stay here; whatever you send to a connected cloud model goes to that provider."}
+          </p>
+
+          <section className="wizard-option">
+            <strong>{zh ? "试试这个" : "Try this first"}</strong>
+            <p className="settings-card-copy">
+              {zh
+                ? "在输入框里直接说人话,例如:「把这段乱糟糟的笔记整理成要点」,或者「每天早上 7 点给我一份 AI 新闻摘要」。"
+                : "Just say it in plain words, for example: “Tidy these messy notes into bullet points”, or “every morning at 7, give me an AI news summary”."}
+            </p>
+            <p className="settings-card-copy">
+              {zh
+                ? "资源库里已经放好一个示例 Routine,可以直接用来看看效果。"
+                : "A sample Routine is already in your Library if you want to see one working."}
+            </p>
+          </section>
+
+          <section className="wizard-option">
+            <strong>{zh ? "想在手机上用?" : "Want it on your phone?"}</strong>
+            <p className="settings-card-copy">
+              {zh
+                ? "Vaenyx 只监听本机 127.0.0.1,不会把端口暴露到网络上 —— 手机(哪怕同一个 WiFi)也要走加密的远程通道。双击文件夹里的 Vaenyx-Connect-Tailscale.cmd 按提示做一次,之后手机打开网址、加到主屏即可。"
+                : "Vaenyx listens only on this computer's 127.0.0.1 and never opens a port to the network — so a phone (even on the same WiFi) connects through an encrypted remote channel. Run Vaenyx-Connect-Tailscale.cmd in the Vaenyx folder once, then open the address on the phone and add it to the Home Screen."}
+            </p>
+            <p className="acceptance-fine">
+              {zh
+                ? "可选,随时都能做。跳过不影响这台电脑上的使用。"
+                : "Optional, and you can do it any time. Skipping changes nothing here."}
+            </p>
+          </section>
+
+          <button
+            className="primary-button acceptance-continue"
+            onClick={onDone}
+            type="button"
+          >
+            {zh ? "开始使用" : "Start Using Vaenyx"}
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="acceptance-screen">
