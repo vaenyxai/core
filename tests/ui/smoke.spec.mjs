@@ -19,18 +19,24 @@ test("first run: owner setup → acceptance gate → model step → Library and 
   await page.getByRole("button", { name: "Create Vaenyx" }).click();
 
   // The install acceptance gate (copy pack Part A) MUST show once after sign-in
-  // on a fresh instance — the Continue tap is the Terms acceptance event, so the
-  // test fails loudly if the gate ever stops appearing. The sharing card beside
-  // it is a preference, not a consent (copy 2.6): it must NOT block Continue,
-  // and neither of its options may start selected.
+  // on a fresh instance, and Continue MUST stay disabled until the sharing card
+  // is answered — both are legal requirements, so the test fails loudly if
+  // either regresses. At copy 2.6 that card asks about interest, not consent:
+  // its heading says sharing is not available yet, and neither option may start
+  // selected or be dressed up as recommended.
   const cont = page.locator(".acceptance-continue");
   await expect(cont).toBeVisible({ timeout: 15_000 });
-  await expect(cont).toBeEnabled();
+  await expect(cont).toBeDisabled();
+  await expect(
+    page.getByRole("heading", { name: "Community Sharing (Not Available Yet)" }),
+  ).toBeVisible();
   const choices = page.locator(".acceptance-choices button");
-  await expect(choices).toHaveCount(2);
+  await expect(choices).toHaveText(["Interested", "Not interested"]);
   for (const button of await choices.all()) {
     await expect(button).toHaveAttribute("aria-pressed", "false");
   }
+  await choices.first().click();
+  await expect(cont).toBeEnabled();
   await cont.click();
 
   // Connect-a-model step (onboarding spec section 4, step 3). It MUST appear

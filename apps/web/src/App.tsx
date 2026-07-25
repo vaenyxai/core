@@ -82,6 +82,7 @@ import {
   installRoutineFromCatalogue,
   installMethodFromCatalogue,
   recordLegalAck,
+  setSharingPreference,
   fetchLegalAcks,
   fetchLegalDocument,
   fetchChatRoutineData,
@@ -7790,10 +7791,14 @@ function Modal({
   title,
   onClose,
   children,
+  // "doc" is for long-form reading (the legal documents): a wide card that
+  // fills the height it is given, instead of the 420px confirm-dialog box.
+  variant,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  variant?: "doc";
 }) {
   const idRef = useRef(Symbol("modal"));
   useEffect(() => {
@@ -7814,7 +7819,7 @@ function Modal({
 
   return (
     <div className="modal-overlay" role="dialog" aria-label={title} aria-modal="true">
-      <div className="modal-card">
+      <div className={variant === "doc" ? "modal-card doc" : "modal-card"}>
         <div className="modal-head">
           <h2>{title}</h2>
           <button
@@ -9748,7 +9753,10 @@ function SettingsPanel({
           <p className="settings-card-copy">{t("disclaimer.finance")}</p>
           <p className="settings-card-copy">{t("disclaimer.legal")}</p>
           <p className="settings-card-copy">{t("disclaimer.community")}</p>
-          <p className="settings-card-copy">{t("disclaimer.merit")}</p>
+          {/* No Merit line (copy pack J3): Merit is not built and the Terms say
+              it is not provided, so a summary of how it works would imply it
+              exists. The held string lives in the copy pack until the Schedule
+              marks Merit active. */}
           <p className="settings-card-copy">{t("disclaimer.remote")}</p>
           <p className="settings-card-copy">{t("disclaimer.model")}</p>
         </div>
@@ -14435,21 +14443,21 @@ function VaenyxWorkspace({
                 onClick={() => openScreen("settings")}
                 type="button"
               >
-                General
+                {t("title.settings")}
               </button>
               <button
                 className={screen === "projects" ? "active" : ""}
                 onClick={() => openScreen("projects")}
                 type="button"
               >
-                Projects
+                {t("title.projects")}
               </button>
               <button
                 className={screen === "scheduled" ? "active" : ""}
                 onClick={() => openScreen("scheduled")}
                 type="button"
               >
-                Scheduled
+                {t("title.scheduled")}
               </button>
               <button
                 className={screen === "library" ? "active" : ""}
@@ -14470,14 +14478,14 @@ function VaenyxWorkspace({
                 onClick={() => openScreen("vaenyx-me")}
                 type="button"
               >
-                Vaenyx Me
+                {t("title.vaenyx-me")}
               </button>
               <button
                 className={screen === "guard" ? "active" : ""}
                 onClick={() => void openGuard()}
                 type="button"
               >
-                Guard
+                {t("title.guard")}
               </button>
             </nav>
           </>
@@ -14708,7 +14716,7 @@ function LegalDocModal({
   }, [name, lang]);
 
   return (
-    <Modal onClose={onClose} title={title}>
+    <Modal onClose={onClose} title={title} variant="doc">
       <div className="legal-doc-body">
         {error ? (
           <p className="form-error">
@@ -15194,10 +15202,11 @@ function ModelConnectGate({ children }: { children: ReactNode }) {
 // card), then A2 (the Continue tap is the Terms acceptance event).
 //
 // A3 stopped being a consent at copy 2.6: sharing does not exist in this
-// version, so a forced choice would ask the Owner to consent to nothing and
-// would record evidence of an authorisation never given. It now records
-// interest only — optional, neither option pre-selected, neither recommended.
-// The forced affirmative choice moves to where it bites: the day sharing
+// version, so the old card recommended consenting to nothing and wrote an
+// acknowledgement record for an authorisation nobody gave. The card still asks
+// — an answer is required to continue — but the answer is interest, stored as
+// an ordinary local setting. Neither option is pre-selected or recommended.
+// The forced *affirmative consent* moves to where it bites: the day sharing
 // actually becomes available.
 function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
   const { lang, t } = useI18n();
@@ -15207,20 +15216,17 @@ function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
 
   function proceed() {
-    if (busy) return;
+    if (!choice || busy) return;
     setBusy(true);
-    // Fire-and-forget the evidence records (best-effort, clause 2.3) and release
-    // the gate immediately — never block the Owner behind a network write.
-    const record = (keyName: string, choiceValue?: string) =>
-      void recordLegalAck({
-        keyName,
-        copyVersion: LEGAL_COPY_VERSION,
-        language: lang,
-        choice: choiceValue,
-      }).catch(() => {});
-    record("legal.notice.firstRun.terms", "accepted");
-    // Only when the Owner actually expressed one: silence is not a preference.
-    if (choice) record("legal.notice.flywheel.preference", choice);
+    // Fire-and-forget both writes (best-effort, clause 2.3) and release the gate
+    // immediately — never block the Owner behind a network write.
+    void recordLegalAck({
+      keyName: "legal.notice.firstRun.terms",
+      copyVersion: LEGAL_COPY_VERSION,
+      language: lang,
+      choice: "accepted",
+    }).catch(() => {});
+    void setSharingPreference(choice).catch(() => {});
     onDone();
   }
 
@@ -15234,6 +15240,8 @@ function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
 
         <section className="acceptance-flywheel">
           <h2>{t("legal.notice.flywheel.preference.title")}</h2>
+          {/* The body ships under the bare key the copy pack's A3 block is named
+              for, so audit-copy.mjs compares it word for word. */}
           <p>{t("legal.notice.flywheel.preference")}</p>
           {/* Both buttons carry the same weight: neither is recommended. */}
           <div className="acceptance-choices">
@@ -15260,7 +15268,7 @@ function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
         <LegalDocLinks names={["terms-of-service", "privacy-policy"]} />
         <button
           className="primary-button acceptance-continue"
-          disabled={busy}
+          disabled={!choice || busy}
           onClick={() => void proceed()}
           type="button"
         >

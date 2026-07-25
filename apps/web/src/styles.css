@@ -3905,6 +3905,31 @@ select {
   overflow-y: auto;
 }
 
+/* Inside the document modal the body owns the height the card gives it, so a
+   nine-thousand-word Terms of Service reads at full size instead of through a
+   60vh letterbox. */
+.modal-card.doc .legal-doc-body {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding-right: 6px;
+  line-height: 1.75;
+}
+
+.modal-card.doc .legal-doc-body p {
+  margin: 0 0 0.95em;
+}
+
+.modal-card.doc .legal-doc-body h1,
+.modal-card.doc .legal-doc-body h2,
+.modal-card.doc .legal-doc-body h3 {
+  margin: 1.5em 0 0.5em;
+}
+
+.modal-card.doc .legal-doc-body li {
+  margin-bottom: 0.4em;
+}
+
 .library-back {
   justify-self: start;
 }
@@ -4634,6 +4659,24 @@ select {
   border-radius: 16px;
   background: var(--bg-raised);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+
+/* Long-form reading, not a confirm box: as wide and tall as the screen allows,
+   with the card itself fixed and only the body scrolling. Narrow screens keep
+   the full width they already had (width: 100% above). */
+.modal-card.doc {
+  display: flex;
+  max-width: 860px;
+  max-height: calc(100vh - 48px);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-card.doc .modal-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .modal-head {

@@ -1212,6 +1212,18 @@ export function recordLegalAck(input: {
   });
 }
 
+// The A3 sharing card's answer. A plain local setting, kept off the
+// acknowledgement path on purpose: sharing does not exist in this release, so
+// this is interest, never consent.
+export function setSharingPreference(
+  choice: "interested" | "not-interested",
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/v1/legal/sharing-preference", {
+    method: "POST",
+    body: JSON.stringify({ choice }),
+  });
+}
+
 // The signed-in Owner's recorded legal acknowledgements (latest row per key).
 export function fetchLegalAcks(): Promise<LegalAcknowledgement[]> {
   return requestJson<LegalAcknowledgementsResponse>(

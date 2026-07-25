@@ -47,6 +47,31 @@ export function getInstanceSettings(
   };
 }
 
+// The install-wizard sharing card (copy pack A3) records interest in a
+// capability that does not exist yet. It is a plain local preference — NOT a
+// legal acknowledgement, NOT a consent event, and never evidence of an
+// authorisation — so it lives here, beside the other instance settings, and
+// never in legal_acknowledgements.
+export function setSharingPreference(
+  database: DatabaseHandle,
+  choice: "interested" | "not-interested",
+): void {
+  database.sqlite
+    .prepare(
+      `INSERT INTO instance_settings (key, value, updated_at)
+       VALUES ('sharing_preference', ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+    )
+    .run(choice);
+}
+
+export function getSharingPreference(
+  database: DatabaseHandle,
+): "interested" | "not-interested" | null {
+  const value = getSetting(database, "sharing_preference", "");
+  return value === "interested" || value === "not-interested" ? value : null;
+}
+
 export function updateInstanceSettings(
   config: AppConfig,
   database: DatabaseHandle,

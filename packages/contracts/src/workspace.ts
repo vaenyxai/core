@@ -1501,6 +1501,23 @@ export const LegalAcknowledgeRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// The A3 sharing card records interest in a capability that does not exist. It
+// is a local preference, deliberately kept out of the acknowledgement record so
+// it can never be read as consent or as evidence of an authorisation.
+export const SetSharingPreferenceRequestSchema = Type.Object(
+  {
+    choice: Type.Union([
+      Type.Literal("interested"),
+      Type.Literal("not-interested"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export type SetSharingPreferenceRequest = Static<
+  typeof SetSharingPreferenceRequestSchema
+>;
+
 export const LegalAcknowledgementSchema = Type.Object(
   {
     keyName: Type.String(),

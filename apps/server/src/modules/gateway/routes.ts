@@ -87,6 +87,7 @@ import {
   InstallMethodRequestSchema,
   LegalAcknowledgeRequestSchema,
   LegalAcknowledgementsResponseSchema,
+  SetSharingPreferenceRequestSchema,
   PublishAcceptanceRequestSchema,
   ClassifyRoutineResponseSchema,
   LoginRequestSchema,
@@ -152,6 +153,7 @@ import {
   type InstallRoutineRequest,
   type InstallMethodRequest,
   type LegalAcknowledgeRequest,
+  type SetSharingPreferenceRequest,
   type PublishAcceptanceRequest,
   type SetMethodTagsRequest,
   type RenameMethodTagRequest,
@@ -387,6 +389,7 @@ import {
 } from "../core/vaenyx-me.js";
 import {
   getInstanceSettings,
+  setSharingPreference,
   updateInstanceSettings,
 } from "../core/settings.js";
 import {
@@ -5803,6 +5806,33 @@ export async function registerGatewayRoutes(
         profileId: owner.id,
         choice: request.body.choice ?? null,
       });
+      return { ok: true };
+    },
+  );
+
+  // The install wizard's sharing card (copy pack A3). Deliberately NOT a legal
+  // acknowledgement: sharing does not exist in this release, so this records
+  // interest as an ordinary local setting and nothing else.
+  app.post<{ Body: SetSharingPreferenceRequest }>(
+    "/v1/legal/sharing-preference",
+    {
+      schema: {
+        body: SetSharingPreferenceRequestSchema,
+        response: {
+          200: Type.Object(
+            { ok: Type.Boolean() },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      setSharingPreference(context.database, request.body.choice);
       return { ok: true };
     },
   );

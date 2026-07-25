@@ -27,6 +27,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
   en: {
     "title.ask-vaenyx": "Vaenyx Portal",
     "title.projects": "Projects",
+    "title.scheduled": "Scheduled",
     "title.library": "Library",
     "title.community": "Community",
     "community.intro":
@@ -63,8 +64,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "disclaimer.legal": "Not legal advice.",
     "disclaimer.community":
       "Community Methods/Routines are made by other users and aren't vetted by Vaenyx as professional advice. 'Verified' means automated checks passed — not that a person reviewed it; community items are at your discretion.",
-    "disclaimer.merit":
-      "Merit is a reputation record — no cash value, can't be bought, sold, or exchanged; not a currency or security.",
     "disclaimer.remote":
       "Remote access is optional and runs through a third-party service using your own account with that provider, under their terms. Third-Party Notices names the provider used by this version.",
     "disclaimer.model":
@@ -75,8 +74,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.legal.title": "Legal",
     "settings.legal.copy":
       "The short notes below summarise the legal position in plain language. The documents linked at the bottom of this page are the ones that actually govern, and the Schedule states what this release actually does.",
-    "settings.legal.docsPending":
-      "Terms of Service · Privacy Policy · Contributor Agreement — coming",
     "settings.backup.tab": "Backup",
     "settings.backup.eyebrow": "Data protection",
     "settings.backup.title": "Backup & Restore",
@@ -223,6 +220,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
   zh: {
     "title.ask-vaenyx": "Vaenyx 门户",
     "title.projects": "项目",
+    // Kept in English, like Vaenyx Me: the Chinese copy elsewhere already calls
+    // this page "Scheduled", and one page must not have two names.
+    "title.scheduled": "Scheduled",
     "title.library": "资源库",
     "title.community": "社区",
     "community.intro":
@@ -255,8 +255,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "disclaimer.legal": "不是法律意见。",
     "disclaimer.community":
       "社区 Method / Routine 由其他用户制作,Vaenyx 不对其内容作为专业建议背书;「Verified」仅表示已通过自动检查,并非有人逐条审核,社区档请自行斟酌。",
-    "disclaimer.merit":
-      "Merit 是信誉记录,无现金价值、不可买卖 / 兑换,不是货币、证券或理财产品。",
     "disclaimer.remote":
       "远程访问是可选的,通过第三方服务实现,用你自己在该服务商的账号登录,受其条款约束。本版本使用哪一家,见《第三方声明》。",
     "disclaimer.model":
@@ -267,7 +265,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.legal.title": "法律",
     "settings.legal.copy":
       "下面几行用大白话概括法律要点。真正具有约束力的是本页底部链接的文件;本次发布实际做了什么,以明细表所载为准。",
-    "settings.legal.docsPending": "服务条款 · 隐私政策 · 贡献者协议 —— 待定",
     "settings.backup.tab": "备份",
     "settings.backup.eyebrow": "数据保护",
     "settings.backup.title": "备份与还原",
