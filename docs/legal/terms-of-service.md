@@ -253,19 +253,47 @@ This clause 14.2 does not apply where the goods or services are of a kind ordina
 
 15.1 **Excluded loss.** Subject to clauses 14 and 15.3, neither party is liable to the other for loss to the extent that it is indirect and was not reasonably foreseeable when these Terms were accepted. This clause does not exclude or limit loss recoverable under the ACL or the reasonable direct cost of restoring or reconstructing data where its loss or corruption was caused by that party's breach, negligence or wilful misconduct.
 
-15.2 **Cap.** Subject to clauses 14 and 15.3, each party's total aggregate liability to the other for all claims arising out of or in connection with these Terms, including liability under clause 16, is limited to AUD $10,000.
+15.2 **Caps.** Subject to clauses 14 and 15.3, each party's total aggregate liability to the other arising from any one event or series of related events in connection with these Terms, including liability under clause 16, is limited to AUD $10,000. Each party's total aggregate liability for all events occurring in a Contract Year is limited to AUD $20,000.
 
-15.3 **What is not limited.** Nothing in this clause excludes or limits: (a) any consumer guarantee, right, remedy or liability preserved by clause 14; (b) liability that cannot lawfully be excluded or limited; (c) fraud, wilful misconduct, or death or personal injury caused by negligence; (d) our liability for misleading or deceptive conduct or false or misleading representations under the ACL; or (e) our liability arising from breach of privacy, confidentiality or security obligations, unlawful handling of personal information, negligent operation of a publishing, sharing or de-identification process, or breach of a removal commitment.
+Claims arising from the same or substantially the same facts or circumstances are treated as one series of related events. "Contract Year" means each 12-month period beginning on the date you first accept these Terms and each anniversary of that date.
+
+15.3 **What is not limited.** Nothing in this clause 15 excludes or limits:
+
+  (a) any consumer guarantee, right, remedy or liability preserved by clause 14;
+
+  (b) liability that cannot lawfully be excluded or limited;
+
+  (c) either party's liability for fraud or wilful misconduct, or for death or personal injury caused by its negligence;
+
+  (d) either party's liability for knowing infringement of a third party's intellectual-property rights or knowing unlawful disclosure of another person's personal information;
+
+  (e) our liability for misleading or deceptive conduct, false or misleading representations, or unconscionable conduct under the Australian Consumer Law; or
+
+  (f) our liability arising from breach of an express privacy, confidentiality or security obligation under these Terms or applicable law, our negligent or unlawful handling of personal or confidential information that we hold or control, our negligent operation of a publishing, sharing or de-identification process, or our breach of an express removal commitment.
 
 15.4 **Basis of risk allocation.** The allocations of risk in clauses 5, 6, 8, 12, 13 and 15 reflect the following facts: the Software is supplied free of charge, is self-hosted on your own hardware, and interoperates with Third-Party Services you choose. This clause records the factual basis on which we make those allocations; it is not an acknowledgment or admission by you and does not limit any assessment a court or tribunal may make.
 
 ## 16. Indemnities
 
-16.1 **By you.** To the extent permitted by law, you indemnify us against loss, damage, liability, and reasonable costs (including reasonable legal costs) we suffer arising out of a third-party claim resulting from: (a) your deliberate or reckless breach of clause 8.6 or clause 10, of the rights warranty in clause 7.4, or of the Contributor Agreement; (b) content you publish to the Community Library that you knew was, or were recklessly indifferent to whether it was, unlawful or an infringement of a third party's rights; or (c) your knowingly unlawful use of the Software or Operator Services — in each case reduced proportionately to the extent the loss was caused or contributed to by us. This indemnity is confined to the deliberate, reckless or knowing conduct described above and does not apply to honest mistakes made in good-faith use of the Software, good-faith sharing under clause 7.4, or good-faith publishing. To the extent a claim under this indemnity arises out of or relates to a Contribution (as defined in the Contributor Agreement), this indemnity is subject to the liability cap, defences and procedure in clause 12 of the Contributor Agreement, which prevail over this clause to the extent of any inconsistency.
+16.1 **By you.** Subject to clauses 14, 15 and 16.3, and to the extent permitted by law, you indemnify us against loss, damage, liability and reasonable costs, including reasonable legal costs, arising from a third-party claim to the extent caused by:
 
-16.2 **By us.** To the extent permitted by law, we indemnify you against loss, damage, liability, and reasonable costs (including reasonable legal costs) you suffer arising out of a third-party claim resulting from: (a) our breach of these Terms; or (b) our unlawful act or omission or negligence in providing the Software or Operator Services — in each case reduced proportionately to the extent the loss was caused or contributed to by you (including by your modification of the Software, your combination of it with other products, or your breach of these Terms). **So that the effect of this indemnity is transparent:** except where clause 14 or clause 15.3 provides otherwise (including the clause 15.3(c) carve-outs, which cover among other things our negligent handling of publisher account information, our negligent operation of the improvement-sharing endpoint and de-identification enforcement, our breach of the removal commitments, and our unlawful acts in operating the publish service), our liability under this indemnity counts towards, and is limited by, the AUD $100 aggregate cap in clause 15.2.
+  (a) your deliberate or reckless breach of an acceptable-use obligation or rights warranty in these Terms;
 
-16.3 **Conduct of claims.** The indemnified party must notify the indemnifying party promptly of any claim, must not admit liability without consent (not to be unreasonably withheld), and must give reasonable cooperation. Each party must take reasonable steps to mitigate loss.
+  (b) content you share or publish that you knew was, or were recklessly indifferent to whether it was, unlawful or infringed a third party's rights; or
+
+  (c) your knowingly unlawful use of the Software or an Operator Service.
+
+The indemnity is reduced proportionately to the extent the loss was caused or contributed to by us and does not apply to an honest mistake made in good faith. A claim arising out of or relating to a Contribution is governed by clause 12 of the Contributor Agreement, which prevails to the extent of any inconsistency.
+
+16.2 **By us.** Subject to clauses 14, 15 and 16.3, and to the extent permitted by law, we indemnify you against loss, damage, liability and reasonable costs, including reasonable legal costs, arising from a third-party claim to the extent caused by:
+
+  (a) our breach of these Terms; or
+
+  (b) our unlawful act or omission or negligence in providing the Software or an Operator Service.
+
+The indemnity is reduced proportionately to the extent the loss was caused or contributed to by you, including through your modification of the Software, combination of it with another product, or breach of these Terms. Liability under this indemnity is subject to clause 15.2 except to the extent clause 14 or 15.3 applies.
+
+16.3 **Conduct of claims.** The indemnified party must notify the indemnifying party promptly; delay reduces the indemnity only to the extent it causes actual prejudice. The indemnifying party may participate in the defence at its own cost. The indemnified party must not admit liability or settle without the indemnifying party's consent, which must not be unreasonably withheld or delayed. Each party must give reasonable cooperation and take reasonable steps to mitigate loss. An indemnity covers only amounts finally awarded by a court, agreed in a settlement consented to under this clause, or reasonably incurred in defending the claim.
 
 ## 17. Termination
 

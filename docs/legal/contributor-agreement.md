@@ -148,9 +148,17 @@ Our own repository's git history is not routinely rewritten on removal, but in e
 
 ## 12. Indemnity
 
-12.1 **Indemnity.** To the extent permitted by law, you indemnify the Operator against loss, damage, liability and reasonable costs arising from a third-party claim to the extent it results from a material breach of clause 7, infringement of a third party's rights, or inclusion of personal information contrary to clause 4.3, but only where you knew or, after taking reasonable care, reasonably ought to have known of the facts constituting the breach, infringement or inclusion. An innocent breach does not trigger this indemnity.
+12.1 **Indemnity.** To the extent permitted by law, you indemnify the Operator against loss, damage, liability and reasonable costs, including reasonable legal costs, arising from a third-party claim to the extent it results from a material breach of the Contributor Warranties, infringement of a third party's rights, or inclusion of personal information contrary to this Agreement, but only where you knew or, after taking reasonable care, reasonably ought to have known of the facts constituting the breach, infringement or inclusion. An innocent breach does not trigger this indemnity.
 
-12.2 **Cap.** Your total aggregate liability to us under or in connection with this Agreement, including under this clause 12 and for breach of clause 7, is capped at AUD $10,000 for all claims combined. The cap does not apply to fraud, wilful misconduct, knowing infringement of a third party's rights, or knowing inclusion of another person's personal information. This clause is subject to clause 11.3.
+12.2 **Safeguards.** This indemnity, and any claim by us for breach of a Contributor Warranty, is limited to loss that was reasonably foreseeable and is reduced proportionately to the extent the loss was caused or contributed to by us. If you took reasonable care in reviewing your Contribution before publishing, a failure of a de-identification control operated by us counts as loss caused or contributed to by us.
+
+For an indemnity claim, we will notify you promptly, give you the option to participate in the defence at your own cost, not admit liability or settle without your consent, which must not be unreasonably withheld or delayed, and take reasonable steps to mitigate loss.
+
+12.3 **Cap.** Your total aggregate liability to us under or in connection with this Agreement, including under this clause and for breach of a Contributor Warranty, is capped at AUD $10,000 for all claims arising from the same or substantially related facts or circumstances.
+
+The cap does not apply to fraud, wilful misconduct, knowing infringement of a third party's rights, or knowing inclusion of another person's personal information.
+
+12.4 **Australian Consumer Law.** Nothing in this clause limits any consumer guarantee, right or remedy that cannot lawfully be excluded, restricted or modified, or limits the Operator's liability under clauses 14 to 16 of the Terms of Service.
 
 ## 13. Relationship
 
@@ -185,7 +193,7 @@ We may update this Agreement from time to time. The version in force when you pu
 The publish step presents a warranty confirmation that you must actively confirm each time you publish — it is never pre-selected. By confirming it and completing the publish step, you certify that:
   (a) you hold the rights needed to publish the Contribution (clause 7.1);
   (b) the Contribution is not malicious or harmful (clauses 4.2 and 7.3); and
-  (c) you consent to de-identified public sharing of the Examples included in the Contribution (clauses 8 and 9) — Examples not included in the Contribution remain governed by your community-sharing setting (clause 9.1), which this certification does not change;
+  (c) in a version that permits Examples to be attached to a Contribution, every Example included is de-identified as required by clauses 4.3 and 7.4, and you agree that each such Example will be published publicly and licensed under clause 5 (see clause 9.2). The current version does not attach Examples to a Contribution, so this paragraph has no present application;
 and that you have read this Agreement, that all of the warranties in clause 7 are true for the Contribution being published, and that you accept this Agreement. The publish step does not complete unless your acceptance is recorded server-side (account identifier, Agreement version, timestamp, and the Contribution's identifier), as described in the Privacy Policy, so that acceptance of this Agreement and the content licences — including the clause 6 moral-rights consent — can be evidenced for each Contribution.
 
 **Contact:** hello@vaenyx.ai
