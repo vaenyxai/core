@@ -5057,11 +5057,11 @@ function AskVaenyxPanel({
   workspace: Workspace;
 }) {
   const { lang, t } = useI18n();
-  // C2 health gate: acceptance is durable (per copy version); "Not Now" only
-  // withholds for this session and re-fires next health chat.
+  // C2 health gate: acceptance is durable (until the consent floor moves); "Not
+  // Now" only withholds for this session and re-fires next health chat.
   const [healthAck, setHealthAck] = useState(
     () =>
-      localStorage.getItem(`vaenyx-health-ack-${LEGAL_COPY_VERSION}`) === "1",
+      localStorage.getItem(`vaenyx-health-ack-${LEGAL_CONSENT_FLOOR}`) === "1",
   );
   const [healthGateDismissed, setHealthGateDismissed] = useState(false);
   // In-chat background creation (spec §2a): while the drafted Method/Routine is
@@ -6811,7 +6811,7 @@ function AskVaenyxPanel({
                 className="primary-button"
                 onClick={() => {
                   localStorage.setItem(
-                    `vaenyx-health-ack-${LEGAL_COPY_VERSION}`,
+                    `vaenyx-health-ack-${LEGAL_CONSENT_FLOOR}`,
                     "1",
                   );
                   setHealthAck(true);
@@ -11382,9 +11382,33 @@ function CreateRoutinePanel({
 
 // Domain of a Method/Routine from its tags, for the B-class context disclaimers
 // (health is highest-risk). Tags are free-form hashtags; match by substring.
-// Mirrors i18n `legal.copyVersion` (copy pack clause 6.4): bumping it re-fires
-// version-gated acknowledgements. Keep the two in step.
+// Mirrors i18n `legal.copyVersion` (copy pack clause 6.4). This is the EDITORIAL
+// version: it changes whenever any string changes, and it is what gets recorded
+// against an acknowledgement, so a record always says exactly which text the
+// Owner was shown.
 const LEGAL_COPY_VERSION = "2.6";
+
+// The consent floor, and the only thing that re-asks the Owner (Oskar, 2026-07-25).
+// It moves ONLY when a consent-class string (`legal.consent.*`) changes in
+// substance. Fixing a typo, adding a notice or rewording an explanation bumps
+// LEGAL_COPY_VERSION and nobody is interrupted; asking again for something the
+// Owner has already agreed to is how consent turns into a reflex click.
+// Acknowledgements count while they are at or above this floor.
+const LEGAL_CONSENT_FLOOR = "2.6";
+
+// Fail-closed dotted compare: an unparseable recorded version never satisfies
+// the floor. Mirrors the publish service's copyVersionAtLeast.
+function legalVersionAtLeast(version: string, floor: string): boolean {
+  const left = version.trim().split(".");
+  const right = floor.trim().split(".");
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = Number.parseInt(left[index] ?? "0", 10);
+    const b = Number.parseInt(right[index] ?? "0", 10);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
 
 // Sign-in page model buttons: the chosen provider id is parked here, then the
 // workspace opens Settings → Models and highlights that provider's connect
@@ -14731,13 +14755,14 @@ function LegalDocLinks({ names }: { names?: string[] }) {
   );
 }
 
-// First-run acceptance gate (copy pack Part A; decision A, 2026-07-10). Shown once
-// per copy version to any Owner who has not recorded the A2 Terms/Privacy
-// acceptance and the A3 flywheel sharing choice — a fresh install AND an existing
-// instance both see it once, then never again, because the gate keys off the
-// recorded acceptance, not "is this a fresh install". Fails OPEN on a lookup error
-// so a transient hiccup can never lock the Owner out of their own instance.
-const LEGAL_ACCEPT_CACHE = `vaenyx-legal-accepted-${LEGAL_COPY_VERSION}`;
+// First-run acceptance gate (copy pack Part A; decision A, 2026-07-10). Shown to
+// any Owner whose recorded A2 Terms/Privacy acceptance is older than the consent
+// floor — a fresh install AND an existing instance both see it once, then never
+// again, because the gate keys off the recorded acceptance, not "is this a fresh
+// install". An editorial copy revision no longer brings it back. Fails OPEN on a
+// lookup error so a transient hiccup can never lock the Owner out of their own
+// instance.
+const LEGAL_ACCEPT_CACHE = `vaenyx-legal-accepted-${LEGAL_CONSENT_FLOOR}`;
 
 function InstallAcceptanceGate({ children }: { children: ReactNode }) {
   const [accepted, setAccepted] = useState<boolean | null>(() =>
@@ -14761,10 +14786,12 @@ function InstallAcceptanceGate({ children }: { children: ReactNode }) {
         const has = (key: string) =>
           acks.some(
             (ack) =>
-              ack.keyName === key && ack.copyVersion === LEGAL_COPY_VERSION,
+              ack.keyName === key &&
+              legalVersionAtLeast(ack.copyVersion, LEGAL_CONSENT_FLOOR),
           );
-        const done =
-          has("legal.notice.firstRun.terms") && has("legal.consent.flywheel");
+        // A2 alone: the sharing card next to it is a preference, not a consent,
+        // so an Owner who skipped it is not held at the gate forever.
+        const done = has("legal.notice.firstRun.terms");
         if (done) localStorage.setItem(LEGAL_ACCEPT_CACHE, "1");
         clearTimeout(timer);
         settle(done);
@@ -15163,19 +15190,24 @@ function ModelConnectGate({ children }: { children: ReactNode }) {
   return <ModelConnectStep onDone={() => setReady(true)} />;
 }
 
-// The install-time acceptance screen: A1 (AI notice), A3 (flywheel forced choice —
-// no option pre-selected; "Keep Sharing On (Recommended)" is visually prominent but
-// never pre-ticked; decline is one equally-accessible tap), then A2 (the Continue
-// tap is the Terms acceptance event). Continue stays disabled until a sharing
-// choice is made, so nothing proceeds — and nothing is shared — until the user
-// chooses. Both the A2 acceptance and the A3 choice are recorded to the backbone.
+// The install-time acceptance screen: A1 (AI notice), A3 (the sharing-preference
+// card), then A2 (the Continue tap is the Terms acceptance event).
+//
+// A3 stopped being a consent at copy 2.6: sharing does not exist in this
+// version, so a forced choice would ask the Owner to consent to nothing and
+// would record evidence of an authorisation never given. It now records
+// interest only — optional, neither option pre-selected, neither recommended.
+// The forced affirmative choice moves to where it bites: the day sharing
+// actually becomes available.
 function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
   const { lang, t } = useI18n();
-  const [choice, setChoice] = useState<"accept" | "decline" | null>(null);
+  const [choice, setChoice] = useState<
+    "interested" | "not-interested" | null
+  >(null);
   const [busy, setBusy] = useState(false);
 
   function proceed() {
-    if (!choice || busy) return;
+    if (busy) return;
     setBusy(true);
     // Fire-and-forget the evidence records (best-effort, clause 2.3) and release
     // the gate immediately — never block the Owner behind a network write.
@@ -15187,7 +15219,8 @@ function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
         choice: choiceValue,
       }).catch(() => {});
     record("legal.notice.firstRun.terms", "accepted");
-    record("legal.consent.flywheel", choice);
+    // Only when the Owner actually expressed one: silence is not a preference.
+    if (choice) record("legal.notice.flywheel.preference", choice);
     onDone();
   }
 
@@ -15200,39 +15233,34 @@ function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
         </p>
 
         <section className="acceptance-flywheel">
-          <h2>{t("legal.consent.flywheel.title")}</h2>
-          <p>{t("legal.consent.flywheel.body")}</p>
+          <h2>{t("legal.notice.flywheel.preference.title")}</h2>
+          <p>{t("legal.notice.flywheel.preference")}</p>
+          {/* Both buttons carry the same weight: neither is recommended. */}
           <div className="acceptance-choices">
             <button
-              aria-pressed={choice === "accept"}
-              className={`primary-button${choice === "accept" ? " selected" : ""}`}
-              onClick={() => setChoice("accept")}
+              aria-pressed={choice === "interested"}
+              className={`secondary-button${choice === "interested" ? " selected" : ""}`}
+              onClick={() => setChoice("interested")}
               type="button"
             >
-              {t("legal.consent.flywheel.accept")}
+              {t("legal.notice.flywheel.preference.interested")}
             </button>
             <button
-              aria-pressed={choice === "decline"}
-              className={`secondary-button${choice === "decline" ? " selected" : ""}`}
-              onClick={() => setChoice("decline")}
+              aria-pressed={choice === "not-interested"}
+              className={`secondary-button${choice === "not-interested" ? " selected" : ""}`}
+              onClick={() => setChoice("not-interested")}
               type="button"
             >
-              {t("legal.consent.flywheel.decline")}
+              {t("legal.notice.flywheel.preference.notInterested")}
             </button>
           </div>
-          <p className="acceptance-fine">
-            {t("legal.consent.flywheel.sensitiveNote")}
-          </p>
-          <p className="acceptance-fine">
-            {t("legal.consent.flywheel.multiUserNote")}
-          </p>
         </section>
 
         <p className="acceptance-terms">{t("legal.notice.firstRun.terms")}</p>
         <LegalDocLinks names={["terms-of-service", "privacy-policy"]} />
         <button
           className="primary-button acceptance-continue"
-          disabled={!choice || busy}
+          disabled={busy}
           onClick={() => void proceed()}
           type="button"
         >

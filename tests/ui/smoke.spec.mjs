@@ -1,8 +1,7 @@
 // First-run UI smoke: the whole happy path a brand-new user walks, in a real
 // browser against the production build — owner setup, the install acceptance
-// gate (forced flywheel choice), the connect-a-model step, workspace, Library,
-// Community. A guardrail so UI refactors cannot silently break the install
-// experience.
+// gate, the connect-a-model step, workspace, Library, Community. A guardrail so
+// UI refactors cannot silently break the install experience.
 import { expect, test } from "@playwright/test";
 
 test("first run: owner setup → acceptance gate → model step → Library and Community", async ({
@@ -19,15 +18,19 @@ test("first run: owner setup → acceptance gate → model step → Library and 
   await page.locator('input[type="password"]').nth(1).fill("smoke-pass-123");
   await page.getByRole("button", { name: "Create Vaenyx" }).click();
 
-  // The install acceptance gate (copy pack Part A) MUST show once after
-  // sign-in on a fresh instance, and Continue MUST stay disabled until a
-  // sharing choice is made — both are legal requirements, so the test fails
-  // loudly if either regresses.
+  // The install acceptance gate (copy pack Part A) MUST show once after sign-in
+  // on a fresh instance — the Continue tap is the Terms acceptance event, so the
+  // test fails loudly if the gate ever stops appearing. The sharing card beside
+  // it is a preference, not a consent (copy 2.6): it must NOT block Continue,
+  // and neither of its options may start selected.
   const cont = page.locator(".acceptance-continue");
   await expect(cont).toBeVisible({ timeout: 15_000 });
-  await expect(cont).toBeDisabled();
-  await page.locator(".acceptance-choices button").first().click();
   await expect(cont).toBeEnabled();
+  const choices = page.locator(".acceptance-choices button");
+  await expect(choices).toHaveCount(2);
+  for (const button of await choices.all()) {
+    await expect(button).toHaveAttribute("aria-pressed", "false");
+  }
   await cont.click();
 
   // Connect-a-model step (onboarding spec section 4, step 3). It MUST appear

@@ -178,15 +178,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "Vaenyx uses AI. AI can be wrong or out of date — always double-check important information.",
     "legal.notice.firstRun.terms":
       "By continuing you agree to the Terms of Service and acknowledge the Privacy Policy.",
-    "legal.consent.flywheel.title": "Help Improve Shared Methods",
-    "legal.consent.flywheel.body":
-      "This version does not upload improvement patterns. This setting records a preference only. If community improvement sharing becomes available, it will remain off until you are shown current information and make a fresh affirmative choice.",
-    "legal.consent.flywheel.accept": "Keep Sharing On (Recommended)",
-    "legal.consent.flywheel.decline": "Don't Share",
-    "legal.consent.flywheel.sensitiveNote":
-      "No content is uploaded in this version. If sharing becomes available, anything Vaenyx recognises as sensitive (health, family, finance) is never shared automatically — it always asks you first, and the check can err.",
-    "legal.consent.flywheel.multiUserNote":
-      "Automatic sharing is for improvements from your own use. If someone else uses this Vaenyx, use Review Each or Off unless they've agreed and you can confirm you hold the rights to share that example.",
+    "legal.notice.flywheel.preference.title":
+      "Community Sharing (Not Available Yet)",
+    "legal.notice.flywheel.preference":
+      "This version does not upload improvement patterns. You may record whether you are interested in sharing in future, but this preference does not turn sharing on, authorise an upload, or grant consent, a licence or moral-rights consent. A fresh affirmative choice will be required if sharing becomes available.",
+    "legal.notice.flywheel.preference.interested": "Interested",
+    "legal.notice.flywheel.preference.notInterested": "Not interested",
     "legal.notice.modelPicker":
       "This chat uses the provider shown. Cloud providers receive your chat content — including context Vaenyx adds, like memories and project summaries — under their own terms.",
     "legal.notice.project.autoSummary":
@@ -370,15 +367,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "Vaenyx 使用 AI。AI 可能出错或过时——重要信息请务必自行核对。",
     "legal.notice.firstRun.terms":
       "继续即表示你同意《服务条款》,并知悉《隐私政策》。",
-    "legal.consent.flywheel.title": "帮助改进共享 Method",
-    "legal.consent.flywheel.body":
-      "本版本不会上传任何改进模式。此处只是记录一项偏好。若将来提供社区改进分享,它依旧保持关闭,直到向你展示当时的说明并由你重新做出一次肯定性选择。",
-    "legal.consent.flywheel.accept": "保持开启(推荐)",
-    "legal.consent.flywheel.decline": "不分享",
-    "legal.consent.flywheel.sensitiveNote":
-      "本版本不会上传任何内容。若将来提供分享功能,凡 Vaenyx 识别为敏感的内容(健康、家庭、财务)绝不会被自动分享——它总会先问你,且该检查可能出错。",
-    "legal.consent.flywheel.multiUserNote":
-      "自动分享仅针对你自己使用所产生的改进。若他人也使用这台 Vaenyx,请改用 Review Each 或 Off,除非对方已同意、且你能确认自己拥有分享该示例所需的权利。",
+    "legal.notice.flywheel.preference.title": "社区分享(尚未提供)",
+    "legal.notice.flywheel.preference":
+      "本版本不会上传任何改进模式。你可以记录自己将来是否有意参与分享,但这项偏好不会开启分享,不构成任何上传授权,也不构成同意、许可或精神权利同意。若将来提供分享,届时需要你重新作出一次肯定性选择。",
+    "legal.notice.flywheel.preference.interested": "有兴趣",
+    "legal.notice.flywheel.preference.notInterested": "暂不参与",
     "legal.notice.modelPicker":
       "本对话使用所示的服务商。云端服务商将按其自身条款接收你的聊天内容,包括 Vaenyx 添加的上下文(如记忆与项目摘要)。",
     "legal.notice.project.autoSummary":
