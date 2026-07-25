@@ -146,7 +146,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "routine.confirm.onePerLine": "One per line",
     "routine.confirm.run": "Looks right — run",
     "routine.confirm.cancel": "Cancel",
-    "legal.copyVersion": "2.2",
+    "legal.copyVersion": "2.5",
     "legal.disclaimer.aiGeneral.composer":
       "AI can make mistakes. Check important information.",
     "legal.disclaimer.community.browse":
@@ -176,11 +176,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "By continuing you agree to the Terms of Service and acknowledge the Privacy Policy.",
     "legal.consent.flywheel.title": "Help Improve Shared Methods",
     "legal.consent.flywheel.body":
-      "When Vaenyx learns a better way to do something, it can share the improvement pattern with the community. Patterns are stripped of your data, names and amounts before sharing, and are published without your name under the CC BY 4.0 licence. If you ever spot something personal in shared content, report it and Vaenyx will remove it from the Library (copies already downloaded, and traces in the library's public history, forks and mirrors, may persist). Nothing is shared until you choose here — pick an option to continue; you can change your choice anytime in Settings.",
+      "This version does not upload improvement patterns. This setting records a preference only. If community improvement sharing becomes available, it will remain off until you are shown current information and make a fresh affirmative choice.",
     "legal.consent.flywheel.accept": "Keep Sharing On (Recommended)",
     "legal.consent.flywheel.decline": "Don't Share",
     "legal.consent.flywheel.sensitiveNote":
-      "Anything Vaenyx recognises as sensitive (health, family, finance) is never shared automatically — it always asks you first.",
+      "No content is uploaded in this version. If sharing becomes available, anything Vaenyx recognises as sensitive (health, family, finance) is never shared automatically — it always asks you first, and the check can err.",
     "legal.consent.flywheel.multiUserNote":
       "Automatic sharing is for improvements from your own use. If someone else uses this Vaenyx, use Review Each or Off unless they've agreed and you can confirm you hold the rights to share that example.",
     "legal.notice.modelPicker":
@@ -194,19 +194,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.methodToken.feedback":
       "This allows the app holding this token to send corrections into My Library on this device. Corrections stay on this device; a correction can only become a shared community example after it is de-identified and you explicitly approve it — corrections from apps are never shared automatically, whatever your Sharing setting.",
     "legal.notice.publish":
-      "Publishing makes this Method or Routine public, credited to your display name and licensed to everyone under the Creative Commons Attribution 4.0 (CC BY 4.0) licence. Attached examples are stripped of names, amounts and personal details before they leave your device. Publication is effectively permanent: you can request removal later, but copies others have installed — and traces in the public library's history, forks and mirrors — may remain. Spot something personal in the preview or in the Library later? Report it: hello@vaenyx.ai. (Reports are handled by email on overseas servers — include only what's needed.)",
+      "Publishing makes this Method or Routine public, credited to your display name and licensed to everyone under the Creative Commons Attribution 4.0 licence. No local examples or raw corrections are included in the current publish submission. Publication is permanent in copies beyond our reach. If you find personal information in Published Content, report it to hello@vaenyx.ai.",
     "legal.notice.publish.contributorTerms":
       "By publishing you agree to the Contributor Agreement. Your acceptance is recorded against your publisher account.",
     "legal.consent.publish.warranty":
-      "I confirm I have the rights to publish this, it contains nothing malicious or harmful, I agree to the de-identified attached examples being shared publicly, and the Contributor Agreement's warranties are true for this item.",
+      "I confirm that I have the rights needed to publish this item, that it contains nothing malicious or harmful, that the Contributor Agreement's warranties are true for this item, and that I give the moral-rights consent in clause 6 for this Contribution.",
     "legal.notice.publish.signIn":
-      "Publishing needs a sign-in with Google or GitHub so your work can be credited to you. Three things happen, all outside Australia: Cloudflare stores Vaenyx's publish-service data (your account details, Merit and service logs); Google or GitHub signs you in and gives Vaenyx a few profile details; and GitHub hosts the public Library where published Methods, Routines and bylines appear. Your public byline is a display name you choose; you can change it anytime for future publishes — bylines on versions already published stay as they were. Your account email stays private. Vaenyx stores only what's needed for attribution, managing your published content, and Merit. Browsing and using the Library needs no account.",
+      "Publishing needs a sign-in with Google or GitHub so your work can be credited to you. Vaenyx stores only what is currently needed for authentication, attribution, managing your published content, moderation and evidencing your publish-time acceptance.",
     "legal.consent.publish.overseas":
-      "I agree to Vaenyx placing the content I publish, and the public byline I choose, into GitHub's public worldwide repository (the Community Library), where anyone can access it. I understand the Australian privacy rule that would make Vaenyx accountable for what an overseas recipient does with information (APP 8.1) may not apply to this disclosure; other laws may still apply.",
+      "I consent to Vaenyx disclosing the content I publish and the public byline I choose to GitHub, Inc. in the United States for hosting in the public, worldwide Community Library. If the Privacy Act applies to Vaenyx and I give this consent, APP 8.1 will not apply to this disclosure. If GitHub handles that information in a way that would breach the APPs, Vaenyx will not be accountable under the Privacy Act for that handling and I will not be able to seek redress from Vaenyx under the Privacy Act for it. Other laws or rights may still apply. Publishing is optional. Withdrawal blocks future publication but cannot reverse information already made public.",
     "legal.disclaimer.community.install":
       "Created by a community member. It has not been reviewed as professional advice — use it at your own discretion.",
     "legal.consent.flywheel.settingsNote":
-      "Sharing sends de-identified improvement patterns to the community. Your data and your local copies stay on this device — only the pattern, stripped of names, amounts and personal details, is shared. Anything Vaenyx recognises as sensitive (health, family, finance) is always asked about separately. Automatic sharing is for improvements from your own use: if someone else uses this Vaenyx, use Review Each or Off unless they've agreed and you can confirm you hold the rights to share that example. If you spot something personal in shared content, report it and Vaenyx will remove it from the Library (copies others have already installed, and traces in the library's public history, forks and mirrors, may persist).",
+      "This version does not upload improvement patterns. This setting records a preference only. If community improvement sharing becomes available, it will remain off until you are shown current information and make a fresh affirmative choice.",
     "legal.notice.modelConnect.local":
       "This backend address points at your own machine. Vaenyx sends chats for this backend only to that address, under the model's own licence terms.",
     "legal.notice.modelConnect.local.lan":
@@ -333,7 +333,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "routine.confirm.onePerLine": "一行一个",
     "routine.confirm.run": "没问题,运行",
     "routine.confirm.cancel": "取消",
-    "legal.copyVersion": "2.2",
+    "legal.copyVersion": "2.5",
     "legal.disclaimer.aiGeneral.composer": "AI 可能出错,重要信息请自行核对。",
     "legal.disclaimer.community.browse":
       "社区 Method 与 Routine 由社区成员制作,Vaenyx 不为其背书,也不构成专业建议;'Verified' 仅表示已通过自动检查。",
@@ -362,11 +362,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "继续即表示你同意《服务条款》,并知悉《隐私政策》。",
     "legal.consent.flywheel.title": "帮助改进共享 Method",
     "legal.consent.flywheel.body":
-      "当 Vaenyx 学到更好的做法时,可以把改进模式分享给社区。模式在分享前会先去除你的数据、姓名与金额,并以 CC BY 4.0 许可、不带你的姓名发布。如果你在共享内容中发现个人信息,可以举报,Vaenyx 会将其从 Library 中移除(他人已下载的副本,以及公共库历史、fork 与镜像中的痕迹,可能仍会保留)。在你做出选择前,不会分享任何内容——请选择一项以继续;之后可随时在 Settings 中更改。",
+      "本版本不会上传任何改进模式。此处只是记录一项偏好。若将来提供社区改进分享,它依旧保持关闭,直到向你展示当时的说明并由你重新做出一次肯定性选择。",
     "legal.consent.flywheel.accept": "保持开启(推荐)",
     "legal.consent.flywheel.decline": "不分享",
     "legal.consent.flywheel.sensitiveNote":
-      "凡被 Vaenyx 识别为敏感(健康、家庭、财务)的内容,绝不会自动分享——一定会先询问你。",
+      "本版本不会上传任何内容。若将来提供分享功能,凡 Vaenyx 识别为敏感的内容(健康、家庭、财务)绝不会被自动分享——它总会先问你,且该检查可能出错。",
     "legal.consent.flywheel.multiUserNote":
       "自动分享仅针对你自己使用所产生的改进。若他人也使用这台 Vaenyx,请改用 Review Each 或 Off,除非对方已同意、且你能确认自己拥有分享该示例所需的权利。",
     "legal.notice.modelPicker":
@@ -380,19 +380,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.methodToken.feedback":
       "开启后,持有此 Token 的应用可以把修正写入本设备上的 My Library。修正只保留在本设备;任何修正要成为社区共享示例,都必须先经脱敏处理并获得你的明确批准——来自应用的修正绝不会自动分享,无论你的 Sharing 设置如何。",
     "legal.notice.publish":
-      "发布后,该 Method 或 Routine 将公开,以你的展示名署名,并以 Creative Commons Attribution 4.0(CC BY 4.0)许可授权所有人使用。附带示例在离开你的设备前会先去除姓名、金额与个人信息。发布实际上是永久性的:之后可以申请下架,但他人已安装的副本,以及公共库历史、fork 与镜像中的痕迹,可能仍会保留。如在预览中或之后的 Library 中发现个人信息,请举报:hello@vaenyx.ai。(举报邮件在海外服务器上处理——请只写必要信息。)",
+      "发布会使该 Method 或 Routine 公开,署上你的显示名称,并依 Creative Commons Attribution 4.0 许可授予所有人。当前的发布提交不包含任何本地示例或原始纠错。就我们无法触及的副本而言,发布是永久的。若你在已发布内容中发现个人信息,请发信至 hello@vaenyx.ai 举报。",
     "legal.notice.publish.contributorTerms":
       "发布即表示你同意《贡献者协议》。此确认将记录在你的发布者账号下。",
     "legal.consent.publish.warranty":
-      "我确认我拥有发布此内容的权利,内容不含恶意或有害成分,同意公开分享经脱敏处理的附带示例,并确认《贡献者协议》中的各项保证对本内容均属真实。",
+      "我确认:我拥有发布本项所需的权利;本项不含任何恶意或有害内容;《贡献者协议》的各项保证就本项均属属实;并且我就本项贡献内容给予第 6 条所述的精神权利同意。",
     "legal.notice.publish.signIn":
-      "发布需要用 Google 或 GitHub 登录,以便把作品归到你的名下。会发生三件事,且都在澳大利亚境外:Cloudflare 存储 Vaenyx 发布服务的数据(你的账号信息、Merit 与服务日志);Google 或 GitHub 负责你的登录,并向 Vaenyx 提供少量个人资料;GitHub 托管公共 Library,已发布的 Method、Routine 与署名在其上公开展示。公开署名用的是你自选的展示名,之后的发布可随时换新名——已发布版本上的署名将保持原样。账号邮箱不会公开。Vaenyx 只存储署名、管理你已发布内容及 Merit 所需的信息。浏览和使用 Library 无需账号。",
+      "发布需要用 Google 或 GitHub 登录,以便你的作品能署名给你。Vaenyx 仅存储当前所需的信息:身份验证、署名、管理你已发布的内容、内容管理,以及留存你发布时的接受记录。",
     "legal.consent.publish.overseas":
-      "我同意 Vaenyx 把我发布的内容,以及我选择的公开署名,放入 GitHub 的全球公共仓库(即 Community Library),供任何人访问。我了解,原本要求 Vaenyx 为海外接收方处理信息的行为负责的澳大利亚隐私规则(APP 8.1)可能不适用于此项披露;其他法律可能仍然适用。",
+      "我同意 Vaenyx 将我发布的内容及我选定的公开署名披露给美国的 GitHub, Inc.,以存放于面向全球的公开社区库。若《隐私法》适用于 Vaenyx 且我作出本同意,APP 8.1 将不适用于该项披露。若 GitHub 以违反 APPs 的方式处理该信息,Vaenyx 就该处理不在《隐私法》项下承担责任,我也无法就此依《隐私法》向 Vaenyx 寻求救济。其他法律或权利仍可能适用。发布是可选的。撤回同意可阻止今后的发布,但无法撤回已公开的信息。",
     "legal.disclaimer.community.install":
       "由社区成员制作,未经专业建议层面的审核——请自行斟酌使用。",
     "legal.consent.flywheel.settingsNote":
-      "分享会向社区发送经过脱敏处理的改进模式。你的数据与本地副本始终留在本设备——对外分享的只有去除姓名、金额与个人信息后的模式。被 Vaenyx 识别为敏感(健康、家庭、财务)的内容始终单独询问。自动分享仅针对你自己使用所产生的改进:若他人也使用这台 Vaenyx,请改用 Review Each 或 Off,除非对方已同意、且你能确认自己拥有分享该示例所需的权利。如在共享内容中发现个人信息,可以举报,Vaenyx 会将其从 Library 中移除(他人已安装的副本,以及公共库历史、fork 与镜像中的痕迹,可能仍会保留)。",
+      "本版本不会上传任何改进模式。此处只是记录一项偏好。若将来提供社区改进分享,它依旧保持关闭,直到向你展示当时的说明并由你重新做出一次肯定性选择。",
     "legal.notice.modelConnect.local":
       "该后端地址指向你自己的机器。Vaenyx 只会把此后端的聊天发送到该地址,并受模型自身许可条款约束。",
     "legal.notice.modelConnect.local.lan":

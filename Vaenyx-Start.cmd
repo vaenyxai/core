@@ -49,9 +49,12 @@ set "NODE_ENV=production"
 set "VAENYX_HOST=127.0.0.1"
 set "VAENYX_PORT=3000"
 set "VAENYX_LOG_LEVEL=info"
-REM Publish/Google credentials live outside the repo (not in git/OneDrive). This is
-REM a path only (no secrets) -> safe to commit. Other machines can override it.
-if not defined VAENYX_SECRETS_DIR set "VAENYX_SECRETS_DIR=%USERPROFILE%\.claude\secrets"
+REM Secrets (model keys, push keypair, token-vault key) stay where the server
+REM puts them by default: private\secrets next to this folder, gitignored. This
+REM MUST match the autostart watchdog (Vaenyx-Service-Run.cmd), which sets no
+REM override -- one machine with two different secret homes meant the models
+REM looked disconnected depending on how Vaenyx was started. Set
+REM VAENYX_SECRETS_DIR yourself to keep them somewhere else.
 REM Personal data lives under userdata\ (separate from app code; portable; never cloud-synced).
 if not defined VAENYX_DATA_DIR set "VAENYX_DATA_DIR=%CD%\userdata\db"
 if not defined VAENYX_BACKUPS_DIR set "VAENYX_BACKUPS_DIR=%CD%\userdata\backups"

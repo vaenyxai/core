@@ -24,7 +24,7 @@
 - "**Example**" — a de-identified input/output or correction pattern published with, or contributed to, a Method or Routine.
 - "**Contribution**" — any Method, Routine, Example, description, metadata, or other content you publish to the Library, including each version of it.
 - "**Declarative content**" — recipes, instructions, schemas, and configuration that describe *what* to do; not runnable foreign program code. Declarative-only content is a core safety property of the Library.
-- "**Merit**" — the non-monetary creator-reputation record described in clause 8.
+- "**Merit**" — if provided by the version of Vaenyx you use, the non-monetary creator-reputation record described in clause 8. As at the Effective Date, Merit is not provided.
 - "**Publish Service**" — the operator-hosted central publishing service (a Cloudflare Worker with a D1 database) through which all publishing flows. Your installation sends your Contribution's declarative files and your signed-in identity to the Publish Service; the Publish Service alone holds the single GitHub credential used to write published content to the public repository. You never push to GitHub yourself and never hold a GitHub write credential.
 - "**Library infrastructure**" — the systems used to store and distribute the Library: the Publish Service, the public GitHub organisation repository (github.com/vaenyxai/community) to which the Publish Service commits on your behalf, and the Cloudflare-served catalogue and index that installations read.
 
@@ -92,7 +92,7 @@ Accordingly — subject in every case to the de-identification-failure scope lim
 
 You warrant, for each Contribution and each version of it, that:
 
-7.1 **Rights.** You created it, or you otherwise hold all rights needed to publish it under this Agreement (including the CC BY 4.0 grant in clause 5.3). If it includes material from others, then to the best of your knowledge: that material's licence, or a written permission from its author, permits the grants in clause 5 and the acts consented to in clause 6; you have complied with its conditions (including any attribution conditions); and you have identified that material and its author in the Contribution's description or metadata rather than presenting it as your own work.
+7.1 **Rights.** You are the sole author and copyright owner of the Contribution, or you hold all rights, permissions and consents needed to make every grant in clause 5 and every consent in clause 6. You must not include third-party material unless its licence or a written permission expressly permits every applicable clause 5 grant and every relevant author has given a genuine written moral-rights consent covering the acts and omissions in clause 6. For a work of joint authorship, the required rights and consents must come from every relevant co-owner and author. You must identify the material, its author, source, and applicable licence or permission in the Contribution's metadata.
 
 7.2 **No Infringement.** To the best of your knowledge, it does not infringe any person's intellectual property, privacy, confidentiality, contractual, or other rights, and publishing it does not breach any law or any obligation you owe to an employer or other party.
 
@@ -136,7 +136,7 @@ You warrant, for each Contribution and each version of it, that:
   (c) routinely remove your display name from the published metadata of historical versions (clause 8.2) — though where the byline itself is personal information whose continued publication causes or risks serious harm, we can take the exceptional repository-history steps described below for our own repository, while still being unable to reach forks, mirrors, or installed copies.
 Our own repository's git history is not routinely rewritten on removal, but in exceptional cases — a de-identification failure involving personal information, or content removed following a duly-made report that it is defamatory or otherwise unlawful (including material of the kind regulated under the *Online Safety Act 2021*) — we can and will take reasonable steps to rewrite or purge it, or otherwise to disable access to the operator-controlled copy (including by a takedown request to the repository host), as described in the Privacy Policy and Terms of Service clause 8.5; such requests are handled under clause 10.2 and the Privacy Policy. Because copies beyond our reach — forks, mirrors, caches, and installed copies — may persist indefinitely, publishing to the Library is, in practical effect, permanent publication. Do not publish anything you may later need to make private.
 
-10.5 **No Obligation to Publish or Keep.** We have no obligation to accept, publish, distribute, rank, feature, host, or continue hosting any Contribution, and no obligation to maintain the Library or any part of it. The Library is provided free of charge and may change or be discontinued.
+10.5 **Scope of decisions.** A decision concerning a particular Contribution is subject to clause 10.1. A material change to or discontinuance of the Library is subject to Terms of Service clause 18.1.
 
 ## 11. Your Contribution Is Provided "As Is" (Between You and Users)
 
@@ -148,12 +148,9 @@ Our own repository's git history is not routinely rewritten on removal, but in e
 
 ## 12. Indemnity
 
-12.1 To the extent permitted by law, you indemnify the Operator against loss, damage, liability, and reasonable costs (including reasonable legal costs) arising from a third-party claim to the extent it results from:
-  (a) your breach of a warranty in clause 7 — except that a breach of the first sentence of clause 7.1 or of clause 7.4 triggers this indemnity only where you knew, or reasonably ought to have known, of the facts constituting the breach; or
-  (b) your Contribution infringing a third party's rights, or containing personal information in breach of clause 4.3, in circumstances where you knew, or reasonably ought to have known, of the infringement or the personal information.
-This indemnity is fault-based: an innocent breach of a strict warranty does not, by itself, trigger it.
+12.1 **Indemnity.** To the extent permitted by law, you indemnify the Operator against loss, damage, liability and reasonable costs arising from a third-party claim to the extent it results from a material breach of clause 7, infringement of a third party's rights, or inclusion of personal information contrary to clause 4.3, but only where you knew or, after taking reasonable care, reasonably ought to have known of the facts constituting the breach, infringement or inclusion. An innocent breach does not trigger this indemnity.
 
-12.2 This indemnity — and any claim by us against you for breach of the warranties in clause 7 — is limited to loss that is reasonably foreseeable, and is reduced proportionately to the extent the loss is caused or contributed to by us. Where you took reasonable care in reviewing your Contribution before publishing, a failure of our de-identification gate (clause 4.3) counts as loss caused or contributed to by us for this purpose, for warranty claims as well as indemnity claims. For any claim we seek to be indemnified for, we will: (a) notify you promptly; (b) give you the option to participate in the defence at your own cost; (c) not settle it without your consent, which must not be unreasonably withheld; and (d) take reasonable steps to mitigate the loss. In addition, if you are an individual who does not publish in the course of a business, your total aggregate liability to us under or in connection with this Agreement, however arising — including under this clause 12 and for breach of the warranties in clause 7 — is capped at AUD $10,000 for all claims combined. This clause is subject to clause 11.3.
+12.2 **Cap.** Your total aggregate liability to us under or in connection with this Agreement, including under this clause 12 and for breach of clause 7, is capped at AUD $10,000 for all claims combined. The cap does not apply to fraud, wilful misconduct, knowing infringement of a third party's rights, or knowing inclusion of another person's personal information. This clause is subject to clause 11.3.
 
 ## 13. Relationship
 
@@ -169,7 +166,7 @@ We may update this Agreement from time to time. The version in force when you pu
 
 ## 16. General
 
-16.1 **Governing Law.** This Agreement is governed by the laws of Victoria, Australia — the same governing law as the Vaenyx Terms of Service — and the parties submit to the non-exclusive jurisdiction of the courts of that place, without limiting any non-excludable rights you have where you live. *Victoria resolves to the state or territory of registration of the operator company described at the head of this Agreement.*
+16.1 **Governing Law.** This Agreement is governed by the laws of Victoria, Australia — the same governing law as the Vaenyx Terms of Service — and the parties submit to the non-exclusive jurisdiction of the courts of that place, without limiting any non-excludable rights you have where you live.
 
 16.2 **Relationship to the Terms of Service.** This Agreement supplements the Terms of Service for publishing activity. If they conflict in relation to a Contribution, this Agreement prevails for that Contribution — except that: (a) the licence text in Terms of Service clause 7.4, and its de-identification-failure scope limitation (mirrored in clause 5.3 of this Agreement), govern examples shared under that clause and prevail over this Agreement as to licence scope; and (b) nothing in this Agreement weakens that scope limitation (as applied to published content by Terms of Service clause 8.6(e)) or the takedown commitments in Terms of Service clause 8.5.
 
@@ -177,7 +174,7 @@ We may update this Agreement from time to time. The version in force when you pu
 
 16.4 **No Waiver.** A failure to enforce a right is not a waiver of it.
 
-16.5 **Assignment.** We may assign this Agreement to a successor operator of the Library; you may not assign it without our consent (which will not be unreasonably withheld).
+16.5 **Assignment.** We may assign this Agreement only to a bona fide successor that agrees in writing to assume our obligations. An assignment must not materially reduce your rights, increase your obligations, expand rights in Your Data or a Contribution, or otherwise materially prejudice you. We will give reasonable advance notice where practicable; if an assignment would materially prejudice you, we must obtain your consent.
 
 16.6 **Survival.** Clauses 5, 6, 7, 8.3, 8.4, 10.4, 11, 12, and 16 survive removal of a Contribution and any termination of your publishing access.
 

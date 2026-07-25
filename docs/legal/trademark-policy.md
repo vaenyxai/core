@@ -33,11 +33,9 @@
 
 ## 3. Ownership and Legal Status of the Marks
 
-3.1 The Vaenyx Marks are owned by the current Operator (as identified in the Terms of Service). On incorporation of Vae Foundry Pty Ltd, the Vaenyx Marks, and any trade mark applications or registrations for them, will be held by (or assigned to) that company. All goodwill arising from use of the Vaenyx Marks under this Policy, or under any permission we grant, accrues solely to us.
+3.1 The Vaenyx Marks are owned by Vae Foundry Pty Ltd. All goodwill arising from their use accrues solely to that company.
 
-3.2 **Registration status.** As at this version (v2.1, 2026-07-05), the Vaenyx Marks are **not yet registered**. An Australian trade mark application under the *Trade Marks Act 1995* (Cth) will be filed with IP Australia around the time of external launch — in the name of Vae Foundry Pty Ltd if it has been incorporated by the time of filing, or otherwise in the name of the individual proprietor and subsequently assigned to Vae Foundry Pty Ltd. Until registration is granted, we use the ™ symbol with the Vaenyx Marks where any symbol is used, and we do not use the ® symbol. This Policy is drafted to operate both **before and after registration**:
-  (a) **before registration**, we rely on any **common law rights** we have acquired, or acquire, in the Vaenyx Marks through use and reputation as they accrue — including, where the necessary reputation exists, the tort of passing off — and on the prohibitions on misleading or deceptive conduct in the Australian Consumer Law (Schedule 2 of the *Competition and Consumer Act 2010* (Cth)); and
-  (b) **upon registration**, we will additionally rely on our registered rights, and this Policy will continue to apply without amendment.
+3.2 **Registration status.** As at 26 July 2026, the Vaenyx Marks are unregistered and no Australian trade mark application is pending. We may apply for registration in the future. Until any registration is granted, we use the ™ symbol with the Vaenyx Marks where any symbol is used, and we do not use the ® symbol. This Policy is drafted to operate both **before and after registration**:
 
 3.3 The extent of our rights in the Vaenyx Marks at any time is that conferred by applicable law. This Policy describes how we exercise and protect those rights; it neither enlarges nor waives them.
 

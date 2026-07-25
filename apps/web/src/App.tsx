@@ -11243,7 +11243,7 @@ function CreateRoutinePanel({
 // (health is highest-risk). Tags are free-form hashtags; match by substring.
 // Mirrors i18n `legal.copyVersion` (copy pack clause 6.4): bumping it re-fires
 // version-gated acknowledgements. Keep the two in step.
-const LEGAL_COPY_VERSION = "2.2";
+const LEGAL_COPY_VERSION = "2.5";
 
 // Sign-in page model buttons: the chosen provider id is parked here, then the
 // workspace opens Settings → Models and highlights that provider's connect
