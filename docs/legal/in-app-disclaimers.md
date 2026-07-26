@@ -231,6 +231,73 @@ the publish service's accepted-copy floor moves to 2.6.
 - **ZH:** "举报不安全、侵权、误导或含个人信息的内容:hello@vaenyx.ai。Vae Foundry Pty Ltd 会直接从你处收集你的邮箱地址与你选择提供的举报内容,用于分流、调查、答复与遵守法律。举报是可选的;但若信息不足以定位该条目并说明问题,我们可能无法处理。举报邮件在海外服务器上处理——请只写必要信息。当前的服务商、国家与留存规则载于《当前实现与数据处理明细表》;查阅、更正与投诉事宜见《核心隐私政策》。"
 - **Behaviour:** On-demand (available from every community item's detail view). Reports are actioned under the operator's takedown discipline — as soon as reasonably practicable, serious-harm material first, and within any period a law or regulator's notice sets — using the publish service's global takedown and ban controls. The email routes via Cloudflare Email Routing to the operator's monitored mailbox on a consumer mail service processed overseas — hence the bracketed overseas-handling line in the string (Note 7.13); an auto-reply states how reports are handled and triage is prompt. The channel must also be visible **outside the app**: the public warehouse repository's README and every publicly rendered item page must carry the same contact (hello@vaenyx.ai) and a one-line takedown statement, because the people most likely to complain (e.g. a person defamed in community content) are not Vaenyx users and will encounter the content on the public surfaces; complaint-receipt timestamps must be logged so the response discipline can be evidenced.
 
+**D4a — the report template** *(one template, two entry points)*
+
+*Why this exists.* The person most likely to need this channel — someone named
+in content another person published — is **not a Vaenyx user** and never will be.
+So the same template has to work from inside the app and from a public page on
+the website, and the public page cannot require an account, an installation, or
+anything a distressed stranger on a phone cannot do. An accessible complaints
+mechanism is the condition of the digital-intermediary defamation defence; a
+mechanism only users can reach fails exactly the case it exists for.
+
+**Subject line — this is what makes reports sortable:**
+
+```
+[VAENYX-REPORT] <category> — <item identifier>
+```
+
+Categories, fixed: `defamation` · `privacy` · `copyright` · `illegal` · `safety` · `other`
+
+**No reporter name in the subject.** Subject lines show up in notification
+previews; there is no reason to put a third party's name there.
+
+**Body template — EN:**
+
+```
+Item identifier:
+Category:
+The specific content complained of (which sentence or section):
+Why you say it is a problem:
+Your name:
+Your contact details:
+Your connection to the content (optional):
+```
+
+**Body template — ZH:**
+
+```
+条目标识:
+类别:
+被投诉的具体内容(哪一句、哪一段):
+为什么认为有问题:
+你的姓名:
+你的联系方式:
+你与该内容的关系(可选):
+```
+
+The first six lines are the four things a complaint must identify to be acted on
+— who is complaining, what the material is, where it is, and the specific words
+said to be a problem. A report carrying them can be actioned without a round of
+questions.
+
+**In the app:** the mail client supplies the sender's address in the From header,
+so **do not ask for an email address as a field** — a redundant field is one more
+reason not to finish. Pre-fill subject and body; the person edits and sends.
+
+**On the public page:** show three routes on one page, because `mailto:` fails
+silently for someone using webmail or a phone with no mail client configured —
+(a) a mailto button, (b) `hello@vaenyx.ai` in plain text with a copy control,
+and (c) the template itself, copyable, so it can be pasted into any mail client.
+**No form that posts to a server**: the moment a form submits to us we hold the
+reporter's name, address and allegation before any email exists, which is a new
+data flow needing its own Schedule entry, collection notice and retention rule.
+The published address does the same job with none of that.
+
+**Never required:** a letter from a lawyer, a statutory declaration, a citation
+to legislation, proof that the material is unlawful, or an identity document.
+Requiring any of them would undermine the accessibility the defence depends on.
+
 **D5 — `legal.notice.community.discord`**
 - **Placement:** Wherever the app links to the community Discord (e.g. Settings → About, Library footer), adjacent to the link.
 - **EN:** "Community discussion happens on Discord, a third-party platform under its own terms. If you join or post in the official Vaenyx server, Discord collects and stores your account details, posts and technical data, and Vae Foundry Pty Ltd administrators can access and use your Discord profile, posts and moderation records to operate and moderate the server. Participation is optional. The Discord platform itself is not operated by Vaenyx. See the Core Privacy Policy and the Current Implementation and Data-Handling Schedule for retention, access, correction and complaints."
