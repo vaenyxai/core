@@ -13,7 +13,12 @@ import { getModelRegistry, resolveProvider } from "../models/registry.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
-import { imageDataUrl, VISION_DIRECT_PROVIDER_IDS } from "./vision.js";
+import {
+  describeImage,
+  imageDataUrl,
+  readImage,
+  VISION_DIRECT_PROVIDER_IDS,
+} from "./vision.js";
 import {
   ensureChatThread,
   touchChatThread,
@@ -483,6 +488,10 @@ export interface CreateAskVaenyxMessageOptions {
   imageId?: string;
   // Where stored photos live (needed to build the data URL for the model).
   dataDirectory?: string;
+  // Where the model keys live. Needed so a photo can still be READ when the
+  // chat model cannot see images: the vision model describes it and the
+  // description rides along as context.
+  secretsDirectory?: string;
 }
 
 // Insert a Vaenyx-authored status note into a conversation (e.g. "✔ Routine X
@@ -702,7 +711,41 @@ export async function createAskVaenyxMessage(
         }
       }
     }
-    const result = await provider.sendChat(history, projectContext, {
+    // The photo is kept and shown either way. What changes is how the model
+    // gets to read it: a vision-capable backend sees the picture itself; any
+    // other backend gets the vision model's description as context. The
+    // Owner's own message is never replaced by that text — the photo stays a
+    // photo in the conversation (Oskar, 2026-07-26).
+    let photoContext = "";
+    if (
+      options?.imageId &&
+      options.dataDirectory &&
+      options.secretsDirectory &&
+      !imageAttachment
+    ) {
+      try {
+        const found = readImage(options.dataDirectory, options.imageId);
+        if (found) {
+          const described = await describeImage(
+            options.secretsDirectory,
+            found.image,
+            found.mimeType,
+            "en",
+          );
+          if (described.trim()) {
+            photoContext = `The Owner attached a photo with this message. This backend cannot see images, so a vision model read it. Its description:\n${described.trim()}`;
+          }
+        }
+      } catch {
+        // No vision model, or it refused: the photo is still attached to the
+        // message and visible; the model simply does not get a description.
+      }
+    }
+    const contextWithPhoto = photoContext
+      ? [projectContext, photoContext].filter(Boolean).join("\n\n")
+      : projectContext;
+
+    const result = await provider.sendChat(history, contextWithPhoto, {
       onDelta: options?.onDelta
         ? (delta) => {
             streamed += delta;

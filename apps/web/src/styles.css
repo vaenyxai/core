@@ -1905,12 +1905,15 @@ select {
 
 .ask-vaenyx-chat {
   display: grid;
-  /* Rows pack to the top (Oskar, dev.147): with short content the composer
-     sits right after the last message instead of pinning to the screen bottom
-     with a void between. Long content scrolls normally — the sticky composer
-     still pins to the viewport while scrolling. */
-  grid-template-rows: auto auto auto;
-  align-content: start;
+  /* The composer sits at the bottom of the screen, always (Oskar, 2026-07-26).
+     It used to follow the content, so a short conversation left it floating in
+     the middle of the screen with dead space underneath. The middle row takes
+     the slack instead. */
+  min-height: calc(100vh - 74px);
+  /* header · messages · composer. The messages row absorbs the spare height,
+     which is what holds the composer on the bottom edge. */
+  grid-template-rows: auto 1fr auto;
+  align-content: stretch;
   overflow: visible;
   border: 0;
   border-radius: 0;
@@ -1922,11 +1925,11 @@ select {
   min-height: calc(100vh - 74px);
 }
 
-/* Height follows content (Oskar, dev.149): no forced full-viewport panel, so
-   a short conversation ends where it ends — no void under the composer. */
+/* Same rule in the focused layouts: the composer belongs on the bottom edge,
+   not wherever the content happens to end. */
 .ask-vaenyx-chat.focused-chat,
 .focused-task-panel {
-  min-height: auto;
+  min-height: calc(100vh - 74px);
 }
 
 .focused-title-line {
@@ -2139,10 +2142,11 @@ select {
   min-height: 0;
   max-height: none;
   overflow: visible;
-  /* Small end padding only — the composer follows the content now; the
-     chat-end-anchor's scroll-margin keeps auto-scroll clear of the sticky
-     composer while long content streams. */
-  padding: 44px max(18px, calc((100% - 820px) / 2)) 28px;
+  /* The bottom padding has to clear the sticky composer, or the last lines of
+     a long reply come to rest underneath it — which is what happened on the
+     phone (Oskar, 2026-07-26). Generous on purpose: the composer grows when a
+     photo is attached. */
+  padding: 44px max(18px, calc((100% - 820px) / 2)) 200px;
 }
 
 /* Scroll target after a send: land the newest message clear of the sticky

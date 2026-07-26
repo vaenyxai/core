@@ -949,11 +949,16 @@ async function downscalePhoto(file: File): Promise<Blob> {
 // lands in the composer for the Owner to top up and send (so Routines like
 // Dinner Planner receive a ready ingredient list). Mirrors the voice flow.
 function CameraButton({
+  describeToo,
   disabled,
   lang,
   onAttach,
   onText,
 }: {
+  // Attach the photo AND put a description in the box. For surfaces that
+  // consume text (a Routine) the description is what they can act on, while
+  // the photo still belongs in the conversation.
+  describeToo?: boolean;
   disabled?: boolean;
   lang: string;
   // Phase B direct mode: the photo attaches to the message itself (the main
@@ -973,14 +978,24 @@ function CameraButton({
     setBusy(true);
     setError(null);
     try {
+      // The photo is ALWAYS kept: it uploads, attaches to the message, and
+      // stays a photo in the conversation. It used to be turned into text and
+      // the text sent in its place whenever the chat model could not see
+      // images — the picture never reached the conversation at all (Oskar,
+      // 2026-07-26). Reading it is the server's job now: a vision-capable
+      // backend sees it first-hand, and any other backend gets the vision
+      // model's description as context.
       const blob = await downscalePhoto(file);
       if (onAttach) {
         const { imageId } = await uploadPhoto(blob);
         onAttach(imageId);
+        if (describeToo) {
+          const text = await describePhoto(blob, lang);
+          if (text) onText(text);
+        }
       } else {
-        // No direct-vision model on this chat, so the photo is described and
-        // the text goes into the composer. If nothing comes back, say so —
-        // an empty description used to end in silence.
+        // Surfaces with no attachment slot (the start-work box) still get the
+        // description in text form, because there is nowhere to hang a photo.
         const text = await describePhoto(blob, lang);
         if (text) {
           onText(text);
@@ -6751,8 +6766,11 @@ function AskVaenyxPanel({
         (candidate) => candidate.id === activeConversation?.modelProviderId,
       ) ?? chatProviders.find((candidate) => candidate.isDefault)
     )?.id;
-    const canAttachPhoto =
-      !isRoutine && VISION_DIRECT_IDS.includes(effectiveChatProviderId ?? "");
+    // A Routine consumes text, so a photo sent to one is described as well as
+    // attached: the picture stays in the conversation, and the Routine still
+    // gets something it can parse.
+    const describePhotoToo =
+      isRoutine || !VISION_DIRECT_IDS.includes(effectiveChatProviderId ?? "");
     // Header chips (spec §2a): same real-state chips as the sidebar, but the
     // Routine chip shows the Routine's actual name, and an in-flight build adds
     // a Building chip alongside the in-conversation banner.
@@ -7265,12 +7283,14 @@ function AskVaenyxPanel({
               value={prompt}
             />
             {visionReady ? (
+              // Always attach, whatever the chat model can see. The photo
+              // belongs in the conversation; how it gets read is the server's
+              // problem, not a reason to throw the picture away.
               <CameraButton
+                describeToo={describePhotoToo}
                 disabled={sending}
                 lang={lang}
-                onAttach={
-                  canAttachPhoto ? (id) => setPendingImageId(id) : undefined
-                }
+                onAttach={(id) => setPendingImageId(id)}
                 onText={(text) =>
                   setPrompt((current) =>
                     current ? `${current}\n${text}` : text,

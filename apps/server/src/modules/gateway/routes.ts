@@ -2682,6 +2682,7 @@ export async function registerGatewayRoutes(
                 ? { imageId: request.body.imageId }
                 : {}),
               dataDirectory: context.config.dataDirectory,
+              secretsDirectory: context.config.secretsDirectory,
             },
           ),
         (response) => {
