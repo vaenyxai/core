@@ -3795,6 +3795,27 @@ select {
   word-break: break-word;
 }
 
+/* Drop a SKILL.md, or paste it. The border lights up while a file is over it,
+   so it is obvious the drop will land. */
+.skill-drop {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.skill-drop.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.skill-import-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
 /* A Routine's steps, shown before anyone starts using it. */
 .routine-steps {
   margin: 8px 0 14px;

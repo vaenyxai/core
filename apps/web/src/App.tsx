@@ -978,15 +978,28 @@ function CameraButton({
         const { imageId } = await uploadPhoto(blob);
         onAttach(imageId);
       } else {
+        // No direct-vision model on this chat, so the photo is described and
+        // the text goes into the composer. If nothing comes back, say so —
+        // an empty description used to end in silence.
         const text = await describePhoto(blob, lang);
-        if (text) onText(text);
+        if (text) {
+          onText(text);
+        } else {
+          throw new Error(
+            "No vision model is connected, so Vaenyx could not read that photo. Connect one under Settings → AI Setting → Models.",
+          );
+        }
       }
     } catch (nextError) {
-      setError(
+      // A tooltip is not an error message on a phone: there is nothing to
+      // hover. A photo that silently does nothing reads as a broken button,
+      // so the reason is said out loud (Oskar, 2026-07-26).
+      const message =
         nextError instanceof Error
           ? nextError.message
-          : "Photo analysis failed.",
-      );
+          : "Vaenyx could not use that photo.";
+      setError(message);
+      showErrorToast(message);
     } finally {
       setBusy(false);
     }
@@ -11250,8 +11263,23 @@ function SkillImportPanel({ onImported }: { onImported: () => void }) {
     null,
   );
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   if (!CAPABILITIES.skillInterop) return null;
+
+  // A SKILL.md arrives as a file far more often than as something to paste, so
+  // it can be dropped on the box or picked with the button. Read here in the
+  // browser: the file never goes anywhere until the Owner confirms the import.
+  async function takeFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      setMarkdown(await file.text());
+      if (!source.trim()) setSource(file.name);
+    } catch {
+      showErrorToast("Vaenyx could not read that file.");
+    }
+  }
 
   async function look() {
     if (!markdown.trim() || busy) return;
@@ -11300,23 +11328,57 @@ function SkillImportPanel({ onImported }: { onImported: () => void }) {
         placeholder={t("skill.import.source")}
         value={source}
       />
-      <textarea
-        className="method-rename-input"
-        onChange={(event) => setMarkdown(event.target.value)}
-        placeholder={t("skill.import.paste")}
-        rows={8}
-        style={{ marginTop: "8px", fontFamily: "ui-monospace, monospace" }}
-        value={markdown}
+      <input
+        accept=".md,.markdown,text/markdown,text/plain"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          void takeFile(file);
+        }}
+        ref={fileRef}
+        type="file"
       />
-      <button
-        className="secondary-button"
-        disabled={busy || !markdown.trim()}
-        onClick={() => void look()}
-        style={{ marginTop: "8px", alignSelf: "flex-start" }}
-        type="button"
+      <div
+        className={`skill-drop${dragging ? " dragging" : ""}`}
+        onDragLeave={() => setDragging(false)}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          void takeFile(event.dataTransfer.files?.[0]);
+        }}
       >
-        {busy ? "…" : t("skill.import.look")}
-      </button>
+        <textarea
+          className="method-rename-input"
+          onChange={(event) => setMarkdown(event.target.value)}
+          placeholder={t("skill.import.paste")}
+          rows={8}
+          style={{ fontFamily: "ui-monospace, monospace", width: "100%" }}
+          value={markdown}
+        />
+        <p className="library-note">{t("skill.import.drop")}</p>
+      </div>
+      <div className="skill-import-actions">
+        <button
+          className="secondary-button"
+          onClick={() => fileRef.current?.click()}
+          type="button"
+        >
+          {t("skill.import.choose")}
+        </button>
+        <button
+          className="primary-button"
+          disabled={busy || !markdown.trim()}
+          onClick={() => void look()}
+          type="button"
+        >
+          {busy ? "…" : t("skill.import.look")}
+        </button>
+      </div>
 
       {preview ? (
         <Modal onClose={() => setPreview(null)} title={preview.name} variant="doc">

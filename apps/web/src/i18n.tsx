@@ -262,6 +262,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "Paste a SKILL.md here. Vaenyx keeps its instructions as a new Method and lists what could not come across. The list covers the kinds of thing we can detect; a Skill can depend on something we cannot see, so treat the result as a starting point rather than a finished copy.",
     "skill.import.source": "Where it came from (a link, optional)",
     "skill.import.paste": "Paste the contents of SKILL.md",
+    "skill.import.choose": "Choose a SKILL.md file",
+    "skill.import.drop": "Or drop a SKILL.md file here.",
     "skill.import.look": "See what would be imported",
     "skill.import.confirm": "Import as a Method",
     // L7: "nothing was dropped" would be a clean bill of health we cannot
@@ -533,6 +535,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "把 SKILL.md 的内容贴进来。Vaenyx 会把其中的指令保留成一个新的 Method,并列出哪些东西没能带过来。该清单涵盖我们能够识别的种类;一个 Skill 也可能依赖我们看不见的东西,所以请把结果当作起点,而不是一份完成的副本。",
     "skill.import.source": "来源(链接,可选)",
     "skill.import.paste": "粘贴 SKILL.md 的内容",
+    "skill.import.choose": "选择 SKILL.md 文件",
+    "skill.import.drop": "也可以把 SKILL.md 文件拖进这里。",
     "skill.import.look": "看看会导入什么",
     "skill.import.confirm": "导入为 Method",
     "skill.import.nothingLost":
