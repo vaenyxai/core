@@ -2,7 +2,7 @@
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
 > Schedule version **2026-07-26.1** · effective from **2026-07-26** · verified **2026-07-26**
-> Client **0.2.1-dev.5** · Server **vaenyx-core-cloud (migrations 0001-0003)**
+> Client **0.2.1-dev.7** · Server **vaenyx-core-cloud (migrations 0001-0003)**
 > Legal set **v3.0** · minimum legal set **v3.0** · minimum copy version **2.6**
 
 ## Status of this Schedule
@@ -52,7 +52,7 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 | `feature.backup` | **active** | no | none |
 | `feature.remote-access` | **available-off** | yes | none |
 | `feature.community.discord` | **active** | yes | Discord profile, posts and moderation records for the official server |
-| `feature.skill-interop` | **backend-only** | no | none |
+| `feature.skill-interop` | **active** | no | none |
 
 **`feature.community-sharing.preference-ui`** — Records a local preference only. Not consent to any upload. See gate.community-sharing.initial.
 
@@ -92,9 +92,9 @@ Required gates: `legal.notice.modelConnect.cloud`, `legal.notice.modelConnect.lo
 **`feature.community.discord`** — The official Vaenyx Discord server is live and administered by the Operator. Participation is optional and requires a Discord account, which Vaenyx never requires. The in-product notice for this surface is copy pack string D5; it must ship wherever the product links to the server.
 Required gates: `legal.notice.community.discord`
 
-**`feature.skill-interop`** — Importing a Skill as a Method and exporting a Method as a Skill. The server side is built — SKILL.md parsing, enumeration of the specific steps dropped because they depended on code, provenance (source, licence on arrival, time, original file hash) written into method.json outside the content hash so recording it does not force every app grant to be re-granted, the publish gate that fires on provenance, and the export endpoint. There is no import or export screen, so no user can reach it: hence backend-only rather than active. Both directions are local; nothing about an import or export reaches the Operator. Provenance does become public when such a Method is published, and that is intended — publishing the source and the original licence is what discharges the attribution most upstream licences require.
+**`feature.skill-interop`** — Importing a Skill as a Method and exporting a Method as a Skill. The server side is built — SKILL.md parsing, enumeration of the specific steps dropped because they depended on code, provenance (source, licence on arrival, time, original file hash) written into method.json outside the content hash so recording it does not force every app grant to be re-granted, the publish gate that fires on provenance, and the export endpoint. The import and export screens shipped in 0.2.1-dev.7 and the capability switch is on, so a user can reach it. Both directions are local; nothing about an import or export reaches the Operator. Provenance does become public when such a Method is published, and that is intended — publishing the source and the original licence is what discharges the attribution most upstream licences require.
 Required gates: `legal.notice.skill.import`, `legal.notice.skill.importedPublish`, `legal.notice.skill.export`
-Evidence: capability switch apps/web/src/capabilities.ts skillInterop=false; strings return empty while gated, with a test asserting failure if the switch flips
+Evidence: Verified on a temporary instance rather than by reading the code: preview listed scripts/extract.py and the step that ran it while keeping the rest, import wrote provenance into method.json, the Method appeared in importedMethodIds so the L2 gate fires on provenance, and export returned the instructions intact. The temporary instance was deleted; the live instance was untouched throughout.
 
 ## Complaint and compliance records
 

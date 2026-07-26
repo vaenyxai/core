@@ -700,6 +700,46 @@ example carries its contributor's byline, publicly and permanently. It must also
 show the exact material proposed for publication before the publisher confirms,
 which Terms of Service clause 8.6(b) already requires.
 
+**K9 — `legal.consent.flywheel.receive`** *(the publisher's choice, at publish and in Method settings)*
+
+Coding raised this and framed it correctly: delivering examples automatically
+would mean **we accepted clause 9.4's obligations on the publisher's behalf** —
+confidentiality, deletion on request, no onward disclosure — and a person who
+published one Method two years ago never asked for that.
+
+**Decision: off unless chosen, per Method.** Offered as an explicit choice in the
+publish flow, changeable later in the Method's settings. It fails safe: if nobody
+ever answers, nothing flows, and the worst outcome is a slower flywheel rather
+than other people's data arriving at someone who did not want it.
+
+This costs the contributor nothing. The zero-interaction requirement was about
+the sending side; a publisher is already reading confirmations at publish time,
+and this is one choice on a screen they are already on.
+
+- **EN:** "Receive examples for this Method? When someone corrects an answer this Method gave, an example can be sent to you to improve it. It arrives with personal details stripped on the sender's device — automatically, and imperfectly, so treat what arrives as someone's real material. If you accept: use it only to improve this Method, don't pass it on, and delete it when asked. Off unless you choose it, and you can change this any time."
+- **ZH:** "要为这个 Method 接收示例吗?当有人纠正了这个 Method 给出的答案,相关示例可以发送给你,用于改进它。它在发送方的设备上就已剥除个人信息 —— 是自动完成的,并不完美,所以请把收到的东西当作某个人的真实材料来对待。若你接受:只用它改进这个 Method、不要转给别人、被要求时删除。**默认关闭**,除非你自己选择开启;随时可以更改。"
+- **Behaviour:** No option pre-selected. The consequence of choosing it is
+  acceptance of Contributor Agreement clause 9.4, so the string must name the
+  three obligations rather than link to them.
+
+**K10 — `legal.notice.flywheel.contributorId`** *(shown where the ID is, not pushed at anyone)*
+
+Coding asked whether the contributor ID should be visible, and proposed treating
+it as a credential. **It is not a credential — it is an identifier that becomes
+public**, and treating it as a secret would cause a specific harm: a person who
+cannot see their own ID cannot tell us which contributions are theirs, and so
+cannot exercise the access and correction rights the Privacy Policy gives them.
+
+So: **available where someone looks for it, displayed prominently nowhere.** In
+the sharing settings, with this line beside it.
+
+The instinct to keep it out of example content is right, for a different reason
+than secrecy: content is what leaks, and an ID written into content survives
+de-identification because it does not look like personal information.
+
+- **EN:** "Your contributor ID. It credits your contributions without naming you, and it is the same ID every time so credit accumulates. It appears publicly wherever a contribution of yours is published, and it cannot be changed or recalled. Quote it if you ever ask us about your contributions."
+- **ZH:** "你的贡献者 ID。它为你的贡献记功,但不写出你的名字;每次都是同一个 ID,所以功劳会累积。凡是你的贡献被公开发布的地方,它都会公开显示,且无法更改、无法收回。若你日后要就自己的贡献询问我们,请报上这个 ID。"
+
 ### Part L — Importing a Skill, exporting a Method *(drafted; nothing here ships until the importer exists)*
 
 *Status.* Not built. This Part settles the wording first, because the risk here is

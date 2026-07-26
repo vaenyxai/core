@@ -124,7 +124,7 @@ You warrant, for each Contribution and each version of it, that:
 
 9.3 You may publish a Method or Routine as recipe-and-schema only, keeping your own tuned Examples private. Only what you actually publish is licensed.
 
-9.4 **Examples you receive as a publisher.** If a later version sends you an example drawn from someone else's use of your Method, you receive it on these terms, and accepting this Agreement is your acceptance of them:
+9.4 **Examples you receive as a publisher — only if you ask for them.** Receiving examples is **off unless you choose it**, per Method, and you can turn it off again at any time. We do not send you other people's material by default: the terms below place real obligations on the person who receives it, and we will not accept those on your behalf. If you do choose to receive examples, you receive each one on these terms:
 
   (a) you may use it only to improve, test or maintain that Method;
 

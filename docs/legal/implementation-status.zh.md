@@ -2,7 +2,7 @@
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
 > 明细表版本 **2026-07-26.1** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-26**
-> 客户端 **0.2.1-dev.5** · 服务端 **vaenyx-core-cloud (migrations 0001-0003)**
+> 客户端 **0.2.1-dev.7** · 服务端 **vaenyx-core-cloud (migrations 0001-0003)**
 > 法律文件集 **v3.0** · 最低法律文件集 **v3.0** · 最低文案版本 **2.6**
 
 ## 本明细表的地位
@@ -52,7 +52,7 @@
 | `feature.backup` | **active** | 否 | 无 |
 | `feature.remote-access` | **available-off** | 是 | 无 |
 | `feature.community.discord` | **active** | 是 | 官方服务器内的 Discord 资料、帖子与管理记录 |
-| `feature.skill-interop` | **backend-only** | 否 | 无 |
+| `feature.skill-interop` | **active** | 否 | 无 |
 
 **`feature.community-sharing.preference-ui`** — 仅记录一项本机偏好。不构成对任何上传的同意。参见 gate.community-sharing.initial。
 
@@ -92,9 +92,9 @@
 **`feature.community.discord`** — 官方 Vaenyx Discord 服务器已上线,由运营方管理。参与是可选的,且需要 Discord 账户 —— Vaenyx 本身从不要求该账户。本界面的应用内告知为文案包字符串 D5;凡产品链接到该服务器之处,均须一并呈示。
 必需的门槛: `legal.notice.community.discord`
 
-**`feature.skill-interop`** — 把 Skill 导入为 Method、以及把 Method 导出为 Skill。服务端已建成 —— SKILL.md 解析、逐条列出因依赖代码而被丢弃的具体步骤、把 provenance(来源、到达时的许可证、时间、原文件哈希)写入 method.json 且不进内容哈希(因此记录来源不会迫使所有 app 重新授权)、按 provenance 触发的发布关卡,以及导出端点。但没有导入/导出界面,用户无从进入,故记为 backend-only 而非 active。两个方向都在本机进行,导入或导出的任何内容都不会到达运营方。当此类 Method 被发布时,provenance 会随之公开 —— 这是有意为之:公开来源与原始许可证,正是履行多数上游许可证所要求的署名。
+**`feature.skill-interop`** — 把 Skill 导入为 Method、以及把 Method 导出为 Skill。服务端已建成 —— SKILL.md 解析、逐条列出因依赖代码而被丢弃的具体步骤、把 provenance(来源、到达时的许可证、时间、原文件哈希)写入 method.json 且不进内容哈希(因此记录来源不会迫使所有 app 重新授权)、按 provenance 触发的发布关卡,以及导出端点。导入与导出界面已随 0.2.1-dev.7 上线,能力开关已打开,用户可以进入。两个方向都在本机进行,导入或导出的任何内容都不会到达运营方。当此类 Method 被发布时,provenance 会随之公开 —— 这是有意为之:公开来源与原始许可证,正是履行多数上游许可证所要求的署名。
 必需的门槛: `legal.notice.skill.import`, `legal.notice.skill.importedPublish`, `legal.notice.skill.export`
-实现证据: capability switch apps/web/src/capabilities.ts skillInterop=false; strings return empty while gated, with a test asserting failure if the switch flips
+实现证据: Verified on a temporary instance rather than by reading the code: preview listed scripts/extract.py and the step that ran it while keeping the rest, import wrote provenance into method.json, the Method appeared in importedMethodIds so the L2 gate fires on provenance, and export returned the instructions intact. The temporary instance was deleted; the live instance was untouched throughout.
 
 ## 投诉与合规记录
 
