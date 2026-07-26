@@ -202,6 +202,7 @@ Two versions are tracked separately. The copy version moves whenever any string 
 
 - All Instance Data: chats, memories, files, project instruction windows, Journal and Gallery, raw corrections, Method Tokens, the private Library, backups.
 - External-application feedback received through a Method Token: written to local SQLite only. No de-identification, Owner preview or external sharing exists for it.
+- Corrections returned by a permitted app to the local instance, and any example kept from one. The app posts to the user's own Vaenyx server on their own machine; nothing about a correction reaches the Operator, and keeping one as an example does not publish it or alter any app grant.
 
 ## Declarations
 

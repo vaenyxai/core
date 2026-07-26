@@ -298,6 +298,72 @@ The published address does the same job with none of that.
 to legislation, proof that the material is unlawful, or an identity document.
 Requiring any of them would undermine the accessibility the defence depends on.
 
+**D4b — `community.report.category.defamation`** *(and the five siblings)*
+
+The six category tokens are a **format contract with the subject line**, not
+decoration: the token that reaches the mailbox must stay in English so a filter
+can match it regardless of the reporter's interface language. The Chinese labels
+therefore carry the token alongside the translation. **The label set must map
+one-to-one to the six tokens** — adding a seventh category means changing D4a as
+well, because the subject-line format is defined there.
+
+- **EN:** "Defamation" — **ZH:** 「诽谤 (defamation)」
+- **EN:** "Privacy / personal information" — **ZH:** 「隐私 / 个人信息 (privacy)」
+- **EN:** "Copyright" — **ZH:** 「版权 (copyright)」
+- **EN:** "Illegal content" — **ZH:** 「违法内容 (illegal)」
+- **EN:** "Safety" — **ZH:** 「安全 (safety)」
+- **EN:** "Something else" — **ZH:** 「其它 (other)」
+
+The heading and placeholder around the selector (`community.report.category`,
+`community.report.categoryPrompt`) are ordinary interface text and are
+deliberately **not** in this pack — nothing legal turns on how the question is
+phrased.
+
+**D4c — `report.page`** *(the public page at vaenyx.ai/report)*
+
+The page a person reaches who is **not** a Vaenyx user. It carries the same
+template as D4a and must not require an account, an installation, or anything a
+distressed stranger on a phone cannot do.
+
+- **EN:** "Report content in the Vaenyx Community. Anyone may use this page — you do not need a Vaenyx account, and you do not need to have installed anything. Send the details below to hello@vaenyx.ai. We assess sufficiently detailed reports having regard to apparent urgency, potential harm, the information available to us and applicable legal requirements. We may restrict content or accounts without prior notice. Sending a report does not guarantee removal, restoration, reasons, individual correspondence or any particular outcome, and we do not decide whether reported material is unlawful. Please tell us what is wrong rather than proving it: we do not ask for a lawyer's letter, a statutory declaration, a citation to legislation, or identity documents."
+- **ZH:** "举报 Vaenyx 社区中的内容。任何人都可以使用本页 —— 你不需要 Vaenyx 账户,也不需要安装过任何东西。请把下列信息发送至 hello@vaenyx.ai。我们会就足够具体的举报作出评估,并考虑其表面紧急程度、潜在伤害、我们可获得的信息以及适用的法律要求。我们可以不经预先通知限制内容或账号。提交举报不保证移除、恢复、说明理由、个别回复或任何特定结果,我们也不就被举报材料是否违法作出判断。请告诉我们问题在哪,而不是去证明它:我们不要求律师函、statutory declaration、法条引用或身份证件。"
+
+**D4d — `report.page.limits`** *(on the same page, below the template)*
+
+The limits of what removal achieves. This is the sentence that stops the page
+becoming a promise, and it has to be on the page rather than in a document
+nobody opens.
+
+- **EN:** "What removal can and cannot do: we can remove content from the Vaenyx catalogue and index that installations read, remove the published files, and block that item identifier from being republished. We cannot remove copies held by other people — forks, mirrors, caches, archives and search-engine results are outside our control, and removal here does not make content disappear from the internet. If the material is unlawful, you may have remedies against the person who published it that we cannot provide."
+- **ZH:** "移除能做到什么、不能做到什么:我们可以把内容从各安装端读取的 Vaenyx 目录与索引中移除、删除已发布的文件,并阻止该条目标识符被重新发布。我们无法移除他人持有的副本 —— fork、镜像、缓存、存档与搜索引擎结果都在我们控制之外,**在这里移除并不等于该内容从互联网上消失**。若该材料违法,你可能对发布它的人享有我们无法提供的救济。"
+
+**D4e — `method.corrections.copy`** *(corrections waiting to be reviewed)*
+
+An app returned a correction after someone fixed this Method's answer. The
+warning matters: a correction carries whatever was actually typed, which may be
+a real name, a real amount, a real address. The Owner is about to decide whether
+to keep it, and must know that before deciding, not after.
+
+- **EN:** "An app sent these back after someone fixed this Method's answer. Keep one and this Method follows it next time. Read it first — a correction contains whatever was actually typed."
+- **ZH:** "有 app 把这些纠正发了回来 —— 是有人改过这个 Method 的答案。保留一条,它下次就照着做。先看清楚:纠正里是当时真实输入的内容。"
+
+**D4f — `method.corrections.locality`** *(shown beside the Keep control)*
+
+**This sentence was written inline in App.tsx.** A representation about where
+data goes, living in a component instead of this pack, is invisible to the audit
+— which is exactly how the Chinese documents drifted two review rounds behind.
+It gets a key so it can be checked.
+
+- **EN:** "Kept examples stay on this computer. Nothing is published, and no app grant is affected."
+- **ZH:** "保留的例子只存在这台电脑上,不会发布,也不会影响已授权的 app。"
+
+**Consistency check when this ships:** the release-scope statement says this
+release provides no community-sharing upload and no Example attachment on
+publication. Keeping a local example is consistent with that only while
+"nothing is published" stays literally true. If a later version ever attaches
+examples to a publication, this string and the Schedule change together, and the
+consent for it is sought at that point.
+
 **D5 — `legal.notice.community.discord`**
 - **Placement:** Wherever the app links to the community Discord (e.g. Settings → About, Library footer), adjacent to the link.
 - **EN:** "Community discussion happens on Discord, a third-party platform under its own terms. If you join or post in the official Vaenyx server, Discord collects and stores your account details, posts and technical data, and Vae Foundry Pty Ltd administrators can access and use your Discord profile, posts and moderation records to operate and moderate the server. Participation is optional. The Discord platform itself is not operated by Vaenyx. See the Core Privacy Policy and the Current Implementation and Data-Handling Schedule for retention, access, correction and complaints."
