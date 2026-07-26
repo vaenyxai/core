@@ -13,6 +13,7 @@ import type {
   AppProfile,
   RecipeEditDraft,
   PublishPauseState,
+  StoredCorrection,
   AskVaenyxConversation,
   AskVaenyxMessage,
   ReasoningEffort,
@@ -89,6 +90,8 @@ import {
   updateMethodRecipe,
   fetchPublishPause,
   setPublishPause,
+  fetchCorrections,
+  adoptCorrection,
   fetchLegalAcks,
   fetchLegalDocument,
   fetchChatRoutineData,
@@ -196,7 +199,7 @@ import {
 } from "./api.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
 import { setToastListener, showErrorToast } from "./toast.js";
-import { useI18n } from "./i18n.js";
+import { useI18n, type Lang } from "./i18n.js";
 import {
   getCodexAuthCopy,
   getProviderConnectionCopy,
@@ -11047,6 +11050,96 @@ function PublishPausePanel() {
   );
 }
 
+// The flywheel, local half. An app sent back a correction; the Owner reads it
+// and decides whether it becomes an example this Method learns from.
+//
+// Shown in full on purpose. A correction contains whatever was actually typed
+// that day — a name, an amount, an address — so the Owner sees the real content
+// before keeping it, rather than trusting a detector to decide what is safe.
+// Nothing here leaves the machine: keeping an example writes one file into the
+// Method's folder, and examples are outside the content hash, so no app grant
+// is disturbed by a Method getting better.
+function MethodCorrections({ methodId }: { methodId: string }) {
+  const { lang, t } = useI18n();
+  const [corrections, setCorrections] = useState<StoredCorrection[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [kept, setKept] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void fetchCorrections(methodId)
+      .then((response) => {
+        if (active) setCorrections(response.corrections);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [methodId]);
+
+  if (corrections.length === 0) return null;
+
+  async function keep(correction: StoredCorrection) {
+    setBusyId(correction.id);
+    try {
+      await adoptCorrection(methodId, {
+        correctionId: correction.id,
+        // The app that sent it is the closest thing to a contributor we have
+        // locally; an empty name means the Owner's own instance.
+        contributor: correction.appProfileName,
+      });
+      setKept((current) => [...current, correction.id]);
+    } catch {
+      // The failed request already raised a toast.
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="settings-card">
+      <p className="eyebrow">{t("method.corrections.title")}</p>
+      <p className="settings-card-copy">{t("method.corrections.copy")}</p>
+      {corrections.map((correction) => (
+        <div className="correction-card" key={correction.id}>
+          <small>
+            {correction.appProfileName} · {correction.createdAt.slice(0, 10)}
+          </small>
+          <pre className="correction-body">
+            {JSON.stringify(correction.input, null, 2)}
+          </pre>
+          <small>{t("method.corrections.corrected")}</small>
+          <pre className="correction-body">
+            {JSON.stringify(correction.correctedOutput, null, 2)}
+          </pre>
+          {correction.note ? (
+            <p className="settings-card-copy">{correction.note}</p>
+          ) : null}
+          {kept.includes(correction.id) ? (
+            <span className="ok-text">{t("method.corrections.kept")} ✓</span>
+          ) : (
+            <button
+              className="secondary-button"
+              disabled={busyId === correction.id}
+              onClick={() => void keep(correction)}
+              type="button"
+            >
+              {busyId === correction.id
+                ? "…"
+                : t("method.corrections.keep")}
+            </button>
+          )}
+        </div>
+      ))}
+      <p className="context-disclaimer">
+        {lang === "zh"
+          ? "保留的例子只存在这台电脑上,不会发布,也不会影响已授权的 app。"
+          : "Kept examples stay on this computer. Nothing is published, and no app grant is affected."}
+      </p>
+    </section>
+  );
+}
+
 // D6 (copy pack): what the community currently publishes, for items installed
 // from it. Fetched once per screen and best-effort — an unreachable catalogue
 // means no notice, never an error in the Owner's face.
@@ -11380,6 +11473,7 @@ function MethodDetail({
             onUpdated={onBack}
           />
         ) : null}
+        <MethodCorrections methodId={method.id} />
         <div className="method-tag-editor">
           <span className="method-picker-label">Tags</span>
           <div className="tag-row">
@@ -12598,19 +12692,76 @@ function CommunityArea({
 // D4 (copy pack): the report channel has to be reachable from every community
 // item, or the takedown discipline in the Terms has nothing to trigger it from
 // inside the app. On-demand: the notice travels with this control.
+// D4a: the fixed report categories. English tokens on purpose — they go into
+// the subject line, which is what makes an inbox of reports sortable, so they
+// must not change with the reader's language.
+const REPORT_CATEGORIES = [
+  "defamation",
+  "privacy",
+  "copyright",
+  "illegal",
+  "safety",
+  "other",
+] as const;
+
+type ReportCategory = (typeof REPORT_CATEGORIES)[number];
+
+// D4a body template, verbatim, in the language the person is reading. The
+// identifier and category are pre-filled; everything else the reporter writes.
+function reportBody(
+  lang: Lang,
+  itemId: string,
+  category: ReportCategory,
+): string {
+  const lines =
+    lang === "zh"
+      ? [
+          `条目标识: ${itemId}`,
+          `类别: ${category}`,
+          "被投诉的具体内容(哪一句、哪一段):",
+          "为什么认为有问题:",
+          "你的姓名:",
+          "你的联系方式:",
+          "你与该内容的关系(可选):",
+        ]
+      : [
+          `Item identifier: ${itemId}`,
+          `Category: ${category}`,
+          "The specific content complained of (which sentence or section):",
+          "Why you say it is a problem:",
+          "Your name:",
+          "Your contact details:",
+          "Your connection to the content (optional):",
+        ];
+  return lines.join("\n");
+}
+
 function CommunityReportLink({
   kind,
+  id,
   name,
 }: {
   kind: "routine" | "method";
+  id: string;
   name: string;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState<ReportCategory | "">("");
   const label =
     kind === "routine"
       ? t("community.report.routine")
       : t("community.report.method");
+
+  // D4a: "[VAENYX-REPORT] <category> — <item identifier>". The item ID, not the
+  // display name, because that is what identifies the item in the warehouse —
+  // and no reporter name, because subject lines show in notification previews.
+  const subject = category
+    ? `[VAENYX-REPORT] ${category} — ${id}`
+    : `[VAENYX-REPORT] other — ${id}`;
+  const mailto = `mailto:hello@vaenyx.ai?subject=${encodeURIComponent(
+    subject,
+  )}&body=${encodeURIComponent(reportBody(lang, id, category || "other"))}`;
 
   return (
     <>
@@ -12618,10 +12769,29 @@ function CommunityReportLink({
         {label}
       </button>
       {open ? (
-        <Modal onClose={() => setOpen(false)} title={label}>
+        <Modal onClose={() => setOpen(false)} title={`${label} — ${name}`}>
           <p className="settings-card-copy">
             {t("legal.notice.community.report")}
           </p>
+          <label className="report-category">
+            <span className="eyebrow">{t("community.report.category")}</span>
+            <select
+              onChange={(event) =>
+                setCategory(event.target.value as ReportCategory | "")
+              }
+              value={category}
+            >
+              <option value="">{t("community.report.categoryPrompt")}</option>
+              {REPORT_CATEGORIES.map((value) => (
+                <option key={value} value={value}>
+                  {t(`community.report.category.${value}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* No "your email" field: the mail client puts the sender in the From
+              header already, and a redundant field is one more reason not to
+              finish (D4a). */}
           <div className="modal-actions">
             <button
               className="text-button"
@@ -12631,11 +12801,12 @@ function CommunityReportLink({
               {t("routine.confirm.cancel")}
             </button>
             <a
+              aria-disabled={category === ""}
               className="primary-button"
-              href={`mailto:hello@vaenyx.ai?subject=${encodeURIComponent(
-                `Report: ${name}`,
-              )}`}
-              onClick={() => setOpen(false)}
+              href={category === "" ? undefined : mailto}
+              onClick={() => {
+                if (category !== "") setOpen(false);
+              }}
             >
               {t("community.report.email")}
             </a>
@@ -12808,7 +12979,7 @@ function CataloguePanel({
                         ? "Installing…"
                         : "Install"}
                   </button>
-                  <CommunityReportLink kind="routine" name={routine.name} />
+                  <CommunityReportLink id={routine.id} kind="routine" name={routine.name} />
                 </div>
               </div>
             );
@@ -12858,7 +13029,7 @@ function CataloguePanel({
                         ? "Installing…"
                         : "Install"}
                   </button>
-                  <CommunityReportLink kind="method" name={method.name} />
+                  <CommunityReportLink id={method.id} kind="method" name={method.name} />
                 </div>
               </div>
             );

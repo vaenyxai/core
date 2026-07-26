@@ -37,6 +37,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "community.report.routine": "Report This Routine",
     "community.report.method": "Report This Method",
     "community.report.email": "Email hello@vaenyx.ai",
+    "community.report.category": "What is the problem?",
+    "community.report.categoryPrompt": "Choose one…",
+    "community.report.category.defamation": "Defamation",
+    "community.report.category.privacy": "Privacy / personal information",
+    "community.report.category.copyright": "Copyright",
+    "community.report.category.illegal": "Illegal content",
+    "community.report.category.safety": "Safety",
+    "community.report.category.other": "Something else",
     "title.modes": "Modes",
     "title.settings": "General",
     "title.vaenyx-me": "Vaenyx Me",
@@ -207,6 +215,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "This rewrites what the Method tells the model to do — its steps only. Its inputs, outputs and permissions are unchanged. Apps you granted this Method must be granted it again, because what they were granted has changed. Nothing is published: your Library copy is the only one affected.",
     "method.edit.apply": "Apply These Changes",
+    "method.corrections.title": "Corrections waiting",
+    "method.corrections.copy":
+      "An app sent these back after someone fixed this Method's answer. Keep one and this Method follows it next time. Read it first — a correction contains whatever was actually typed.",
+    "method.corrections.corrected": "Corrected answer",
+    "method.corrections.keep": "Keep as an example",
+    "method.corrections.kept": "Kept",
     "legal.notice.publish.localChanges":
       "You have changed this since you published it. The community still has the version you published; publishing again replaces it with what is on this device.",
     "legal.notice.community.updateAvailable":
@@ -251,6 +265,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "community.report.routine": "举报此 Routine",
     "community.report.method": "举报此 Method",
     "community.report.email": "发邮件到 hello@vaenyx.ai",
+    "community.report.category": "问题属于哪一类?",
+    "community.report.categoryPrompt": "请选择…",
+    "community.report.category.defamation": "诽谤 (defamation)",
+    "community.report.category.privacy": "隐私 / 个人信息 (privacy)",
+    "community.report.category.copyright": "版权 (copyright)",
+    "community.report.category.illegal": "违法内容 (illegal)",
+    "community.report.category.safety": "安全 (safety)",
+    "community.report.category.other": "其它 (other)",
     "title.modes": "模式",
     "title.settings": "通用",
     "title.vaenyx-me": "Vaenyx Me",
@@ -414,6 +436,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
     "method.edit.apply": "应用这些改动",
+    "method.corrections.title": "待处理的纠正",
+    "method.corrections.copy":
+      "有 app 把这些纠正发了回来 —— 是有人改过这个 Method 的答案。保留一条,它下次就照着做。先看清楚:纠正里是当时真实输入的内容。",
+    "method.corrections.corrected": "修正后的答案",
+    "method.corrections.keep": "保留为例子",
+    "method.corrections.kept": "已保留",
     "legal.notice.publish.localChanges":
       "自你发布之后,你改动过这一份。社区上仍是你当初发布的那个版本;再次发布会用这台设备上的内容替换它。",
     "legal.notice.community.updateAvailable":

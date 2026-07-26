@@ -1498,6 +1498,48 @@ export const InstallMethodRequestSchema = Type.Object(
 // Legal acknowledgement / consent record (in-app disclaimers copy pack, clause
 // 2.3). language = the rendered UI language; copyVersion = the legal.copyVersion
 // in force; choice = an optional recorded choice (e.g. flywheel accept/decline).
+// A stored correction the Owner can turn into an example (the local flywheel).
+// The payloads are shown in full before anything is kept: a correction carries
+// whatever was typed that day, so the Owner decides, not a detector.
+export const StoredCorrectionSchema = Type.Object(
+  {
+    id: Type.String(),
+    appProfileName: Type.String(),
+    input: Type.Unknown(),
+    aiOutput: Type.Unknown(),
+    correctedOutput: Type.Unknown(),
+    note: Type.Union([Type.String(), Type.Null()]),
+    createdAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const CorrectionsResponseSchema = Type.Object(
+  { corrections: Type.Array(StoredCorrectionSchema) },
+  { additionalProperties: false },
+);
+
+export const AdoptCorrectionRequestSchema = Type.Object(
+  {
+    correctionId: Type.String({ minLength: 1 }),
+    // Who the example is credited to. Empty = the Owner's own instance.
+    contributor: Type.Optional(Type.String({ maxLength: 120 })),
+  },
+  { additionalProperties: false },
+);
+
+export const AdoptCorrectionResponseSchema = Type.Object(
+  { file: Type.String(), exampleCount: Type.Integer() },
+  { additionalProperties: false },
+);
+
+export type StoredCorrection = Static<typeof StoredCorrectionSchema>;
+export type CorrectionsResponse = Static<typeof CorrectionsResponseSchema>;
+export type AdoptCorrectionRequest = Static<typeof AdoptCorrectionRequestSchema>;
+export type AdoptCorrectionResponse = Static<
+  typeof AdoptCorrectionResponseSchema
+>;
+
 // The operator's emergency stop on community publishing. `available` is false
 // for everyone who is not the operator, so the switch is simply absent rather
 // than present-and-refusing.

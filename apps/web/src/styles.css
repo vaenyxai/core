@@ -3769,6 +3769,49 @@ select {
   font-size: 10px;
 }
 
+/* Corrections waiting to become examples: the payloads are shown in full, so
+   they need to be readable and scrollable rather than pretty. */
+.correction-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.correction-body {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* D4a report category picker. */
+.report-category {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.report-category select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  color: inherit;
+  font: inherit;
+}
+
 /* Recipe edit diff (copy pack B4): changed lines have to be readable at a
    glance, so they are monospaced and colour-coded, and unchanged context is
    dimmed rather than hidden. */

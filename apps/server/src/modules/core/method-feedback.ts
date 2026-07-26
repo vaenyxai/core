@@ -42,6 +42,102 @@ function toJsonOrNull(value: unknown): string | null {
   }
 }
 
+export interface StoredMethodFeedback {
+  id: string;
+  appProfileName: string;
+  reaction: MethodFeedbackReaction;
+  input: unknown;
+  aiOutput: unknown;
+  correctedOutput: unknown;
+  note: string | null;
+  createdAt: string;
+}
+
+function parseJsonOrNull(value: string | null): unknown {
+  if (value === null) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+// Corrections worth turning into examples: the Owner edited the output, and we
+// still have both sides of the pair. Rejections and bare confirmations teach a
+// model nothing, so they are not offered.
+export function listAdoptableFeedback(
+  database: DatabaseHandle,
+  methodId: string,
+  limit = 20,
+): StoredMethodFeedback[] {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT id, app_profile_name, reaction, input, ai_output, corrected_output,
+              note, created_at
+         FROM method_feedback
+        WHERE method_id = ? AND reaction = 'edited'
+          AND input IS NOT NULL AND corrected_output IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT ?`,
+    )
+    .all(methodId, limit) as {
+    id: string;
+    app_profile_name: string;
+    reaction: MethodFeedbackReaction;
+    input: string | null;
+    ai_output: string | null;
+    corrected_output: string | null;
+    note: string | null;
+    created_at: string;
+  }[];
+  return rows.map((row) => ({
+    id: row.id,
+    appProfileName: row.app_profile_name,
+    reaction: row.reaction,
+    input: parseJsonOrNull(row.input),
+    aiOutput: parseJsonOrNull(row.ai_output),
+    correctedOutput: parseJsonOrNull(row.corrected_output),
+    note: row.note,
+    createdAt: row.created_at,
+  }));
+}
+
+export function getFeedbackById(
+  database: DatabaseHandle,
+  methodId: string,
+  feedbackId: string,
+): StoredMethodFeedback | null {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT id, app_profile_name, reaction, input, ai_output, corrected_output,
+              note, created_at
+         FROM method_feedback
+        WHERE method_id = ? AND id = ?`,
+    )
+    .all(methodId, feedbackId) as {
+    id: string;
+    app_profile_name: string;
+    reaction: MethodFeedbackReaction;
+    input: string | null;
+    ai_output: string | null;
+    corrected_output: string | null;
+    note: string | null;
+    created_at: string;
+  }[];
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    appProfileName: row.app_profile_name,
+    reaction: row.reaction,
+    input: parseJsonOrNull(row.input),
+    aiOutput: parseJsonOrNull(row.ai_output),
+    correctedOutput: parseJsonOrNull(row.corrected_output),
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
 export function recordMethodFeedback(
   database: DatabaseHandle,
   input: RecordMethodFeedbackInput,

@@ -89,6 +89,9 @@ import {
   LegalAcknowledgementsResponseSchema,
   SetSharingPreferenceRequestSchema,
   PublishPauseStateSchema,
+  CorrectionsResponseSchema,
+  AdoptCorrectionRequestSchema,
+  AdoptCorrectionResponseSchema,
   DraftRecipeEditRequestSchema,
   RecipeEditDraftSchema,
   UpdateRecipeRequestSchema,
@@ -160,6 +163,7 @@ import {
   type LegalAcknowledgeRequest,
   type SetSharingPreferenceRequest,
   type DraftRecipeEditRequest,
+  type AdoptCorrectionRequest,
   type UpdateRecipeRequest,
   type PublishAcceptanceRequest,
   type SetMethodTagsRequest,
@@ -270,6 +274,7 @@ import {
 } from "../core/modes.js";
 import {
   createMethod,
+  addMethodExample,
   diffRecipeLines,
   draftMethodSpec,
   draftRecipeEdit,
@@ -285,7 +290,7 @@ import {
   updateMethodRecipe,
   validateAgainstSchema,
 } from "../core/methods.js";
-import { recordMethodFeedback } from "../core/method-feedback.js";
+import { getFeedbackById, listAdoptableFeedback, recordMethodFeedback } from "../core/method-feedback.js";
 import {
   buildGoogleAuthUrl,
   createOAuthState,
@@ -6059,6 +6064,114 @@ export async function registerGatewayRoutes(
       });
 
       return toLibraryMethod(method);
+    },
+  );
+
+  // The corrections waiting to become examples, and the act of keeping one.
+  // This is the flywheel's local half: a correction only becomes an example
+  // because the Owner looked at it and said so. Nothing here uploads anything.
+  app.get<{ Params: { id: string } }>(
+    "/v1/library/methods/:id/corrections",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: CorrectionsResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return {
+        corrections: listAdoptableFeedback(
+          context.database,
+          request.params.id,
+        ).map((row) => ({
+          id: row.id,
+          appProfileName: row.appProfileName,
+          input: row.input,
+          aiOutput: row.aiOutput,
+          correctedOutput: row.correctedOutput,
+          note: row.note,
+          createdAt: row.createdAt,
+        })),
+      };
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: AdoptCorrectionRequest }>(
+    "/v1/library/methods/:id/examples",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: AdoptCorrectionRequestSchema,
+        response: {
+          200: AdoptCorrectionResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const correction = getFeedbackById(
+        context.database,
+        request.params.id,
+        request.body.correctionId,
+      );
+      if (!correction) {
+        return reply.code(404).send({ error: "That correction is gone." });
+      }
+      const contributor = request.body.contributor?.trim() ?? "";
+      let result;
+      try {
+        result = addMethodExample(
+          context.config.libraryDirectory,
+          request.params.id,
+          {
+            input: correction.input,
+            output: correction.correctedOutput,
+            note: correction.note,
+            // Someone else's correction only counts as contributed when it is
+            // credited to them; unattributed stays the Owner's own.
+            source: contributor ? "contributed" : "owner",
+            contributor: contributor || null,
+          },
+        );
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        if (code === "METHOD_NOT_FOUND") {
+          return reply.code(404).send({ error: "Method not found." });
+        }
+        return reply.code(400).send({ error: "That example could not be saved." });
+      }
+
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "library.method.example.adopt",
+        decision: "allowed",
+        reason:
+          "Owner kept a correction as an example; examples are outside the content hash, so app grants are unaffected.",
+        resourceType: "method",
+        resourceId: request.params.id,
+      });
+      return result;
     },
   );
 

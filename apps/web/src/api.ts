@@ -11,6 +11,9 @@
   BackupConfigUpdate,
   ModelProviderInfo,
   PublishPauseState,
+  CorrectionsResponse,
+  AdoptCorrectionRequest,
+  AdoptCorrectionResponse,
   RecipeEditDraft,
   UpdateRecipeResponse,
   BootstrapStatus,
@@ -1213,6 +1216,26 @@ export function recordLegalAck(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+// The local flywheel: corrections an app sent back, and keeping one as an
+// example. Reading is free; keeping is always the Owner's explicit act.
+export function fetchCorrections(
+  methodId: string,
+): Promise<CorrectionsResponse> {
+  return requestJson<CorrectionsResponse>(
+    `/v1/library/methods/${encodeURIComponent(methodId)}/corrections`,
+  );
+}
+
+export function adoptCorrection(
+  methodId: string,
+  input: AdoptCorrectionRequest,
+): Promise<AdoptCorrectionResponse> {
+  return requestJson<AdoptCorrectionResponse>(
+    `/v1/library/methods/${encodeURIComponent(methodId)}/examples`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
 }
 
 // The operator's publishing pause. Reports available: false for anyone the
