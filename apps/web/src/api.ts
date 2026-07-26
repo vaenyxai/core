@@ -225,6 +225,17 @@ export interface PublishAcceptance {
   copyVersion: string;
   language: string;
   warrantyConfirmed: true;
+  /** K9: does the publisher want corrections back? Travels alongside the
+   *  acceptance rather than inside it — it is a preference, not a consent. */
+  receiveExamples?: boolean;
+}
+
+// The acceptance record and the K9 preference go up as separate fields; the
+// acceptance object itself is closed, and a preference does not belong in a
+// legal record.
+function publishBody(acceptance: PublishAcceptance): string {
+  const { receiveExamples, ...rest } = acceptance;
+  return JSON.stringify({ acceptance: rest, receiveExamples });
 }
 
 export function publishMethodToCommunity(
@@ -233,7 +244,7 @@ export function publishMethodToCommunity(
 ): Promise<PublishMethodResponse> {
   return requestJson<PublishMethodResponse>(
     `/v1/library/methods/${encodeURIComponent(id)}/publish`,
-    { method: "POST", body: JSON.stringify({ acceptance }) },
+    { method: "POST", body: publishBody(acceptance) },
   );
 }
 
@@ -243,7 +254,7 @@ export function publishRoutineToCommunity(
 ): Promise<PublishRoutineResponse> {
   return requestJson<PublishRoutineResponse>(
     `/v1/library/routines/${encodeURIComponent(id)}/publish`,
-    { method: "POST", body: JSON.stringify({ acceptance }) },
+    { method: "POST", body: publishBody(acceptance) },
   );
 }
 

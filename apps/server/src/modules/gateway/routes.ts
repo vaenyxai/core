@@ -329,6 +329,7 @@ import {
   fetchServiceIdentity,
   getServiceSession,
   publishViaService,
+  setServiceReceiving,
   recordServiceAcceptance,
   saveServiceSession,
   updateServiceDisplayName,
@@ -7758,6 +7759,16 @@ export async function registerGatewayRoutes(
             session.displayName,
             commitSha,
           );
+          // K9: whether this publisher wants corrections about it. Off unless
+          // asked for, and a failure here is not a failed publish — the item is
+          // already live, and off is the safe direction to fail in.
+          if (request.body.receiveExamples === true) {
+            void setServiceReceiving(serviceUrl, session.token, {
+              kind: "method",
+              itemId: method.id,
+              receive: true,
+            });
+          }
           recordPublishAcceptanceLocally(
             owner.id,
             request.body.acceptance,
@@ -7950,6 +7961,14 @@ export async function registerGatewayRoutes(
             session.displayName,
             commitSha,
           );
+          // K9, same as the Method path: asked for, or off.
+          if (request.body.receiveExamples === true) {
+            void setServiceReceiving(serviceUrl, session.token, {
+              kind: "routine",
+              itemId: routineId,
+              receive: true,
+            });
+          }
           for (const dep of collected.depMethods) {
             recordServicePublish(
               context.database,

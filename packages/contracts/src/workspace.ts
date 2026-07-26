@@ -1771,6 +1771,10 @@ export const PublishAcceptanceRequestSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
+    // K9: does this publisher want to receive corrections from households that
+    // install the item? Absent means no — publishing is not, by itself, an
+    // invitation to hear from strangers.
+    receiveExamples: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );

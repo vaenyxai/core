@@ -168,6 +168,32 @@ export async function publishViaService(
   };
 }
 
+// POST /flywheel/receiving — the publisher's switch (K9). Separate from the
+// publish call on purpose: publishing something is not agreeing to hear from
+// everyone who installs it, so it is a second answer, given once at publish and
+// changeable afterwards. A failure here never fails the publish — the item is
+// already live and the switch defaults to off, which is the safe direction.
+export async function setServiceReceiving(
+  serviceUrl: string,
+  token: string,
+  input: { kind: "method" | "routine"; itemId: string; receive: boolean },
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  try {
+    const res = await fetchImpl(`${serviceUrl}/flywheel/receiving`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // GET /acceptance — the account's recorded publish-flow acceptances (latest per
 // key). Null = the route does not exist (an older deployed service) — callers
 // skip the ensure step, matching that build's non-enforcement. Any OTHER

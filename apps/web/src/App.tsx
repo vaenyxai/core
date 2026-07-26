@@ -10901,6 +10901,7 @@ function PublishConfirmDialog({
 }) {
   const { lang, t } = useI18n();
   const [warranty, setWarranty] = useState(false);
+  const [receiveExamples, setReceiveExamples] = useState(false);
   const [showAgreement, setShowAgreement] = useState(false);
   return (
     <Modal onClose={onCancel} title={t("publish.title")}>
@@ -10936,6 +10937,31 @@ function PublishConfirmDialog({
           />
           <span>{t("legal.consent.publish.warranty")}</span>
         </label>
+        {/* K9. A separate question from the warranty above and deliberately
+            unticked: publishing something is not agreeing to hear from everyone
+            who installs it. Changeable later in Sharing. */}
+        {CAPABILITIES.flywheelUpload ? (
+          <label
+            style={{
+              display: "flex",
+              gap: "0.5rem",
+              alignItems: "flex-start",
+              fontSize: "var(--fs-sm)",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              checked={receiveExamples}
+              onChange={(event) => setReceiveExamples(event.target.checked)}
+              style={{ marginTop: "0.2rem" }}
+              type="checkbox"
+            />
+            <span>
+              Send me corrections from people who install this, so I can improve
+              it. You can change this later.
+            </span>
+          </label>
+        ) : null}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <button
             className="primary-button"
@@ -10945,6 +10971,7 @@ function PublishConfirmDialog({
                 copyVersion: LEGAL_COPY_VERSION,
                 language: lang,
                 warrantyConfirmed: true,
+                receiveExamples,
               })
             }
             type="button"
