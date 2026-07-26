@@ -609,14 +609,19 @@ that click, the ordinary path is zero interaction.
 
 **K3 — `legal.consent.flywheel.activate`** *(the activation consent; replaces nothing, adds a surface)*
 
-- **EN:** "Corrections you receive can help the person who made this Method improve it. If you turn this on: an example is prepared on this computer, personal details are stripped here before anything leaves, and it waits 48 hours before it is sent to that Method's publisher. During those 48 hours you can remove any of them, and you can turn this off at any time. Health, family and finance content is never sent this way — we ask you separately, every time. Stripping personal details is an automated process and it is not perfect, which is why the 48 hours exist. What is sent goes to the publisher, not to the public: it becomes public only if they choose to include it when they publish, and only under the terms you confirm now."
-- **ZH:** "你收到的纠正,可以帮助制作这个 Method 的人把它改得更好。若你开启:例子在这台电脑上准备好,个人信息在离开本机之前就在本地剥除,然后等待 48 小时才发送给该 Method 的发布者。这 48 小时内你可以撤掉任意一条,也可以随时整个关掉。健康、家庭与财务类内容绝不会经此发送 —— 每一次我们都会单独问你。剥除个人信息是自动化处理,并不完美,48 小时的等待正是为此而设。发出去的内容是给发布者的,不是给公众的:只有当他们在发布时选择收录,它才会公开,且仅依你现在确认的条款。"
+- **EN:** "Corrections you receive can help the person who made this Method improve it. If you turn this on: an example is prepared on this computer, personal details are stripped here before anything leaves, and it waits 48 hours before it is sent to that Method's publisher. During those 48 hours you can remove any of them, and you can turn this off at any time. Health, family and finance content is never sent this way — we ask you separately, every time. Stripping personal details is an automated process and it is not perfect, which is why the 48 hours exist. What is sent goes to the publisher, not to the public: it becomes public only if they choose to include it when they publish. Your contributions carry a **contributor ID** — a permanent code that credits you without naming you. Your name is never attached. The ID is public wherever the example is, cannot be changed, and cannot be recalled from copies made by others; it does not identify you to anyone but us."
+- **ZH:** "你收到的纠正,可以帮助制作这个 Method 的人把它改得更好。若你开启:例子在这台电脑上准备好,个人信息在离开本机之前就在本地剥除,然后等待 48 小时才发送给该 Method 的发布者。这 48 小时内你可以撤掉任意一条,也可以随时整个关掉。健康、家庭与财务类内容绝不会经此发送 —— 每一次我们都会单独问你。剥除个人信息是自动化处理,并不完美,48 小时的等待正是为此而设。发出去的内容是给发布者的,不是给公众的:只有当他们在发布时选择收录,它才会公开。你的贡献会带一个**贡献者 ID** —— 一串永久的编号,用来为你记功,但不写出你的名字。你的姓名绝不会被附上。该 ID 在例子出现的任何地方都是公开的,不可更改,也无法从他人所做的副本中收回;除我们之外,它不向任何人指明你是谁。"
 - **Behaviour:** Consent class. Shown at activation, never at install of a version without the capability. No option pre-selected; declining as easy as accepting. Records key name, copy version, language, profile and time.
 
-**K4 — `legal.notice.flywheel.queued`** *(the weekly digest — one line, not a nag)*
+**K4 — no digest, no reminder, no weekly prompt** *(decided 2026-07-26)*
 
-- **EN:** "{count} examples are ready to send this week. Open to review or remove any of them."
-- **ZH:** "本周有 {count} 条例子准备发出。可以打开查看或撤掉其中任意一条。"
+The window is an **undo**, not a review queue. A weekly "8 examples are ready"
+prompt turns a safety control into a to-do list, and a to-do list that arrives
+every week is a nag people learn to dismiss — which is worse than not having it,
+because a dismissed prompt looks like attention was paid.
+
+So: the queue is **visible in the app to anyone who looks for it, and pushed at
+nobody**. Default is send. Ordinary interaction count is zero, which is the point.
 
 **K5 — `legal.notice.flywheel.item`** *(on each queued example)*
 
@@ -644,16 +649,45 @@ contractually is what makes this reasonable steps under APP 8.1 instead —
 combined with on-device stripping, which reduces the exposure without being
 claimed to eliminate it.
 
-**Open decision for the Operator — attribution.** Whether a published example
-carries a contributor byline is not a wording question. Attribution turns every
-user who corrects an answer into a permanently, publicly named contributor, with
-the same permanence warning publishers get; the earlier design deliberately
-supplied no creator identification, which is why the CC BY attribution condition
-had nothing to operate on. Merit needs attribution; ordinary users do not want
-it. **Recommended: unattributed by default, attribution only where the
-contributor holds a publishing account and opts into it** — that keeps the
-zero-interaction path clean for people who are not trying to become contributors.
-This is a product decision and is not resolved here.
+**Attribution — resolved 2026-07-26: a pseudonymous contributor ID.**
+
+Merit needs to know who contributed; nobody who fixed an answer signed up to be
+publicly named. A permanent opaque **contributor ID** satisfies both: it credits
+the person, and it identifies them to us and to no one else.
+
+What that means legally, stated plainly because it is easy to get wrong: the ID
+is **pseudonymous to the public and personal information to us** — we hold the
+mapping to the account, so we treat it as personal information, exactly as the
+ban ledger already treats a hashed provider identity (Core Privacy Policy 2.6
+states this rule).
+
+Four conditions, without which the pseudonymity does not hold:
+
+1. **The ID is permanent and cannot be reset.** Resetting it would break the
+   Merit history that is its whole purpose. So it travels into the public
+   repository, forks and mirrors and cannot be recalled — which K3 has to say,
+   and does.
+2. **The contributor ID and the publisher byline are separate identifiers.** A
+   publisher's byline is a self-chosen display name that may be their real name.
+   If the two were the same value, or trivially linkable in public data, the ID
+   would be a real name with extra steps.
+3. **The pseudonym only holds while the content is clean.** An example that still
+   contains "my daughter's teacher at St X" identifies the person behind the ID —
+   and does so **retrospectively**, for every other contribution carrying that
+   ID. This is the strongest argument for keeping the window: the ID lowers the
+   default exposure, it does not remove the need to catch a leak.
+4. **Merit counts adopted examples, not submitted ones**, and adoption is the
+   publisher's decision. Counting submissions would pay people to generate them.
+
+Because the ID names nobody, publishing it is a much smaller act than publishing
+a name, and it rides on the activation consent in K3 rather than needing a
+separate click. That is what keeps the ordinary path at zero interaction.
+
+**CC BY consequence:** with an ID attached, the attribution condition now has
+something to operate on — downstream reuse must retain the contributor ID. Earlier
+drafts said shared examples supplied no creator identification and that CC BY's
+attribution condition therefore had nothing to operate on. That reasoning is
+superseded and must not be reintroduced.
 
 **K8 — G1 when examples can be attached**
 
