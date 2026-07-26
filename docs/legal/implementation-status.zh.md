@@ -1,9 +1,9 @@
 # Vaenyx — 当前实现与数据处理明细表
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
-> 明细表版本 **2026-07-26.1** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-26**
-> 客户端 **0.2.1-dev.7** · 服务端 **vaenyx-core-cloud (migrations 0001-0003)**
-> 法律文件集 **v3.0** · 最低法律文件集 **v3.0** · 最低文案版本 **2.6**
+> 明细表版本 **2026-07-27.1** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-27**
+> 客户端 **0.2.1-dev.7** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
+> 法律文件集 **v3.1** · 最低法律文件集 **v3.0** · 最低文案版本 **2.7**
 
 ## 本明细表的地位
 
@@ -33,7 +33,7 @@
 | 能力 | 状态 | 数据离开设备 | 运营方接收 |
 |---|---|---|---|
 | `feature.community-sharing.preference-ui` | **active** | 否 | 无 |
-| `feature.community-sharing.upload-engine` | **not-built** | 否 | 无 |
+| `feature.community-sharing.upload-engine` | **available-off** | 是 | 传输途中的一条已去标识化的示例,取走即删 |
 | `feature.community-sharing.upload-endpoint` | **not-built** | 否 | 无 |
 | `feature.community-sharing.deidentification-pipeline` | **not-built** | — | — |
 | `feature.community-sharing.sensitive-category-gate` | **not-built** | — | — |
@@ -56,7 +56,9 @@
 
 **`feature.community-sharing.preference-ui`** — 仅记录一项本机偏好。不构成对任何上传的同意。参见 gate.community-sharing.initial。
 
-**`feature.community-sharing.upload-engine`** — **标记为启用之前必须先完成:**《服务条款》第 7.4 条已不再载有分享所需的许可、保证与精神权利同意机制(v3.0 删除,因其描述的是并不存在的能力)。这些条款必须重新起草、呈示,并依第 18.1A 条作为实质修订被单独接受。继续使用或安装更新,不得被视为接受。 **文案已上线并被关卡挡住(2026-07-26)。** Part K 的字符串已进入受审计的 app 字符串表,且不可渲染:能力开关会让字符串查找本身返回空,因此即便有人误接了组件,渲染出来也是空白,而不是一段描述不存在机制的文字。一旦有人打开该开关,测试立即失败,逼着改开关的人先回到这里。排队、48 小时窗口、脱敏管线与发送通道均未建成。
+**`feature.community-sharing.upload-engine`** — **已上线,且默认关闭,除非用户自己打开。** 传输通道已建成并部署;没有启用同意记录(文案包 K3),就不会排队、也不会扫描,而早期版本中记录的那项 Sharing 偏好不能代替它 —— 那项偏好是在「什么都无法离开本机」的年代选择的,因此无法承载对一项当时并不存在的上传行为的同意。
+必需的门槛: `legal.consent.flywheel.activate`, `legal.consent.flywheel.receive`, `legal.consent.flywheel.sensitiveAsk`, `flywheel.queue.window`, `flywheel.queue.held`
+实现证据: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written.
 
 **`feature.community-sharing.upload-endpoint`** — **标记为启用之前必须先完成:**《服务条款》第 7.4 条已不再载有分享所需的许可、保证与精神权利同意机制(v3.0 删除,因其描述的是并不存在的能力)。这些条款必须重新起草、呈示,并依第 18.1A 条作为实质修订被单独接受。继续使用或安装更新,不得被视为接受。
 
@@ -108,7 +110,7 @@
 
 ## 点位文案
 
-最低文案版本 **2.6** · 同意门槛 **2.6**
+最低文案版本 **2.7** · 同意门槛 **2.6**
 
 两个版本号分开跟踪。**文案版本**在任何字符串改动时都会上升,并被记录在每一次确认里,因此记录总能说明当事人当时看到的是哪一版文字。**同意门槛**只在同意类字符串发生实质变化时上升,而且只有它会重新打扰用户。最近一次实质性的同意变化是 2.6。
 
@@ -202,6 +204,21 @@
 - **国家:** 美国; 全球
 - **海外处理依据:** 个人依 Discord 自身条款直接与 Discord 交互;运营方的角色是服务器管理。
 - **留存:** 平台持有的内容依 Discord 现行条款留存。运营方另行创建的任何管理记录,在不再合理需要时予以销毁或去标识化。
+
+### `flow.improvement.sharing`
+
+- **触发方式:** 用户开启「分享改进」(一次单独、明确的同意),某条纠正进入队列,且 48 小时内用户未将其移除。健康、家人与金钱的内容永不自动进入此通道:它们会被扣下并逐条询问。
+- **来源:** 作出贡献的用户的实例。个人信息在该设备上、于任何内容发出之前被剥除;该剥除是自动的、并不完美,且用户可以看到队列中有什么。
+- **收集方法:** 由实例向分享端点发出的、无需认证的 HTTPS 请求。发送方没有账号,也不需要账号。
+- **存放环境:** 发布服务(Cloudflare Worker)及其 D1 数据库,其角色是管道而非存储。一条投递记录在接收方发布者自己的 app 取走的那一刻即被删除;若 14 天内无人取走,则原样删除、不会被阅读。等待中的内容并非端到端加密:运营方在其等待期间技术上能够读到它 —— 本行之所以出现在这里,正是为了如实披露这一点。
+- **关联:** 不与发送方的任何账号关联,因为根本没有账号。它携带一个由发送实例自行生成的贡献者 ID —— 那是一个署名标签,不是凭据;我们刻意不为其做任何登记,也无法由我们把它对应到某个人。
+- **所涉信息:** 示例本身:问了什么、返回了什么、用户的纠正,以及一条可选备注; 贡献者 ID(自行生成的署名标签); 该示例所对应 Method 版本的内容哈希; 仅用于限流、且只存在于另一行记录中:贡献者 ID、连接的哈希形式、条目 id 与时间戳
+- **主要目的:** 把一条纠正送达发布该 Method 的人,以便其改进它。对该端点进行限流与防滥用。
+- **接收方:** Vae Foundry Pty Ltd 与 Cloudflare, Inc. —— 作为传输方,在投递等待期间; 接收方发布者 —— 且仅限该发布者已就该 Method 打开接收开关的情形(《贡献者协议》第 9.4 条)。开关关闭时,发送被拒绝,不存储任何内容。
+- **国家:** 全球边缘网络
+- **海外处理依据:** 依 APP 8.2(b) 明示同意,于启用步骤取得;该步骤已载明服务器位于澳大利亚境外,以及示例会送达发布者。
+- **留存:** 投递记录在接收方取走的那一刻删除;若始终无人取走,则 14 天后过期。删除某个发布者账号,即一并删除寄给它的投递记录。限流记录 7 天后删除。已送达的示例不保留任何副本。
+- **法律地位:** 发布者收到的内容,少于经过管道的内容:投递载荷只带示例、贡献者 ID 与内容哈希,不带任何关于它来自何处的信息。发送实例所出示的凭证 —— 其实例标识、同意事件的标识、当时所处的模式 —— 在门口被校验,随后即丢弃。由此产生两个后果,且两者都是有意为之。我们不持有作出贡献的家庭的任何设备标识。我们同样不持有该家庭的同意记录:该记录存放在他们自己的机器上,而我们能够展示的,是这项服务会拒绝什么 —— 那一点在公开源代码中可以看到。
 
 ## 仅本地处理(运营方不收集)
 

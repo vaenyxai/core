@@ -700,6 +700,85 @@ example carries its contributor's byline, publicly and permanently. It must also
 show the exact material proposed for publication before the publisher confirms,
 which Terms of Service clause 8.6(b) already requires.
 
+**K3 — `legal.consent.flywheel.activate`** *(consent-class — the only consent point in Part K)*
+
+Coding built the hard gate this needs and was right to: **no activation record,
+nothing queues and nothing scans**, and the old Sharing setting does not stand in
+for it. That setting was chosen in a version where nothing could leave the
+machine at all, so it cannot carry consent to an upload that did not exist when
+it was clicked. Consent must be current (Privacy Policy 7.2), and a preference
+recorded about a different world is not current.
+
+The 48-hour window is **withdrawal**, not consent. Silence is not agreement, and
+the queue must never be described as though letting the clock run is how someone
+agrees.
+
+- **EN:** "Turn on sharing improvements?
+
+  When you correct something a Method got wrong, Vaenyx can send that one correction to the person who published the Method, so they can fix it for everyone who uses it.
+
+  **What goes:** the example itself — what was asked, what came back, and what you corrected — plus a contributor ID that credits you without naming you. **What does not go:** your name, your files, your other chats, or anything else on this computer.
+
+  Personal details are removed on this computer before anything leaves it. That is done automatically by a program, and it is not perfect. Read what you are sending — you are the last check.
+
+  **Where it goes:** to our server first, which holds it only until the publisher's own app collects it and deletes it at that moment. Anything nobody collects within 14 days is deleted unread. Our server is outside Australia, and we can read what is waiting on it. Publishers receive examples only if they have asked to.
+
+  **Once an example is sent, it cannot be recalled.** You can stop future sends at any time, and turning this off stops everything from then on.
+
+  Health, family and money are never sent automatically. Vaenyx asks you about those separately, every time.
+
+  This is off unless you turn it on now."
+- **ZH:** "要开启「分享改进」吗?
+
+  当你纠正了某个 Method 出错的地方,Vaenyx 可以把这一条纠正发送给发布该 Method 的人,让他为所有使用者修好它。
+
+  **会发出去的:**这条示例本身 —— 问了什么、返回了什么、你把它纠正成了什么 —— 外加一个为你记功但不写出你名字的贡献者 ID。**不会发出去的:**你的姓名、你的文件、你其它的聊天,以及这台电脑上的任何其它内容。
+
+  个人信息会在**这台电脑上**、在任何内容离开之前被剥除。这是由程序自动完成的,并不完美。请你自己看一眼要发出去的东西 —— 你是最后一道检查。
+
+  **它会去哪里:**先到我们的服务器,而服务器只保存到发布者自己的 app 来取走为止,取走的那一刻即删除。14 天内无人取走的,原样删除、不会被阅读。我们的服务器在澳大利亚境外,且我们能够读到正在等待中的内容。只有主动要求接收的发布者才会收到示例。
+
+  **示例一经发出便无法收回。**你可以随时停止此后的发送;关掉此项,从那一刻起就什么都不再发送。
+
+  健康、家人与金钱的内容永远不会自动发送。Vaenyx 每一次都会就这些内容单独询问你。
+
+  **此项默认关闭**,除非你现在就把它打开。"
+- **Behaviour:** Two choices, neither pre-selected — decline ("Not now") and
+  accept ("Turn on sharing"). Declining is a complete answer and must not be
+  re-asked on a timer. Record the acknowledgement as consent-class: key, copy
+  version, language, profile, timestamp.
+
+**K9a — `legal.consent.flywheel.receive.label`** *(the checkbox itself, at publish)*
+
+Coding's placeholder was "Send me corrections from people who install this, so I
+can improve it. You can change this later." The first sentence is right. What is
+missing is that **ticking it takes on obligations** — clause 9.4 — and a
+checkbox that hides its own consequence is the thing this pack exists to prevent.
+It is one more line on a screen the publisher is already reading.
+
+- **EN:** "Send me corrections from people who install this, so I can improve it. What arrives is someone else's material: use it only to improve this Method, don't pass it on, and delete it if asked. You can change this later."
+- **ZH:** "把安装了这个 Method 的人所做的纠正发给我,好让我改进它。收到的是**别人的**材料:只能用它改进这个 Method、不要转给别人、被要求时删除。此设置以后可以更改。"
+- **Behaviour:** Unticked. Never pre-ticked, and never remembered from a previous
+  publish — each Method is its own decision.
+
+**K11 — `flywheel.queue.window`** *(the queue panel)*
+
+The wording carries one load-bearing distinction: the wait is a **chance to
+change your mind**, not the reason any of this is permitted. Anything that reads
+as "we will send unless you object" describes consent by silence.
+
+- **EN:** "Waiting to be sent — nothing here has left this computer yet. Anything still here in 48 hours goes out. Remove what you don't want sent, or turn sharing off to stop all of it. The wait is a chance to change your mind, not what makes this allowed: you allowed it when you turned sharing on, and you can turn it off again whenever you like."
+- **ZH:** "等待发送 —— 这里的内容都还没有离开这台电脑。48 小时后仍在此处的,会被发送出去。把你不想发的移除,或者直接关掉分享、让全部内容都不发送。这段等待是给你反悔的机会,**并不是**这件事被允许的依据:允许它的是你开启分享时所作的选择,而你随时可以再把它关掉。"
+
+**K12 — `flywheel.queue.held`** *(an item the sensitive check pulled out)*
+
+- **EN:** "Held back — this looks like it touches health, family or money. Vaenyx never sends these automatically. Open it, read it, and decide on this one by itself. If you do nothing, it is not sent."
+- **ZH:** "已扣下 —— 这一条看起来涉及健康、家人或金钱。Vaenyx 永远不会自动发送这类内容。请打开它、读一遍,然后单独就这一条作出决定。你什么都不做,它就不会被发送。"
+
+**The contributor ID line in this panel is K10 — do not write a second one.** Two
+strings saying the same thing is exactly how the two drift apart, and then one of
+them is wrong and nobody knows which.
+
 **K9 — `legal.consent.flywheel.receive`** *(the publisher's choice, at publish and in Method settings)*
 
 Coding raised this and framed it correctly: delivering examples automatically

@@ -1,9 +1,9 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-26.1** · effective from **2026-07-26** · verified **2026-07-26**
-> Client **0.2.1-dev.7** · Server **vaenyx-core-cloud (migrations 0001-0003)**
-> Legal set **v3.0** · minimum legal set **v3.0** · minimum copy version **2.6**
+> Schedule version **2026-07-27.1** · effective from **2026-07-26** · verified **2026-07-27**
+> Client **0.2.1-dev.7** · Server **vaenyx-core-cloud (migrations 0001-0007)**
+> Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **2.7**
 
 ## Status of this Schedule
 
@@ -33,7 +33,7 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 | Capability | Status | Data leaves device | Operator receives |
 |---|---|---|---|
 | `feature.community-sharing.preference-ui` | **active** | no | none |
-| `feature.community-sharing.upload-engine` | **not-built** | no | none |
+| `feature.community-sharing.upload-engine` | **available-off** | yes | one de-identified example in transit, deleted on collection |
 | `feature.community-sharing.upload-endpoint` | **not-built** | no | none |
 | `feature.community-sharing.deidentification-pipeline` | **not-built** | — | — |
 | `feature.community-sharing.sensitive-category-gate` | **not-built** | — | — |
@@ -56,7 +56,9 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 
 **`feature.community-sharing.preference-ui`** — Records a local preference only. Not consent to any upload. See gate.community-sharing.initial.
 
-**`feature.community-sharing.upload-engine`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance. **Copy shipped and gated (2026-07-26).** The Part K strings are in the app string table under audit, and cannot render: the capability switch makes the string lookup itself return empty, so a component wired up by mistake renders nothing rather than a description of a mechanism that does not exist. A test fails the moment the switch is turned on, which forces whoever flips it to come here first. Queueing, the 48-hour window, the de-identification pipeline and the send path are not built.
+**`feature.community-sharing.upload-engine`** — Live and off unless the user turns it on. The transport is built and deployed; nothing queues or scans without the activation consent record (copy pack K3), and the Sharing preference recorded in earlier versions does not stand in for it — that preference was chosen when nothing could leave the machine, so it cannot carry consent to an upload that did not then exist.
+Required gates: `legal.consent.flywheel.activate`, `legal.consent.flywheel.receive`, `legal.consent.flywheel.sensitiveAsk`, `flywheel.queue.window`, `flywheel.queue.held`
+Evidence: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written.
 
 **`feature.community-sharing.upload-endpoint`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance.
 
@@ -108,7 +110,7 @@ Two regimes overlap here and are deliberately satisfied by one rule. The Basic O
 
 ## Point-of-use copy
 
-Copy version **2.6** · consent floor **2.6**
+Copy version **2.7** · consent floor **2.6**
 
 Two versions are tracked separately. The copy version moves whenever any string changes and is what gets recorded against an acknowledgement, so a record always says which text the person was shown. The consent floor moves only when a consent-class string changes in substance, and only the floor re-asks anyone. The last substantive consent change was 2.6.
 
@@ -202,6 +204,21 @@ Two versions are tracked separately. The copy version moves whenever any string 
 - **Countries:** United States; global
 - **Overseas basis:** The individual deals with Discord directly under Discord's own terms; the Operator's role is server administration.
 - **Retention:** Under Discord's current terms for platform-held content. Any separate Operator moderation record is destroyed or de-identified when no longer reasonably required.
+
+### `flow.improvement.sharing`
+
+- **Trigger:** The user turns on sharing improvements (a separate, explicit consent), a correction is queued, and 48 hours pass without the user removing it. Health, family and money content never enters this path automatically: it is held and asked about individually.
+- **Source:** The contributing user's Instance. Personal details are removed on that device before anything is sent; the removal is automatic and imperfect, and the user is shown what is queued.
+- **Collection method:** Unauthenticated HTTPS request from the Instance to the sharing endpoint. There is no account on the sending side and none is required.
+- **Holding environment:** The publish service (Cloudflare Worker) and its D1 database, as a pipe rather than a store. A delivery row is deleted the moment the recipient publisher's own app collects it, and is deleted unread if nobody collects it within 14 days. The waiting payload is not encrypted end-to-end: the Operator is technically able to read it while it waits, and the Privacy Policy's disclosure of that is the whole reason this line appears here.
+- **Linking:** Not linked to any account on the sending side, because there is none. Carries a contributor ID the sending Instance generates for itself — a credit label, not a credential, deliberately not registered with us and not resolvable to a person by us.
+- **Information:** the example: what was asked, what came back, the user's correction, and an optional note; the contributor ID (self-generated credit label); the content hash of the Method version the example relates to; for rate limiting only, and only in a separate row: the contributor ID, a hashed form of the connection, the item id and a timestamp
+- **Primary purpose:** Deliver one correction to the person who published the Method so they can improve it. Rate-limit and prevent abuse of the endpoint.
+- **Recipients:** Vae Foundry Pty Ltd and Cloudflare, Inc. — as the transport, for as long as the delivery waits; the receiving publisher — and only where that publisher has switched receiving on for that Method (Contributor Agreement 9.4). Where the switch is off, the send is refused and nothing is stored.
+- **Countries:** global edge network
+- **Overseas basis:** APP 8.2(b) express consent, obtained at the activation step, which states that the server is outside Australia and that examples reach the publisher.
+- **Retention:** A delivery is deleted at the moment the recipient collects it, and expires after 14 days if it is never collected. Deleting a publisher's account deletes the deliveries addressed to it. Rate-limiting rows are deleted after 7 days. No copy of a delivered example is kept.
+- **Legal position:** What the publisher receives is less than what passes through: the delivery payload carries the example, the contributor ID and the content hash, and nothing about where it came from. The evidence the sending Instance presents — its instance identifier, the identifier of the consent event, the mode it was in — is checked at the door and then discarded. Two consequences follow, and both are deliberate. We hold no device identifier for a contributing household. We also hold no record of that household's consent: the record lives on their own machine, and what we can show is what the service refuses, which is visible in public source.
 
 ## Local-only processing (no Operator collection)
 
