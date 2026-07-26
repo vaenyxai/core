@@ -1989,6 +1989,10 @@ function VoicePanel() {
         Turns what you say into text — the mic button in chat. Whisper via
         Groq (fast, free tier) or OpenAI.
       </p>
+      <FreePick href="https://console.groq.com">
+        Groq gives Whisper away on a free key — no card, 20 recordings a minute
+        and 2,000 a day, which no household will reach.
+      </FreePick>
       <label className="chat-font-field">
         Engine
         <select
@@ -2023,6 +2027,11 @@ function VoicePanel() {
         The voice that reads replies — voice bubbles and the speaker toggle in
         chat both use it.
       </p>
+      <FreePick>
+        This one needs no website and no account: Local Voice downloads once and
+        then works offline, forever, on this machine. Browser Voice is free too
+        and needs no download, but sounds more robotic.
+      </FreePick>
       <label className="chat-font-field">
         Engine
         <select
@@ -2289,6 +2298,10 @@ function VoicePanel() {
         ingredient list). Powered by a vision-capable model — Gemini, Zhipu
         BigModel or OpenAI.
       </p>
+      <FreePick href="https://aistudio.google.com/apikey">
+        A free Google AI Studio key reads photos at no charge. (The same key
+        cannot MAKE pictures — see below for why.)
+      </FreePick>
       <label className="chat-font-field">
         Engine
         <select
@@ -2359,11 +2372,13 @@ function VoicePanel() {
           <span className="library-chip chip-published">Connected</span>
         </div>
       ) : null}
-      <p className="settings-card-copy">
-        Note: Google gives image models no free quota — a free Gemini key
-        returns &quot;quota 0&quot; here even though it works for everything
-        else. Picture-making needs a paid key or another provider.
-      </p>
+      <FreePick href="https://bigmodel.cn">
+        Zhipu BigModel gives CogView-3-Flash away free — set the model to{" "}
+        <code>cogview-3-flash</code>. Sign-up needs a Chinese phone number.
+        Google is NOT an option here: it gives image models a free quota of
+        zero, so a free Gemini key that reads photos perfectly well still
+        answers &quot;quota 0&quot; when asked to draw one.
+      </FreePick>
       {imageError ? <p className="form-error">{imageError}</p> : null}
     </section>
   );
@@ -8460,6 +8475,41 @@ function FlywheelQueuePanel() {
       ) : null}
       {error ? <p className="form-error">{error}</p> : null}
     </div>
+  );
+}
+
+// The free way to do each of the four things Vaenyx needs an outside model for
+// (Oskar, 2026-07-27). Someone who cannot pay should still be able to run the
+// whole app, and finding that out should not require reading four pricing pages.
+//
+// The date is stamped and lives in ONE constant, because free tiers move: a
+// recommendation with no date is one nobody can judge the age of, and four
+// copies of a date is four chances for the UI to claim a check that never
+// happened. Every claim under it was verified against the provider, not
+// remembered — Google's image quota of zero is exactly what that catches.
+const FREE_PICK_CHECKED = "July 2026";
+
+function FreePick({
+  children,
+  href,
+}: {
+  children: ReactNode;
+  href?: string;
+}) {
+  return (
+    <p className="free-pick">
+      <strong>Free option</strong>{" "}
+      <span className="text-faint">(checked {FREE_PICK_CHECKED})</span>{" "}
+      {children}
+      {href ? (
+        <>
+          {" "}
+          <a href={href} rel="noreferrer noopener" target="_blank">
+            {new URL(href).hostname.replace(/^www\./, "")}
+          </a>
+        </>
+      ) : null}
+    </p>
   );
 }
 

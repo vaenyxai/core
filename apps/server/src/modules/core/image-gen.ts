@@ -32,8 +32,11 @@ const IMAGE_CANDIDATES = [
   },
   {
     id: "zhipu",
+    // CogView-3-Flash rather than the paid CogView-4: this is the default for
+    // someone who picked Zhipu and typed nothing else, and the default should be
+    // the one that costs a household nothing. A paid model is one field away.
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    model: "cogview-4",
+    model: "cogview-3-flash",
   },
 ] as const;
 

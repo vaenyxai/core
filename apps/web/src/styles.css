@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   /* Global type size (Oskar, dev.150): every rem token scales off this — 18px
      base lifts the whole UI ~12% over the browser default. */
   font-size: 112.5%;
@@ -6031,7 +6031,10 @@ select {
   gap: 12px;
   margin-top: 8px;
 }
-.flywheel-queue { margin-top: var(--space-4); border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.flywheel-queue { margin-top: var(--space-4); border-top: 1px solid var(--border); padding-top: var(--space-3); }
 .flywheel-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
-.flywheel-item { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-2); padding: var(--space-2) var(--space-3); }
+.flywheel-item { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: var(--space-2) var(--space-3); }
 .flywheel-item p { margin: 0.15rem 0 0; font-size: var(--fs-sm); }
+.free-pick { margin: var(--space-2) 0 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: var(--fs-sm); line-height: 1.5; }
+.free-pick a { word-break: break-all; }
+.free-pick code { font-size: 0.95em; }
