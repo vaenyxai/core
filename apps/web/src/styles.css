@@ -3795,6 +3795,24 @@ select {
   word-break: break-word;
 }
 
+/* A Routine's steps, shown before anyone starts using it. */
+.routine-steps {
+  margin: 8px 0 14px;
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-2, #9a9bb4);
+}
+
+/* Take a photo / choose one: two clear options rather than whatever the
+   device decides a bare file input means. */
+.photo-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0;
+}
+
 /* What a Skill import had to leave behind (copy pack L1). Listed one by one:
    "some features may not work" is not this notice. */
 .skill-dropped {

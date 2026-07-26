@@ -15,6 +15,7 @@ import type {
   PublishPauseState,
   StoredCorrection,
   MethodExampleEntry,
+  LibraryRoutine,
   SkillImportPreviewResponse,
   AskVaenyxConversation,
   AskVaenyxMessage,
@@ -83,6 +84,7 @@ import {
   fetchLibraryMethod,
   fetchLibraryMethods,
   fetchLibraryRoutines,
+  fetchLibraryRoutine,
   fetchCatalogue,
   installRoutineFromCatalogue,
   installMethodFromCatalogue,
@@ -960,9 +962,12 @@ function CameraButton({
   onAttach?: (imageId: string) => void;
   onText: (text: string) => void;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
 
   async function handleFile(file: File) {
     setBusy(true);
@@ -987,8 +992,18 @@ function CameraButton({
     }
   }
 
+  function pick(from: "camera" | "library") {
+    setChoosing(false);
+    (from === "camera" ? cameraRef : inputRef).current?.click();
+  }
+
   return (
     <>
+      {/* Two inputs, because one cannot do both jobs. `capture` tells a phone
+          to open the camera straight away; without it the phone offers the
+          photo library. Some phones show a chooser for a bare input and some
+          go straight to the library — which is what Oskar hit — so the choice
+          is made here instead of being left to the device. */}
       <input
         accept="image/*"
         hidden
@@ -1000,16 +1015,48 @@ function CameraButton({
         ref={inputRef}
         type="file"
       />
+      <input
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void handleFile(file);
+        }}
+        ref={cameraRef}
+        type="file"
+      />
       <button
-        aria-label="Add a photo"
+        aria-label={t("photo.add")}
         className={`mic-button${busy ? " mic-button--busy" : ""}`}
         disabled={disabled || busy}
-        onClick={() => inputRef.current?.click()}
-        title={error ?? "Add a photo"}
+        onClick={() => setChoosing(true)}
+        title={error ?? t("photo.add")}
         type="button"
       >
         {busy ? <IconSpinner /> : <IconCamera />}
       </button>
+      {choosing ? (
+        <Modal onClose={() => setChoosing(false)} title={t("photo.add")}>
+          <div className="photo-choice">
+            <button
+              className="primary-button"
+              onClick={() => pick("camera")}
+              type="button"
+            >
+              {t("photo.take")}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => pick("library")}
+              type="button"
+            >
+              {t("photo.choose")}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }
@@ -11066,6 +11113,109 @@ function PublishPausePanel() {
   );
 }
 
+// What a Routine does, before anyone starts using it. Reached by opening a
+// Routine in the Library; the chat starts from the button at the bottom, so
+// nobody is dropped into a conversation with something they have not read.
+function RoutineDetail({
+  summary,
+  methods,
+  onBack,
+  onStart,
+}: {
+  summary: LibraryRoutineSummary;
+  methods: LibraryMethodSummary[];
+  onBack: () => void;
+  onStart: () => void;
+}) {
+  const { t } = useI18n();
+  const [full, setFull] = useState<LibraryRoutine | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetchLibraryRoutine(summary.id)
+      .then((routine) => {
+        if (active) setFull(routine);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [summary.id]);
+
+  const methodName = (methodId: string) =>
+    methods.find((method) => method.id === methodId)?.name ?? methodId;
+
+  return (
+    <div className="library-layout">
+      <button className="text-button library-back" onClick={onBack} type="button">
+        {t("common.back")}
+      </button>
+      <section className="settings-card">
+        <p className="eyebrow">{t("routine.open.title")}</p>
+        <h2>{summary.name}</h2>
+        <p className="settings-card-copy">{summary.description}</p>
+        {summary.tags.length > 0 ? (
+          <span className="tag-row">
+            {summary.tags.map((tag) => (
+              <span className="tag-chip" key={tag}>
+                #{tag}
+              </span>
+            ))}
+          </span>
+        ) : null}
+        <p className="settings-card-copy">
+          {summary.mode === "accumulate"
+            ? t("routine.open.mode.accumulate")
+            : t("routine.open.mode.oneShot")}
+        </p>
+
+        <p className="eyebrow">{t("routine.open.steps")}</p>
+        {full ? (
+          <ol className="routine-steps">
+            {full.flow.map((step, index) => (
+              <li key={step.id}>
+                <strong>{methodName(step.methodId)}</strong>
+                {" — "}
+                {step.from === "previous"
+                  ? t("routine.open.from.previous")
+                  : step.from === "static"
+                    ? t("routine.open.from.static")
+                    : t("routine.open.from.journal")}
+                {index === 0 ? "" : ""}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="settings-card-copy">
+            {summary.stepCount} {summary.stepCount === 1 ? "step" : "steps"}
+          </p>
+        )}
+
+        {full && full.deps.length > 0 ? (
+          <p className="settings-card-copy">
+            {t("routine.open.uses")}:{" "}
+            {full.deps.map((dep) => methodName(dep.methodId)).join(" · ")}
+          </p>
+        ) : null}
+
+        <small>
+          v{summary.version}
+          {summary.owner ? ` · by ${summary.owner}` : ""}
+        </small>
+
+        <button
+          className="primary-button"
+          onClick={onStart}
+          style={{ marginTop: "14px", alignSelf: "flex-start" }}
+          type="button"
+        >
+          {t("routine.open.start")}
+        </button>
+      </section>
+    </div>
+  );
+}
+
 // Importing the instructions from an Agent Skill (copy pack Part L).
 //
 // WORDING — never "Skill compatible", "runs Skills" or "works with Skills".
@@ -13428,6 +13578,8 @@ function RoutinesPanel({
   onUseRoutine: (routineId: string) => void;
 }) {
   const communityVersions = useCommunityVersions();
+  // Which Routine's description is open. Null = the list.
+  const [opened, setOpened] = useState<string | null>(null);
   // A chat create-offer opens the create flow directly, description pre-filled.
   const [creating, setCreating] = useState(
     () => peekCreateIntent()?.kind === "routine",
@@ -13463,6 +13615,21 @@ function RoutinesPanel({
     );
   }
 
+  const openedRoutine = routines.find((routine) => routine.id === opened);
+  if (openedRoutine) {
+    return (
+      <RoutineDetail
+        methods={methods}
+        onBack={() => setOpened(null)}
+        onStart={() => {
+          setOpened(null);
+          onUseRoutine(openedRoutine.id);
+        }}
+        summary={openedRoutine}
+      />
+    );
+  }
+
   return (
     <div className="library-layout">
       <section className="library-intro">
@@ -13484,7 +13651,7 @@ function RoutinesPanel({
         </div>
         <p>
           A Routine is a ready-to-use product: feed it something, it runs its
-          steps and keeps a log you can revisit. Tap one to use it.
+          steps and keeps a log you can revisit. Tap one to see what it does.
         </p>
       </section>
       {routines.length === 0 ? (
@@ -13499,9 +13666,13 @@ function RoutinesPanel({
               key={routine.id}
               style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
             >
+              {/* Opening a Routine explains it first (Oskar, 2026-07-26).
+                  Tapping a card used to drop straight into a chat with it,
+                  which asks someone to use a thing before they know what it
+                  does — Methods have always opened a page first. */}
               <button
                 className="library-card"
-                onClick={() => onUseRoutine(routine.id)}
+                onClick={() => setOpened(routine.id)}
                 type="button"
               >
                 <div className="library-card-head">

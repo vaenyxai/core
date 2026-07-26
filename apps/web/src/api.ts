@@ -1234,6 +1234,14 @@ export function fetchCorrections(
   );
 }
 
+// One Routine in full — what it does, step by step — so the Library can
+// explain it before the Owner commits to a chat with it.
+export function fetchLibraryRoutine(id: string): Promise<LibraryRoutine> {
+  return requestJson<LibraryRoutine>(
+    `/v1/library/routines/${encodeURIComponent(id)}`,
+  );
+}
+
 // Agent Skill interoperability (copy pack Part L). The wording is binding:
 // Vaenyx IMPORTS THE INSTRUCTIONS FROM A SKILL and lists what was dropped.
 // Never "Skill compatible", never "runs Skills" (L4 / ToS 11.5).

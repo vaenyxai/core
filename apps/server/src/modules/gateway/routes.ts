@@ -6085,6 +6085,37 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // One Routine in full, so the Library can explain what it does before the
+  // Owner starts a chat with it. No 200 response schema: view/manifest are
+  // arbitrary author JSON that a strict serializer would quietly strip.
+  app.get<{ Params: { id: string } }>(
+    "/v1/library/routines/:id",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: { 401: ErrorResponseSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const routine = loadRoutine(
+        context.config.routinesDirectory,
+        context.config.libraryDirectory,
+        request.params.id,
+      );
+      if (!routine) {
+        return reply.code(404).send({ error: "Routine not found." });
+      }
+      return routine;
+    },
+  );
+
   // Agent Skill import/export (copy pack Part L). The wording rule is binding
   // on this code and on anything written about it: Vaenyx IMPORTS THE
   // INSTRUCTIONS FROM A SKILL. Never "Skill compatible", never "runs Skills" —

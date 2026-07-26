@@ -241,6 +241,18 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "method.edit.apply": "Apply These Changes",
     // Part L surfaces. "Import the instructions from a Skill" — never
     // "Skill compatible" or "runs Skills" (L4).
+    "photo.add": "Add a photo",
+    "photo.take": "Take a photo",
+    "photo.choose": "Choose an existing photo",
+    "routine.open.title": "About this Routine",
+    "routine.open.steps": "What it does, step by step",
+    "routine.open.start": "Start this Routine",
+    "routine.open.mode.oneShot": "Answers each message on its own",
+    "routine.open.mode.accumulate": "Builds up over the conversation",
+    "routine.open.uses": "Built from",
+    "routine.open.from.journal": "works from what you send",
+    "routine.open.from.previous": "works from the previous step's result",
+    "routine.open.from.static": "works from a fixed input",
     "skill.import.title": "Import the instructions from a Skill",
     // L6: NOT "exactly". The parser recognises four kinds of thing; a Skill can
     // lose a bundled resource, a reference to a service, an assumption about its
@@ -504,6 +516,18 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
     "method.edit.apply": "应用这些改动",
+    "photo.add": "添加照片",
+    "photo.take": "拍照",
+    "photo.choose": "从相册选择",
+    "routine.open.title": "关于这个 Routine",
+    "routine.open.steps": "它会一步一步做什么",
+    "routine.open.start": "开始使用",
+    "routine.open.mode.oneShot": "每条消息各自独立回答",
+    "routine.open.mode.accumulate": "在这段对话里逐步累积",
+    "routine.open.uses": "由这些 Method 组成",
+    "routine.open.from.journal": "处理你发来的内容",
+    "routine.open.from.previous": "处理上一步的结果",
+    "routine.open.from.static": "使用固定的输入",
     "skill.import.title": "导入 Skill 里的指令",
     "skill.import.copy":
       "把 SKILL.md 的内容贴进来。Vaenyx 会把其中的指令保留成一个新的 Method,并列出哪些东西没能带过来。该清单涵盖我们能够识别的种类;一个 Skill 也可能依赖我们看不见的东西,所以请把结果当作起点,而不是一份完成的副本。",
