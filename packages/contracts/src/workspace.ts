@@ -332,8 +332,15 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       // build from. The reply asks ONE clarifying question first; the answered
       // follow-up classifies as create-* and builds (spec §2a phase 2).
       Type.Literal("clarify-create"),
+      // The Owner wants an installed Method to behave differently ("make the
+      // quote one include GST"). The chat proposes the edit and shows what
+      // changed; nothing is written until they approve it (copy pack B4).
+      Type.Literal("edit-method"),
     ]),
     routineId: Type.Union([Type.String(), Type.Null()]),
+    // For edit-method: which installed Method, and what to change about it.
+    methodId: Type.Union([Type.String(), Type.Null()]),
+    editRequest: Type.Union([Type.String(), Type.Null()]),
     // For use-task: the thing to do, extracted from the conversation.
     taskRequest: Type.Union([Type.String(), Type.Null()]),
     // The recurring schedule the Owner asked for ("every morning at 7"), when
@@ -1491,6 +1498,79 @@ export const InstallMethodRequestSchema = Type.Object(
 // Legal acknowledgement / consent record (in-app disclaimers copy pack, clause
 // 2.3). language = the rendered UI language; copyVersion = the legal.copyVersion
 // in force; choice = an optional recorded choice (e.g. flywheel accept/decline).
+// The operator's emergency stop on community publishing. `available` is false
+// for everyone who is not the operator, so the switch is simply absent rather
+// than present-and-refusing.
+export const PublishPauseStateSchema = Type.Object(
+  {
+    available: Type.Boolean(),
+    paused: Type.Boolean(),
+    // Pinned by service configuration; the in-app switch cannot override it.
+    envOverride: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export type PublishPauseState = Static<typeof PublishPauseStateSchema>;
+
+// Editing a Method's recipe from the conversation (copy pack B4). Two steps on
+// purpose: the first only proposes and returns the difference, the second
+// writes what the Owner approved. Nothing here can publish - a publication is a
+// separate, deliberate acceptance of the Contributor Agreement.
+export const DraftRecipeEditRequestSchema = Type.Object(
+  {
+    request: Type.String({ minLength: 1, maxLength: 2000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const RecipeDiffLineSchema = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal("same"),
+      Type.Literal("added"),
+      Type.Literal("removed"),
+    ]),
+    text: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const RecipeEditDraftSchema = Type.Object(
+  {
+    methodId: Type.String(),
+    methodName: Type.String(),
+    current: Type.String(),
+    proposed: Type.String(),
+    diff: Type.Array(RecipeDiffLineSchema),
+    // No line differs: the model returned the recipe unchanged.
+    unchanged: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export const UpdateRecipeRequestSchema = Type.Object(
+  {
+    recipe: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export const UpdateRecipeResponseSchema = Type.Object(
+  {
+    methodId: Type.String(),
+    contentHash: Type.String(),
+    // App Profiles whose grant no longer matches, and must grant again.
+    staleGrants: Type.Integer(),
+  },
+  { additionalProperties: false },
+);
+
+export type DraftRecipeEditRequest = Static<typeof DraftRecipeEditRequestSchema>;
+export type RecipeEditDraft = Static<typeof RecipeEditDraftSchema>;
+export type UpdateRecipeRequest = Static<typeof UpdateRecipeRequestSchema>;
+export type UpdateRecipeResponse = Static<typeof UpdateRecipeResponseSchema>;
+
 export const LegalAcknowledgeRequestSchema = Type.Object(
   {
     keyName: Type.String({ minLength: 1 }),
@@ -1662,6 +1742,10 @@ export const PublishStateSchema = Type.Object(
     // The display name the user is signed in as (either mode), or null.
     signedInAs: Type.Union([Type.String(), Type.Null()]),
     publishedMethodIds: Type.Array(Type.String()),
+    // Published, but changed locally since (copy pack G5). Shown as a fact
+    // beside the publish control; nothing republishes on its own.
+    staleMethodIds: Type.Array(Type.String()),
+    staleRoutineIds: Type.Array(Type.String()),
     publishedRoutineIds: Type.Array(Type.String()),
   },
   { additionalProperties: false },

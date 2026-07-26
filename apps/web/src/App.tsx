@@ -11,6 +11,8 @@ import {
 import type {
   AgentProfile,
   AppProfile,
+  RecipeEditDraft,
+  PublishPauseState,
   AskVaenyxConversation,
   AskVaenyxMessage,
   ReasoningEffort,
@@ -83,6 +85,10 @@ import {
   installMethodFromCatalogue,
   recordLegalAck,
   setSharingPreference,
+  draftRecipeEdit,
+  updateMethodRecipe,
+  fetchPublishPause,
+  setPublishPause,
   fetchLegalAcks,
   fetchLegalDocument,
   fetchChatRoutineData,
@@ -5072,6 +5078,12 @@ function AskVaenyxPanel({
     conversationId: string;
     kind: "method" | "routine";
   } | null>(null);
+  // A proposed recipe edit waiting for the Owner to read the diff and approve.
+  const [recipeEdit, setRecipeEdit] = useState<{
+    conversationId: string;
+    draft: RecipeEditDraft;
+  } | null>(null);
+  const [applyingEdit, setApplyingEdit] = useState(false);
   // Voice (dev.133): the mic shows once a voice connection exists; the speaker
   // toggle reads finished replies aloud (persisted per device).
   const [voiceReady, setVoiceReady] = useState(false);
@@ -5634,6 +5646,67 @@ function AskVaenyxPanel({
   // post a confirmation note into the conversation — the Owner sees it in
   // place, and the model sees it in history on every later turn. Failures post
   // a note too, so the chat never goes silently quiet about a build.
+  // edit-method (copy pack B4): propose the change, then show the Owner exactly
+  // which lines move before anything is written. The confirmation is not
+  // optional and the edit never publishes — see the note on the modal.
+  async function proposeRecipeEdit(
+    conversationId: string,
+    methodId: string,
+    request: string,
+  ): Promise<void> {
+    try {
+      const draft = await draftRecipeEdit(methodId, request);
+      if (draft.unchanged) {
+        await appendConversationNote(
+          conversationId,
+          lang === "zh"
+            ? `「${draft.methodName}」的步骤没有需要改的地方,没有做任何改动。`
+            : `Nothing in "${draft.methodName}" needed changing, so nothing was changed.`,
+        ).catch(() => {});
+        return;
+      }
+      setRecipeEdit({ conversationId, draft });
+    } catch {
+      await appendConversationNote(
+        conversationId,
+        lang === "zh"
+          ? "⚠ 这次没能改成。把要改的地方再说一遍,我重试。"
+          : "⚠ That change could not be drafted. Say what to change again and I'll retry.",
+      ).catch(() => {});
+    }
+  }
+
+  async function applyRecipeEdit(): Promise<void> {
+    if (!recipeEdit || applyingEdit) return;
+    setApplyingEdit(true);
+    const { conversationId, draft } = recipeEdit;
+    try {
+      const result = await updateMethodRecipe(draft.methodId, draft.proposed);
+      const changed = draft.diff.filter((line) => line.kind !== "same").length;
+      const regrant =
+        result.staleGrants > 0
+          ? lang === "zh"
+            ? ` 有 ${result.staleGrants} 个 app 之前授权过这个 Method,需要重新授权。`
+            : ` ${result.staleGrants} app grant(s) for this Method need granting again.`
+          : "";
+      setRecipeEdit(null);
+      const note = await appendConversationNote(
+        conversationId,
+        lang === "zh"
+          ? `✔ 「${draft.methodName}」的步骤已更新(${changed} 行有变动)。${regrant}`
+          : `✔ "${draft.methodName}" updated (${changed} line(s) changed).${regrant}`,
+      );
+      setMessages((current) =>
+        activeConversationId === conversationId ? [...current, note] : current,
+      );
+      onLibraryRefresh();
+    } catch {
+      // The toast from the failed request already said what went wrong.
+    } finally {
+      setApplyingEdit(false);
+    }
+  }
+
   async function buildFromChat(
     conversationId: string,
     kind: "method" | "routine",
@@ -5710,6 +5783,8 @@ function AskVaenyxPanel({
     let suggestRoutineId: string | undefined;
     let suggestTask = false;
     let suggestCreate: "method" | "routine" | undefined;
+    let editMethodId: string | null = null;
+    let editRequest: string | null = null;
     let createDescription: string | null = null;
     let clarifyCreateQuestion: string | undefined;
     // The FIRST message of a brand-new chat is exactly where people state what
@@ -5827,6 +5902,16 @@ function AskVaenyxPanel({
       // answered follow-up classifies as create-* and builds as usual.
       if (verdict?.decision === "clarify-create" && verdict.clarifyQuestion) {
         clarifyCreateQuestion = verdict.clarifyQuestion;
+      }
+      // edit-method: an installed Method should behave differently. The reply
+      // still happens; the proposed change follows it as a confirmation.
+      if (
+        verdict?.decision === "edit-method" &&
+        verdict.methodId &&
+        verdict.editRequest
+      ) {
+        editMethodId = verdict.methodId;
+        editRequest = verdict.editRequest;
       }
     }
 
@@ -5978,6 +6063,9 @@ function AskVaenyxPanel({
           suggestCreate,
           createDescription ?? content,
         );
+      }
+      if (editMethodId && editRequest) {
+        void proposeRecipeEdit(conversationId, editMethodId, editRequest);
       }
 
       onConversationsChange(
@@ -6688,6 +6776,56 @@ function AskVaenyxPanel({
             </div>
           ) : null}
         </header>
+
+        {/* B4: the Owner approves an edit by reading it, so the changed lines
+            are shown against the current recipe — never a rewritten whole.
+            Applying writes recipe.md only, and never publishes: a publication
+            is a separate acceptance of the Contributor Agreement, and an edit
+            that published itself would make those warranties for the Owner
+            without asking (ToS 7.2(d), copy pack G5). */}
+        {recipeEdit ? (
+          <Modal
+            onClose={() => setRecipeEdit(null)}
+            title={recipeEdit.draft.methodName}
+            variant="doc"
+          >
+            <p className="settings-card-copy">{t("legal.notice.method.edit")}</p>
+            <div className="recipe-diff">
+              {recipeEdit.draft.diff.map((line, index) => (
+                <div
+                  className={`recipe-diff-line ${line.kind}`}
+                  key={`${index}-${line.kind}`}
+                >
+                  <span className="recipe-diff-mark">
+                    {line.kind === "added"
+                      ? "+"
+                      : line.kind === "removed"
+                        ? "−"
+                        : " "}
+                  </span>
+                  <span>{line.text || " "}</span>
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button
+                className="text-button"
+                onClick={() => setRecipeEdit(null)}
+                type="button"
+              >
+                {t("routine.confirm.cancel")}
+              </button>
+              <button
+                className="primary-button"
+                disabled={applyingEdit}
+                onClick={() => void applyRecipeEdit()}
+                type="button"
+              >
+                {applyingEdit ? "…" : t("method.edit.apply")}
+              </button>
+            </div>
+          </Modal>
+        ) : null}
 
         {routineInputConfirm ? (
           <Modal
@@ -9737,7 +9875,12 @@ function SettingsPanel({
       {activeTab === "ai" ? <VoicePanel /> : null}
       {activeTab === "notifications" ? <NotificationsPanel /> : null}
       {activeTab === "backup" ? <BackupPanel /> : null}
-      {activeTab === "sharing" ? <SharingPanel /> : null}
+      {activeTab === "sharing" ? (
+        <>
+          <SharingPanel />
+          <PublishPausePanel />
+        </>
+      ) : null}
       {activeTab === "modes" ? <ModesPanel /> : null}
       {activeTab === "legal" ? (
       <section className="settings-card">
@@ -10799,6 +10942,14 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
               <span className="ok-text">{t("publish.published")} ✓</span>
             </p>
           ) : null}
+          {/* G5: states the fact, and offers nothing. Republishing is a fresh
+              acceptance of the Contributor Agreement, so it stays the Owner's
+              deliberate act — never a nudge, never automatic. */}
+          {state.staleMethodIds.includes(method.id) ? (
+            <p className="context-disclaimer">
+              {t("legal.notice.publish.localChanges")}
+            </p>
+          ) : null}
           <button
             className="primary-button"
             disabled={busy}
@@ -10827,6 +10978,213 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
   );
 }
 
+// The operator's emergency stop on community publishing. Invisible to everyone
+// else: the publish service holds the operator allow-list and answers 403, so
+// this panel simply does not render rather than showing a control that refuses.
+// Oskar has to be able to reach this himself when abuse is in progress - a stop
+// that needs a deploy is not a stop.
+function PublishPausePanel() {
+  const { t } = useI18n();
+  const [state, setState] = useState<PublishPauseState | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetchPublishPause()
+      .then((next) => {
+        if (active) setState(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!state?.available) return null;
+
+  async function toggle() {
+    if (!state || busy) return;
+    setBusy(true);
+    try {
+      setState(await setPublishPause(!state.paused));
+    } catch {
+      // The failed request already raised a toast.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="settings-card">
+      <p className="eyebrow">{t("title.community")}</p>
+      <h2>{t("settings.community.pauseTitle")}</h2>
+      <p className="settings-card-copy">{t("settings.community.pauseCopy")}</p>
+      <p className="settings-card-copy">
+        <strong>
+          {state.paused
+            ? t("settings.community.paused")
+            : t("settings.community.live")}
+        </strong>
+      </p>
+      {state.envOverride ? (
+        <p className="context-disclaimer">
+          {t("settings.community.pauseOverride")}
+        </p>
+      ) : null}
+      <button
+        className={state.paused ? "primary-button" : "danger-button"}
+        disabled={busy}
+        onClick={() => void toggle()}
+        type="button"
+      >
+        {busy
+          ? "…"
+          : state.paused
+            ? t("settings.community.live")
+            : t("settings.community.paused")}
+      </button>
+    </section>
+  );
+}
+
+// D6 (copy pack): what the community currently publishes, for items installed
+// from it. Fetched once per screen and best-effort — an unreachable catalogue
+// means no notice, never an error in the Owner's face.
+function useCommunityVersions(): Map<string, { version: string; description: string }> {
+  const [versions, setVersions] = useState<
+    Map<string, { version: string; description: string }>
+  >(new Map());
+  useEffect(() => {
+    let active = true;
+    void fetchCatalogue()
+      .then((index) => {
+        if (!active) return;
+        const next = new Map<string, { version: string; description: string }>();
+        for (const item of [...index.methods, ...index.routines]) {
+          next.set(item.id, {
+            version: item.version,
+            description: item.description,
+          });
+        }
+        setVersions(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return versions;
+}
+
+// Dotted compare: is `candidate` a later version than `installed`?
+function isLaterVersion(candidate: string, installed: string): boolean {
+  const a = candidate.split(".").map((part) => Number.parseInt(part, 10));
+  const b = installed.split(".").map((part) => Number.parseInt(part, 10));
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const left = a[index] ?? 0;
+    const right = b[index] ?? 0;
+    if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
+    if (left !== right) return left > right;
+  }
+  return false;
+}
+
+// The notice on an installed community item when a newer version exists.
+//
+// Deliberately NOT an update prompt. Vaenyx has not reviewed the new version
+// any more than it reviewed the installed one, so recommending it would be
+// vouching for third-party content — the string states availability and stops.
+// And nothing updates itself: user-side auto-update is prohibited, because "the
+// author can change a repository but cannot reach anyone's machine" is the
+// property that keeps a compromised item from becoming a compromised install.
+// Content that must reach installed copies goes through takedown (ToS 8.5),
+// which the operator controls.
+function CommunityUpdateNotice({
+  kind,
+  id,
+  installedVersion,
+  latest,
+  onUpdated,
+}: {
+  kind: "method" | "routine";
+  id: string;
+  installedVersion: string;
+  latest: { version: string; description: string } | undefined;
+  onUpdated: () => void;
+}) {
+  const { t } = useI18n();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  if (!latest || !isLaterVersion(latest.version, installedVersion)) return null;
+
+  async function update() {
+    setBusy(true);
+    try {
+      if (kind === "method") {
+        await installMethodFromCatalogue(id);
+      } else {
+        await installRoutineFromCatalogue(id);
+      }
+      setConfirming(false);
+      onUpdated();
+    } catch {
+      // The failed request already raised a toast.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="update-notice">
+      <p className="context-disclaimer">
+        {t("legal.notice.community.updateAvailable")}
+      </p>
+      <p className="settings-card-copy">
+        {t("community.update.versions")
+          .replace("{installed}", `v${installedVersion}`)
+          .replace("{latest}", `v${latest.version}`)}
+      </p>
+      {latest.description ? (
+        <p className="settings-card-copy">{latest.description}</p>
+      ) : null}
+      <button
+        className="text-button"
+        onClick={() => setConfirming(true)}
+        type="button"
+      >
+        {t("community.update.action")}
+      </button>
+      {confirming ? (
+        <Modal onClose={() => setConfirming(false)} title={t("community.update.action")}>
+          {/* An update IS an install of someone else's content, so D2 is shown
+              again exactly as it was the first time. */}
+          <p className="settings-card-copy">
+            {t("legal.disclaimer.community.install")}
+          </p>
+          <div className="modal-actions">
+            <button
+              className="text-button"
+              onClick={() => setConfirming(false)}
+              type="button"
+            >
+              {t("routine.confirm.cancel")}
+            </button>
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() => void update()}
+              type="button"
+            >
+              {busy ? "…" : t("community.update.action")}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+    </div>
+  );
+}
+
 function MethodDetail({
   method,
   onBack,
@@ -10836,6 +11194,7 @@ function MethodDetail({
   onBack: () => void;
   onChanged: (method: LibraryMethod) => void;
 }) {
+  const communityVersions = useCommunityVersions();
   const [inputText, setInputText] = useState(() =>
     JSON.stringify(buildInputSkeleton(method.inputSchema), null, 2),
   );
@@ -11012,6 +11371,15 @@ function MethodDetail({
         )}
         {renameError ? <p className="form-error">{renameError}</p> : null}
         <p className="settings-card-copy">{method.description}</p>
+        {method.origin === "community" ? (
+          <CommunityUpdateNotice
+            id={method.id}
+            installedVersion={method.version}
+            kind="method"
+            latest={communityVersions.get(method.id)}
+            onUpdated={onBack}
+          />
+        ) : null}
         <div className="method-tag-editor">
           <span className="method-picker-label">Tags</span>
           <div className="tag-row">
@@ -12606,6 +12974,12 @@ function RoutinePublishControl({
       {published ? (
         <span className="ok-text">{t("publish.published")} ✓</span>
       ) : null}
+      {/* G5: fact, not prompt — see the note on the Method publish card. */}
+      {state.staleRoutineIds.includes(routineId) ? (
+        <span className="context-disclaimer">
+          {t("legal.notice.publish.localChanges")}
+        </span>
+      ) : null}
       {error ? <span className="form-error">{error}</span> : null}
       {confirming ? (
         <PublishConfirmDialog
@@ -12657,6 +13031,7 @@ function RoutinesPanel({
   onRoutinesRefresh: () => void;
   onUseRoutine: (routineId: string) => void;
 }) {
+  const communityVersions = useCommunityVersions();
   // A chat create-offer opens the create flow directly, description pre-filled.
   const [creating, setCreating] = useState(
     () => peekCreateIntent()?.kind === "routine",
@@ -12766,6 +13141,15 @@ function RoutinesPanel({
                 state={publishState}
                 onPublished={reloadPublish}
               />
+              {routine.origin === "community" ? (
+                <CommunityUpdateNotice
+                  id={routine.id}
+                  installedVersion={routine.version}
+                  kind="routine"
+                  latest={communityVersions.get(routine.id)}
+                  onUpdated={onRoutinesRefresh}
+                />
+              ) : null}
             </div>
           ))}
         </div>

@@ -94,6 +94,50 @@ export async function fetchServiceIdentity(
   }
 }
 
+// GET/POST /admin/publishing — the operator's emergency stop. Paused means the
+// service refuses every publish, the operator's own included. It lives on the
+// service, not in a deploy, so stopping abuse is a switch rather than a release.
+export async function fetchPublishingPause(
+  serviceUrl: string,
+  token: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ paused: boolean; envOverride: boolean } | null> {
+  try {
+    const res = await fetchImpl(`${serviceUrl}/admin/publishing`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      paused?: unknown;
+      envOverride?: unknown;
+    };
+    return {
+      paused: Boolean(data.paused),
+      envOverride: Boolean(data.envOverride),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function setPublishingPause(
+  serviceUrl: string,
+  token: string,
+  paused: boolean,
+  fetchImpl: typeof fetch = fetch,
+): Promise<boolean> {
+  const res = await fetchImpl(`${serviceUrl}/admin/publishing`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ paused }),
+  });
+  if (!res.ok) throw new Error("PUBLISH_PAUSE_FAILED");
+  return paused;
+}
+
 // POST /publish — hand the collected declarative files to the service, which
 // stamps the byline, commits with the bot token, and returns the commit sha.
 export async function publishViaService(

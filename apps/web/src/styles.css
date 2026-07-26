@@ -3769,6 +3769,51 @@ select {
   font-size: 10px;
 }
 
+/* Recipe edit diff (copy pack B4): changed lines have to be readable at a
+   glance, so they are monospaced and colour-coded, and unchanged context is
+   dimmed rather than hidden. */
+.recipe-diff {
+  max-height: 46vh;
+  overflow: auto;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.recipe-diff-line {
+  display: flex;
+  gap: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.recipe-diff-mark {
+  flex-shrink: 0;
+  width: 1ch;
+  opacity: 0.7;
+}
+
+.recipe-diff-line.same {
+  color: var(--text-3, #8c8981);
+}
+
+.recipe-diff-line.added {
+  color: #7ee2a8;
+  background: rgba(126, 226, 168, 0.08);
+}
+
+.recipe-diff-line.removed {
+  color: #ef9a9a;
+  background: rgba(239, 154, 154, 0.08);
+  text-decoration: line-through;
+  text-decoration-color: rgba(239, 154, 154, 0.5);
+}
+
 /* Install + the D4 report link sit on one row under each community card. */
 .library-card-actions {
   display: flex;

@@ -70,6 +70,25 @@ function allowedMethodIds(database: DatabaseHandle, profileId: string): string[]
   ).map((row) => row.method_id);
 }
 
+// How many App Profiles hold a grant for this method that no longer matches
+// what the method now is. Editing a recipe moves the content hash, and those
+// profiles will be refused (409) until they are granted the new version - the
+// Owner is told the count before they apply an edit, not after an app breaks.
+export function countStaleMethodGrants(
+  database: DatabaseHandle,
+  methodId: string,
+  contentHash: string,
+): number {
+  const row = database.sqlite
+    .prepare(
+      `SELECT COUNT(*) AS n
+       FROM app_profile_methods
+       WHERE method_id = ? AND content_hash <> ?`,
+    )
+    .get(methodId, contentHash) as { n: number } | undefined;
+  return row?.n ?? 0;
+}
+
 // The content hash an App Profile pinned for a granted method (the version
 // lock), or null if the method is not granted to this profile.
 export function getAppProfileMethodLock(

@@ -1,4 +1,4 @@
-﻿import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { Type } from "@sinclair/typebox";
@@ -88,6 +88,11 @@ import {
   LegalAcknowledgeRequestSchema,
   LegalAcknowledgementsResponseSchema,
   SetSharingPreferenceRequestSchema,
+  PublishPauseStateSchema,
+  DraftRecipeEditRequestSchema,
+  RecipeEditDraftSchema,
+  UpdateRecipeRequestSchema,
+  UpdateRecipeResponseSchema,
   PublishAcceptanceRequestSchema,
   ClassifyRoutineResponseSchema,
   LoginRequestSchema,
@@ -154,6 +159,8 @@ import {
   type InstallMethodRequest,
   type LegalAcknowledgeRequest,
   type SetSharingPreferenceRequest,
+  type DraftRecipeEditRequest,
+  type UpdateRecipeRequest,
   type PublishAcceptanceRequest,
   type SetMethodTagsRequest,
   type RenameMethodTagRequest,
@@ -196,6 +203,7 @@ import {
 } from "../core/backups.js";
 import {
   authenticateAppProfile,
+  countStaleMethodGrants,
   createAppProfile,
   deleteAppProfile,
   disableAppProfile,
@@ -262,7 +270,9 @@ import {
 } from "../core/modes.js";
 import {
   createMethod,
+  diffRecipeLines,
   draftMethodSpec,
+  draftRecipeEdit,
   executeMethod,
   listMethodSummaries,
   loadMethod,
@@ -272,6 +282,7 @@ import {
   runDraftMethod,
   setMethodTags,
   toLibraryMethod,
+  updateMethodRecipe,
   validateAgainstSchema,
 } from "../core/methods.js";
 import { recordMethodFeedback } from "../core/method-feedback.js";
@@ -288,6 +299,7 @@ import {
   collectMethodFiles,
   collectRoutineFiles,
   listPublishedIds,
+  listStalePublishedIds,
   publishMethod,
   publishRoutine,
   recordServicePublish,
@@ -295,6 +307,8 @@ import {
 import {
   clearServiceSession,
   fetchServiceAcceptances,
+  fetchPublishingPause,
+  setPublishingPause,
   fetchServiceIdentity,
   getServiceSession,
   publishViaService,
@@ -2492,9 +2506,16 @@ export async function registerGatewayRoutes(
           request.body.content,
           context.config.routinesDirectory,
           controller.signal,
+          context.config.libraryDirectory,
         );
       } catch {
-        return { decision: "none", routineId: null, note: "" };
+        return {
+          decision: "none",
+          routineId: null,
+          methodId: null,
+          editRequest: null,
+          note: "",
+        };
       }
     },
   );
@@ -5810,6 +5831,98 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // The operator's publishing pause, proxied to the publish service. The
+  // service decides who counts as an operator (it holds the allow-list); this
+  // instance only forwards the signed-in session, so a non-operator gets the
+  // service's own 403 rather than a check that could be edited locally.
+  app.get(
+    "/v1/publish/pause",
+    {
+      schema: {
+        response: {
+          200: PublishPauseStateSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const serviceUrl = context.config.publishServiceUrl;
+      const session = serviceUrl
+        ? getServiceSession(context.database, owner.id)
+        : null;
+      if (!serviceUrl || !session) {
+        return { available: false, paused: false, envOverride: false };
+      }
+      const state = await fetchPublishingPause(serviceUrl, session.token);
+      // No state = not an operator (403) or the service is unreachable. Either
+      // way the switch simply does not appear.
+      return state
+        ? { available: true, paused: state.paused, envOverride: state.envOverride }
+        : { available: false, paused: false, envOverride: false };
+    },
+  );
+
+  app.post<{ Body: { paused: boolean } }>(
+    "/v1/publish/pause",
+    {
+      schema: {
+        body: Type.Object(
+          { paused: Type.Boolean() },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: PublishPauseStateSchema,
+          401: ErrorResponseSchema,
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const serviceUrl = context.config.publishServiceUrl;
+      const session = serviceUrl
+        ? getServiceSession(context.database, owner.id)
+        : null;
+      if (!serviceUrl || !session) {
+        return reply
+          .code(503)
+          .send({ error: "The publish service is not connected." });
+      }
+      try {
+        await setPublishingPause(serviceUrl, session.token, request.body.paused);
+      } catch {
+        return reply
+          .code(503)
+          .send({ error: "The publish service refused that change." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "publish.pause",
+        decision: "allowed",
+        reason: request.body.paused
+          ? "Operator paused community publishing for everyone."
+          : "Operator resumed community publishing.",
+        resourceType: "publish_service",
+        resourceId: "publishing",
+      });
+      const state = await fetchPublishingPause(serviceUrl, session.token);
+      return {
+        available: true,
+        paused: state?.paused ?? request.body.paused,
+        envOverride: state?.envOverride ?? false,
+      };
+    },
+  );
+
   // The install wizard's sharing card (copy pack A3). Deliberately NOT a legal
   // acknowledgement: sharing does not exist in this release, so this records
   // interest as an ordinary local setting and nothing else.
@@ -5946,6 +6059,136 @@ export async function registerGatewayRoutes(
       });
 
       return toLibraryMethod(method);
+    },
+  );
+
+  // Propose a recipe edit (copy pack B4). Reads the current recipe, asks the
+  // model for the revision the Owner described, and returns BOTH texts plus the
+  // line difference. Writes nothing: the Owner approves the change first.
+  app.post<{ Params: { id: string }; Body: DraftRecipeEditRequest }>(
+    "/v1/methods/:id/recipe/draft",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: DraftRecipeEditRequestSchema,
+        response: {
+          200: RecipeEditDraftSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const method = loadMethod(
+        context.config.libraryDirectory,
+        request.params.id,
+      );
+      if (!method) {
+        return reply.code(404).send({ error: "Method not found." });
+      }
+
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+
+      let proposed: string;
+      try {
+        proposed = await draftRecipeEdit(
+          method,
+          request.body.request,
+          controller.signal,
+        );
+      } catch {
+        return reply
+          .code(400)
+          .send({ error: "Vaenyx could not draft that change." });
+      }
+
+      const current = method.recipe.trim();
+      const diff = diffRecipeLines(current, proposed);
+      return {
+        methodId: method.id,
+        methodName: method.name,
+        current,
+        proposed,
+        diff,
+        unchanged: !diff.some((line) => line.kind !== "same"),
+      };
+    },
+  );
+
+  // Apply an approved recipe edit. ONLY recipe.md is written: schema.json and
+  // manifest.json (the permission declaration) are deliberately out of reach of
+  // a conversation. This never publishes - publishing is a separate, deliberate
+  // acceptance of the Contributor Agreement (ToS 7.2(d)), and an edit that
+  // published itself would make those warranties for the Owner without asking.
+  app.put<{ Params: { id: string }; Body: UpdateRecipeRequest }>(
+    "/v1/methods/:id/recipe",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: UpdateRecipeRequestSchema,
+        response: {
+          200: UpdateRecipeResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      let updated;
+      try {
+        updated = updateMethodRecipe(
+          context.config.libraryDirectory,
+          request.params.id,
+          request.body.recipe,
+        );
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        if (code === "METHOD_NOT_FOUND") {
+          return reply.code(404).send({ error: "Method not found." });
+        }
+        return reply.code(400).send({ error: "That recipe could not be saved." });
+      }
+
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "library.method.recipe.edit",
+        decision: "allowed",
+        reason:
+          "Owner approved a recipe edit from chat; the content hash moved, so granted App Profiles must grant again.",
+        resourceType: "method",
+        resourceId: request.params.id,
+      });
+
+      return {
+        methodId: updated.id,
+        contentHash: updated.contentHash,
+        staleGrants: countStaleMethodGrants(
+          context.database,
+          updated.id,
+          updated.contentHash,
+        ),
+      };
     },
   );
 
@@ -6462,6 +6705,23 @@ export async function registerGatewayRoutes(
       }
       const publishedMethodIds = listPublishedIds(context.database, "method");
       const publishedRoutineIds = listPublishedIds(context.database, "routine");
+      // G5: which of those no longer match what is on disk.
+      const staleMethodIds = listStalePublishedIds(
+        context.database,
+        "method",
+        (id) =>
+          loadMethod(context.config.libraryDirectory, id)?.contentHash ?? null,
+      );
+      const staleRoutineIds = listStalePublishedIds(
+        context.database,
+        "routine",
+        (id) =>
+          loadRoutine(
+            context.config.routinesDirectory,
+            context.config.libraryDirectory,
+            id,
+          )?.contentHash ?? null,
+      );
       // Service mode: publishing routes through the operator-hosted core-cloud
       // service; the Owner signs in there (Google/GitHub) and we hold a session.
       if (context.config.publishServiceUrl) {
@@ -6473,6 +6733,8 @@ export async function registerGatewayRoutes(
           signedInAs: session ? session.displayName : null,
           publishedMethodIds,
           publishedRoutineIds,
+          staleMethodIds,
+          staleRoutineIds,
         };
         return serviceState;
       }
@@ -6492,6 +6754,8 @@ export async function registerGatewayRoutes(
         signedInAs: identityRow ? identityRow.name : null,
         publishedMethodIds,
         publishedRoutineIds,
+        staleMethodIds,
+        staleRoutineIds,
       };
       return state;
     },

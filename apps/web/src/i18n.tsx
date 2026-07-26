@@ -204,6 +204,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "I consent to Vaenyx disclosing the content I publish and the public byline I choose to GitHub, Inc. in the United States for hosting in the public, worldwide Community Library. If the Privacy Act applies to Vaenyx and I give this consent, APP 8.1 will not apply to this disclosure. If GitHub handles that information in a way that would breach the APPs, Vaenyx will not be accountable under the Privacy Act for that handling and I will not be able to seek redress from Vaenyx under the Privacy Act for it. Other laws or rights may still apply. Publishing is optional. Withdrawal blocks future publication but cannot reverse information already made public. Consent will be obtained again if the recipient, purpose or consequences materially change.",
     "legal.disclaimer.community.install":
       "Created by a community member. It has not been reviewed as professional advice — use it at your own discretion. It does nothing until you use it.",
+    "legal.notice.method.edit":
+      "This rewrites what the Method tells the model to do — its steps only. Its inputs, outputs and permissions are unchanged. Apps you granted this Method must be granted it again, because what they were granted has changed. Nothing is published: your Library copy is the only one affected.",
+    "method.edit.apply": "Apply These Changes",
+    "legal.notice.publish.localChanges":
+      "You have changed this since you published it. The community still has the version you published; publishing again replaces it with what is on this device.",
+    "legal.notice.community.updateAvailable":
+      "A newer version of this community item has been published. Updating replaces your installed copy with the publisher's new version; the current one keeps working if you do nothing.",
+    "community.update.action": "Update",
+    "community.update.versions": "Installed {installed} · published {latest}",
+    "settings.community.pauseTitle": "Pause Community Publishing",
+    "settings.community.pauseCopy":
+      "Operator only. While publishing is paused the service refuses every publish, including yours. Use it to stop abuse in progress.",
+    "settings.community.paused": "Publishing is paused",
+    "settings.community.live": "Publishing is open",
+    "settings.community.pauseOverride":
+      "Set by service configuration; the switch here cannot override it.",
     "legal.notice.community.discord":
       "Community discussion happens on Discord, a third-party platform under its own terms. If you join or post in the official Vaenyx server, Discord collects and stores your account details, posts and technical data, and Vae Foundry Pty Ltd administrators can access and use your Discord profile, posts and moderation records to operate and moderate the server. Participation is optional. The Discord platform itself is not operated by Vaenyx. See the Core Privacy Policy and the Current Implementation and Data-Handling Schedule for retention, access, correction and complaints.",
     "legal.notice.community.report":
@@ -395,6 +411,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "我同意 Vaenyx 将我发布的内容及我选定的公开署名披露给美国的 GitHub, Inc.,以存放于面向全球的公开社区库。若《隐私法》适用于 Vaenyx 且我作出本同意,APP 8.1 将不适用于该项披露。若 GitHub 以违反 APPs 的方式处理该信息,Vaenyx 就该处理不在《隐私法》项下承担责任,我也无法就此依《隐私法》向 Vaenyx 寻求救济。其他法律或权利仍可能适用。发布是可选的。撤回同意可阻止今后的发布,但无法撤回已公开的信息。若接收方、目的或后果发生实质变化,将重新取得同意。",
     "legal.disclaimer.community.install":
       "由社区成员制作,未经专业建议层面的审核——请自行斟酌使用。你不主动使用,它就不会做任何事。",
+    "legal.notice.method.edit":
+      "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
+    "method.edit.apply": "应用这些改动",
+    "legal.notice.publish.localChanges":
+      "自你发布之后,你改动过这一份。社区上仍是你当初发布的那个版本;再次发布会用这台设备上的内容替换它。",
+    "legal.notice.community.updateAvailable":
+      "该社区条目已发布更新的版本。更新会用发布者的新版本替换你已安装的这一份;你不做任何操作,现在这一份也会继续正常工作。",
+    "community.update.action": "更新",
+    "community.update.versions": "已安装 {installed} · 已发布 {latest}",
+    "settings.community.pauseTitle": "暂停社区发布",
+    "settings.community.pauseCopy":
+      "仅运营方可见。暂停期间,发布服务会拒绝所有人的发布请求,包括你自己的。用于在滥用发生时立即止血。",
+    "settings.community.paused": "发布已暂停",
+    "settings.community.live": "发布正常开放",
+    "settings.community.pauseOverride":
+      "当前由服务配置设定,此处的开关无法覆盖。",
     "legal.notice.community.discord":
       "社区讨论在 Discord 上进行。Discord 是第三方平台,受其自身条款约束。若你加入官方 Vaenyx 服务器或在其中发帖,Discord 会收集并存储你的账户信息、帖子与技术数据;Vae Foundry Pty Ltd 的管理员可以访问并使用你的 Discord 资料、帖子与管理记录,以运营和管理该服务器。参与是可选的。Discord 平台本身并非由 Vaenyx 运营。留存、查阅、更正与投诉事宜,见《核心隐私政策》与《当前实现与数据处理明细表》。",
     "legal.notice.community.report":

@@ -63,7 +63,7 @@
 
 **`feature.community-sharing.server-evidence-record`** — D1 表 flywheel_evidence 已存在(migration 0003),但没有任何代码向其写入,因为不存在上传路径。
 
-**`feature.publication.core`** — 
+**`feature.publication.core`** — 发布服务校验的是**形式,不是内容**:允许的声明式文件类型、安全的路径、大小限制、条目标识符的归属,以及已移除条目不得重新发布。它不检查 recipe 写了什么。app 只是客户端,不是边界 —— 已登录的账户可以直接调用该端点 —— 因此任何重要的防护都必须在此强制执行,而我们不就文字含义作任何防护主张。该服务另设有按账户的发布速率上限、由运营方控制的暂停开关,以及一道针对「本会进入公开仓库的联系方式与支付信息」的自动筛查。该筛查只作用于提交内容;其具体检查项与阈值不予公布,我们也不表示它能检出任何特定内容。
 发送的文件: `recipe.md`, `schema.json`, `manifest.json (if present)`, `method.json / routine.json with publisher display name stamped as owner`
 必需的门槛: `legal.notice.publish`, `legal.notice.publish.contributorTerms`, `legal.consent.publish.warranty`, `legal.notice.publish.signIn`, `legal.consent.publish.overseas`
 实现证据: apps/server/src/modules/core/publish.ts collectMethodFiles; core-cloud src/github.ts commitFiles

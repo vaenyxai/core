@@ -17,6 +17,7 @@ import type { DatabaseHandle } from "../../db/database.js";
 import { getDefaultProvider } from "../models/registry.js";
 
 import { listAskVaenyxMessages } from "./ask-vaenyx.js";
+import { listMethodSummaries } from "./methods.js";
 import { listRoutineSummaries } from "./routines.js";
 
 function extractJson(raw: string): Record<string, unknown> | null {
@@ -42,10 +43,13 @@ export async function classifyRoutineIntent(
   content: string,
   routinesDirectory: string,
   signal: AbortSignal,
+  libraryDirectory?: string,
 ): Promise<ClassifyRoutineResponse> {
   const none: ClassifyRoutineResponse = {
     decision: "none",
     routineId: null,
+    methodId: null,
+    editRequest: null,
     taskRequest: null,
     taskSchedule: null,
     createDescription: null,
@@ -60,6 +64,19 @@ export async function classifyRoutineIntent(
           .map(
             (routine) =>
               `- id: ${routine.id} — ${routine.name}: ${routine.description} [tags: ${routine.tags.join(", ")}]`,
+          )
+          .join("\n")
+      : "(none installed)";
+
+  // Installed Methods are listed too, so "make the quote one include GST" can
+  // be matched to a Method the Owner actually has.
+  const methods = libraryDirectory ? listMethodSummaries(libraryDirectory) : [];
+  const methodCatalogue =
+    methods.length > 0
+      ? methods
+          .map(
+            (method) =>
+              `- id: ${method.id} — ${method.name}: ${method.description}`,
           )
           .join("\n")
       : "(none installed)";
@@ -85,6 +102,9 @@ export async function classifyRoutineIntent(
     "Installed Routines:",
     catalogue,
     "",
+    "Installed Methods:",
+    methodCatalogue,
+    "",
     history ? `Recent conversation:\n${history}\n` : "",
     `Owner's latest message: "${content.trim()}"`,
     "",
@@ -104,6 +124,11 @@ export async function classifyRoutineIntent(
     '- "create-routine": wants to BUILD a new multi-step helper (a repeatable',
     "  workflow with several steps) that nothing installed covers — set",
     "  createDescription.",
+    '- "edit-method": wants an ALREADY INSTALLED Method to behave differently',
+    '  ("make the quote one include GST", "让它别写那么长", "改成…"). Set methodId',
+    "  to the Method being talked about and editRequest to what should change, in",
+    "  the Owner's language. Only for a Method that is in the list above — never",
+    "  invent an id, and never use this to build something new.",
     '- "clarify-create": the Owner clearly wants something BUILT (create-method /',
     "  create-routine territory) but the description is too vague to build from —",
     "  the essentials are missing (what goes in, what should come out, or what the",
@@ -111,7 +136,9 @@ export async function classifyRoutineIntent(
     "  Owner's language, that would make it buildable. Ask at most once: if the",
     "  recent conversation already shows Vaenyx asking a clarifying question about",
     "  this build, never pick this again — pick create-* with your best combined",
-    "  understanding instead.",
+    "  understanding instead. Use it the same way for an edit: if the Owner",
+    "  clearly wants an installed Method changed but it is not clear WHICH one,",
+    "  ask which Method they mean.",
     '- "none": ordinary conversation, or a question to answer directly here.',
     "",
     "If the recent conversation shows Vaenyx asked a clarifying question about",
@@ -135,8 +162,12 @@ export async function classifyRoutineIntent(
     "",
     "Output ONE JSON object and nothing else:",
     '{ "decision": "none" | "use-routine" | "suggest-routine" | "suggest-task" |',
-    '    "use-task" | "create-method" | "create-routine" | "clarify-create",',
+    '    "use-task" | "create-method" | "create-routine" | "clarify-create" |',
+    '    "edit-method",',
     '  "routineId": "<routine id or null>",',
+    '  "methodId": "<for edit-method, the installed method id, else null>",',
+    '  "editRequest": "<for edit-method, what to change, in the Owner\'s',
+    '    language, else null>",',
     '  "taskRequest": "<for use-task, the thing to do, else null>",',
     '  "taskSchedule": { "cadence": "hourly"|"daily"|"weekly"|"monthly",',
     '      "time": "HH:MM" or null, "dayOfWeek": 0-6 or null,',
@@ -171,6 +202,7 @@ export async function classifyRoutineIntent(
     "create-method",
     "create-routine",
     "clarify-create",
+    "edit-method",
   ].includes(parsed.decision as string)
     ? (parsed.decision as ClassifyRoutineResponse["decision"])
     : "none";
@@ -179,6 +211,11 @@ export async function classifyRoutineIntent(
   const note = typeof parsed.note === "string" ? parsed.note.trim() : "";
   const routineId =
     typeof parsed.routineId === "string" ? parsed.routineId : null;
+  const methodId = typeof parsed.methodId === "string" ? parsed.methodId : null;
+  const editRequest =
+    typeof parsed.editRequest === "string" && parsed.editRequest.trim()
+      ? parsed.editRequest.trim().slice(0, 2000)
+      : null;
   const taskRequest =
     typeof parsed.taskRequest === "string" && parsed.taskRequest.trim()
       ? parsed.taskRequest.trim()
@@ -241,6 +278,8 @@ export async function classifyRoutineIntent(
     return {
       decision,
       routineId,
+      methodId: null,
+      editRequest: null,
       taskRequest: null,
       taskSchedule: null,
       createDescription: null,
@@ -254,6 +293,8 @@ export async function classifyRoutineIntent(
     return {
       decision,
       routineId: null,
+      methodId: null,
+      editRequest: null,
       taskRequest,
       taskSchedule,
       createDescription: null,
@@ -268,9 +309,35 @@ export async function classifyRoutineIntent(
     return {
       decision,
       routineId: null,
+      methodId: null,
+      editRequest: null,
       taskRequest: null,
       taskSchedule: null,
       createDescription: createDescription ?? content.trim().slice(0, 2000),
+      clarifyQuestion: null,
+      note,
+    };
+  }
+
+  if (decision === "edit-method") {
+    // The Method must be one the Owner actually has, and there must be a stated
+    // change. Anything else degrades to plain chat rather than guessing at
+    // which of their Methods to rewrite.
+    if (
+      !methodId ||
+      !editRequest ||
+      !methods.some((method) => method.id === methodId)
+    ) {
+      return none;
+    }
+    return {
+      decision,
+      routineId: null,
+      methodId,
+      editRequest,
+      taskRequest: null,
+      taskSchedule: null,
+      createDescription: null,
       clarifyQuestion: null,
       note,
     };
@@ -283,6 +350,8 @@ export async function classifyRoutineIntent(
     return {
       decision,
       routineId: null,
+      methodId: null,
+      editRequest: null,
       taskRequest: null,
       taskSchedule: null,
       createDescription: null,
@@ -295,6 +364,8 @@ export async function classifyRoutineIntent(
   return {
     decision,
     routineId: null,
+    methodId: null,
+    editRequest: null,
     taskRequest: null,
     taskSchedule,
     createDescription: null,

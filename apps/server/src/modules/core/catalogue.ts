@@ -151,6 +151,14 @@ async function downloadMethod(
 // installer runs for each dependency, exposed directly so a Method can be pulled
 // as a reusable building block. Loaded back through the normal loader so the
 // content hash is computed the usual way.
+//
+// NEVER call this on a timer, on startup, or from a "keep my community items up
+// to date" setting. Installing is the Owner's deliberate act, every time,
+// including for an update (copy pack D6). An author who can change a repository
+// still cannot reach anyone's machine — that gap is the strongest safety
+// property Vaenyx has, and it exists only because nothing here runs by itself.
+// When content genuinely must stop being used, that is a takedown plus index
+// removal (ToS 8.5), which the operator controls and the author does not.
 export async function installMethod(
   baseUrl: string,
   libraryDirectory: string,

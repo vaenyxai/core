@@ -63,7 +63,7 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 
 **`feature.community-sharing.server-evidence-record`** — D1 table flywheel_evidence exists (migration 0003) but nothing writes to it, because no upload path exists.
 
-**`feature.publication.core`** — 
+**`feature.publication.core`** — The publish service validates shape, not content: permitted declarative file kinds, safe paths, size limits, item-id ownership, and that a removed item cannot be republished. It does not inspect what a recipe says. The app is a client, not a boundary — a signed-in account can call the endpoint directly — so any protection that matters must be enforced here, and no protection over the meaning of the words is claimed. The service applies a per-account publish rate limit, an operator-controlled pause switch, and an automated screen for contact and payment details that would otherwise reach a public repository. The screen operates on the submission only; its checks and thresholds are not published, and it is not represented as detecting anything in particular.
 Files sent: `recipe.md`, `schema.json`, `manifest.json (if present)`, `method.json / routine.json with publisher display name stamped as owner`
 Required gates: `legal.notice.publish`, `legal.notice.publish.contributorTerms`, `legal.consent.publish.warranty`, `legal.notice.publish.signIn`, `legal.consent.publish.overseas`
 Evidence: apps/server/src/modules/core/publish.ts collectMethodFiles; core-cloud src/github.ts commitFiles

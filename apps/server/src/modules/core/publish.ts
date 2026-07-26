@@ -378,6 +378,31 @@ export function listPublishedIds(
   ).map((row) => row.item_id);
 }
 
+// Published items whose local copy has since changed (copy pack G5). The hash
+// recorded at publish time is compared with what the files hash to now, so an
+// edited Method shows "changed since you published it" instead of looking
+// identical to the version the community actually has. Publishing again is the
+// Owner's call and theirs alone: an edit must never publish itself, because
+// every publication is a fresh acceptance of the Contributor Agreement.
+export function listStalePublishedIds(
+  database: DatabaseHandle,
+  kind: "method" | "routine",
+  currentHash: (id: string) => string | null,
+): string[] {
+  const rows = database.sqlite
+    .prepare(
+      "SELECT item_id, content_hash FROM published_items WHERE kind = ? ORDER BY item_id",
+    )
+    .all(kind) as { item_id: string; content_hash: string }[];
+  return rows
+    .filter((row) => {
+      const local = currentHash(row.item_id);
+      // Gone from the library: nothing to compare, and nothing to republish.
+      return local !== null && local !== row.content_hash;
+    })
+    .map((row) => row.item_id);
+}
+
 // --- Central publish service path (core-cloud) --------------------------------
 // When config.publishServiceUrl is set, the app collects the same declarative
 // files but hands them to the operator-hosted service (which holds the bot token)

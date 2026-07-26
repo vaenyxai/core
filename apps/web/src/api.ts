@@ -10,6 +10,9 @@
   BackupConfigView,
   BackupConfigUpdate,
   ModelProviderInfo,
+  PublishPauseState,
+  RecipeEditDraft,
+  UpdateRecipeResponse,
   BootstrapStatus,
   ChangePasswordRequest,
   ChatConnectionTestRequest,
@@ -1210,6 +1213,42 @@ export function recordLegalAck(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+// The operator's publishing pause. Reports available: false for anyone the
+// publish service does not recognise as an operator.
+export function fetchPublishPause(): Promise<PublishPauseState> {
+  return requestJson<PublishPauseState>("/v1/publish/pause");
+}
+
+export function setPublishPause(paused: boolean): Promise<PublishPauseState> {
+  return requestJson<PublishPauseState>("/v1/publish/pause", {
+    method: "POST",
+    body: JSON.stringify({ paused }),
+  });
+}
+
+// Editing a Method's recipe from chat (copy pack B4). Two calls, never one:
+// the draft only proposes and returns the difference, and nothing is written
+// until the Owner has seen what changed and approved it.
+export function draftRecipeEdit(
+  methodId: string,
+  request: string,
+): Promise<RecipeEditDraft> {
+  return requestJson<RecipeEditDraft>(
+    `/v1/methods/${encodeURIComponent(methodId)}/recipe/draft`,
+    { method: "POST", body: JSON.stringify({ request }) },
+  );
+}
+
+export function updateMethodRecipe(
+  methodId: string,
+  recipe: string,
+): Promise<UpdateRecipeResponse> {
+  return requestJson<UpdateRecipeResponse>(
+    `/v1/methods/${encodeURIComponent(methodId)}/recipe`,
+    { method: "PUT", body: JSON.stringify({ recipe }) },
+  );
 }
 
 // The A3 sharing card's answer. A plain local setting, kept off the
