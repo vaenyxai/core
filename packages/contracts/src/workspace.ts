@@ -1498,6 +1498,35 @@ export const InstallMethodRequestSchema = Type.Object(
 // Legal acknowledgement / consent record (in-app disclaimers copy pack, clause
 // 2.3). language = the rendered UI language; copyVersion = the legal.copyVersion
 // in force; choice = an optional recorded choice (e.g. flywheel accept/decline).
+// An example this Method has learnt from. `source` says where the pair came
+// from and `contributor` who from — the hook a credit system would need later.
+export const MethodExampleEntrySchema = Type.Object(
+  {
+    file: Type.String(),
+    input: Type.Unknown(),
+    output: Type.Unknown(),
+    note: Type.Union([Type.String(), Type.Null()]),
+    source: Type.String(),
+    contributor: Type.Union([Type.String(), Type.Null()]),
+    time: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const MethodExamplesResponseSchema = Type.Object(
+  {
+    examples: Type.Array(MethodExampleEntrySchema),
+    // Corrections become examples on their own while this is true.
+    autoExamples: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export type MethodExampleEntry = Static<typeof MethodExampleEntrySchema>;
+export type MethodExamplesResponse = Static<
+  typeof MethodExamplesResponseSchema
+>;
+
 // A stored correction the Owner can turn into an example (the local flywheel).
 // The payloads are shown in full before anything is kept: a correction carries
 // whatever was typed that day, so the Owner decides, not a detector.

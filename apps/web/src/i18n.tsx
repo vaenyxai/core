@@ -215,6 +215,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "This rewrites what the Method tells the model to do — its steps only. Its inputs, outputs and permissions are unchanged. Apps you granted this Method must be granted it again, because what they were granted has changed. Nothing is published: your Library copy is the only one affected.",
     "method.edit.apply": "Apply These Changes",
+    "method.examples.title": "What this Method has learnt",
+    "method.examples.copy":
+      "Corrections become examples automatically, and this Method follows the most recent ones. They stay on this computer — nothing is published, and no app grant is affected. Remove any you would rather it did not learn from.",
+    "method.examples.remove": "Remove",
+    "method.examples.you": "You",
     "method.corrections.title": "Corrections waiting",
     "method.corrections.copy":
       "An app sent these back after someone fixed this Method's answer. Keep one and this Method follows it next time. Read it first — a correction contains whatever was actually typed.",
@@ -436,6 +441,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
     "method.edit.apply": "应用这些改动",
+    "method.examples.title": "这个 Method 学到的东西",
+    "method.examples.copy":
+      "纠正会自动变成例子,这个 Method 会照着最近的几条做。它们只存在这台电脑上:不会发布,也不影响已授权的 app。不想让它学的,删掉就行。",
+    "method.examples.remove": "删除",
+    "method.examples.you": "你",
     "method.corrections.title": "待处理的纠正",
     "method.corrections.copy":
       "有 app 把这些纠正发了回来 —— 是有人改过这个 Method 的答案。保留一条,它下次就照着做。先看清楚:纠正里是当时真实输入的内容。",

@@ -90,6 +90,7 @@ import {
   SetSharingPreferenceRequestSchema,
   PublishPauseStateSchema,
   CorrectionsResponseSchema,
+  MethodExamplesResponseSchema,
   AdoptCorrectionRequestSchema,
   AdoptCorrectionResponseSchema,
   DraftRecipeEditRequestSchema,
@@ -275,6 +276,8 @@ import {
 import {
   createMethod,
   addMethodExample,
+  deleteMethodExample,
+  listMethodExamples,
   diffRecipeLines,
   draftMethodSpec,
   draftRecipeEdit,
@@ -407,6 +410,7 @@ import {
   scanVaenyxMe,
 } from "../core/vaenyx-me.js";
 import {
+  autoExamplesEnabled,
   getInstanceSettings,
   setSharingPreference,
   updateInstanceSettings,
@@ -6106,6 +6110,73 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // The examples this Method has learnt from, newest first, and removing one.
+  app.get<{ Params: { id: string } }>(
+    "/v1/library/methods/:id/examples",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: { 200: MethodExamplesResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return {
+        examples: listMethodExamples(
+          context.config.libraryDirectory,
+          request.params.id,
+        ),
+        autoExamples: autoExamplesEnabled(context.database),
+      };
+    },
+  );
+
+  app.delete<{ Params: { id: string; file: string } }>(
+    "/v1/library/methods/:id/examples/:file",
+    {
+      schema: {
+        params: Type.Object(
+          {
+            id: Type.String({ minLength: 1 }),
+            file: Type.String({ minLength: 1 }),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: Type.Object(
+            { exampleCount: Type.Integer() },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return {
+          exampleCount: deleteMethodExample(
+            context.config.libraryDirectory,
+            request.params.id,
+            request.params.file,
+          ),
+        };
+      } catch {
+        return reply.code(404).send({ error: "That example is already gone." });
+      }
+    },
+  );
+
   app.post<{ Params: { id: string }; Body: AdoptCorrectionRequest }>(
     "/v1/library/methods/:id/examples",
     {
@@ -6781,6 +6852,37 @@ export async function registerGatewayRoutes(
         note: body.note ?? null,
         occurredAt: body.occurredAt ?? null,
       });
+
+      // The flywheel's local half, automatic by default (Oskar, 2026-07-26).
+      // A correction that validates against the CURRENT schema becomes an
+      // example straight away: it stays on this machine, it can be deleted, and
+      // examples are outside the content hash, so nothing an app was granted
+      // changes underneath it. A correction that does not validate is kept as a
+      // record but never taught — a wrong-shaped example teaches the wrong shape.
+      //
+      // This is intake only. It does NOT send anything anywhere: uploading to
+      // the Method's publisher is a separate path with its own consent, and it
+      // does not exist yet.
+      if (
+        autoExamplesEnabled(context.database) &&
+        body.reaction === "edited" &&
+        outputValid === true &&
+        body.input !== undefined &&
+        body.correctedOutput !== undefined
+      ) {
+        try {
+          addMethodExample(context.config.libraryDirectory, methodId, {
+            input: body.input,
+            output: body.correctedOutput,
+            note: body.note ?? null,
+            source: "contributed",
+            contributor: profile.name,
+          });
+        } catch {
+          // The correction is stored either way; failing to teach from it is
+          // not a reason to reject the app's request.
+        }
+      }
 
       recordAudit(context.database, {
         actorType: "app",

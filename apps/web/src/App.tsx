@@ -14,6 +14,7 @@ import type {
   RecipeEditDraft,
   PublishPauseState,
   StoredCorrection,
+  MethodExampleEntry,
   AskVaenyxConversation,
   AskVaenyxMessage,
   ReasoningEffort,
@@ -92,6 +93,8 @@ import {
   setPublishPause,
   fetchCorrections,
   adoptCorrection,
+  fetchMethodExamples,
+  deleteMethodExample,
   fetchLegalAcks,
   fetchLegalDocument,
   fetchChatRoutineData,
@@ -11062,6 +11065,7 @@ function PublishPausePanel() {
 function MethodCorrections({ methodId }: { methodId: string }) {
   const { lang, t } = useI18n();
   const [corrections, setCorrections] = useState<StoredCorrection[]>([]);
+  const [examples, setExamples] = useState<MethodExampleEntry[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [kept, setKept] = useState<string[]>([]);
 
@@ -11072,12 +11076,29 @@ function MethodCorrections({ methodId }: { methodId: string }) {
         if (active) setCorrections(response.corrections);
       })
       .catch(() => undefined);
+    void fetchMethodExamples(methodId)
+      .then((response) => {
+        if (active) setExamples(response.examples);
+      })
+      .catch(() => undefined);
     return () => {
       active = false;
     };
   }, [methodId]);
 
-  if (corrections.length === 0) return null;
+  async function removeExample(file: string) {
+    setBusyId(file);
+    try {
+      await deleteMethodExample(methodId, file);
+      setExamples((current) => current.filter((entry) => entry.file !== file));
+    } catch {
+      // The failed request already raised a toast.
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (corrections.length === 0 && examples.length === 0) return null;
 
   async function keep(correction: StoredCorrection) {
     setBusyId(correction.id);
@@ -11098,8 +11119,38 @@ function MethodCorrections({ methodId }: { methodId: string }) {
 
   return (
     <section className="settings-card">
-      <p className="eyebrow">{t("method.corrections.title")}</p>
-      <p className="settings-card-copy">{t("method.corrections.copy")}</p>
+      <p className="eyebrow">{t("method.examples.title")}</p>
+      <p className="settings-card-copy">{t("method.examples.copy")}</p>
+      {examples.length > 0 ? (
+        <div className="example-list">
+          {examples.map((example) => (
+            <div className="correction-card" key={example.file}>
+              <small>
+                {example.contributor ?? t("method.examples.you")}
+                {example.time ? ` · ${example.time}` : ""}
+                {` · ${example.source}`}
+              </small>
+              <pre className="correction-body">
+                {JSON.stringify(example.input, null, 2)}
+              </pre>
+              <button
+                className="text-button"
+                disabled={busyId === example.file}
+                onClick={() => void removeExample(example.file)}
+                type="button"
+              >
+                {t("method.examples.remove")}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {corrections.length > 0 ? (
+        <>
+          <p className="eyebrow">{t("method.corrections.title")}</p>
+          <p className="settings-card-copy">{t("method.corrections.copy")}</p>
+        </>
+      ) : null}
       {corrections.map((correction) => (
         <div className="correction-card" key={correction.id}>
           <small>

@@ -1,0 +1,16 @@
+{
+  "input": {
+    "text": "A long passage to summarise."
+  },
+  "output": {
+    "summary": "The right summary.",
+    "keyPoints": [
+      "a",
+      "b"
+    ]
+  },
+  "note": "Fixed the summary.",
+  "source": "contributed",
+  "contributor": "Estimating App",
+  "time": "2026-07-26"
+}

@@ -12,6 +12,7 @@
   ModelProviderInfo,
   PublishPauseState,
   CorrectionsResponse,
+  MethodExamplesResponse,
   AdoptCorrectionRequest,
   AdoptCorrectionResponse,
   RecipeEditDraft,
@@ -1225,6 +1226,24 @@ export function fetchCorrections(
 ): Promise<CorrectionsResponse> {
   return requestJson<CorrectionsResponse>(
     `/v1/library/methods/${encodeURIComponent(methodId)}/corrections`,
+  );
+}
+
+export function fetchMethodExamples(
+  methodId: string,
+): Promise<MethodExamplesResponse> {
+  return requestJson<MethodExamplesResponse>(
+    `/v1/library/methods/${encodeURIComponent(methodId)}/examples`,
+  );
+}
+
+export function deleteMethodExample(
+  methodId: string,
+  file: string,
+): Promise<{ exampleCount: number }> {
+  return requestJson<{ exampleCount: number }>(
+    `/v1/library/methods/${encodeURIComponent(methodId)}/examples/${encodeURIComponent(file)}`,
+    { method: "DELETE" },
   );
 }
 

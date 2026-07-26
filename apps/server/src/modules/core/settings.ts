@@ -65,6 +65,27 @@ export function setSharingPreference(
     .run(choice);
 }
 
+// Corrections become examples on their own unless the Owner turns it off. On by
+// default because the cost of a bad example is "delete it" and the cost of
+// asking every time is that nobody ever says yes, so the Method never improves.
+// Local only: this switch has nothing to do with sharing anything.
+export function autoExamplesEnabled(database: DatabaseHandle): boolean {
+  return getSetting(database, "auto_examples", "on") !== "off";
+}
+
+export function setAutoExamples(
+  database: DatabaseHandle,
+  enabled: boolean,
+): void {
+  database.sqlite
+    .prepare(
+      `INSERT INTO instance_settings (key, value, updated_at)
+       VALUES ('auto_examples', ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+    )
+    .run(enabled ? "on" : "off");
+}
+
 export function getSharingPreference(
   database: DatabaseHandle,
 ): "interested" | "not-interested" | null {
