@@ -137,6 +137,12 @@ the publish service's accepted-copy floor moves to 2.6.
 - **ZH:** "Vaenyx 会为此项目自动维护一份你的偏好摘要,并作为本项目对话的上下文使用。它存储在本设备上——你可以随时查看、编辑或删除。未经你的批准,任何内容都不会进入 Vaenyx Me。"
 - **Behaviour:** Persistent (visible wherever the automatic summary Document is shown). The storage-locality statement is scoped and true by design (clause 3.2); its *use as context* is deliberately disclosed because that context may reach a cloud provider (see B2/F1). The final sentence ("Nothing enters Vaenyx Me without your approval" / ZH equivalent) is a clause 6.7 feature-existence statement: it renders only while the Vaenyx Me approval gate is structurally verified — no code path writes to Vaenyx Me without an approval record.
 
+**B4 — `legal.notice.method.edit`**
+- **Placement:** The confirmation shown in chat before a Method's recipe is rewritten from a conversation, above the apply button and beside the list of changed lines.
+- **EN:** "This rewrites what the Method tells the model to do — its steps only. Its inputs, outputs and permissions are unchanged. Apps you granted this Method must be granted it again, because what they were granted has changed. Nothing is published: your Library copy is the only one affected."
+- **ZH:** "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。"
+- **Behaviour:** Point-of-action (every recipe edit). The changed lines must be shown as a difference against the current recipe, never as a rewritten whole — an Owner who cannot see what changed cannot meaningfully approve it. Editing is confined to `recipe.md`: `schema.json` and `manifest.json` (the permission declaration) are out of scope for natural-language editing and need an explicit interface of their own. The edit must never publish, and must never be applied without this confirmation.
+
 ### Part C — Sensitive-Domain Surfaces
 
 *Standing position (locked 2026-07-03): v1 ships no official health Methods or Routines — none are in the seed library and the operator makes no health claims. General health conversation is not blocked, but it carries the C1 disclaimer and is gated once by C2. **Coverage is detector-dependent:** C1/C2 trigger on health-flagged content, so a missed flag means no banner and no gate — the health flagger must therefore be biased to over-trigger (false positives are cheap; false negatives silently defeat the single highest-risk protection) and must include a keyword/intent union trigger for medication, dosage and treatment terms. Community health content additionally carries the not-endorsed disclaimers (D1/D2). No official health feature may ever ship without prior sign-off from qualified counsel (Note 7.3).*
@@ -231,6 +237,12 @@ the publish service's accepted-copy floor moves to 2.6.
 - **ZH:** "社区讨论在 Discord 上进行。Discord 是第三方平台,受其自身条款约束。若你加入官方 Vaenyx 服务器或在其中发帖,Discord 会收集并存储你的账户信息、帖子与技术数据;Vae Foundry Pty Ltd 的管理员可以访问并使用你的 Discord 资料、帖子与管理记录,以运营和管理该服务器。参与是可选的。Discord 平台本身并非由 Vaenyx 运营。留存、查阅、更正与投诉事宜,见《核心隐私政策》与《当前实现与数据处理明细表》。"
 - **Behaviour:** On-demand (travels with the Discord link). Vaenyx does not self-host a forum; the Discord *platform* is not an Operator Service and Discord's own platform-level moderation applies. The official server, however, is created and administered by the operator: posts in it are subject to the same D4 report channel and takedown discipline, and the server's rules/about text must carry the hello@vaenyx.ai report contact together with the same overseas-handling notice line as D4 (Note 7.13). If the linked server ever ceases to be operator-administered, re-verify this string and clause 6.6 before the link ships.
 
+**D6 — `legal.notice.community.updateAvailable`**
+- **Placement:** On an installed community item, wherever a newer published version exists, beside the version numbers and the publisher's own description of the change.
+- **EN:** "A newer version of this community item has been published. Updating replaces your installed copy with the publisher's new version; the current one keeps working if you do nothing."
+- **ZH:** "该社区条目已发布更新的版本。更新会用发布者的新版本替换你已安装的这一份;你不做任何操作,现在这一份也会继续正常工作。"
+- **Behaviour:** Persistent while a newer version exists. **Neutral by construction:** the string states availability, never a recommendation — no "update now", no urgency, no badge implying something is wrong with the installed copy, because Vaenyx would then be vouching for third-party content it has not reviewed. Nothing updates itself: user-side auto-update is prohibited (Note 7.14), so this notice is the only path from a new version to an installed one. Choosing to update runs the ordinary install flow, which means D2 is shown again — an update is a fresh install of someone else's content, and the install-time disclaimer applies to it exactly as it did the first time. Content that must reach installed copies without the user choosing is handled by takedown and index removal (ToS 8.5), which is an operator control, not an author one.
+
 ### Part E — Merit and Creator UI
 
 **E1 — `legal.disclaimer.merit`**
@@ -324,6 +336,12 @@ the publish service's accepted-copy floor moves to 2.6.
 - **ZH:** "不分享"
 
 - **Behaviour (whole dialog):** Gated acknowledgement, point-of-action — asked separately every time; there is no "always allow" option for sensitive categories, by design (locked 2026-06-23). Each answer is recorded. Note: "family" is the neutral UI label for the family sensitive-data category, implemented at full width — all family-related content, child-related included (clause 3.5; Note 7.12); it describes data content, not users, preserving the 18+ posture.
+
+**G5 — `legal.notice.publish.localChanges`**
+- **Placement:** On a published Method or Routine whose local copy no longer matches the published one, beside the publish control.
+- **EN:** "You have changed this since you published it. The community still has the version you published; publishing again replaces it with what is on this device."
+- **ZH:** "自你发布之后,你改动过这一份。社区上仍是你当初发布的那个版本;再次发布会用这台设备上的内容替换它。"
+- **Behaviour:** Persistent while the local content hash differs from the published one. It states a fact and offers no prompt to act: **an edit must never publish itself.** Every publication is a separate acceptance of the Contributor Agreement in which the publisher warrants their rights, grants the CC BY 4.0 licence and gives the moral-rights consent (clause 17); an automatic republish would make those warranties on the publisher's behalf without their knowledge, and would put half-finished edits into a public history that cannot be recalled (G1 permanence). ToS 7.2(d) requires publication to follow a deliberate act.
 
 ### Part H — Backup and Restore
 

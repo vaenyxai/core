@@ -231,6 +231,8 @@ clauses below govern.*
 
 10.5 If a data breach involving personal information we hold may be an eligible data breach, we will assess and respond in accordance with the Notifiable Data Breaches scheme to the extent it applies.
 
+10.6 Australian law provides a right of action for a serious invasion of privacy that is committed intentionally or recklessly. That right does not depend on whether the Privacy Act applies to us. We do not deliberately or recklessly invade anyone's privacy, and where we are told that material we control exposes someone's private information we act on it rather than leaving it in place. Nothing in this clause is a promise about outcomes; it states the standard we hold ourselves to.
+
 ## 11. Access, correction and complaints
 
 11.1 An individual may request access to, or correction of, personal information we hold about them by contacting hello@vaenyx.ai. We may take reasonable steps to verify identity before acting.
