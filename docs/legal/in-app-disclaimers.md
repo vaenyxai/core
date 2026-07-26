@@ -700,6 +700,74 @@ example carries its contributor's byline, publicly and permanently. It must also
 show the exact material proposed for publication before the publisher confirms,
 which Terms of Service clause 8.6(b) already requires.
 
+### Part L — Importing a Skill, exporting a Method *(drafted; nothing here ships until the importer exists)*
+
+*Status.* Not built. This Part settles the wording first, because the risk here is
+not the capability gap — it is what we say about it, and what a user unknowingly
+does with someone else's work.
+
+**L0 — the two problems, in order of seriousness**
+
+**The second problem is the serious one.** The obvious problem is capability: a
+Skill may ship executable code, a Method may not (a recipe is text fed to the
+model; nothing author-supplied executes). So an import keeps the instructions and
+drops the code, and the result can be less capable than the original.
+
+The problem that actually creates liability is different: **a Skill is someone
+else's copyrighted work, under its own licence.** Converting it into a Method does
+not make it the importer's work. Our publish warranties require a contributor to
+own their Contribution or hold the rights to license it — and a person who
+imported a Skill, edited it, and pressed Publish may sincerely believe they wrote
+it. The warranty is then breached honestly, which helps nobody: the third party's
+claim is against us as well as them.
+
+So two notices are needed, at two different moments: **at import**, that this is
+someone else's work under its own licence; and **at publish**, that this
+particular Method came from an import.
+
+**Technical consequence:** an imported Method must carry its provenance — where
+it came from, and the licence it arrived under — so the publish gate can fire. A
+notice that depends on the person remembering is not a gate.
+
+**L1 — `legal.notice.skill.import`** *(shown before an import completes)*
+
+- **EN:** "This Skill was written by someone else and stays under its own licence — importing it does not make it yours. Vaenyx keeps the instructions and drops anything that runs as code, because published content here is instructions only, never programs. Steps that depended on that code will not work, and we list them below rather than leave you to discover it. Check the original licence before you rely on this or share it."
+- **ZH:** "这个 Skill 是别人写的,并且仍受它自己的许可证约束 —— 导入它不会让它变成你的。Vaenyx 会保留其中的指令,并丢弃任何以代码形式运行的部分,因为这里发布的内容只能是指令,绝不是程序。依赖那些代码的步骤将无法工作,我们会在下面列出来,而不是留给你自己去发现。在依赖它或分享它之前,请先查看原始许可证。"
+- **Behaviour:** Gated acknowledgement before the import completes. **Must list the
+  dropped steps specifically** — "some features may not work" is not this notice.
+  Records the source and the licence string against the imported Method.
+
+**L2 — `legal.notice.skill.importedPublish`** *(shown at publish, only for a Method carrying import provenance)*
+
+- **EN:** "This Method was imported from someone else's Skill. Publishing it here licenses it to the public under CC BY 4.0 and confirms you hold the rights to do that. You may not hold them: the original licence may forbid redistribution, may require attribution you have not given, or may not permit relicensing at all. Check it before you publish. If you are not sure, don't."
+- **ZH:** "这个 Method 是从别人的 Skill 导入的。在此发布会依 CC BY 4.0 将它许可给公众,并同时确认你拥有这样做的权利。你可能并不拥有:原始许可证可能禁止再分发、可能要求你尚未给出的署名,或者根本不允许再许可。发布前请先查清。如果不确定,就不要发布。"
+- **Behaviour:** Gated acknowledgement, shown **in addition to** the ordinary publish
+  confirmations, never instead of them. Fires on provenance, not on the person's
+  memory.
+
+**L3 — `legal.notice.skill.export`** *(exporting a Method as a Skill)*
+
+This direction is clean: a Method is instructions already, so nothing is lost and
+no capability is implied that does not exist.
+
+- **EN:** "Exported as instructions, which is all a Method ever was — nothing is lost. Whoever receives it is bound by the licence the Method carries, not by anything in Vaenyx."
+- **ZH:** "以指令形式导出 —— Method 本来就只是指令,不会有任何损失。收到它的人受该 Method 自带的许可证约束,而不受 Vaenyx 中的任何条款约束。"
+
+**L4 — what must never be said about interoperability**
+
+Terms of Service clause 11.5 states that statements of factual interoperability
+with open standards such as Agent Skills are descriptive only. That protects us
+**only while we do not overstate it.** So:
+
+- ✗ "Skill compatible", "runs Skills", "works with Skills"
+- ✗ any wording implying an imported Skill behaves as it did in its original host
+- ✓ "imports the instructions from a Skill"
+- ✓ a specific list of what was dropped
+
+**Silently degrading an import while advertising compatibility is misleading
+conduct** — and unlike most of what this pack guards against, it would be our own
+statement about our own product, which is the least defensible kind.
+
 ## 5. Placement Summary Matrix
 
 | Key (root) | Surface | Behaviour |
