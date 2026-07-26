@@ -242,14 +242,20 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     // Part L surfaces. "Import the instructions from a Skill" — never
     // "Skill compatible" or "runs Skills" (L4).
     "skill.import.title": "Import the instructions from a Skill",
+    // L6: NOT "exactly". The parser recognises four kinds of thing; a Skill can
+    // lose a bundled resource, a reference to a service, an assumption about its
+    // host — and promising exactness would be a false statement about our own
+    // product, which is the least defensible kind there is.
     "skill.import.copy":
-      "Paste a SKILL.md here. Vaenyx keeps its instructions as a new Method and tells you exactly what could not come across.",
+      "Paste a SKILL.md here. Vaenyx keeps its instructions as a new Method and lists what could not come across. The list covers the kinds of thing we can detect; a Skill can depend on something we cannot see, so treat the result as a starting point rather than a finished copy.",
     "skill.import.source": "Where it came from (a link, optional)",
     "skill.import.paste": "Paste the contents of SKILL.md",
     "skill.import.look": "See what would be imported",
     "skill.import.confirm": "Import as a Method",
+    // L7: "nothing was dropped" would be a clean bill of health we cannot
+    // issue. What is true is "nothing we look for was present".
     "skill.import.nothingLost":
-      "This Skill is instructions only — nothing had to be dropped.",
+      "Nothing we check for was dropped. That is not the same as nothing being lost: a Skill can rely on things we cannot detect from the file alone.",
     "skill.export.action": "Export as a Skill",
     "skill.drop.executable": "A file that would have run",
     "skill.drop.runs-a-script": "A step that ran one of those files",
@@ -500,12 +506,13 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "method.edit.apply": "应用这些改动",
     "skill.import.title": "导入 Skill 里的指令",
     "skill.import.copy":
-      "把 SKILL.md 的内容贴进来。Vaenyx 会把其中的指令保留成一个新的 Method,并明确告诉你哪些东西没能带过来。",
+      "把 SKILL.md 的内容贴进来。Vaenyx 会把其中的指令保留成一个新的 Method,并列出哪些东西没能带过来。该清单涵盖我们能够识别的种类;一个 Skill 也可能依赖我们看不见的东西,所以请把结果当作起点,而不是一份完成的副本。",
     "skill.import.source": "来源(链接,可选)",
     "skill.import.paste": "粘贴 SKILL.md 的内容",
     "skill.import.look": "看看会导入什么",
     "skill.import.confirm": "导入为 Method",
-    "skill.import.nothingLost": "这个 Skill 只有指令 —— 没有任何东西被丢弃。",
+    "skill.import.nothingLost":
+      "我们所检查的项目中,没有任何内容被丢弃。这与「没有任何损失」不是一回事:一个 Skill 可能依赖我们仅凭文件无法察觉的东西。",
     "skill.export.action": "导出为 Skill",
     "skill.drop.executable": "一个会运行的文件",
     "skill.drop.runs-a-script": "一个会去运行那些文件的步骤",

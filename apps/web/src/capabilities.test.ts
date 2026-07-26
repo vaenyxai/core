@@ -11,19 +11,25 @@ describe("capability gate", () => {
     // If this fails because the capability was switched on, the Schedule entry
     // and the Part A data-flow entry have to move at the same time.
     expect(CAPABILITIES.flywheelUpload).toBe(false);
-    for (const key of Object.keys(GATED_KEYS)) {
+    for (const key of [
+      "legal.consent.flywheel.activate",
+      "legal.notice.flywheel.item",
+      "legal.notice.flywheel.remove",
+    ]) {
       expect(isKeyRenderable(key)).toBe(false);
     }
   });
 
-  it("keeps every Part L string unrenderable while import/export is not built", () => {
-    expect(CAPABILITIES.skillInterop).toBe(false);
+  it("renders Part L only while the interface it describes is reachable", () => {
+    // Part L went live with its interface (2026-07-26). If this is ever
+    // switched back off, its strings must go dark with it — a notice about a
+    // feature nobody can reach describes software that does not exist.
     for (const key of [
       "legal.notice.skill.import",
       "legal.notice.skill.importedPublish",
       "legal.notice.skill.export",
     ]) {
-      expect(isKeyRenderable(key)).toBe(false);
+      expect(isKeyRenderable(key)).toBe(CAPABILITIES.skillInterop);
     }
   });
 

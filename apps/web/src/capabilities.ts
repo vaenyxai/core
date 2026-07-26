@@ -23,7 +23,12 @@ export const CAPABILITIES = {
   // Skills" or "works with Skills" (L4): our interoperability statements are
   // descriptive only under ToS 11.5, and that holds only while we do not
   // overstate them. We import instructions and we list what was dropped.
-  skillInterop: false,
+  //
+  // ON since 2026-07-26: the interface shipped, so the Schedule entry moves
+  // from backend-only to active. The order matters and is deliberate — the
+  // switch goes on only when a user can actually reach the feature, because
+  // the Schedule has to be true at the moment it is read, not eventually.
+  skillInterop: true,
 } as const;
 
 // Keys that render only while their capability is on. They still live in the

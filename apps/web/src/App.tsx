@@ -11171,8 +11171,11 @@ function SkillImportPanel({ onImported }: { onImported: () => void }) {
       {preview ? (
         <Modal onClose={() => setPreview(null)} title={preview.name} variant="doc">
           <p className="settings-card-copy">{t("legal.notice.skill.import")}</p>
-          {/* L1 requires the dropped items listed one by one. This list IS the
-              notice; without it the notice is "some features may not work". */}
+          {/* L1 requires the dropped items listed one by one, and L5 requires
+              each label to sit AGAINST the thing found — the file name, the
+              step. Never a category heading with a count: "3 x A file that
+              would have run" tells a person nothing about what their Skill
+              did. */}
           {preview.dropped.length > 0 ? (
             <ul className="skill-dropped">
               {preview.dropped.map((item, index) => (
