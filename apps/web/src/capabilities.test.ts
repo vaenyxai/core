@@ -35,7 +35,13 @@ describe("capability gate", () => {
 
   it("gates exactly the Part K and Part L keys", () => {
     expect(Object.keys(GATED_KEYS).sort()).toEqual([
+      "flywheel.queue.held",
+      "flywheel.queue.window",
       "legal.consent.flywheel.activate",
+      "legal.consent.flywheel.receive",
+      "legal.consent.flywheel.receive.label",
+      "legal.consent.flywheel.sensitiveAsk",
+      "legal.notice.flywheel.contributorId",
       "legal.notice.flywheel.item",
       "legal.notice.flywheel.remove",
       "legal.notice.skill.export",

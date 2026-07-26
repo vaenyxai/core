@@ -224,8 +224,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "Kept examples stay on this computer. Nothing is published, and no app grant is affected.",
     // Part K — the flywheel's upload half. GATED: none of these may render
     // until the Schedule marks the capability active (see capabilities.ts).
-    "legal.consent.flywheel.activate":
-      "Corrections you receive can help the person who made this Method improve it. If you turn this on: an example is prepared on this computer, personal details are stripped here before anything leaves, and it waits 48 hours before it is sent to that Method's publisher. During those 48 hours you can remove any of them, and you can turn this off at any time. Health, family and finance content is never sent this way — we ask you separately, every time. Stripping personal details is an automated process and it is not perfect, which is why the 48 hours exist. What is sent goes to the publisher, not to the public: it becomes public only if they choose to include it when they publish. Your contributions carry a **contributor ID** — a permanent code that credits you without naming you. Your name is never attached. The ID is public wherever the example is, cannot be changed, and cannot be recalled from copies made by others; it does not identify you to anyone but us.",
     "legal.notice.flywheel.item":
       "Sends in {time}. Remove it if it still contains anything private — the automated check is not perfect.",
     "legal.notice.flywheel.remove": "Don't send this one",
@@ -313,6 +311,20 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.restore":
       "Vaenyx will restart to restore this snapshot (about 30 seconds). Your current data is saved as an automatic safety copy first, so you can undo it.",
     "legal.notice.restore.confirm": "Restore and Replace",
+    "legal.consent.flywheel.activate":
+      "Turn on sharing improvements?\nWhen you correct something a Method got wrong, Vaenyx can send that one correction to the person who published the Method, so they can fix it for everyone who uses it.\n**What goes:** the example itself — what was asked, what came back, and what you corrected — plus a contributor ID that credits you without naming you. **What does not go:** your name, your files, your other chats, or anything else on this computer.\nPersonal details are removed on this computer before anything leaves it. That is done automatically by a program, and it is not perfect. Read what you are sending — you are the last check.\n**Where it goes:** to our server first, which holds it only until the publisher's own app collects it and deletes it at that moment. Anything nobody collects within 14 days is deleted unread. Our server is outside Australia, and we can read what is waiting on it. Publishers receive examples only if they have asked to.\n**Once an example is sent, it cannot be recalled.** You can stop future sends at any time, and turning this off stops everything from then on.\nHealth, family and money are never sent automatically. Vaenyx asks you about those separately, every time.\nThis is off unless you turn it on now.",
+    "legal.consent.flywheel.receive.label":
+      "Send me corrections from people who install this, so I can improve it. What arrives is someone else's material: use it only to improve this Method, don't pass it on, and delete it if asked. You can change this later.",
+    "legal.consent.flywheel.receive":
+      "Receive examples for this Method? When someone corrects an answer this Method gave, an example can be sent to you to improve it. It arrives with personal details stripped on the sender's device — automatically, and imperfectly, so treat what arrives as someone's real material. If you accept: use it only to improve this Method, don't pass it on, and delete it when asked. Off unless you choose it, and you can change this any time.",
+    "legal.consent.flywheel.sensitiveAsk":
+      "This improvement touches a sensitive area (health, family or finance). Patterns Vaenyx recognises as sensitive are never shared automatically. Share this de-identified pattern with the community?",
+    "legal.notice.flywheel.contributorId":
+      "Your contributor ID. It credits your contributions without naming you, and it is the same ID every time so credit accumulates. It appears publicly wherever a contribution of yours is published, and it cannot be changed or recalled. Quote it if you ever ask us about your contributions.",
+    "flywheel.queue.window":
+      "Waiting to be sent — nothing here has left this computer yet. Anything still here in 48 hours goes out. Remove what you don't want sent, or turn sharing off to stop all of it. The wait is a chance to change your mind, not what makes this allowed: you allowed it when you turned sharing on, and you can turn it off again whenever you like.",
+    "flywheel.queue.held":
+      "Held back — this looks like it touches health, family or money. Vaenyx never sends these automatically. Open it, read it, and decide on this one by itself. If you do nothing, it is not sent.",
     "legal.consent.flywheel.settingsNote":
       "This version does not upload improvement patterns. This setting records a preference only. If community improvement sharing becomes available, it will remain off until you are shown current information and make a fresh affirmative choice.",
     "legal.notice.modelConnect.local":
@@ -511,8 +523,6 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "移除能做到什么、不能做到什么:我们可以把内容从各安装端读取的 Vaenyx 目录与索引中移除、删除已发布的文件,并阻止该条目标识符被重新发布。我们无法移除他人持有的副本 —— fork、镜像、缓存、存档与搜索引擎结果都在我们控制之外,**在这里移除并不等于该内容从互联网上消失**。若该材料违法,你可能对发布它的人享有我们无法提供的救济。",
     "method.corrections.locality":
       "保留的例子只存在这台电脑上,不会发布,也不会影响已授权的 app。",
-    "legal.consent.flywheel.activate":
-      "你收到的纠正,可以帮助制作这个 Method 的人把它改得更好。若你开启:例子在这台电脑上准备好,个人信息在离开本机之前就在本地剥除,然后等待 48 小时才发送给该 Method 的发布者。这 48 小时内你可以撤掉任意一条,也可以随时整个关掉。健康、家庭与财务类内容绝不会经此发送 —— 每一次我们都会单独问你。剥除个人信息是自动化处理,并不完美,48 小时的等待正是为此而设。发出去的内容是给发布者的,不是给公众的:只有当他们在发布时选择收录,它才会公开。你的贡献会带一个**贡献者 ID** —— 一串永久的编号,用来为你记功,但不写出你的名字。你的姓名绝不会被附上。该 ID 在例子出现的任何地方都是公开的,不可更改,也无法从他人所做的副本中收回;除我们之外,它不向任何人指明你是谁。",
     "legal.notice.flywheel.item":
       "{time} 后发送。若其中仍有私密内容,请撤掉它 —— 自动检查并不完美。",
     "legal.notice.flywheel.remove": "不要发送这一条",
@@ -591,6 +601,20 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.restore":
       "Vaenyx 会重启以还原这个快照(约 30 秒)。会先把你当前的数据自动存成一份安全副本,可反悔。",
     "legal.notice.restore.confirm": "恢复并替换",
+    "legal.consent.flywheel.activate":
+      "要开启「分享改进」吗?\n当你纠正了某个 Method 出错的地方,Vaenyx 可以把这一条纠正发送给发布该 Method 的人,让他为所有使用者修好它。\n**会发出去的:**这条示例本身 —— 问了什么、返回了什么、你把它纠正成了什么 —— 外加一个为你记功但不写出你名字的贡献者 ID。**不会发出去的:**你的姓名、你的文件、你其它的聊天,以及这台电脑上的任何其它内容。\n个人信息会在**这台电脑上**、在任何内容离开之前被剥除。这是由程序自动完成的,并不完美。请你自己看一眼要发出去的东西 —— 你是最后一道检查。\n**它会去哪里:**先到我们的服务器,而服务器只保存到发布者自己的 app 来取走为止,取走的那一刻即删除。14 天内无人取走的,原样删除、不会被阅读。我们的服务器在澳大利亚境外,且我们能够读到正在等待中的内容。只有主动要求接收的发布者才会收到示例。\n**示例一经发出便无法收回。**你可以随时停止此后的发送;关掉此项,从那一刻起就什么都不再发送。\n健康、家人与金钱的内容永远不会自动发送。Vaenyx 每一次都会就这些内容单独询问你。\n**此项默认关闭**,除非你现在就把它打开。",
+    "legal.consent.flywheel.receive.label":
+      "把安装了这个 Method 的人所做的纠正发给我,好让我改进它。收到的是**别人的**材料:只能用它改进这个 Method、不要转给别人、被要求时删除。此设置以后可以更改。",
+    "legal.consent.flywheel.receive":
+      "要为这个 Method 接收示例吗?当有人纠正了这个 Method 给出的答案,相关示例可以发送给你,用于改进它。它在发送方的设备上就已剥除个人信息 —— 是自动完成的,并不完美,所以请把收到的东西当作某个人的真实材料来对待。若你接受:只用它改进这个 Method、不要转给别人、被要求时删除。**默认关闭**,除非你自己选择开启;随时可以更改。",
+    "legal.consent.flywheel.sensitiveAsk":
+      "该改进涉及敏感领域(健康、家庭或财务)。被识别为敏感的模式绝不会自动分享。要把这份脱敏后的模式分享给社区吗?",
+    "legal.notice.flywheel.contributorId":
+      "你的贡献者 ID。它为你的贡献记功,但不写出你的名字;每次都是同一个 ID,所以功劳会累积。凡是你的贡献被公开发布的地方,它都会公开显示,且无法更改、无法收回。若你日后要就自己的贡献询问我们,请报上这个 ID。",
+    "flywheel.queue.window":
+      "等待发送 —— 这里的内容都还没有离开这台电脑。48 小时后仍在此处的,会被发送出去。把你不想发的移除,或者直接关掉分享、让全部内容都不发送。这段等待是给你反悔的机会,**并不是**这件事被允许的依据:允许它的是你开启分享时所作的选择,而你随时可以再把它关掉。",
+    "flywheel.queue.held":
+      "已扣下 —— 这一条看起来涉及健康、家人或金钱。Vaenyx 永远不会自动发送这类内容。请打开它、读一遍,然后单独就这一条作出决定。你什么都不做,它就不会被发送。",
     "legal.consent.flywheel.settingsNote":
       "本版本不会上传任何改进模式。此处只是记录一项偏好。若将来提供社区改进分享,它依旧保持关闭,直到向你展示当时的说明并由你重新做出一次肯定性选择。",
     "legal.notice.modelConnect.local":

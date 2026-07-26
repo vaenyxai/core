@@ -1763,6 +1763,10 @@ function VoicePanel() {
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [vision, setVision] = useState<VisionStatus | null>(null);
   const [imageEngine, setImageEngine] = useState<VisionStatus | null>(null);
+  const [imageEngineChoice, setImageEngineChoiceState] = useState<
+    "none" | "cloudflare" | "gemini" | "openai" | "zhipu"
+  >("none");
+  const [cloudflareToken, setCloudflareToken] = useState("");
   const [imageError, setImageError] = useState<string | null>(null);
   const [outputEngine, setOutputEngine] = useState<
     "none" | "browser" | "gemini" | "local"
@@ -1879,12 +1883,18 @@ function VoicePanel() {
   }
 
   async function applyImageEngine(
-    next: "none" | "gemini" | "openai" | "zhipu",
+    next: "none" | "cloudflare" | "gemini" | "openai" | "zhipu",
+    apiKey?: string,
   ) {
+    setImageEngineChoiceState(next);
+    // Cloudflare with no token yet is a half-made choice: show its field and
+    // wait, rather than saving something that cannot work.
+    if (next === "cloudflare" && !apiKey && !imageEngine?.connected) return;
     setBusy(true);
     setImageError(null);
     try {
-      setImageEngine(await setImageEngineChoice(next));
+      setImageEngine(await setImageEngineChoice(next, apiKey));
+      setCloudflareToken("");
     } catch (nextError) {
       setImageError(
         nextError instanceof Error
@@ -2359,14 +2369,48 @@ function VoicePanel() {
               event.target.value as "none" | "gemini" | "openai" | "zhipu",
             )
           }
-          value={imageEngine?.provider ?? "none"}
+          value={imageEngineChoice}
         >
           <option value="none">None — Vaenyx Will Not Draw</option>
+          <option value="cloudflare">Cloudflare Workers AI — Free</option>
           <option value="gemini">Gemini</option>
           <option value="openai">OpenAI</option>
           <option value="zhipu">Zhipu BigModel</option>
         </select>
       </label>
+      {/* Cloudflare's token is typed HERE rather than under Models: it is the
+          one engine a household adds solely to make pictures, and sending them
+          to a different page to paste it is how a working setting turns into an
+          abandoned one. The account id is looked up from the token, so this
+          field is the only thing anyone has to find. */}
+      {imageEngineChoice === "cloudflare" && !imageEngine?.connected ? (
+        <>
+          <label className="chat-font-field">
+            Workers AI Token
+            <input
+              autoComplete="off"
+              disabled={busy}
+              onChange={(event) => setCloudflareToken(event.target.value)}
+              placeholder="Paste the token from Cloudflare"
+              type="password"
+              value={cloudflareToken}
+            />
+          </label>
+          <button
+            className="primary-button"
+            disabled={busy || cloudflareToken.trim().length === 0}
+            onClick={() => void applyImageEngine("cloudflare", cloudflareToken)}
+            type="button"
+          >
+            Save Token
+          </button>
+          <p className="settings-card-copy text-faint">
+            Cloudflare dashboard → My Profile → API Tokens → Create Token →
+            Workers AI template. Vaenyx works out which account it belongs to on
+            its own.
+          </p>
+        </>
+      ) : null}
       {imageEngine?.connected ? (
         <div className="model-card-head">
           <span className="library-chip chip-published">Connected</span>
@@ -8386,6 +8430,26 @@ function FlywheelQueuePanel() {
     }
   }
 
+  // Declining is a complete answer: it is recorded so the question is not put
+  // again on a timer, which is what the pack means by "must not be re-asked".
+  async function decline() {
+    setBusy(true);
+    setError(null);
+    try {
+      await recordLegalAck({
+        keyName: "legal.consent.flywheel.activate",
+        copyVersion: LEGAL_COPY_VERSION,
+        language: lang,
+        choice: "decline",
+      });
+      refresh();
+    } catch {
+      setError("That could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function withdraw(id: string) {
     setBusy(true);
     try {
@@ -8409,34 +8473,46 @@ function FlywheelQueuePanel() {
       <h3 className="settings-subhead">Sending Corrections Back</h3>
       {state.activated ? null : (
         <>
-          <p className="settings-card-copy">
+          {/* K3, the only consent point in Part K. Long on purpose: it is the
+              one screen that describes the whole mechanism, and the 48 hours
+              below are a chance to change your mind, not what permits any of
+              this. Two choices, neither pre-selected; declining is a complete
+              answer and is not re-asked on a timer. */}
+          <p className="settings-card-copy legal-multiline">
             {t("legal.consent.flywheel.activate")}
           </p>
-          <button
-            className="primary-button"
-            disabled={busy}
-            onClick={() => void activate()}
-            type="button"
-          >
-            Turn This On
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() => void activate()}
+              type="button"
+            >
+              {lang === "zh" ? "开启分享" : "Turn On Sharing"}
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => void decline()}
+              type="button"
+            >
+              {lang === "zh" ? "暂不" : "Not Now"}
+            </button>
+          </div>
         </>
       )}
 
       {state.activated ? (
         <>
-          <p className="settings-card-copy">
-            Nothing is sent for {state.windowHours} hours. While an item is
-            waiting you can take it out, and it will not be sent.
-          </p>
-          {/* K10: the Owner's own label on what they contribute. Shown, not
-              hidden — someone who cannot see their own id cannot ask about
-              what was credited to it. */}
-          <p className="settings-card-copy text-faint">
-            Credited as <code>{state.contributorId}</code>
+          <p className="settings-card-copy legal-multiline">
+            {t("flywheel.queue.window")}
           </p>
           {state.items.length === 0 ? (
-            <p className="settings-card-copy">Nothing is waiting to be sent.</p>
+            <p className="settings-card-copy">
+              {lang === "zh"
+                ? "目前没有等待发送的内容。"
+                : "Nothing is waiting to be sent."}
+            </p>
           ) : (
             <ul className="flywheel-list">
               {state.items.map((item) => (
@@ -8446,10 +8522,12 @@ function FlywheelQueuePanel() {
                     {item.note ? <span> — {item.note}</span> : null}
                     <p className="text-faint">
                       {item.sensitive
-                        ? "Held back: this looks personal, so it is never sent automatically."
-                        : `Sends after ${new Date(item.sendAfter).toLocaleString()}`}
+                        ? t("flywheel.queue.held")
+                        : `${lang === "zh" ? "发送时间" : "Sends after"} ${new Date(
+                            item.sendAfter,
+                          ).toLocaleString()}`}
                       {item.redactions > 0
-                        ? ` · ${item.redactions} detail(s) removed`
+                        ? ` · ${item.redactions} ${lang === "zh" ? "处细节已移除" : "detail(s) removed"}`
                         : ""}
                     </p>
                   </div>
@@ -8459,16 +8537,24 @@ function FlywheelQueuePanel() {
                     onClick={() => void withdraw(item.id)}
                     type="button"
                   >
-                    Take It Out
+                    {lang === "zh" ? "移除" : "Remove"}
                   </button>
                 </li>
               ))}
             </ul>
           )}
+          {/* K10: available where someone looks for it, prominent nowhere. */}
+          <p className="settings-card-copy">
+            <code>{state.contributorId}</code>
+          </p>
+          <p className="settings-card-copy text-faint">
+            {t("legal.notice.flywheel.contributorId")}
+          </p>
           {state.configured ? null : (
             <p className="settings-card-copy text-faint">
-              No publish service is configured, so nothing can be sent from this
-              machine.
+              {lang === "zh"
+                ? "尚未配置发布服务,因此这台机器无法发送任何内容。"
+                : "No publish service is configured, so nothing can be sent from this machine."}
             </p>
           )}
         </>
@@ -11006,10 +11092,7 @@ function PublishConfirmDialog({
               style={{ marginTop: "0.2rem" }}
               type="checkbox"
             />
-            <span>
-              Send me corrections from people who install this, so I can improve
-              it. You can change this later.
-            </span>
+            <span>{t("legal.consent.flywheel.receive.label")}</span>
           </label>
         ) : null}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>

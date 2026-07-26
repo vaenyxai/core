@@ -16,7 +16,100 @@ import { writeConnections } from "../models/provider-settings.js";
 
 import { saveImage } from "./vision.js";
 
-export type ImageEngineChoice = "none" | "gemini" | "openai" | "zhipu";
+export type ImageEngineChoice =
+  | "none"
+  | "cloudflare"
+  | "gemini"
+  | "openai"
+  | "zhipu";
+
+// Cloudflare is the free way to make pictures (Oskar, 2026-07-27) and it is the
+// only provider here that is NOT OpenAI-shaped: its URL carries the account id
+// and it answers with its own envelope. It also asks the household for two
+// values where every other provider asks for one — so we ask for the token and
+// look the account id up ourselves, because "paste this one thing" is the whole
+// difference between a setting a family can use and one they cannot.
+const CLOUDFLARE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
+
+interface CloudflareConnection {
+  apiKey?: string;
+  accountId?: string;
+  model?: string;
+}
+
+/** Which account does this token belong to? Asked once, when the token is
+ *  saved, and stored — a token scoped to one account answers with that one. */
+export async function discoverCloudflareAccount(
+  apiKey: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const response = await fetchImpl(`${CLOUDFLARE_API}/accounts`, {
+    headers: { authorization: `Bearer ${apiKey}` },
+  });
+  if (!response.ok) {
+    throw new Error(`IMAGE_CF_TOKEN_REJECTED:${response.status}`);
+  }
+  const body = (await response.json()) as {
+    result?: { id?: unknown }[];
+  };
+  const first = body.result?.[0]?.id;
+  if (typeof first !== "string" || !first) {
+    throw new Error("IMAGE_CF_NO_ACCOUNT");
+  }
+  return first;
+}
+
+async function generateWithCloudflare(
+  connection: CloudflareConnection,
+  dataDirectory: string,
+  prompt: string,
+): Promise<string> {
+  const response = await fetch(
+    `${CLOUDFLARE_API}/accounts/${connection.accountId}/ai/run/${connection.model ?? CLOUDFLARE_MODEL}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${connection.apiKey ?? ""}`,
+      },
+      body: JSON.stringify({ prompt }),
+    },
+  );
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = (await response.json()) as {
+        errors?: { message?: unknown }[];
+      };
+      const first = body.errors?.[0]?.message;
+      if (typeof first === "string") detail = first.slice(0, 300);
+    } catch {
+      // Non-JSON body: the status is all there is.
+    }
+    throw new Error(
+      `IMAGE_GENERATE_FAILED:${response.status}${detail ? `:${detail}` : ""}`,
+    );
+  }
+  // Two shapes in the wild: the newer models answer with base64 inside their
+  // own envelope, the older ones hand back the PNG bytes directly.
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.startsWith("image/")) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return saveImage(dataDirectory, bytes as unknown as Buffer, "image/png");
+  }
+  const parsed = (await response.json()) as {
+    result?: { image?: unknown };
+  };
+  const image = parsed.result?.image;
+  if (typeof image !== "string" || !image) {
+    throw new Error("IMAGE_EMPTY_RESPONSE");
+  }
+  const bytes = Uint8Array.from(globalThis.atob(image), (char) =>
+    char.charCodeAt(0),
+  );
+  return saveImage(dataDirectory, bytes as unknown as Buffer, "image/png");
+}
 
 // Provider defaults for the OpenAI-compatible /images/generations endpoint.
 const IMAGE_CANDIDATES = [
@@ -50,20 +143,35 @@ function pickCandidate(
   return pinned;
 }
 
+function cloudflareReady(
+  connections: ReturnType<typeof readProviderConnections>,
+): boolean {
+  const connection = connections.cloudflare as CloudflareConnection | undefined;
+  return Boolean(connection?.apiKey && connection?.accountId);
+}
+
 export function getImageEngineStatus(secretsDirectory: string): {
   connected: boolean;
   provider: string | null;
 } {
-  const candidate = pickCandidate(readProviderConnections(secretsDirectory));
+  const connections = readProviderConnections(secretsDirectory);
+  if (connections.imageOutput?.provider === "cloudflare") {
+    return {
+      connected: cloudflareReady(connections),
+      provider: "cloudflare",
+    };
+  }
+  const candidate = pickCandidate(connections);
   return candidate
     ? { connected: true, provider: candidate.id }
     : { connected: false, provider: null };
 }
 
-export function setImageEngine(
+export async function setImageEngine(
   secretsDirectory: string,
   choice: ImageEngineChoice,
-): ReturnType<typeof getImageEngineStatus> {
+  apiKey?: string,
+): Promise<ReturnType<typeof getImageEngineStatus>> {
   const connections = readProviderConnections(secretsDirectory);
   if (choice === "none") {
     if ("imageOutput" in connections) {
@@ -72,6 +180,23 @@ export function setImageEngine(
     }
     return getImageEngineStatus(secretsDirectory);
   }
+
+  if (choice === "cloudflare") {
+    const key = apiKey?.trim() || (connections.cloudflare as CloudflareConnection | undefined)?.apiKey;
+    if (!key) throw new Error("IMAGE_NO_KEY");
+    // Look the account up now rather than at drawing time: a token that is
+    // wrong should say so while the Owner is still looking at the field.
+    const accountId = await discoverCloudflareAccount(key);
+    connections.cloudflare = {
+      ...(connections.cloudflare as CloudflareConnection | undefined),
+      apiKey: key,
+      accountId,
+    };
+    connections.imageOutput = { provider: "cloudflare" };
+    writeConnections(secretsDirectory, connections);
+    return getImageEngineStatus(secretsDirectory);
+  }
+
   if (!connections[choice]?.apiKey) {
     throw new Error("IMAGE_NO_KEY");
   }
@@ -99,6 +224,16 @@ export async function generateImage(
   prompt: string,
 ): Promise<string> {
   const connections = readProviderConnections(secretsDirectory);
+
+  if (connections.imageOutput?.provider === "cloudflare") {
+    if (!cloudflareReady(connections)) throw new Error("IMAGE_NOT_CONNECTED");
+    return generateWithCloudflare(
+      connections.cloudflare as CloudflareConnection,
+      dataDirectory,
+      prompt,
+    );
+  }
+
   const candidate = pickCandidate(connections);
   if (!candidate) throw new Error("IMAGE_NOT_CONNECTED");
   const connection = connections[candidate.id];

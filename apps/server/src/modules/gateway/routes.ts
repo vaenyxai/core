@@ -4503,12 +4503,18 @@ export async function registerGatewayRoutes(
     },
   );
 
-  app.post<{ Body: { provider: string } }>(
+  app.post<{ Body: { provider: string; apiKey?: string } }>(
     "/v1/images/engine",
     {
       schema: {
         body: Type.Object(
-          { provider: Type.String({ minLength: 1 }) },
+          {
+            provider: Type.String({ minLength: 1 }),
+            // Only Cloudflare uses this: its token is typed into the Pictures
+            // setting itself rather than under Models, because it is the one
+            // engine a household adds solely to make pictures.
+            apiKey: Type.Optional(Type.String({ maxLength: 500 })),
+          },
           { additionalProperties: false },
         ),
         response: {
@@ -4524,15 +4530,31 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       try {
-        return setImageEngine(
+        return await setImageEngine(
           context.config.secretsDirectory,
           request.body.provider as ImageEngineChoice,
+          request.body.apiKey,
         );
       } catch (error) {
-        if (error instanceof Error && error.message === "IMAGE_NO_KEY") {
+        const code = error instanceof Error ? error.message : "";
+        if (code === "IMAGE_NO_KEY") {
           return reply.code(400).send({
             error:
               "That model has no key yet — connect it under Models first, then pick it here.",
+          });
+        }
+        // Cloudflare is the one engine whose key is entered right here, so its
+        // key problems have to be answered right here too.
+        if (code.startsWith("IMAGE_CF_TOKEN_REJECTED")) {
+          return reply.code(400).send({
+            error:
+              "Cloudflare would not accept that token. Check it was copied whole, and that it has the Workers AI permission.",
+          });
+        }
+        if (code === "IMAGE_CF_NO_ACCOUNT") {
+          return reply.code(400).send({
+            error:
+              "That token works but is not attached to any Cloudflare account.",
           });
         }
         throw error;

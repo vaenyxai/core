@@ -17,6 +17,15 @@ export const CAPABILITIES = {
   // feature.community-sharing.upload-endpoint — Schedule: not-built
   // feature.community-sharing.deidentification-pipeline — Schedule: not-built
   // The whole of copy pack Part K depends on these three.
+  //
+  // STILL FALSE as of 2026-07-27 even though all three are now BUILT and
+  // deployed (queue + 48-hour window + de-identification on this machine; the
+  // pipe live at publish.vaenyx.ai; the publisher's receive switch). Part K
+  // says it plainly: "Until the Schedule marks the capability active, none of
+  // these strings may render." Built is not the same as scheduled-active, and
+  // this switch mirrors the Schedule rather than the code — otherwise the
+  // Schedule stops being the thing that decides. Flip it when the Schedule
+  // entries move, in the same change.
   flywheelUpload: false,
   // Importing the instructions from an Agent Skill, and exporting a Method as
   // one. Copy pack Part L. Never describe this as "Skill compatible", "runs
@@ -38,6 +47,12 @@ export const GATED_KEYS: Record<string, keyof typeof CAPABILITIES> = {
   "legal.consent.flywheel.activate": "flywheelUpload",
   "legal.notice.flywheel.item": "flywheelUpload",
   "legal.notice.flywheel.remove": "flywheelUpload",
+  "legal.consent.flywheel.receive": "flywheelUpload",
+  "legal.consent.flywheel.receive.label": "flywheelUpload",
+  "legal.consent.flywheel.sensitiveAsk": "flywheelUpload",
+  "legal.notice.flywheel.contributorId": "flywheelUpload",
+  "flywheel.queue.window": "flywheelUpload",
+  "flywheel.queue.held": "flywheelUpload",
   "legal.notice.skill.import": "skillInterop",
   "legal.notice.skill.importedPublish": "skillInterop",
   "legal.notice.skill.export": "skillInterop",

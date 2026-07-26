@@ -18,6 +18,10 @@ export interface ProviderConnection {
   enVoice?: string;
   // Vision entry only: the pinned vision engine ("auto" = entry absent).
   provider?: string;
+  // Cloudflare entry only: its API URL carries the account, so the account id
+  // is part of the connection. Looked up from the token when it is saved, so
+  // nobody has to go and find it (see image-gen.ts).
+  accountId?: string;
 }
 
 export function readProviderConnections(

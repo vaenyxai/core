@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   AppProfile,
   AskVaenyxConversation,
   AskVaenyxMessage,
@@ -1284,11 +1284,12 @@ export function fetchImageEngine(): Promise<VisionStatus> {
 }
 
 export function setImageEngineChoice(
-  provider: "none" | "gemini" | "openai" | "zhipu",
+  provider: "none" | "cloudflare" | "gemini" | "openai" | "zhipu",
+  apiKey?: string,
 ): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/images/engine", {
     method: "POST",
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify(apiKey ? { provider, apiKey } : { provider }),
   });
 }
 
