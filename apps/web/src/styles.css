@@ -3820,6 +3820,37 @@ select {
   margin-top: 10px;
 }
 
+/* Multi-select in the chat list: the picked rows read as picked, and the bar
+   with what you can do to them sits above them. */
+.thread-item-row.picked {
+  border-radius: 10px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.thread-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 11px;
+}
+
+.thread-bulk-bar .text-button.danger,
+.thread-item-row .text-button.danger {
+  color: #ef9a9a;
+}
+
+.archived-section {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
 /* The one action on the Routine page, alone on its own line at the right. */
 .routine-start-row {
   display: flex;

@@ -85,6 +85,7 @@ import {
   fetchLibraryMethods,
   fetchLibraryRoutines,
   fetchLibraryRoutine,
+  deleteAskVaenyxConversation,
   fetchCatalogue,
   installRoutineFromCatalogue,
   installMethodFromCatalogue,
@@ -14646,6 +14647,8 @@ function ThreadList({
   onMoveThreadProject,
   onRenameThread,
   onSetThreadStatus,
+  onBulkArchive,
+  onBulkDelete,
 }: {
   threads: VaenyxThread[];
   emptyLabel: string;
@@ -14657,8 +14660,16 @@ function ThreadList({
   onMoveThreadProject: (thread: VaenyxThread, projectId: string | null) => void;
   onRenameThread: (thread: VaenyxThread, title: string) => void;
   onSetThreadStatus: (thread: VaenyxThread, status: VaenyxThread["status"]) => void;
+  // Bulk actions on a selection. Ctrl/Cmd-click adds one, Shift-click takes a
+  // run — the same gesture as a file manager, because that is what people
+  // already know (Oskar, 2026-07-27).
+  onBulkArchive: (threads: VaenyxThread[]) => void;
+  onBulkDelete: (threads: VaenyxThread[]) => void;
 }) {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(THREAD_LIST_INITIAL);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [anchor, setAnchor] = useState<string | null>(null);
 
   if (threads.length === 0) {
     return <p className="thread-empty">{emptyLabel}</p>;
@@ -14666,18 +14677,85 @@ function ThreadList({
 
   const shown = threads.slice(0, visible);
   const remaining = threads.length - shown.length;
+  const selectedThreads = threads.filter((thread) =>
+    selected.includes(thread.id),
+  );
+
+  // Modifier-click selects instead of opening. Returns true when the click was
+  // a selection gesture, so the caller knows not to open the chat.
+  function handleSelectClick(
+    thread: VaenyxThread,
+    event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean },
+  ): boolean {
+    if (event.shiftKey && anchor) {
+      const from = shown.findIndex((entry) => entry.id === anchor);
+      const to = shown.findIndex((entry) => entry.id === thread.id);
+      if (from >= 0 && to >= 0) {
+        const [start, end] = from <= to ? [from, to] : [to, from];
+        const run = shown.slice(start, end + 1).map((entry) => entry.id);
+        setSelected((current) => [...new Set([...current, ...run])]);
+        return true;
+      }
+    }
+    if (event.ctrlKey || event.metaKey) {
+      setSelected((current) =>
+        current.includes(thread.id)
+          ? current.filter((id) => id !== thread.id)
+          : [...current, thread.id],
+      );
+      setAnchor(thread.id);
+      return true;
+    }
+    return false;
+  }
 
   return (
     <div className="thread-items">
+      {selected.length > 0 ? (
+        <div className="thread-bulk-bar">
+          <span>
+            {t("threads.bulk.count").replace("{n}", String(selected.length))}
+          </span>
+          <button
+            className="text-button"
+            onClick={() => {
+              onBulkArchive(selectedThreads);
+              setSelected([]);
+            }}
+            type="button"
+          >
+            {t("threads.bulk.archive")}
+          </button>
+          <button
+            className="text-button danger"
+            onClick={() => {
+              onBulkDelete(selectedThreads);
+              setSelected([]);
+            }}
+            type="button"
+          >
+            {t("threads.bulk.delete")}
+          </button>
+          <button
+            className="text-button"
+            onClick={() => setSelected([])}
+            type="button"
+          >
+            {t("threads.bulk.clear")}
+          </button>
+        </div>
+      ) : null}
       {shown.map((thread) => {
         const light = threadLight(thread, tasks);
         return (
           <div
-            className={
-              selectedThreadId === thread.id
-                ? "thread-item-row active"
-                : "thread-item-row"
-            }
+            className={[
+              "thread-item-row",
+              selectedThreadId === thread.id ? "active" : "",
+              selected.includes(thread.id) ? "picked" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             key={thread.id}
           >
             <button
@@ -14686,7 +14764,8 @@ function ThreadList({
                   ? "thread-item active"
                   : "thread-item"
               }
-              onClick={() => {
+              onClick={(event) => {
+                if (handleSelectClick(thread, event)) return;
                 if (thread.kind === "chat" && thread.conversationId) {
                   onOpenChat(thread.conversationId, thread.id);
                   return;
@@ -14741,6 +14820,8 @@ function SidebarThreadTree({
   onMoveThreadProject,
   onRenameThread,
   onSetThreadStatus,
+  onBulkArchive,
+  onBulkDelete,
 }: {
   selectedThreadId: string | null;
   workspace: Workspace;
@@ -14749,9 +14830,16 @@ function SidebarThreadTree({
   onMoveThreadProject: (thread: VaenyxThread, projectId: string | null) => void;
   onRenameThread: (thread: VaenyxThread, title: string) => void;
   onSetThreadStatus: (thread: VaenyxThread, status: VaenyxThread["status"]) => void;
+  onBulkArchive: (threads: VaenyxThread[]) => void;
+  onBulkDelete: (threads: VaenyxThread[]) => void;
 }) {
+  const { t } = useI18n();
+  const [showArchived, setShowArchived] = useState(false);
   const visibleThreads = workspace.threads.filter(
     (thread) => thread.status !== "archived",
+  );
+  const archivedThreads = workspace.threads.filter(
+    (thread) => thread.status === "archived",
   );
 
   const namedProjects = sortProjectsForSidebar(workspace.projects).filter(
@@ -14778,6 +14866,8 @@ function SidebarThreadTree({
         onOpenTask={onOpenTask}
         onRenameThread={onRenameThread}
         onSetThreadStatus={onSetThreadStatus}
+        onBulkArchive={onBulkArchive}
+        onBulkDelete={onBulkDelete}
         projects={workspace.projects}
         selectedThreadId={selectedThreadId}
         tasks={workspace.tasks}
@@ -14817,6 +14907,56 @@ function SidebarThreadTree({
           {renderThreadItems(unsortedThreads, "No chats yet")}
         </SidebarDetails>
       </div>
+      {/* Archived chats live behind one click: out of the way, but somewhere
+          you can get back to them and, if you are sure, delete them for good
+          (Oskar, 2026-07-27). */}
+      {archivedThreads.length > 0 ? (
+        <div className="project-thread-folders archived-section">
+          <button
+            className="thread-show-more"
+            onClick={() => setShowArchived((open) => !open)}
+            type="button"
+          >
+            {showArchived ? "▾" : "▸"} {t("threads.archived")} (
+            {archivedThreads.length})
+          </button>
+          {showArchived ? (
+            <div className="thread-items">
+              {archivedThreads.map((thread) => (
+                <div className="thread-item-row" key={thread.id}>
+                  <button
+                    className="thread-item"
+                    onClick={() => {
+                      if (thread.kind === "chat" && thread.conversationId) {
+                        onOpenChat(thread.conversationId, thread.id);
+                      } else if (thread.kind === "task" && thread.taskId) {
+                        onOpenTask(thread.taskId, thread.id);
+                      }
+                    }}
+                    type="button"
+                  >
+                    <strong>{thread.title.trim() || "New chat"}</strong>
+                  </button>
+                  <button
+                    className="text-button"
+                    onClick={() => onSetThreadStatus(thread, "active")}
+                    type="button"
+                  >
+                    {t("threads.archived.restore")}
+                  </button>
+                  <button
+                    className="text-button danger"
+                    onClick={() => onBulkDelete([thread])}
+                    type="button"
+                  >
+                    {t("threads.bulk.delete")}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -14832,7 +14972,7 @@ function VaenyxWorkspace({
   onLogout: () => Promise<void>;
   onWorkspaceChange: (workspace: Workspace) => void;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   // A model button on the sign-in page leaves a connect intent; land straight
   // on Settings (whose Models tab picks it up) instead of the chat portal.
   const [screen, setScreen] = useState<Screen>(() =>
@@ -15255,6 +15395,49 @@ function VaenyxWorkspace({
     // Runs once per load: the params are consumed above.
   }, []);
 
+  // Bulk archive: one call per thread, then a single refresh. Archiving is
+  // reversible, so it needs no confirmation.
+  async function archiveThreads(threads: VaenyxThread[]): Promise<void> {
+    for (const thread of threads) {
+      try {
+        await updateVaenyxThreadStatus(thread.id, { status: "archived" });
+      } catch {
+        // Keep going: one failure should not strand the rest.
+      }
+    }
+    await refreshWorkspace();
+  }
+
+  // Bulk delete: this one asks first, because it cannot be undone and the
+  // whole point of selecting several is that it is easy to select one too many.
+  async function deleteThreads(threads: VaenyxThread[]): Promise<void> {
+    const chats = threads.filter(
+      (thread) => thread.kind === "chat" && thread.conversationId,
+    );
+    if (chats.length === 0) return;
+    const question =
+      lang === "zh"
+        ? `删除 ${chats.length} 个对话?这个动作无法撤销。`
+        : `Delete ${chats.length} conversation(s)? This cannot be undone.`;
+    if (!window.confirm(question)) return;
+    for (const thread of chats) {
+      try {
+        if (thread.conversationId) {
+          await deleteAskVaenyxConversation(thread.conversationId);
+        }
+      } catch {
+        // Keep going: one failure should not strand the rest.
+      }
+    }
+    setAskVaenyxConversations((current) =>
+      current.filter(
+        (conversation) =>
+          !chats.some((thread) => thread.conversationId === conversation.id),
+      ),
+    );
+    await refreshWorkspace();
+  }
+
   function openThreadTask(taskId: string, threadId?: string) {
     const taskThread = workspace.threads.find(
       (thread) => thread.taskId === taskId,
@@ -15417,6 +15600,8 @@ function VaenyxWorkspace({
             onSetThreadStatus={(thread, status) =>
               void setWorkspaceThreadStatus(thread, status)
             }
+            onBulkArchive={(threads) => void archiveThreads(threads)}
+            onBulkDelete={(threads) => void deleteThreads(threads)}
           />
         </nav>
 

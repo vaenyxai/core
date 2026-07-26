@@ -241,6 +241,13 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "method.edit.apply": "Apply These Changes",
     // Part L surfaces. "Import the instructions from a Skill" — never
     // "Skill compatible" or "runs Skills" (L4).
+    "threads.bulk.count": "{n} selected",
+    "threads.bulk.archive": "Archive",
+    "threads.bulk.delete": "Delete",
+    "threads.bulk.clear": "Clear",
+    "threads.archived": "Archived",
+    "threads.archived.empty": "Nothing archived yet.",
+    "threads.archived.restore": "Restore",
     "photo.add": "Add a photo",
     "photo.take": "Take a photo",
     "photo.choose": "Choose an existing photo",
@@ -518,6 +525,13 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
     "method.edit.apply": "应用这些改动",
+    "threads.bulk.count": "已选 {n} 个",
+    "threads.bulk.archive": "归档",
+    "threads.bulk.delete": "删除",
+    "threads.bulk.clear": "取消选择",
+    "threads.archived": "已归档",
+    "threads.archived.empty": "还没有归档的对话。",
+    "threads.archived.restore": "取回",
     "photo.add": "添加照片",
     "photo.take": "拍照",
     "photo.choose": "从相册选择",
