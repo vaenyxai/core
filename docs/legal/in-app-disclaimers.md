@@ -549,6 +549,123 @@ pack and are covered by `audit-copy.mjs`.*
 
 **J6 — `disclaimer.community`, `disclaimer.ai`, `disclaimer.health`, `disclaimer.finance`, `disclaimer.legal`** — already accurate; listed here so the audit covers them.
 
+### Part K — The sharing window *(drafted; nothing here ships until the upload channel exists)*
+
+*Status.* The local half is live: a correction returned by an app becomes a local
+example, capped, deletable, outside the content hash. The upload half — how an
+example reaches the Method's publisher — is **not built**. This Part is the
+wording agreed in advance so the code is written against settled copy rather than
+the other way round. Until the Schedule marks the capability active, none of
+these strings may render.
+
+**K0 — the principle, and why it holds**
+
+**Automatic to a person, never automatic to the public.**
+
+Sending an example to the Method's publisher shows it to one identified person
+and can be undone — the item can be withdrawn, the publisher can be required to
+delete it. Putting it in the Community makes it permanent in git history, forks
+and mirrors, where nobody can undo anything. The first can be automatic. The
+second is always a deliberate act, which is what publishing is.
+
+It follows that **a publisher's own examples do not reach the Community
+automatically either** — that would be automatic publication, which is the thing
+this rule exists to prevent.
+
+**K1 — the window is a control, not the consent**
+
+This distinction decides whether the design is lawful, so it is stated here
+rather than assumed.
+
+Core Privacy Policy clause 7.2 requires consent to be voluntary, informed,
+current and specific, with no option pre-selected. **Silence cannot be consent.**
+So the 48-hour window is **not** where consent is given. Consent is given once,
+at activation, on a surface that describes the whole mechanism: what is sent, to
+whom, when, how to stop an item, and that the sensitive categories are always
+asked separately. The window is a **safety control exercised under that consent**
+— the user's opportunity to catch what the filter missed.
+
+Written that way, "no action means it sends" is the operation of a control, not
+an inference of agreement from silence. Written the other way it is neither.
+
+**K2 — where the consent is taken**
+
+**Not by rewriting A3.** A3 today is deliberately *not* a consent: at copy
+version 2.6 it left the consent class and became a local interest preference,
+because consenting to a capability that does not exist is consenting to nothing.
+Rewriting A3 later would reinterpret a click someone made months earlier as
+agreement to a mechanism that did not then exist — which Terms of Service clause
+7.4 and clause 18.1A forbid in terms.
+
+**A new surface, shown at activation.** This is not a preference; it is our own
+Terms requiring it: sharing "stays off until the Schedule marks it active, the
+then-current Point-of-Use Notice is shown, and a fresh affirmative choice is
+recorded".
+
+**A note on the "one click, then never again" requirement.** That is achievable,
+but the click is at **activation**, not at first install of today's version — the
+capability does not exist yet, so there is nothing to consent to today. After
+that click, the ordinary path is zero interaction.
+
+**K3 — `legal.consent.flywheel.activate`** *(the activation consent; replaces nothing, adds a surface)*
+
+- **EN:** "Corrections you receive can help the person who made this Method improve it. If you turn this on: an example is prepared on this computer, personal details are stripped here before anything leaves, and it waits 48 hours before it is sent to that Method's publisher. During those 48 hours you can remove any of them, and you can turn this off at any time. Health, family and finance content is never sent this way — we ask you separately, every time. Stripping personal details is an automated process and it is not perfect, which is why the 48 hours exist. What is sent goes to the publisher, not to the public: it becomes public only if they choose to include it when they publish, and only under the terms you confirm now."
+- **ZH:** "你收到的纠正,可以帮助制作这个 Method 的人把它改得更好。若你开启:例子在这台电脑上准备好,个人信息在离开本机之前就在本地剥除,然后等待 48 小时才发送给该 Method 的发布者。这 48 小时内你可以撤掉任意一条,也可以随时整个关掉。健康、家庭与财务类内容绝不会经此发送 —— 每一次我们都会单独问你。剥除个人信息是自动化处理,并不完美,48 小时的等待正是为此而设。发出去的内容是给发布者的,不是给公众的:只有当他们在发布时选择收录,它才会公开,且仅依你现在确认的条款。"
+- **Behaviour:** Consent class. Shown at activation, never at install of a version without the capability. No option pre-selected; declining as easy as accepting. Records key name, copy version, language, profile and time.
+
+**K4 — `legal.notice.flywheel.queued`** *(the weekly digest — one line, not a nag)*
+
+- **EN:** "{count} examples are ready to send this week. Open to review or remove any of them."
+- **ZH:** "本周有 {count} 条例子准备发出。可以打开查看或撤掉其中任意一条。"
+
+**K5 — `legal.notice.flywheel.item`** *(on each queued example)*
+
+- **EN:** "Sends in {time}. Remove it if it still contains anything private — the automated check is not perfect."
+- **ZH:** "{time} 后发送。若其中仍有私密内容,请撤掉它 —— 自动检查并不完美。"
+
+**K6 — `legal.notice.flywheel.remove`** *(the control)*
+
+- **EN:** "Don't send this one" — **ZH:** 「不要发送这一条」
+
+**K7 — what the receiving publisher is bound to**
+
+An example sent to a publisher may still contain personal information the filter
+missed — that is the premise of the window. So the publisher must be bound
+before receiving it, and the Contributor Agreement is where that binding lives:
+an example received this way may be used to improve that Method and for nothing
+else; it must not be republished, disclosed or retained beyond that purpose; and
+it must be deleted on request.
+
+**This is the answer to a problem the design does not otherwise solve.** A
+publisher may be anywhere in the world, so an automatic send is potentially an
+overseas disclosure by us. A consent under APP 8.2(b) must identify the same
+recipient, and "whoever published the Method" does not. Binding the publisher
+contractually is what makes this reasonable steps under APP 8.1 instead —
+combined with on-device stripping, which reduces the exposure without being
+claimed to eliminate it.
+
+**Open decision for the Operator — attribution.** Whether a published example
+carries a contributor byline is not a wording question. Attribution turns every
+user who corrects an answer into a permanently, publicly named contributor, with
+the same permanence warning publishers get; the earlier design deliberately
+supplied no creator identification, which is why the CC BY attribution condition
+had nothing to operate on. Merit needs attribution; ordinary users do not want
+it. **Recommended: unattributed by default, attribution only where the
+contributor holds a publishing account and opts into it** — that keeps the
+zero-interaction path clean for people who are not trying to become contributors.
+This is a product decision and is not resolved here.
+
+**K8 — G1 when examples can be attached**
+
+G1 currently reads "No local examples or raw corrections are included in the
+current publish submission." That sentence is true today and must change on the
+day it stops being true — not before. The replacement must state, in the publish
+flow: which examples are included, that they become public with the item and are
+permanent in copies beyond our reach, and — if attribution is adopted — that each
+example carries its contributor's byline, publicly and permanently. It must also
+show the exact material proposed for publication before the publisher confirms,
+which Terms of Service clause 8.6(b) already requires.
+
 ## 5. Placement Summary Matrix
 
 | Key (root) | Surface | Behaviour |
