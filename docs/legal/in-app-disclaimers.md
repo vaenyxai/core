@@ -768,6 +768,57 @@ with open standards such as Agent Skills are descriptive only. That protects us
 conduct** — and unlike most of what this pack guards against, it would be our own
 statement about our own product, which is the least defensible kind.
 
+**L5 — the dropped-item labels** *(four keys, one block each below)*
+
+These four are not labels. **They are the specific list L1 requires**, and L1 says
+in terms that "some features may not work" does not discharge it. The wording is
+the whole notice: it decides whether a person understands what they just lost.
+
+Each label must appear **against the specific thing found** — the file name, the
+step — not as a category heading with a count. "3 x A file that would have run"
+tells a person nothing about what their Skill did.
+
+**L5a — `skill.drop.executable`**
+- **EN:** "A file that would have run"
+- **ZH:** "一个会运行的文件"
+
+**L5b — `skill.drop.runs-a-script`**
+- **EN:** "A step that ran one of those files"
+- **ZH:** "一个会去运行那些文件的步骤"
+
+**L5c — `skill.drop.local-file`**
+- **EN:** "A step that used a file on the other machine"
+- **ZH:** "一个用到对方机器上文件的步骤"
+
+**L5d — `skill.drop.external-tool`**
+- **EN:** "A step that ran an outside tool"
+- **ZH:** "一个会调用外部工具的步骤"
+
+**L6 — `skill.import.copy`** *(the line under the paste box)*
+
+Coding filed this as an operation label. It is not: it promises that we will tell
+you **exactly** what could not come across, and exactness is not something the
+parser can deliver. It finds four kinds of thing. A Skill may lose something else
+— a bundled resource, a reference to a service, an assumption about its host —
+and then "exactly" is a false statement about our own product, which is the least
+defensible kind.
+
+- **EN:** "Paste a SKILL.md here. Vaenyx keeps its instructions as a new Method and lists what could not come across. The list covers the kinds of thing we can detect; a Skill can depend on something we cannot see, so treat the result as a starting point rather than a finished copy."
+- **ZH:** "把 SKILL.md 的内容贴进来。Vaenyx 会把其中的指令保留成一个新的 Method,并列出哪些东西没能带过来。该清单涵盖我们能够识别的种类;一个 Skill 也可能依赖我们看不见的东西,所以请把结果当作起点,而不是一份完成的副本。"
+
+**L7 — `skill.import.nothingLost`** *(shown when the parser finds nothing to drop)*
+
+Same problem, sharper. "Nothing had to be dropped" is a clean bill of health we
+cannot issue — it means "nothing we look for was present", which is a different
+statement and the only one that is true.
+
+- **EN:** "Nothing we check for was dropped. That is not the same as nothing being lost: a Skill can rely on things we cannot detect from the file alone."
+- **ZH:** "我们所检查的项目中,没有任何内容被丢弃。这与「没有任何损失」不是一回事:一个 Skill 可能依赖我们仅凭文件无法察觉的东西。"
+
+**Not in this pack, and correctly so:** `skill.import.title`, `.source`,
+`.paste`, `.look`, `.confirm` and `skill.export.action`. They are verbs and
+field labels; nothing turns on their wording.
+
 ## 5. Placement Summary Matrix
 
 | Key (root) | Surface | Behaviour |
