@@ -1234,6 +1234,21 @@ export function fetchCorrections(
   );
 }
 
+// The picture-MAKING engine. Separate from the vision slot above, which reads
+// pictures: the two are rarely the same model.
+export function fetchImageEngine(): Promise<VisionStatus> {
+  return requestJson<VisionStatus>("/v1/images/engine");
+}
+
+export function setImageEngineChoice(
+  provider: "none" | "gemini" | "openai" | "zhipu",
+): Promise<VisionStatus> {
+  return requestJson<VisionStatus>("/v1/images/engine", {
+    method: "POST",
+    body: JSON.stringify({ provider }),
+  });
+}
+
 // One Routine in full — what it does, step by step — so the Library can
 // explain it before the Owner commits to a chat with it.
 export function fetchLibraryRoutine(id: string): Promise<LibraryRoutine> {

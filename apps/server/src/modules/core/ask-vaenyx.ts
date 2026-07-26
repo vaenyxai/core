@@ -14,6 +14,11 @@ import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
 import {
+  generateImage,
+  getImageEngineStatus,
+  looksLikeImageRequest,
+} from "./image-gen.js";
+import {
   describeImage,
   imageDataUrl,
   readImage,
@@ -773,14 +778,43 @@ export async function createAskVaenyxMessage(
     assistantStatus = "failed";
   }
 
+  // Making a picture. A text model cannot return one — it can only claim to,
+  // which is exactly what happened: Vaenyx said "here is your cartoon cat" and
+  // showed nothing (Oskar, 2026-07-27). When the Owner asked for a picture and
+  // an image engine is connected, one is actually made and attached.
+  let generatedImageId: string | null = null;
+  if (
+    assistantStatus === "completed" &&
+    options?.dataDirectory &&
+    options?.secretsDirectory &&
+    looksLikeImageRequest(content) &&
+    getImageEngineStatus(options.secretsDirectory).connected
+  ) {
+    try {
+      generatedImageId = await generateImage(
+        options.secretsDirectory,
+        options.dataDirectory,
+        content,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const parts = message.split(":");
+      const detail = parts.slice(2).join(":").trim();
+      assistantContent = `${assistantContent}\n\n_(The picture could not be made${
+        detail ? `: ${detail}` : "."
+      })_`;
+    }
+  }
+
   const assistantMessageId = randomUUID();
   const completedAt = new Date().toISOString();
 
   database.sqlite
     .prepare(
       `INSERT INTO ask_vaenyx_messages (
-        id, conversation_id, role, content, status, web_search_used, created_at, voice
-      ) VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
+        id, conversation_id, role, content, status, web_search_used, created_at,
+        voice, image_id
+      ) VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       assistantMessageId,
@@ -790,6 +824,7 @@ export async function createAskVaenyxMessage(
       webSearchUsed ? 1 : 0,
       completedAt,
       options?.voiceAudioId && assistantStatus === "completed" ? 1 : 0,
+      generatedImageId,
     );
 
   database.sqlite
@@ -873,6 +908,7 @@ export async function createAskVaenyxMessage(
           options?.voiceAudioId && assistantStatus === "completed",
         ),
         audioId: null,
+        imageId: generatedImageId,
       },
     ],
   };

@@ -350,6 +350,11 @@ import {
   exportMethodAsSkill,
   previewSkillImport,
 } from "../core/skills-interop.js";
+import {
+  getImageEngineStatus,
+  setImageEngine,
+  type ImageEngineChoice,
+} from "../core/image-gen.js";
 import { classifyRoutineIntent } from "../core/routine-intent.js";
 import { fetchCatalogue, installRoutine, installMethod } from "../core/catalogue.js";
 import {
@@ -4456,6 +4461,61 @@ export async function registerGatewayRoutes(
         );
       } catch (error) {
         if (error instanceof Error && error.message === "VISION_NO_KEY") {
+          return reply.code(400).send({
+            error:
+              "That model has no key yet — connect it under Models first, then pick it here.",
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // The picture-making engine. A separate slot from the one that reads
+  // pictures: a model that can look at a photo usually cannot draw one.
+  app.get(
+    "/v1/images/engine",
+    {
+      schema: {
+        response: { 200: VisionStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return getImageEngineStatus(context.config.secretsDirectory);
+    },
+  );
+
+  app.post<{ Body: { provider: string } }>(
+    "/v1/images/engine",
+    {
+      schema: {
+        body: Type.Object(
+          { provider: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: VisionStatusSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return setImageEngine(
+          context.config.secretsDirectory,
+          request.body.provider as ImageEngineChoice,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "IMAGE_NO_KEY") {
           return reply.code(400).send({
             error:
               "That model has no key yet — connect it under Models first, then pick it here.",

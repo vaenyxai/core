@@ -149,6 +149,8 @@ import {
   type PushPrefs,
   type PushDiagnostics,
   fetchVisionStatus,
+  fetchImageEngine,
+  setImageEngineChoice,
   describePhoto,
   uploadPhoto,
   type VisionStatus,
@@ -1756,6 +1758,8 @@ function VoicePanel() {
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [vision, setVision] = useState<VisionStatus | null>(null);
+  const [imageEngine, setImageEngine] = useState<VisionStatus | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [outputEngine, setOutputEngine] = useState<
     "none" | "browser" | "gemini" | "local"
   >("none");
@@ -1787,6 +1791,9 @@ function VoicePanel() {
       .catch(() => undefined);
     void fetchVisionStatus()
       .then(setVision)
+      .catch(() => undefined);
+    void fetchImageEngine()
+      .then(setImageEngine)
       .catch(() => undefined);
     void fetchLocalTts()
       .then(setLocalTts)
@@ -1861,6 +1868,24 @@ function VoicePanel() {
         nextError instanceof Error && nextError.message
           ? nextError.message
           : "Could not play the test — is the engine connected?",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyImageEngine(
+    next: "none" | "gemini" | "openai" | "zhipu",
+  ) {
+    setBusy(true);
+    setImageError(null);
+    try {
+      setImageEngine(await setImageEngineChoice(next));
+    } catch (nextError) {
+      setImageError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not change the picture engine.",
       );
     } finally {
       setBusy(false);
@@ -2296,6 +2321,46 @@ function VoicePanel() {
         </p>
       )}
       {visionError ? <p className="form-error">{visionError}</p> : null}
+
+      <div className="settings-card-divider" />
+
+      {/* A separate slot from the one above: reading a picture and drawing one
+          are different models. Empty = Vaenyx never tries to draw. */}
+      <h3 className="settings-subhead">Pictures (Making Them)</h3>
+      <p className="settings-card-copy">
+        Ask for a picture in a chat and this engine makes one. Leave it off and
+        Vaenyx will not try — a text model can only claim to have drawn
+        something.
+      </p>
+      <label className="chat-font-field">
+        Engine
+        <select
+          className="task-select"
+          disabled={busy}
+          onChange={(event) =>
+            void applyImageEngine(
+              event.target.value as "none" | "gemini" | "openai" | "zhipu",
+            )
+          }
+          value={imageEngine?.provider ?? "none"}
+        >
+          <option value="none">None — Vaenyx Will Not Draw</option>
+          <option value="gemini">Gemini</option>
+          <option value="openai">OpenAI</option>
+          <option value="zhipu">Zhipu BigModel</option>
+        </select>
+      </label>
+      {imageEngine?.connected ? (
+        <div className="model-card-head">
+          <span className="library-chip chip-published">Connected</span>
+        </div>
+      ) : null}
+      <p className="settings-card-copy">
+        Note: Google gives image models no free quota — a free Gemini key
+        returns &quot;quota 0&quot; here even though it works for everything
+        else. Picture-making needs a paid key or another provider.
+      </p>
+      {imageError ? <p className="form-error">{imageError}</p> : null}
     </section>
   );
 }
