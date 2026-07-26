@@ -1498,6 +1498,77 @@ export const InstallMethodRequestSchema = Type.Object(
 // Legal acknowledgement / consent record (in-app disclaimers copy pack, clause
 // 2.3). language = the rendered UI language; copyVersion = the legal.copyVersion
 // in force; choice = an optional recorded choice (e.g. flywheel accept/decline).
+// Agent Skill interoperability (copy pack Part L). NEVER describe this as
+// "Skill compatible" or "runs Skills": we import the INSTRUCTIONS from a Skill
+// and we list what was dropped (L4, ToS 11.5).
+export const SkillDroppedItemSchema = Type.Object(
+  {
+    kind: Type.Union([Type.Literal("script"), Type.Literal("step")]),
+    detail: Type.String(),
+    reason: Type.Union([
+      Type.Literal("executable"),
+      Type.Literal("runs-a-script"),
+      Type.Literal("local-file"),
+      Type.Literal("external-tool"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const SkillImportPreviewSchema = Type.Object(
+  {
+    name: Type.String(),
+    description: Type.String(),
+    recipe: Type.String(),
+    // Listed one by one on the import notice: "some features may not work" is
+    // not this notice.
+    dropped: Type.Array(SkillDroppedItemSchema),
+    license: Type.Union([Type.String(), Type.Null()]),
+    source: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const PreviewSkillRequestSchema = Type.Object(
+  {
+    markdown: Type.String({ minLength: 1, maxLength: 200_000 }),
+    files: Type.Optional(Type.Array(Type.String({ maxLength: 512 }))),
+    source: Type.Optional(Type.String({ maxLength: 512 })),
+  },
+  { additionalProperties: false },
+);
+
+export const ImportSkillRequestSchema = Type.Object(
+  {
+    markdown: Type.String({ minLength: 1, maxLength: 200_000 }),
+    files: Type.Optional(Type.Array(Type.String({ maxLength: 512 }))),
+    source: Type.Optional(Type.String({ maxLength: 512 })),
+    // The licence as it arrived; recorded with the Method so the publish gate
+    // can fire on provenance rather than on someone's memory.
+    license: Type.Optional(Type.String({ maxLength: 512 })),
+  },
+  { additionalProperties: false },
+);
+
+export const ImportSkillResponseSchema = Type.Object(
+  { methodId: Type.String(), dropped: Type.Array(SkillDroppedItemSchema) },
+  { additionalProperties: false },
+);
+
+export const ExportSkillResponseSchema = Type.Object(
+  { fileName: Type.String(), markdown: Type.String() },
+  { additionalProperties: false },
+);
+
+export type SkillDroppedItem = Static<typeof SkillDroppedItemSchema>;
+export type SkillImportPreviewResponse = Static<
+  typeof SkillImportPreviewSchema
+>;
+export type PreviewSkillRequest = Static<typeof PreviewSkillRequestSchema>;
+export type ImportSkillRequest = Static<typeof ImportSkillRequestSchema>;
+export type ImportSkillResponse = Static<typeof ImportSkillResponseSchema>;
+export type ExportSkillResponse = Static<typeof ExportSkillResponseSchema>;
+
 // An example this Method has learnt from. `source` says where the pair came
 // from and `contributor` who from — the hook a credit system would need later.
 export const MethodExampleEntrySchema = Type.Object(
@@ -1817,6 +1888,9 @@ export const PublishStateSchema = Type.Object(
     // beside the publish control; nothing republishes on its own.
     staleMethodIds: Type.Array(Type.String()),
     staleRoutineIds: Type.Array(Type.String()),
+    // Methods carrying import provenance (copy pack L2). The publish gate fires
+    // on this, not on the publisher remembering where a Method came from.
+    importedMethodIds: Type.Array(Type.String()),
     publishedRoutineIds: Type.Array(Type.String()),
   },
   { additionalProperties: false },

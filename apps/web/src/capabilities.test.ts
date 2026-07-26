@@ -16,11 +16,25 @@ describe("capability gate", () => {
     }
   });
 
-  it("gates the three Part K keys and nothing else", () => {
+  it("keeps every Part L string unrenderable while import/export is not built", () => {
+    expect(CAPABILITIES.skillInterop).toBe(false);
+    for (const key of [
+      "legal.notice.skill.import",
+      "legal.notice.skill.importedPublish",
+      "legal.notice.skill.export",
+    ]) {
+      expect(isKeyRenderable(key)).toBe(false);
+    }
+  });
+
+  it("gates exactly the Part K and Part L keys", () => {
     expect(Object.keys(GATED_KEYS).sort()).toEqual([
       "legal.consent.flywheel.activate",
       "legal.notice.flywheel.item",
       "legal.notice.flywheel.remove",
+      "legal.notice.skill.export",
+      "legal.notice.skill.import",
+      "legal.notice.skill.importedPublish",
     ]);
   });
 

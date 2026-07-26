@@ -10956,6 +10956,14 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
               {t("legal.notice.publish.localChanges")}
             </p>
           ) : null}
+          {/* L2: fires on the Method carrying import provenance, never on the
+              publisher remembering where it came from — and it is shown IN
+              ADDITION to the ordinary publish confirmations, never instead. */}
+          {state.importedMethodIds.includes(method.id) ? (
+            <p className="context-disclaimer">
+              {t("legal.notice.skill.importedPublish")}
+            </p>
+          ) : null}
           <button
             className="primary-button"
             disabled={busy}

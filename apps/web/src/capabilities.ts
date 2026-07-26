@@ -18,6 +18,12 @@ export const CAPABILITIES = {
   // feature.community-sharing.deidentification-pipeline — Schedule: not-built
   // The whole of copy pack Part K depends on these three.
   flywheelUpload: false,
+  // Importing the instructions from an Agent Skill, and exporting a Method as
+  // one. Copy pack Part L. Never describe this as "Skill compatible", "runs
+  // Skills" or "works with Skills" (L4): our interoperability statements are
+  // descriptive only under ToS 11.5, and that holds only while we do not
+  // overstate them. We import instructions and we list what was dropped.
+  skillInterop: false,
 } as const;
 
 // Keys that render only while their capability is on. They still live in the
@@ -27,6 +33,9 @@ export const GATED_KEYS: Record<string, keyof typeof CAPABILITIES> = {
   "legal.consent.flywheel.activate": "flywheelUpload",
   "legal.notice.flywheel.item": "flywheelUpload",
   "legal.notice.flywheel.remove": "flywheelUpload",
+  "legal.notice.skill.import": "skillInterop",
+  "legal.notice.skill.importedPublish": "skillInterop",
+  "legal.notice.skill.export": "skillInterop",
 };
 
 export function isKeyRenderable(key: string): boolean {

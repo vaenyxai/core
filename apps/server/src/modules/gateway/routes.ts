@@ -91,6 +91,11 @@ import {
   PublishPauseStateSchema,
   CorrectionsResponseSchema,
   MethodExamplesResponseSchema,
+  SkillImportPreviewSchema,
+  PreviewSkillRequestSchema,
+  ImportSkillRequestSchema,
+  ImportSkillResponseSchema,
+  ExportSkillResponseSchema,
   AdoptCorrectionRequestSchema,
   AdoptCorrectionResponseSchema,
   DraftRecipeEditRequestSchema,
@@ -165,6 +170,8 @@ import {
   type SetSharingPreferenceRequest,
   type DraftRecipeEditRequest,
   type AdoptCorrectionRequest,
+  type PreviewSkillRequest,
+  type ImportSkillRequest,
   type UpdateRecipeRequest,
   type PublishAcceptanceRequest,
   type SetMethodTagsRequest,
@@ -278,6 +285,8 @@ import {
   addMethodExample,
   deleteMethodExample,
   listMethodExamples,
+  setMethodProvenance,
+  getMethodProvenance,
   diffRecipeLines,
   draftMethodSpec,
   draftRecipeEdit,
@@ -336,6 +345,11 @@ import {
   buildChatRoutineInput,
   parseChatRoutineInput,
 } from "../core/routine-run.js";
+import {
+  buildProvenance,
+  exportMethodAsSkill,
+  previewSkillImport,
+} from "../core/skills-interop.js";
 import { classifyRoutineIntent } from "../core/routine-intent.js";
 import { fetchCatalogue, installRoutine, installMethod } from "../core/catalogue.js";
 import {
@@ -6071,6 +6085,129 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // Agent Skill import/export (copy pack Part L). The wording rule is binding
+  // on this code and on anything written about it: Vaenyx IMPORTS THE
+  // INSTRUCTIONS FROM A SKILL. Never "Skill compatible", never "runs Skills" —
+  // ToS 11.5 makes our interoperability statements descriptive only, and that
+  // protects us only while we do not overstate them.
+  //
+  // Preview first, always: the Owner is shown exactly which scripts and which
+  // steps cannot come across before anything is created.
+  app.post<{ Body: PreviewSkillRequest }>(
+    "/v1/skills/preview",
+    {
+      schema: {
+        body: PreviewSkillRequestSchema,
+        response: { 200: SkillImportPreviewSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return previewSkillImport(
+        request.body.markdown,
+        (request.body.files ?? []).map((path) => ({ path })),
+        request.body.source ?? null,
+      );
+    },
+  );
+
+  app.post<{ Body: ImportSkillRequest }>(
+    "/v1/skills/import",
+    {
+      schema: {
+        body: ImportSkillRequestSchema,
+        response: {
+          200: ImportSkillResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const preview = previewSkillImport(
+        request.body.markdown,
+        (request.body.files ?? []).map((path) => ({ path })),
+        request.body.source ?? null,
+      );
+      if (!preview.recipe.trim()) {
+        return reply
+          .code(400)
+          .send({ error: "Nothing was left to import once the code was dropped." });
+      }
+      const created = createMethod(context.config.libraryDirectory, {
+        name: preview.name,
+        description: preview.description,
+        recipe: preview.recipe,
+        inputSchema: { type: "object", properties: {} },
+        outputSchema: { type: "object", properties: {} },
+        tags: [],
+      });
+      // Provenance rides in method.json, which is outside the content hash: a
+      // recorded source must not force every granted app to re-authorise.
+      setMethodProvenance(
+        context.config.libraryDirectory,
+        created.id,
+        buildProvenance(
+          request.body.markdown,
+          request.body.source ?? null,
+          request.body.license ?? preview.license,
+        ) as unknown as Record<string, unknown>,
+      );
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "library.skill.import",
+        decision: "allowed",
+        reason: `Imported the instructions from a Skill; ${preview.dropped.length} item(s) could not come across.`,
+        resourceType: "method",
+        resourceId: created.id,
+      });
+      return { methodId: created.id, dropped: preview.dropped };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/methods/:id/skill-export",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: ExportSkillResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const method = loadMethod(
+        context.config.libraryDirectory,
+        request.params.id,
+      );
+      if (!method) {
+        return reply.code(404).send({ error: "Method not found." });
+      }
+      return {
+        fileName: `${method.id}.SKILL.md`,
+        markdown: exportMethodAsSkill(method),
+      };
+    },
+  );
+
   // The corrections waiting to become examples, and the act of keeping one.
   // This is the flywheel's local half: a correction only becomes an example
   // because the Owner looked at it and said so. Nothing here uploads anything.
@@ -6937,6 +7074,17 @@ export async function registerGatewayRoutes(
             id,
           )?.contentHash ?? null,
       );
+      // L2: which Methods came from someone else's Skill. Read from disk every
+      // time so the gate cannot drift out of step with what is actually there.
+      const importedMethodIds = listMethodSummaries(
+        context.config.libraryDirectory,
+      )
+        .filter(
+          (method) =>
+            getMethodProvenance(context.config.libraryDirectory, method.id) !==
+            null,
+        )
+        .map((method) => method.id);
       // Service mode: publishing routes through the operator-hosted core-cloud
       // service; the Owner signs in there (Google/GitHub) and we hold a session.
       if (context.config.publishServiceUrl) {
@@ -6950,6 +7098,7 @@ export async function registerGatewayRoutes(
           publishedRoutineIds,
           staleMethodIds,
           staleRoutineIds,
+          importedMethodIds,
         };
         return serviceState;
       }
@@ -6971,6 +7120,7 @@ export async function registerGatewayRoutes(
         publishedRoutineIds,
         staleMethodIds,
         staleRoutineIds,
+        importedMethodIds,
       };
       return state;
     },

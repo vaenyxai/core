@@ -229,6 +229,13 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.flywheel.item":
       "Sends in {time}. Remove it if it still contains anything private — the automated check is not perfect.",
     "legal.notice.flywheel.remove": "Don't send this one",
+    // Part L — Skill import/export. GATED (see capabilities.ts).
+    "legal.notice.skill.import":
+      "This Skill was written by someone else and stays under its own licence — importing it does not make it yours. Vaenyx keeps the instructions and drops anything that runs as code, because published content here is instructions only, never programs. Steps that depended on that code will not work, and we list them below rather than leave you to discover it. Check the original licence before you rely on this or share it.",
+    "legal.notice.skill.importedPublish":
+      "This Method was imported from someone else's Skill. Publishing it here licenses it to the public under CC BY 4.0 and confirms you hold the rights to do that. You may not hold them: the original licence may forbid redistribution, may require attribution you have not given, or may not permit relicensing at all. Check it before you publish. If you are not sure, don't.",
+    "legal.notice.skill.export":
+      "Exported as instructions, which is all a Method ever was — nothing is lost. Whoever receives it is bound by the licence the Method carries, not by anything in Vaenyx.",
     "legal.notice.method.edit":
       "This rewrites what the Method tells the model to do — its steps only. Its inputs, outputs and permissions are unchanged. Apps you granted this Method must be granted it again, because what they were granted has changed. Nothing is published: your Library copy is the only one affected.",
     "method.edit.apply": "Apply These Changes",
@@ -466,6 +473,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.flywheel.item":
       "{time} 后发送。若其中仍有私密内容,请撤掉它 —— 自动检查并不完美。",
     "legal.notice.flywheel.remove": "不要发送这一条",
+    "legal.notice.skill.import":
+      "这个 Skill 是别人写的,并且仍受它自己的许可证约束 —— 导入它不会让它变成你的。Vaenyx 会保留其中的指令,并丢弃任何以代码形式运行的部分,因为这里发布的内容只能是指令,绝不是程序。依赖那些代码的步骤将无法工作,我们会在下面列出来,而不是留给你自己去发现。在依赖它或分享它之前,请先查看原始许可证。",
+    "legal.notice.skill.importedPublish":
+      "这个 Method 是从别人的 Skill 导入的。在此发布会依 CC BY 4.0 将它许可给公众,并同时确认你拥有这样做的权利。你可能并不拥有:原始许可证可能禁止再分发、可能要求你尚未给出的署名,或者根本不允许再许可。发布前请先查清。如果不确定,就不要发布。",
+    "legal.notice.skill.export":
+      "以指令形式导出 —— Method 本来就只是指令,不会有任何损失。收到它的人受该 Method 自带的许可证约束,而不受 Vaenyx 中的任何条款约束。",
     "legal.notice.method.edit":
       "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
     "method.edit.apply": "应用这些改动",
