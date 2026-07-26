@@ -3,7 +3,7 @@
 > **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Product:** Vaenyx (the exact third-party contents of each release build are fixed by the per-release manifest described in Section 3)
-**Operator:** Vae Foundry Pty Ltd (ACN 700 703 724), a proprietary limited company registered in Victoria, Australia
+**Operator:** Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724), a proprietary limited company registered in Victoria, Australia
 **Contact:** hello@vaenyx.ai
 **Effective Date:** 26 July 2026 *(set at the first public release to which these notices attach and that satisfies the manifest-delivery condition in Section 3.4; the Section 3 release manifest for that build must exist and ship before these notices attach to it)*
 

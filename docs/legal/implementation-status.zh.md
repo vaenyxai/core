@@ -1,8 +1,8 @@
 # Vaenyx — 当前实现与数据处理明细表
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
-> 明细表版本 **2026-07-25.2** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-25**
-> 客户端 **0.2.0-dev.184** · 服务端 **vaenyx-core-cloud (migrations 0001-0003)**
+> 明细表版本 **2026-07-26.1** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-26**
+> 客户端 **0.2.1-dev.5** · 服务端 **vaenyx-core-cloud (migrations 0001-0003)**
 > 法律文件集 **v3.0** · 最低法律文件集 **v3.0** · 最低文案版本 **2.6**
 
 ## 本明细表的地位
@@ -52,10 +52,11 @@
 | `feature.backup` | **active** | 否 | 无 |
 | `feature.remote-access` | **available-off** | 是 | 无 |
 | `feature.community.discord` | **active** | 是 | 官方服务器内的 Discord 资料、帖子与管理记录 |
+| `feature.skill-interop` | **backend-only** | 否 | 无 |
 
 **`feature.community-sharing.preference-ui`** — 仅记录一项本机偏好。不构成对任何上传的同意。参见 gate.community-sharing.initial。
 
-**`feature.community-sharing.upload-engine`** — **标记为启用之前必须先完成:**《服务条款》第 7.4 条已不再载有分享所需的许可、保证与精神权利同意机制(v3.0 删除,因其描述的是并不存在的能力)。这些条款必须重新起草、呈示,并依第 18.1A 条作为实质修订被单独接受。继续使用或安装更新,不得被视为接受。
+**`feature.community-sharing.upload-engine`** — **标记为启用之前必须先完成:**《服务条款》第 7.4 条已不再载有分享所需的许可、保证与精神权利同意机制(v3.0 删除,因其描述的是并不存在的能力)。这些条款必须重新起草、呈示,并依第 18.1A 条作为实质修订被单独接受。继续使用或安装更新,不得被视为接受。 **文案已上线并被关卡挡住(2026-07-26)。** Part K 的字符串已进入受审计的 app 字符串表,且不可渲染:能力开关会让字符串查找本身返回空,因此即便有人误接了组件,渲染出来也是空白,而不是一段描述不存在机制的文字。一旦有人打开该开关,测试立即失败,逼着改开关的人先回到这里。排队、48 小时窗口、脱敏管线与发送通道均未建成。
 
 **`feature.community-sharing.upload-endpoint`** — **标记为启用之前必须先完成:**《服务条款》第 7.4 条已不再载有分享所需的许可、保证与精神权利同意机制(v3.0 删除,因其描述的是并不存在的能力)。这些条款必须重新起草、呈示,并依第 18.1A 条作为实质修订被单独接受。继续使用或安装更新,不得被视为接受。
 
@@ -90,6 +91,10 @@
 
 **`feature.community.discord`** — 官方 Vaenyx Discord 服务器已上线,由运营方管理。参与是可选的,且需要 Discord 账户 —— Vaenyx 本身从不要求该账户。本界面的应用内告知为文案包字符串 D5;凡产品链接到该服务器之处,均须一并呈示。
 必需的门槛: `legal.notice.community.discord`
+
+**`feature.skill-interop`** — 把 Skill 导入为 Method、以及把 Method 导出为 Skill。服务端已建成 —— SKILL.md 解析、逐条列出因依赖代码而被丢弃的具体步骤、把 provenance(来源、到达时的许可证、时间、原文件哈希)写入 method.json 且不进内容哈希(因此记录来源不会迫使所有 app 重新授权)、按 provenance 触发的发布关卡,以及导出端点。但没有导入/导出界面,用户无从进入,故记为 backend-only 而非 active。两个方向都在本机进行,导入或导出的任何内容都不会到达运营方。当此类 Method 被发布时,provenance 会随之公开 —— 这是有意为之:公开来源与原始许可证,正是履行多数上游许可证所要求的署名。
+必需的门槛: `legal.notice.skill.import`, `legal.notice.skill.importedPublish`, `legal.notice.skill.export`
+实现证据: capability switch apps/web/src/capabilities.ts skillInterop=false; strings return empty while gated, with a test asserting failure if the switch flips
 
 ## 投诉与合规记录
 

@@ -3,7 +3,7 @@
 > **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Effective date:** 26 July 2026. These Terms take effect from the install-time acceptance flow in which they are first presented; that flow and the clause 12.3 health acknowledgement gate are live in the shipped build.
-**Operator:** Vae Foundry Pty Ltd (ACN 700 703 724), a proprietary limited company registered in Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**").
+**Operator:** Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724), a proprietary limited company registered in Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**").
 **Contact:** hello@vaenyx.ai
 
 These Terms of Service and End User Licence Agreement (the "**Terms**"; the document may be referred to, including in the product and in the other Vaenyx legal documents, as the "**Terms of Service**") are a legally binding agreement between you and Vae Foundry Pty Ltd governing your download, installation and use of the Vaenyx software and your use of the limited online services we operate in connection with it. Please read them carefully. Key points are summarised in plain English at the start of some clauses; the full clause text governs.

@@ -6,7 +6,7 @@
 **Trademark owner:** the current Operator (as identified in the Vaenyx Terms of Service)
 **Contact:** hello@vaenyx.ai
 
-*The Operator is **Vae Foundry Pty Ltd (ACN 700 703 724)**, a proprietary limited company registered in **Victoria**, Australia (incorporated 25 July 2026), which holds the Vaenyx Marks and any trade mark applications or registrations for them (clauses 3.1–3.2).*
+*The Operator is **Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724)**, a proprietary limited company registered in **Victoria**, Australia (incorporated 25 July 2026), which holds the Vaenyx Marks and any trade mark applications or registrations for them (clauses 3.1–3.2).*
 
 ---
 

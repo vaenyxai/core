@@ -11,7 +11,7 @@
 | Copy pack version | `legal.copyVersion = "2.6"` |
 
 Placeholders — all resolved 2026-07-25:
-- **Operator** = **Vae Foundry Pty Ltd (ACN 700 703 724)**, incorporated 25 July 2026.
+- **Operator** = **Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724)**, incorporated 25 July 2026.
 - **State** = **Victoria**.
 - **Effective date** = **26 July 2026** (set at v2.4, after the feature-existence amendments).
 

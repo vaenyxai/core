@@ -3,7 +3,7 @@
 > **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Effective date:** 26 July 2026 — *the acceptance-recording described in clause 17 is in operation.*
-**This Agreement is between you (the "Contributor", "you") and** Vae Foundry Pty Ltd (ACN 700 703 724), a proprietary limited company registered in Victoria, Australia (the "**Operator**", "**we**", "**us**"), the operator of the Vaenyx Community Library.
+**This Agreement is between you (the "Contributor", "you") and** Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724), a proprietary limited company registered in Victoria, Australia (the "**Operator**", "**we**", "**us**"), the operator of the Vaenyx Community Library.
 
 ---
 
@@ -123,6 +123,20 @@ You warrant, for each Contribution and each version of it, that:
 9.2 Your published Examples become public and are licensed under clause 5 — including CC BY 4.0 — like any other Contribution. Examples shared under the community-sharing setting (whether or not the sharer has ever accepted this Agreement) are licensed under Terms of Service clause 7.4, whose text governs those Examples and carries its own de-identification-failure scope limitation; those licences operate only to the extent of the sharer's actual rights in the Example. Material shared or published without the necessary rights — including another person's personal information carried in breach of the de-identification promise — is to that extent not licensed at all — the remedy for such material is removal under clause 10 and Terms of Service clause 8.5, not any licence.
 
 9.3 You may publish a Method or Routine as recipe-and-schema only, keeping your own tuned Examples private. Only what you actually publish is licensed.
+
+9.4 **Examples you receive as a publisher.** If a later version sends you an example drawn from someone else's use of your Method, you receive it on these terms, and accepting this Agreement is your acceptance of them:
+
+  (a) you may use it only to improve, test or maintain that Method;
+
+  (b) you must not republish it, disclose it to anyone else, or use it for any other purpose, whether or not you include it in a later publication of that Method;
+
+  (c) if you do include it when you next publish that Method, it becomes public under clause 5 like any other published material, and the ordinary publish confirmations apply to it;
+
+  (d) you must delete it on request from us or from the person it came from, and in any event when you no longer need it for paragraph (a); and
+
+  (e) you must treat anything in it that identifies a person as confidential, and tell us promptly at hello@vaenyx.ai if you find such material in it.
+
+An example reaches you already stripped of personal details on the sender's own device. **That stripping is automated and imperfect**, which is why these terms exist rather than a statement that nothing identifying can arrive. These obligations survive termination of this Agreement in respect of any example you have received.
 
 ## 10. Removal, Takedown, and Their Honest Limits
 

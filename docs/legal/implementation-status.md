@@ -1,8 +1,8 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-25.2** · effective from **2026-07-26** · verified **2026-07-25**
-> Client **0.2.0-dev.184** · Server **vaenyx-core-cloud (migrations 0001-0003)**
+> Schedule version **2026-07-26.1** · effective from **2026-07-26** · verified **2026-07-26**
+> Client **0.2.1-dev.5** · Server **vaenyx-core-cloud (migrations 0001-0003)**
 > Legal set **v3.0** · minimum legal set **v3.0** · minimum copy version **2.6**
 
 ## Status of this Schedule
@@ -52,10 +52,11 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 | `feature.backup` | **active** | no | none |
 | `feature.remote-access` | **available-off** | yes | none |
 | `feature.community.discord` | **active** | yes | Discord profile, posts and moderation records for the official server |
+| `feature.skill-interop` | **backend-only** | no | none |
 
 **`feature.community-sharing.preference-ui`** — Records a local preference only. Not consent to any upload. See gate.community-sharing.initial.
 
-**`feature.community-sharing.upload-engine`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance.
+**`feature.community-sharing.upload-engine`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance. **Copy shipped and gated (2026-07-26).** The Part K strings are in the app string table under audit, and cannot render: the capability switch makes the string lookup itself return empty, so a component wired up by mistake renders nothing rather than a description of a mechanism that does not exist. A test fails the moment the switch is turned on, which forces whoever flips it to come here first. Queueing, the 48-hour window, the de-identification pipeline and the send path are not built.
 
 **`feature.community-sharing.upload-endpoint`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance.
 
@@ -90,6 +91,10 @@ Required gates: `legal.notice.modelConnect.cloud`, `legal.notice.modelConnect.lo
 
 **`feature.community.discord`** — The official Vaenyx Discord server is live and administered by the Operator. Participation is optional and requires a Discord account, which Vaenyx never requires. The in-product notice for this surface is copy pack string D5; it must ship wherever the product links to the server.
 Required gates: `legal.notice.community.discord`
+
+**`feature.skill-interop`** — Importing a Skill as a Method and exporting a Method as a Skill. The server side is built — SKILL.md parsing, enumeration of the specific steps dropped because they depended on code, provenance (source, licence on arrival, time, original file hash) written into method.json outside the content hash so recording it does not force every app grant to be re-granted, the publish gate that fires on provenance, and the export endpoint. There is no import or export screen, so no user can reach it: hence backend-only rather than active. Both directions are local; nothing about an import or export reaches the Operator. Provenance does become public when such a Method is published, and that is intended — publishing the source and the original licence is what discharges the attribution most upstream licences require.
+Required gates: `legal.notice.skill.import`, `legal.notice.skill.importedPublish`, `legal.notice.skill.export`
+Evidence: capability switch apps/web/src/capabilities.ts skillInterop=false; strings return empty while gated, with a test asserting failure if the switch flips
 
 ## Complaint and compliance records
 
