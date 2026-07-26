@@ -91,6 +91,16 @@ Required gates: `legal.notice.modelConnect.cloud`, `legal.notice.modelConnect.lo
 **`feature.community.discord`** — The official Vaenyx Discord server is live and administered by the Operator. Participation is optional and requires a Discord account, which Vaenyx never requires. The in-product notice for this surface is copy pack string D5; it must ship wherever the product links to the server.
 Required gates: `legal.notice.community.discord`
 
+## Complaint and compliance records
+
+Two regimes overlap here and are deliberately satisfied by one rule. The Basic Online Safety Expectations carry a five-year record-keeping expectation for reports and complaints about harmful material; it is not a directly enforceable obligation in itself, but eSafety can require an explanation of whether and how it is met, through a reporting notice, an investigation, or the non-compliance and public-reporting mechanisms. Separately, the industry standard applying to a designated internet service requires records of the steps taken to comply, kept until at least the end of the second year after the calendar year in which the step was taken — that one is a direct compliance requirement. Keeping the complaint ledger for five years satisfies both without running two systems.
+
+- **Complaint ledger:** Complaint and disposition ledger: five years. Fields kept — date received, channel, case reference, reporter contact details, URL or item identifier, category, summary of the complaint, the necessary extract or limited snapshot of the material complained of, action taken, time of action, whether the item was hidden, removed, the account banned or the matter referred, final status, and whether a legal hold applies.
+- **Compliance-step records:** Records of compliance steps: at least until the end of the second year after the calendar year in which the step was taken. Covers the Online Safety risk self-assessment and its versions, the complaint-handling process and its versions, and records of the filtering, rate-limiting and takedown controls actually implemented.
+- **Attachments:** Evidence attachments are not kept as a matter of course. For a defamation, copyright, serious safety or regulatory matter, a limited plaintext snapshot or exact extract of the material complained of is kept together with its hash, so that what was acted on and why can be shown later. Identity documents and other high-risk attachments are deleted or isolated once the verification they were needed for is complete. An attachment that played no part in the decision is not kept.
+- **Legal hold:** A legal hold is started on a litigation threat, a formal concerns notice, a court document, or a regulatory investigation, and suspends the ordinary deletion rules for the material within its scope.
+- **What the Policy says:** The Privacy Policy states the general principle only — records are kept for as long as reasonably necessary for legal, safety, abuse-prevention and operational purposes. The periods above live here, not in the Policy, so that a change in the applicable standard does not require a policy amendment.
+
 ## Point-of-use copy
 
 Copy version **2.6** · consent floor **2.6**

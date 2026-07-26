@@ -24,7 +24,7 @@ clauses below govern.*
 
 1.1 This Core Privacy Policy explains how Vae Foundry Pty Ltd manages personal information in connection with Vaenyx and any online service that we operate.
 
-1.2 We use the Australian Privacy Principles in Schedule 1 to the *Privacy Act 1988* (Cth) as our baseline standard whether or not a particular act or practice is legally subject to that Act.
+1.2 We use the Australian Privacy Principles in Schedule 1 to the *Privacy Act 1988* (Cth) as a reference point in designing our privacy practices. This does not represent that we are an APP entity, or that we have opted in to the Privacy Act.
 
 1.3 Our privacy information has three layers:
 
