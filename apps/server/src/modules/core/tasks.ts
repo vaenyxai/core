@@ -769,7 +769,23 @@ async function executeTaskRun(
     result = await run(controller.signal);
     status = "completed";
   } catch (error) {
-    const code = error instanceof Error ? error.message : "CODEX_UNKNOWN_ERROR";
+    let code = error instanceof Error ? error.message : "CODEX_UNKNOWN_ERROR";
+    // A boundary trip is the model deciding, on this one turn, to reach for a
+    // tool it is not allowed. Nothing ran — the turn was refused — and the
+    // same prompt usually goes straight through on the next attempt. A daily
+    // 7am task whose whole value is being there at 7am should not be lost to
+    // one such decision, so it gets exactly one more go (2026-07-27).
+    if (code.startsWith("CODEX_ASK_VAENYX_BOUNDARY_VIOLATION") && !controller.signal.aborted) {
+      try {
+        result = await run(controller.signal);
+        status = "completed";
+        runningTasks.delete(id);
+        return await finishTaskRun(database, id, runId, trigger, result, status);
+      } catch (retryError) {
+        code =
+          retryError instanceof Error ? retryError.message : "CODEX_UNKNOWN_ERROR";
+      }
+    }
     result =
       TASK_ERROR_COPY[code] ??
       `This task could not complete. Local error: ${code}`;
@@ -778,6 +794,18 @@ async function executeTaskRun(
     runningTasks.delete(id);
   }
 
+  await finishTaskRun(database, id, runId, trigger, result, status);
+}
+
+// Record the outcome and, for a scheduled run, tell the Owner's devices.
+function finishTaskRun(
+  database: DatabaseHandle,
+  id: string,
+  runId: string,
+  trigger: "manual" | "schedule",
+  result: string,
+  status: "completed" | "failed",
+): Promise<void> {
   const finishedAt = new Date().toISOString();
   try {
     database.sqlite
@@ -807,7 +835,9 @@ async function executeTaskRun(
             status === "completed"
               ? "New result is ready."
               : "The scheduled run failed.",
-          url: "/",
+          // Open the task itself, not the home screen: a notification that
+          // announces a result should land on that result.
+          url: `/?task=${encodeURIComponent(id)}`,
         },
         "scheduled",
       );
@@ -815,6 +845,7 @@ async function executeTaskRun(
   } catch {
     // Server shutting down (database closed); reconcile handles it next start.
   }
+  return Promise.resolve();
 }
 
 // On startup, any task left "running" was interrupted by a restart/crash. Mark

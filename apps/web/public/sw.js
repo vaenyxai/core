@@ -108,7 +108,19 @@ self.addEventListener("notificationclick", (event) => {
       });
       for (const client of windows) {
         if ("focus" in client) {
+          // Focus AND go to the target. Focusing alone left the app on
+          // whatever page was already open, so a notification about a
+          // finished task dropped you on the home screen and you had to go
+          // find it (Oskar, 2026-07-27).
           await client.focus();
+          if ("navigate" in client && url !== "/") {
+            try {
+              await client.navigate(url);
+            } catch {
+              // Some browsers refuse navigate() on a focused client; the
+              // notification has still done its job of bringing the app up.
+            }
+          }
           return;
         }
       }

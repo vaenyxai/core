@@ -1061,8 +1061,13 @@ class CodexAskVaenyxSession {
       item?.type === "approvalRequest" ||
       item?.type === "requestPermissions"
     ) {
+      // Name the item that crossed the line. Without it the failure says only
+      // that a boundary was crossed, and the same message covers "the model
+      // tried to run a command" and "the CLI renamed the event we allow" —
+      // which is what made a working scheduled task fail overnight and take a
+      // round trip to diagnose (2026-07-27).
       this.#turn.safetyViolation = new Error(
-        "CODEX_ASK_VAENYX_BOUNDARY_VIOLATION",
+        `CODEX_ASK_VAENYX_BOUNDARY_VIOLATION:${item.type}`,
       );
       return;
     }

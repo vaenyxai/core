@@ -15232,6 +15232,29 @@ function VaenyxWorkspace({
     setMobileSidebarOpen(false);
   }
 
+  // A notification opens the thing it is about. Tapping one used to land on
+  // whatever page happened to be open — usually the home screen — which meant
+  // hunting for the result the notification had just announced (Oskar,
+  // 2026-07-27). The target rides in the URL the push carries.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const taskId = params.get("task");
+    const chatId = params.get("chat");
+    if (!taskId && !chatId) return;
+    // Clear it immediately: a deep link is a one-time instruction, and leaving
+    // it in the address bar would re-open the same thing on every reload.
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete("task");
+    clean.searchParams.delete("chat");
+    window.history.replaceState({}, "", clean.toString());
+    if (taskId) {
+      openThreadTask(taskId);
+    } else if (chatId) {
+      openDraftConversation(chatId);
+    }
+    // Runs once per load: the params are consumed above.
+  }, []);
+
   function openThreadTask(taskId: string, threadId?: string) {
     const taskThread = workspace.threads.find(
       (thread) => thread.taskId === taskId,

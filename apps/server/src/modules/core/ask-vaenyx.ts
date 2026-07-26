@@ -116,8 +116,11 @@ function getAskVaenyxFailureMessage(error: unknown): string {
     return "Vaenyx Chat requires Codex to be signed in with ChatGPT Subscription Auth.";
   }
 
-  if (code === "CODEX_ASK_VAENYX_BOUNDARY_VIOLATION") {
-    return "Vaenyx Chat tried to use something outside this chat boundary, so Vaenyx stopped the reply. Chat may use web search, but not local commands, file changes, MCP tools, or permission requests.";
+  if (code.startsWith("CODEX_ASK_VAENYX_BOUNDARY_VIOLATION")) {
+    const what = code.split(":")[1];
+    return `Vaenyx Chat tried to use something outside this chat boundary, so Vaenyx stopped the reply${
+      what ? ` (${what})` : ""
+    }. Chat may use web search, but not local commands, file changes, MCP tools, or permission requests.`;
   }
 
   if (code === "CODEX_RETURNED_NO_ANSWER") {
@@ -811,7 +814,8 @@ export async function createAskVaenyxMessage(
       {
         title: titleRow?.title?.trim() || "Vaenyx",
         body: assistantContent.replace(/\s+/g, " ").trim().slice(0, 90),
-        url: "/",
+        // Straight to the conversation the reply is in.
+        url: `/?chat=${encodeURIComponent(conversationId)}`,
       },
       "chat",
     );
