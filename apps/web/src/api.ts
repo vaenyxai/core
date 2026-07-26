@@ -1234,6 +1234,38 @@ export function fetchCorrections(
   );
 }
 
+// The flywheel's outbound queue (Part K): what is waiting to go to a Method's
+// publisher, and the window in which it can be pulled back.
+export interface FlywheelItem {
+  id: string;
+  methodId: string;
+  note: string | null;
+  redactions: number;
+  sensitive: boolean;
+  createdAt: string;
+  sendAfter: string;
+}
+
+export interface FlywheelState {
+  mode: "automatic" | "review-each" | "off";
+  activated: boolean;
+  windowHours: number;
+  contributorId: string;
+  configured: boolean;
+  items: FlywheelItem[];
+}
+
+export function fetchFlywheel(): Promise<FlywheelState> {
+  return requestJson<FlywheelState>("/v1/flywheel");
+}
+
+export function withdrawFlywheelItem(id: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(
+    `/v1/flywheel/${encodeURIComponent(id)}/withdraw`,
+    { method: "POST" },
+  );
+}
+
 // The picture-MAKING engine. Separate from the vision slot above, which reads
 // pictures: the two are rarely the same model.
 export function fetchImageEngine(): Promise<VisionStatus> {

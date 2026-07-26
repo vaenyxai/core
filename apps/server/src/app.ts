@@ -1,4 +1,4 @@
-﻿import { existsSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 import cors from "@fastify/cors";
@@ -15,6 +15,7 @@ import { reconcileInterruptedTasks, runDueTasks } from "./modules/core/tasks.js"
 import { runScheduledBackupIfDue } from "./modules/core/backup-schedule.js";
 import { autoScanVaenyxMe } from "./modules/core/vaenyx-me.js";
 import { runDueModeDigests } from "./modules/core/modes.js";
+import { sweepFlywheel } from "./modules/core/flywheel-send.js";
 import { registerGatewayRoutes } from "./modules/gateway/routes.js";
 import { renewSessionOnUse } from "./modules/guard/auth.js";
 
@@ -82,6 +83,12 @@ export async function buildApp(
     } catch (error) {
       app.log.error(error);
     }
+    // The flywheel's outbound sweep (Part K). Almost always a no-op: it needs
+    // sharing switched on, an item past its 48-hour window, and a publisher who
+    // asked to receive. A failed send stays queued for the next minute.
+    void sweepFlywheel(database, config).catch((error: unknown) =>
+      app.log.error(error),
+    );
   }, 60_000);
   schedulerTick.unref();
 

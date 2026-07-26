@@ -3,6 +3,7 @@ import {
   type FormEvent,
   type ReactNode,
   type RefObject,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -149,6 +150,9 @@ import {
   type PushPrefs,
   type PushDiagnostics,
   fetchVisionStatus,
+  fetchFlywheel,
+  withdrawFlywheelItem,
+  type FlywheelState,
   fetchImageEngine,
   setImageEngineChoice,
   describePhoto,
@@ -8323,7 +8327,139 @@ function SharingPanel() {
           </button>
         ))}
       </div>
+      <FlywheelQueuePanel />
     </section>
+  );
+}
+
+// The outbound queue (copy pack Part K), and the two things the Owner can do
+// about it: turn the sending on in the first place, and pull an item back out
+// before it goes.
+//
+// The 48-hour wait shown here is a WITHDRAWAL window, not a consent step. Consent
+// was given once, on the activation button below, on a surface describing the
+// whole mechanism — silence over two days is not agreement to anything.
+function FlywheelQueuePanel() {
+  const { lang, t } = useI18n();
+  const [state, setState] = useState<FlywheelState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    fetchFlywheel()
+      .then(setState)
+      .catch(() => setState(null));
+  }, []);
+
+  useEffect(refresh, [refresh]);
+
+  async function activate() {
+    setBusy(true);
+    setError(null);
+    try {
+      await recordLegalAck({
+        keyName: "legal.consent.flywheel.activate",
+        copyVersion: LEGAL_COPY_VERSION,
+        language: lang,
+        choice: "accept",
+      });
+      refresh();
+    } catch {
+      setError("That could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function withdraw(id: string) {
+    setBusy(true);
+    try {
+      await withdrawFlywheelItem(id);
+      refresh();
+    } catch {
+      setError("That item could not be withdrawn.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The whole surface waits on its copy. An activation button with no
+  // description of what it activates is worse than no button: this panel exists
+  // to explain a mechanism, so until the copy is cleared it does not render and
+  // (because the server needs the activation record) nothing can be sent.
+  if (!state || !CAPABILITIES.flywheelUpload) return null;
+
+  return (
+    <div className="flywheel-queue">
+      <h3 className="settings-subhead">Sending Corrections Back</h3>
+      {state.activated ? null : (
+        <>
+          <p className="settings-card-copy">
+            {t("legal.consent.flywheel.activate")}
+          </p>
+          <button
+            className="primary-button"
+            disabled={busy}
+            onClick={() => void activate()}
+            type="button"
+          >
+            Turn This On
+          </button>
+        </>
+      )}
+
+      {state.activated ? (
+        <>
+          <p className="settings-card-copy">
+            Nothing is sent for {state.windowHours} hours. While an item is
+            waiting you can take it out, and it will not be sent.
+          </p>
+          {/* K10: the Owner's own label on what they contribute. Shown, not
+              hidden — someone who cannot see their own id cannot ask about
+              what was credited to it. */}
+          <p className="settings-card-copy text-faint">
+            Credited as <code>{state.contributorId}</code>
+          </p>
+          {state.items.length === 0 ? (
+            <p className="settings-card-copy">Nothing is waiting to be sent.</p>
+          ) : (
+            <ul className="flywheel-list">
+              {state.items.map((item) => (
+                <li className="flywheel-item" key={item.id}>
+                  <div>
+                    <strong>{item.methodId}</strong>
+                    {item.note ? <span> — {item.note}</span> : null}
+                    <p className="text-faint">
+                      {item.sensitive
+                        ? "Held back: this looks personal, so it is never sent automatically."
+                        : `Sends after ${new Date(item.sendAfter).toLocaleString()}`}
+                      {item.redactions > 0
+                        ? ` · ${item.redactions} detail(s) removed`
+                        : ""}
+                    </p>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    disabled={busy}
+                    onClick={() => void withdraw(item.id)}
+                    type="button"
+                  >
+                    Take It Out
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {state.configured ? null : (
+            <p className="settings-card-copy text-faint">
+              No publish service is configured, so nothing can be sent from this
+              machine.
+            </p>
+          )}
+        </>
+      ) : null}
+      {error ? <p className="form-error">{error}</p> : null}
+    </div>
   );
 }
 

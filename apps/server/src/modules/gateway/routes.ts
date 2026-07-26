@@ -362,6 +362,19 @@ import {
   listLegalAcknowledgements,
 } from "../core/legal-records.js";
 import {
+  WINDOW_HOURS,
+  getContributorId,
+  listQueue,
+  queueExample,
+  withdrawQueued,
+} from "../core/flywheel.js";
+import {
+  communityItemIdFor,
+  readOwnerAcks,
+  readSharingChoice,
+  sweepFlywheel,
+} from "../core/flywheel-send.js";
+import {
   listGalleryItems,
   listJournalEntries,
   addParseExample,
@@ -6327,6 +6340,102 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // ------------------------------------------------------------------
+  // The flywheel's outbound half (copy pack Part K). Local half above:
+  // a correction becomes an example on this machine. This half is about
+  // one example travelling to the person who published the Method, and
+  // every gate it has to pass first.
+  // ------------------------------------------------------------------
+
+  /** The household's live sharing choice, from its own consent records. */
+  function sharingChoice() {
+    return readSharingChoice(readOwnerAcks(context.database));
+  }
+
+  /** Put one example in the outbound window — or don't, which is the usual
+   *  answer. Called from both places a correction becomes an example, so the
+   *  gates live in one place rather than two. */
+  function queueForSharing(
+    methodId: string,
+    example: { input: unknown; output: unknown; note: string | null },
+  ): void {
+    try {
+      if (sharingChoice().mode === "off") return;
+      if (!communityItemIdFor(context.config.libraryDirectory, methodId)) return;
+      queueExample(context.database, {
+        methodId,
+        input: example.input,
+        output: example.output,
+        note: example.note,
+      });
+    } catch {
+      // Queueing is a courtesy to the publisher; failing at it must never cost
+      // the Owner the correction itself, which is already stored.
+    }
+  }
+
+  // What is waiting, who it will be credited to, and how long the window is.
+  app.get("/v1/flywheel", async (request, reply) => {
+    const owner = requireOwner(request);
+    if (!owner) {
+      return reply.code(401).send({ error: "Owner login required." });
+    }
+    const choice = sharingChoice();
+    return {
+      mode: choice.mode,
+      activated: choice.activated,
+      windowHours: WINDOW_HOURS,
+      contributorId: getContributorId(context.database),
+      configured: context.config.publishServiceUrl !== null,
+      items: listQueue(context.database).map((item) => ({
+        id: item.id,
+        methodId: item.methodId,
+        input: item.input,
+        output: item.output,
+        note: item.note,
+        redactions: item.redactions.length,
+        sensitive: item.sensitive,
+        createdAt: item.createdAt,
+        sendAfter: item.sendAfter,
+      })),
+    };
+  });
+
+  // Pulling one out. This is what the window is FOR, so it never asks why.
+  app.post<{ Params: { id: string } }>(
+    "/v1/flywheel/:id/withdraw",
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (!withdrawQueued(context.database, request.params.id)) {
+        return reply.code(404).send({ error: "That item is no longer waiting." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "flywheel.withdraw",
+        decision: "allowed",
+        reason: "Owner withdrew a queued example before it was sent.",
+        resourceType: "flywheel",
+        resourceId: request.params.id,
+      });
+      return { ok: true };
+    },
+  );
+
+  // Send whatever is due, now. The tick does this on its own; the button exists
+  // so "waiting to send" is never a thing the Owner has to take on faith.
+  app.post("/v1/flywheel/send-now", async (request, reply) => {
+    const owner = requireOwner(request);
+    if (!owner) {
+      return reply.code(401).send({ error: "Owner login required." });
+    }
+    return sweepFlywheel(context.database, context.config);
+  });
+
   // The corrections waiting to become examples, and the act of keeping one.
   // This is the flywheel's local half: a correction only becomes an example
   // because the Owner looked at it and said so. Nothing here uploads anything.
@@ -6486,6 +6595,12 @@ export async function registerGatewayRoutes(
         }
         return reply.code(400).send({ error: "That example could not be saved." });
       }
+
+      queueForSharing(request.params.id, {
+        input: correction.input,
+        output: correction.correctedOutput,
+        note: correction.note,
+      });
 
       recordAudit(context.database, {
         actorType: "owner",
@@ -7116,9 +7231,10 @@ export async function registerGatewayRoutes(
       // changes underneath it. A correction that does not validate is kept as a
       // record but never taught — a wrong-shaped example teaches the wrong shape.
       //
-      // This is intake only. It does NOT send anything anywhere: uploading to
-      // the Method's publisher is a separate path with its own consent, and it
-      // does not exist yet.
+      // Sending it on to the Method's publisher is a SEPARATE path with its own
+      // consent (Part K): queueForSharing does nothing unless the household
+      // turned sharing on, and even then the item sits in a 48-hour window the
+      // Owner can pull it out of.
       if (
         autoExamplesEnabled(context.database) &&
         body.reaction === "edited" &&
@@ -7138,6 +7254,11 @@ export async function registerGatewayRoutes(
           // The correction is stored either way; failing to teach from it is
           // not a reason to reject the app's request.
         }
+        queueForSharing(methodId, {
+          input: body.input,
+          output: body.correctedOutput,
+          note: body.note ?? null,
+        });
       }
 
       recordAudit(context.database, {
