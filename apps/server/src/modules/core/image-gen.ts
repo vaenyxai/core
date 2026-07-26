@@ -18,7 +18,7 @@ import { saveImage } from "./vision.js";
 
 export type ImageEngineChoice =
   | "none"
-  | "cloudflare"
+  | "workersai"
   | "gemini"
   | "openai"
   | "zhipu";
@@ -35,7 +35,11 @@ const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 interface CloudflareConnection {
   apiKey?: string;
   accountId?: string;
+  baseUrl?: string;
   model?: string;
+  /** The picture model, which is NOT the chat model on the same connection —
+   *  `model` there is what chat uses, so drawing keeps its own. */
+  imageModel?: string;
 }
 
 /** Which account does this token belong to? Asked once, when the token is
@@ -66,7 +70,7 @@ async function generateWithCloudflare(
   prompt: string,
 ): Promise<string> {
   const response = await fetch(
-    `${CLOUDFLARE_API}/accounts/${connection.accountId}/ai/run/${connection.model ?? CLOUDFLARE_MODEL}`,
+    `${CLOUDFLARE_API}/accounts/${connection.accountId}/ai/run/${connection.imageModel ?? CLOUDFLARE_MODEL}`,
     {
       method: "POST",
       headers: {
@@ -146,7 +150,7 @@ function pickCandidate(
 function cloudflareReady(
   connections: ReturnType<typeof readProviderConnections>,
 ): boolean {
-  const connection = connections.cloudflare as CloudflareConnection | undefined;
+  const connection = connections.workersai as CloudflareConnection | undefined;
   return Boolean(connection?.apiKey && connection?.accountId);
 }
 
@@ -155,10 +159,10 @@ export function getImageEngineStatus(secretsDirectory: string): {
   provider: string | null;
 } {
   const connections = readProviderConnections(secretsDirectory);
-  if (connections.imageOutput?.provider === "cloudflare") {
+  if (connections.imageOutput?.provider === "workersai") {
     return {
       connected: cloudflareReady(connections),
-      provider: "cloudflare",
+      provider: "workersai",
     };
   }
   const candidate = pickCandidate(connections);
@@ -181,18 +185,23 @@ export async function setImageEngine(
     return getImageEngineStatus(secretsDirectory);
   }
 
-  if (choice === "cloudflare") {
-    const key = apiKey?.trim() || (connections.cloudflare as CloudflareConnection | undefined)?.apiKey;
+  if (choice === "workersai") {
+    const key = apiKey?.trim() || (connections.workersai as CloudflareConnection | undefined)?.apiKey;
     if (!key) throw new Error("IMAGE_NO_KEY");
     // Look the account up now rather than at drawing time: a token that is
     // wrong should say so while the Owner is still looking at the field.
     const accountId = await discoverCloudflareAccount(key);
-    connections.cloudflare = {
-      ...(connections.cloudflare as CloudflareConnection | undefined),
+    connections.workersai = {
+      ...(connections.workersai as CloudflareConnection | undefined),
       apiKey: key,
       accountId,
+      // Signing in ADDS a backend rather than dedicating one (Oskar,
+      // 2026-07-27). The same token can drive chat through Cloudflare's
+      // OpenAI-compatible endpoint, so fill that in too and the registry picks
+      // it up — one login, available to whichever slot wants it.
+      baseUrl: `${CLOUDFLARE_API}/accounts/${accountId}/ai/v1`,
     };
-    connections.imageOutput = { provider: "cloudflare" };
+    connections.imageOutput = { provider: "workersai" };
     writeConnections(secretsDirectory, connections);
     return getImageEngineStatus(secretsDirectory);
   }
@@ -225,10 +234,10 @@ export async function generateImage(
 ): Promise<string> {
   const connections = readProviderConnections(secretsDirectory);
 
-  if (connections.imageOutput?.provider === "cloudflare") {
+  if (connections.imageOutput?.provider === "workersai") {
     if (!cloudflareReady(connections)) throw new Error("IMAGE_NOT_CONNECTED");
     return generateWithCloudflare(
-      connections.cloudflare as CloudflareConnection,
+      connections.workersai as CloudflareConnection,
       dataDirectory,
       prompt,
     );

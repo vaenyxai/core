@@ -1762,6 +1762,8 @@ function VoicePanel() {
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [vision, setVision] = useState<VisionStatus | null>(null);
+  // What the household has signed in to. One list, shared by every slot.
+  const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
   const [imageEngine, setImageEngine] = useState<VisionStatus | null>(null);
   const [imageEngineChoice, setImageEngineChoiceState] = useState<
     "none" | "cloudflare" | "gemini" | "openai" | "zhipu"
@@ -1796,6 +1798,9 @@ function VoicePanel() {
         if (current.enVoice) setLocalEnVoice(current.enVoice);
         if (current.zhVoice) setLocalZhVoice(current.zhVoice);
       })
+      .catch(() => undefined);
+    void fetchModelProviders()
+      .then((result) => setProviders(result.providers))
       .catch(() => undefined);
     void fetchVisionStatus()
       .then(setVision)
@@ -2016,8 +2021,7 @@ function VoicePanel() {
           value={status?.provider ?? "none"}
         >
           <option value="none">None — Mic Off</option>
-          <option value="groq">Groq Whisper — Recommended</option>
-          <option value="openai">OpenAI Whisper</option>
+          <EngineOptions capability="voice-in" providers={providers} />
         </select>
       </label>
       {status?.connected ? (
@@ -2325,9 +2329,7 @@ function VoicePanel() {
           value={vision?.provider ?? "none"}
         >
           <option value="none">None — Camera Off</option>
-          <option value="gemini">Gemini</option>
-          <option value="zhipu">Zhipu BigModel</option>
-          <option value="openai">OpenAI</option>
+          <EngineOptions capability="vision" providers={providers} />
         </select>
       </label>
       {vision?.connected ? (
@@ -2372,10 +2374,14 @@ function VoicePanel() {
           value={imageEngineChoice}
         >
           <option value="none">None — Vaenyx Will Not Draw</option>
-          <option value="cloudflare">Cloudflare Workers AI — Free</option>
-          <option value="gemini">Gemini</option>
-          <option value="openai">OpenAI</option>
-          <option value="zhipu">Zhipu BigModel</option>
+          {/* Workers AI is offered even when not yet signed in, because unlike
+              the others its token is entered right here. */}
+          <option value="workersai">Cloudflare Workers AI — Free</option>
+          <EngineOptions
+            capability="image"
+            exclude={["workersai"]}
+            providers={providers}
+          />
         </select>
       </label>
       {/* Cloudflare's token is typed HERE rather than under Models: it is the
@@ -8561,6 +8567,38 @@ function FlywheelQueuePanel() {
       ) : null}
       {error ? <p className="form-error">{error}</p> : null}
     </div>
+  );
+}
+
+// The engine pickers offer what the household has actually signed in to
+// (Oskar, 2026-07-27). Signing in ADDS a backend and never replaces one, so
+// every slot — the main agent and the four side engines — chooses from the
+// same accumulated set. A fixed menu listing everything that exists reads as a
+// choice and then answers "connect this somewhere else first", which is not a
+// choice; anything signed in but not capable of this job is simply not offered.
+function EngineOptions({
+  capability,
+  exclude = [],
+  providers,
+}: {
+  capability: string;
+  exclude?: string[];
+  providers: ModelProviderInfo[];
+}) {
+  const usable = providers.filter(
+    (provider) =>
+      provider.connected &&
+      provider.capabilities.includes(capability) &&
+      !exclude.includes(provider.id),
+  );
+  return (
+    <>
+      {usable.map((provider) => (
+        <option key={provider.id} value={provider.id}>
+          {provider.name}
+        </option>
+      ))}
+    </>
   );
 }
 

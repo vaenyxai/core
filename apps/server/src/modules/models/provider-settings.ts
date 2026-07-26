@@ -130,6 +130,7 @@ export function listModelProviders(
       healthy: health?.ok ?? false,
       detail: health?.detail ?? "Not connected.",
       isDefault: known.id === defaultId,
+      capabilities: providerCapabilities(known.id),
       ...(connections[known.id]?.model
         ? { model: connections[known.id]?.model }
         : {}),
@@ -145,6 +146,23 @@ export function listModelProviders(
 const STT_CAPABLE_PROVIDERS = ["groq", "openai"];
 const TTS_CAPABLE_PROVIDERS = ["gemini"];
 const VISION_CAPABLE_PROVIDERS = ["gemini", "zhipu", "openai"];
+const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
+
+/** What each backend can be used FOR, so the engine pickers can offer the
+ *  Owner what they have actually signed in to instead of a fixed menu where
+ *  most entries answer "connect this somewhere else first" (Oskar, 2026-07-27).
+ *  Signing in adds a backend; it never replaces one, and every slot chooses
+ *  from the same accumulated set. */
+export function providerCapabilities(id: string): string[] {
+  const capabilities: string[] = [];
+  // Anything registered as a chat backend can be the main agent.
+  capabilities.push("chat");
+  if (STT_CAPABLE_PROVIDERS.includes(id)) capabilities.push("voice-in");
+  if (TTS_CAPABLE_PROVIDERS.includes(id)) capabilities.push("voice-out");
+  if (VISION_CAPABLE_PROVIDERS.includes(id)) capabilities.push("vision");
+  if (IMAGE_CAPABLE_PROVIDERS.includes(id)) capabilities.push("image");
+  return capabilities;
+}
 
 // Fill empty engine slots from connected capable providers, and clear slots
 // whose provider lost its key (falling back to another capable one when

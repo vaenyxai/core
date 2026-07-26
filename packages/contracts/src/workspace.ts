@@ -150,6 +150,10 @@ export const ModelProviderInfoSchema = Type.Object(
     healthy: Type.Boolean(),
     detail: Type.String(),
     isDefault: Type.Boolean(),
+    // What this backend can be used for: "chat" | "voice-in" | "voice-out" |
+    // "vision" | "image". The engine pickers offer the connected backends that
+    // can do the job, rather than a fixed menu of everything that exists.
+    capabilities: Type.Array(Type.String()),
     model: Type.Optional(Type.String()),
   },
   { additionalProperties: false },

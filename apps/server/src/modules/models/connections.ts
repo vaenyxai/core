@@ -22,6 +22,9 @@ export interface ProviderConnection {
   // is part of the connection. Looked up from the token when it is saved, so
   // nobody has to go and find it (see image-gen.ts).
   accountId?: string;
+  // Cloudflare entry only: the picture model. Separate from `model`, which is
+  // what chat uses on the same connection — one login, two different jobs.
+  imageModel?: string;
 }
 
 export function readProviderConnections(
