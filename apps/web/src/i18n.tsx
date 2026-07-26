@@ -16,6 +16,7 @@ import {
 } from "react";
 
 import { fetchSystemStatus } from "./api.js";
+import { isKeyRenderable } from "./capabilities.js";
 
 export type Lang = "en" | "zh";
 
@@ -212,6 +213,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "I consent to Vaenyx disclosing the content I publish and the public byline I choose to GitHub, Inc. in the United States for hosting in the public, worldwide Community Library. If the Privacy Act applies to Vaenyx and I give this consent, APP 8.1 will not apply to this disclosure. If GitHub handles that information in a way that would breach the APPs, Vaenyx will not be accountable under the Privacy Act for that handling and I will not be able to seek redress from Vaenyx under the Privacy Act for it. Other laws or rights may still apply. Publishing is optional. Withdrawal blocks future publication but cannot reverse information already made public. Consent will be obtained again if the recipient, purpose or consequences materially change.",
     "legal.disclaimer.community.install":
       "Created by a community member. It has not been reviewed as professional advice — use it at your own discretion. It does nothing until you use it.",
+    // D4c/D4d: the public report page's copy. It renders on vaenyx.ai/report,
+    // not in the app — it lives here so the copy audit can hold the website to
+    // the same wording as everything else.
+    "report.page":
+      "Report content in the Vaenyx Community. Anyone may use this page — you do not need a Vaenyx account, and you do not need to have installed anything. Send the details below to hello@vaenyx.ai. We assess sufficiently detailed reports having regard to apparent urgency, potential harm, the information available to us and applicable legal requirements. We may restrict content or accounts without prior notice. Sending a report does not guarantee removal, restoration, reasons, individual correspondence or any particular outcome, and we do not decide whether reported material is unlawful. Please tell us what is wrong rather than proving it: we do not ask for a lawyer's letter, a statutory declaration, a citation to legislation, or identity documents.",
+    "report.page.limits":
+      "What removal can and cannot do: we can remove content from the Vaenyx catalogue and index that installations read, remove the published files, and block that item identifier from being republished. We cannot remove copies held by other people — forks, mirrors, caches, archives and search-engine results are outside our control, and removal here does not make content disappear from the internet. If the material is unlawful, you may have remedies against the person who published it that we cannot provide.",
+    "method.corrections.locality":
+      "Kept examples stay on this computer. Nothing is published, and no app grant is affected.",
+    // Part K — the flywheel's upload half. GATED: none of these may render
+    // until the Schedule marks the capability active (see capabilities.ts).
+    "legal.consent.flywheel.activate":
+      "Corrections you receive can help the person who made this Method improve it. If you turn this on: an example is prepared on this computer, personal details are stripped here before anything leaves, and it waits 48 hours before it is sent to that Method's publisher. During those 48 hours you can remove any of them, and you can turn this off at any time. Health, family and finance content is never sent this way — we ask you separately, every time. Stripping personal details is an automated process and it is not perfect, which is why the 48 hours exist. What is sent goes to the publisher, not to the public: it becomes public only if they choose to include it when they publish. Your contributions carry a **contributor ID** — a permanent code that credits you without naming you. Your name is never attached. The ID is public wherever the example is, cannot be changed, and cannot be recalled from copies made by others; it does not identify you to anyone but us.",
+    "legal.notice.flywheel.item":
+      "Sends in {time}. Remove it if it still contains anything private — the automated check is not perfect.",
+    "legal.notice.flywheel.remove": "Don't send this one",
     "legal.notice.method.edit":
       "This rewrites what the Method tells the model to do — its steps only. Its inputs, outputs and permissions are unchanged. Apps you granted this Method must be granted it again, because what they were granted has changed. Nothing is published: your Library copy is the only one affected.",
     "method.edit.apply": "Apply These Changes",
@@ -438,6 +455,17 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "我同意 Vaenyx 将我发布的内容及我选定的公开署名披露给美国的 GitHub, Inc.,以存放于面向全球的公开社区库。若《隐私法》适用于 Vaenyx 且我作出本同意,APP 8.1 将不适用于该项披露。若 GitHub 以违反 APPs 的方式处理该信息,Vaenyx 就该处理不在《隐私法》项下承担责任,我也无法就此依《隐私法》向 Vaenyx 寻求救济。其他法律或权利仍可能适用。发布是可选的。撤回同意可阻止今后的发布,但无法撤回已公开的信息。若接收方、目的或后果发生实质变化,将重新取得同意。",
     "legal.disclaimer.community.install":
       "由社区成员制作,未经专业建议层面的审核——请自行斟酌使用。你不主动使用,它就不会做任何事。",
+    "report.page":
+      "举报 Vaenyx 社区中的内容。任何人都可以使用本页 —— 你不需要 Vaenyx 账户,也不需要安装过任何东西。请把下列信息发送至 hello@vaenyx.ai。我们会就足够具体的举报作出评估,并考虑其表面紧急程度、潜在伤害、我们可获得的信息以及适用的法律要求。我们可以不经预先通知限制内容或账号。提交举报不保证移除、恢复、说明理由、个别回复或任何特定结果,我们也不就被举报材料是否违法作出判断。请告诉我们问题在哪,而不是去证明它:我们不要求律师函、statutory declaration、法条引用或身份证件。",
+    "report.page.limits":
+      "移除能做到什么、不能做到什么:我们可以把内容从各安装端读取的 Vaenyx 目录与索引中移除、删除已发布的文件,并阻止该条目标识符被重新发布。我们无法移除他人持有的副本 —— fork、镜像、缓存、存档与搜索引擎结果都在我们控制之外,**在这里移除并不等于该内容从互联网上消失**。若该材料违法,你可能对发布它的人享有我们无法提供的救济。",
+    "method.corrections.locality":
+      "保留的例子只存在这台电脑上,不会发布,也不会影响已授权的 app。",
+    "legal.consent.flywheel.activate":
+      "你收到的纠正,可以帮助制作这个 Method 的人把它改得更好。若你开启:例子在这台电脑上准备好,个人信息在离开本机之前就在本地剥除,然后等待 48 小时才发送给该 Method 的发布者。这 48 小时内你可以撤掉任意一条,也可以随时整个关掉。健康、家庭与财务类内容绝不会经此发送 —— 每一次我们都会单独问你。剥除个人信息是自动化处理,并不完美,48 小时的等待正是为此而设。发出去的内容是给发布者的,不是给公众的:只有当他们在发布时选择收录,它才会公开。你的贡献会带一个**贡献者 ID** —— 一串永久的编号,用来为你记功,但不写出你的名字。你的姓名绝不会被附上。该 ID 在例子出现的任何地方都是公开的,不可更改,也无法从他人所做的副本中收回;除我们之外,它不向任何人指明你是谁。",
+    "legal.notice.flywheel.item":
+      "{time} 后发送。若其中仍有私密内容,请撤掉它 —— 自动检查并不完美。",
+    "legal.notice.flywheel.remove": "不要发送这一条",
     "legal.notice.method.edit":
       "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
     "method.edit.apply": "应用这些改动",
@@ -538,8 +566,15 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // A gated key returns nothing at all until its capability is on. Enforced
+  // here rather than in each component: copy that describes a mechanism which
+  // does not exist is a false statement about the software, and "nothing
+  // renders it today" is an accident waiting for the next component.
   const t = useCallback(
-    (key: string) => STRINGS[lang][key] ?? STRINGS.en[key] ?? key,
+    (key: string) =>
+      isKeyRenderable(key)
+        ? (STRINGS[lang][key] ?? STRINGS.en[key] ?? key)
+        : "",
     [lang],
   );
 

@@ -11063,7 +11063,7 @@ function PublishPausePanel() {
 // Method's folder, and examples are outside the content hash, so no app grant
 // is disturbed by a Method getting better.
 function MethodCorrections({ methodId }: { methodId: string }) {
-  const { lang, t } = useI18n();
+  const { t } = useI18n();
   const [corrections, setCorrections] = useState<StoredCorrection[]>([]);
   const [examples, setExamples] = useState<MethodExampleEntry[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -11182,10 +11182,10 @@ function MethodCorrections({ methodId }: { methodId: string }) {
           )}
         </div>
       ))}
+      {/* D4f: this sentence used to be written inline here. A statement about
+          where data goes belongs in the copy pack, where the audit can see it. */}
       <p className="context-disclaimer">
-        {lang === "zh"
-          ? "保留的例子只存在这台电脑上,不会发布,也不会影响已授权的 app。"
-          : "Kept examples stay on this computer. Nothing is published, and no app grant is affected."}
+        {t("method.corrections.locality")}
       </p>
     </section>
   );
