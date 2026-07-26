@@ -13,6 +13,11 @@
   PublishPauseState,
   CorrectionsResponse,
   MethodExamplesResponse,
+  PreviewSkillRequest,
+  SkillImportPreviewResponse,
+  ImportSkillRequest,
+  ImportSkillResponse,
+  ExportSkillResponse,
   AdoptCorrectionRequest,
   AdoptCorrectionResponse,
   RecipeEditDraft,
@@ -1226,6 +1231,35 @@ export function fetchCorrections(
 ): Promise<CorrectionsResponse> {
   return requestJson<CorrectionsResponse>(
     `/v1/library/methods/${encodeURIComponent(methodId)}/corrections`,
+  );
+}
+
+// Agent Skill interoperability (copy pack Part L). The wording is binding:
+// Vaenyx IMPORTS THE INSTRUCTIONS FROM A SKILL and lists what was dropped.
+// Never "Skill compatible", never "runs Skills" (L4 / ToS 11.5).
+export function previewSkillImport(
+  input: PreviewSkillRequest,
+): Promise<SkillImportPreviewResponse> {
+  return requestJson<SkillImportPreviewResponse>("/v1/skills/preview", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function importSkill(
+  input: ImportSkillRequest,
+): Promise<ImportSkillResponse> {
+  return requestJson<ImportSkillResponse>("/v1/skills/import", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function exportMethodAsSkill(
+  methodId: string,
+): Promise<ExportSkillResponse> {
+  return requestJson<ExportSkillResponse>(
+    `/v1/methods/${encodeURIComponent(methodId)}/skill-export`,
   );
 }
 

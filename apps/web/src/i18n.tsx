@@ -239,6 +239,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "This rewrites what the Method tells the model to do — its steps only. Its inputs, outputs and permissions are unchanged. Apps you granted this Method must be granted it again, because what they were granted has changed. Nothing is published: your Library copy is the only one affected.",
     "method.edit.apply": "Apply These Changes",
+    // Part L surfaces. "Import the instructions from a Skill" — never
+    // "Skill compatible" or "runs Skills" (L4).
+    "skill.import.title": "Import the instructions from a Skill",
+    "skill.import.copy":
+      "Paste a SKILL.md here. Vaenyx keeps its instructions as a new Method and tells you exactly what could not come across.",
+    "skill.import.source": "Where it came from (a link, optional)",
+    "skill.import.paste": "Paste the contents of SKILL.md",
+    "skill.import.look": "See what would be imported",
+    "skill.import.confirm": "Import as a Method",
+    "skill.import.nothingLost":
+      "This Skill is instructions only — nothing had to be dropped.",
+    "skill.export.action": "Export as a Skill",
+    "skill.drop.executable": "A file that would have run",
+    "skill.drop.runs-a-script": "A step that ran one of those files",
+    "skill.drop.local-file": "A step that used a file on the other machine",
+    "skill.drop.external-tool": "A step that ran an outside tool",
     "method.examples.title": "What this Method has learnt",
     "method.examples.copy":
       "Corrections become examples automatically, and this Method follows the most recent ones. They stay on this computer — nothing is published, and no app grant is affected. Remove any you would rather it did not learn from.",
@@ -482,6 +498,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
     "method.edit.apply": "应用这些改动",
+    "skill.import.title": "导入 Skill 里的指令",
+    "skill.import.copy":
+      "把 SKILL.md 的内容贴进来。Vaenyx 会把其中的指令保留成一个新的 Method,并明确告诉你哪些东西没能带过来。",
+    "skill.import.source": "来源(链接,可选)",
+    "skill.import.paste": "粘贴 SKILL.md 的内容",
+    "skill.import.look": "看看会导入什么",
+    "skill.import.confirm": "导入为 Method",
+    "skill.import.nothingLost": "这个 Skill 只有指令 —— 没有任何东西被丢弃。",
+    "skill.export.action": "导出为 Skill",
+    "skill.drop.executable": "一个会运行的文件",
+    "skill.drop.runs-a-script": "一个会去运行那些文件的步骤",
+    "skill.drop.local-file": "一个用到对方机器上文件的步骤",
+    "skill.drop.external-tool": "一个会调用外部工具的步骤",
     "method.examples.title": "这个 Method 学到的东西",
     "method.examples.copy":
       "纠正会自动变成例子,这个 Method 会照着最近的几条做。它们只存在这台电脑上:不会发布,也不影响已授权的 app。不想让它学的,删掉就行。",

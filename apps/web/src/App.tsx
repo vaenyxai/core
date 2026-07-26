@@ -15,6 +15,7 @@ import type {
   PublishPauseState,
   StoredCorrection,
   MethodExampleEntry,
+  SkillImportPreviewResponse,
   AskVaenyxConversation,
   AskVaenyxMessage,
   ReasoningEffort,
@@ -95,6 +96,9 @@ import {
   adoptCorrection,
   fetchMethodExamples,
   deleteMethodExample,
+  previewSkillImport,
+  importSkill,
+  exportMethodAsSkill,
   fetchLegalAcks,
   fetchLegalDocument,
   fetchChatRoutineData,
@@ -203,6 +207,7 @@ import {
 import { MarkdownMessage } from "./MarkdownMessage.js";
 import { setToastListener, showErrorToast } from "./toast.js";
 import { useI18n, type Lang } from "./i18n.js";
+import { CAPABILITIES } from "./capabilities.js";
 import {
   getCodexAuthCopy,
   getProviderConnectionCopy,
@@ -11061,6 +11066,147 @@ function PublishPausePanel() {
   );
 }
 
+// Importing the instructions from an Agent Skill (copy pack Part L).
+//
+// WORDING — never "Skill compatible", "runs Skills" or "works with Skills".
+// Our interoperability statements are descriptive only under ToS 11.5, and that
+// holds only while we do not overstate them. What this does is import the
+// INSTRUCTIONS and name what was dropped, item by item: "some features may not
+// work" would send the Owner off to discover the breakage themselves, which is
+// precisely what L1 exists to prevent.
+// Hands the Owner the file. Everything stays on this machine: the export is
+// built by the local server and saved by the browser, with nothing uploaded.
+async function downloadMethodAsSkill(methodId: string): Promise<void> {
+  try {
+    const result = await exportMethodAsSkill(methodId);
+    const url = URL.createObjectURL(
+      new Blob([result.markdown], { type: "text/markdown" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = result.fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    // The failed request already raised a toast.
+  }
+}
+
+function SkillImportPanel({ onImported }: { onImported: () => void }) {
+  const { t } = useI18n();
+  const [markdown, setMarkdown] = useState("");
+  const [source, setSource] = useState("");
+  const [preview, setPreview] = useState<SkillImportPreviewResponse | null>(
+    null,
+  );
+  const [busy, setBusy] = useState(false);
+
+  if (!CAPABILITIES.skillInterop) return null;
+
+  async function look() {
+    if (!markdown.trim() || busy) return;
+    setBusy(true);
+    try {
+      setPreview(
+        await previewSkillImport({
+          markdown,
+          source: source.trim() || undefined,
+        }),
+      );
+    } catch {
+      // The failed request already raised a toast.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm() {
+    if (!preview || busy) return;
+    setBusy(true);
+    try {
+      await importSkill({
+        markdown,
+        source: source.trim() || undefined,
+        license: preview.license ?? undefined,
+      });
+      setPreview(null);
+      setMarkdown("");
+      setSource("");
+      onImported();
+    } catch {
+      // The failed request already raised a toast.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="settings-card">
+      <p className="eyebrow">{t("skill.import.title")}</p>
+      <p className="settings-card-copy">{t("skill.import.copy")}</p>
+      <input
+        className="method-rename-input"
+        onChange={(event) => setSource(event.target.value)}
+        placeholder={t("skill.import.source")}
+        value={source}
+      />
+      <textarea
+        className="method-rename-input"
+        onChange={(event) => setMarkdown(event.target.value)}
+        placeholder={t("skill.import.paste")}
+        rows={8}
+        style={{ marginTop: "8px", fontFamily: "ui-monospace, monospace" }}
+        value={markdown}
+      />
+      <button
+        className="secondary-button"
+        disabled={busy || !markdown.trim()}
+        onClick={() => void look()}
+        style={{ marginTop: "8px", alignSelf: "flex-start" }}
+        type="button"
+      >
+        {busy ? "…" : t("skill.import.look")}
+      </button>
+
+      {preview ? (
+        <Modal onClose={() => setPreview(null)} title={preview.name} variant="doc">
+          <p className="settings-card-copy">{t("legal.notice.skill.import")}</p>
+          {/* L1 requires the dropped items listed one by one. This list IS the
+              notice; without it the notice is "some features may not work". */}
+          {preview.dropped.length > 0 ? (
+            <ul className="skill-dropped">
+              {preview.dropped.map((item, index) => (
+                <li key={`${item.kind}-${index}`}>
+                  <strong>{t(`skill.drop.${item.reason}`)}</strong> — {item.detail}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="settings-card-copy">{t("skill.import.nothingLost")}</p>
+          )}
+          <div className="modal-actions">
+            <button
+              className="text-button"
+              onClick={() => setPreview(null)}
+              type="button"
+            >
+              {t("routine.confirm.cancel")}
+            </button>
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() => void confirm()}
+              type="button"
+            >
+              {busy ? "…" : t("skill.import.confirm")}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+    </section>
+  );
+}
+
 // The flywheel, local half. An app sent back a correction; the Owner reads it
 // and decides whether it becomes an example this Method learns from.
 //
@@ -11346,6 +11492,7 @@ function MethodDetail({
   onBack: () => void;
   onChanged: (method: LibraryMethod) => void;
 }) {
+  const { t } = useI18n();
   const communityVersions = useCommunityVersions();
   const [inputText, setInputText] = useState(() =>
     JSON.stringify(buildInputSkeleton(method.inputSchema), null, 2),
@@ -11533,6 +11680,22 @@ function MethodDetail({
           />
         ) : null}
         <MethodCorrections methodId={method.id} />
+        {/* L3: the clean direction. A Method is instructions already, so
+            nothing is lost and no capability is implied that does not exist. */}
+        {CAPABILITIES.skillInterop ? (
+          <div className="skill-export">
+            <button
+              className="secondary-button"
+              onClick={() => void downloadMethodAsSkill(method.id)}
+              type="button"
+            >
+              {t("skill.export.action")}
+            </button>
+            <p className="context-disclaimer">
+              {t("legal.notice.skill.export")}
+            </p>
+          </div>
+        ) : null}
         <div className="method-tag-editor">
           <span className="method-picker-label">Tags</span>
           <div className="tag-row">
@@ -13905,6 +14068,7 @@ function LibraryPanel({
         </p>
       </section>
       {error ? <p className="form-error">{error}</p> : null}
+      <SkillImportPanel onImported={onMethodsRefresh} />
       {methods.length === 0 ? (
         <div className="empty-state">
           <strong>No Methods yet</strong>

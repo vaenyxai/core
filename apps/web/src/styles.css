@@ -3795,6 +3795,27 @@ select {
   word-break: break-word;
 }
 
+/* What a Skill import had to leave behind (copy pack L1). Listed one by one:
+   "some features may not work" is not this notice. */
+.skill-dropped {
+  margin: 12px 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-2, #9a9bb4);
+}
+
+.skill-dropped li {
+  margin-bottom: 6px;
+}
+
+.skill-export {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0;
+}
+
 /* D4a report category picker. */
 .report-category {
   display: flex;
