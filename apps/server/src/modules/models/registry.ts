@@ -26,7 +26,9 @@ export const OPENAI_COMPATIBLE_PRESETS = [
     id: "gemini",
     name: "Gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.0-flash",
+    // Alias rather than a pinned version: Google retires specific models for
+    // new API keys, which breaks first-time setups only (see vision.ts).
+    model: "gemini-flash-latest",
   },
   {
     id: "grok",

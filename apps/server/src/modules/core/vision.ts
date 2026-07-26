@@ -73,7 +73,12 @@ const VISION_CANDIDATES = [
   {
     id: "gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.5-flash",
+    // An alias, not a pinned version, on purpose. Google retires a specific
+    // model for NEW keys while existing users keep working, so a pinned name
+    // fails only for people setting Vaenyx up for the first time — the users
+    // least able to diagnose it. gemini-2.5-flash did exactly that
+    // (404 "no longer available to new users", found 2026-07-26).
+    model: "gemini-flash-latest",
   },
   {
     id: "zhipu",
@@ -176,7 +181,24 @@ export async function describeImage(
     },
   );
   if (!response.ok) {
-    throw new Error(`VISION_DESCRIBE_FAILED:${response.status}`);
+    // Carry the provider's own words. "Photo analysis failed" tells the Owner
+    // nothing they can act on, and this is their own instance talking to their
+    // own account — an expired key, a model that is not enabled, a quota, are
+    // all things only the message itself can distinguish.
+    let detail = "";
+    try {
+      const body = (await response.json()) as {
+        error?: { message?: unknown } | string;
+      };
+      const raw =
+        typeof body.error === "string" ? body.error : body.error?.message;
+      if (typeof raw === "string") detail = raw.slice(0, 300);
+    } catch {
+      // Non-JSON body: the status code is all there is.
+    }
+    throw new Error(
+      `VISION_DESCRIBE_FAILED:${response.status}${detail ? `:${detail}` : ""}`,
+    );
   }
   const parsed = (await response.json()) as {
     choices?: { message?: { content?: unknown } }[];

@@ -11216,14 +11216,14 @@ function RoutineDetail({
           {summary.owner ? ` · by ${summary.owner}` : ""}
         </small>
 
-        <button
-          className="primary-button"
-          onClick={onStart}
-          style={{ marginTop: "14px", alignSelf: "flex-start" }}
-          type="button"
-        >
-          {t("routine.open.start")}
-        </button>
+        {/* The start button gets its own row at the bottom right (Oskar,
+            2026-07-26): sharing a line with the version made it look like a
+            caption, and it sat on top of the text on a narrow screen. */}
+        <div className="routine-start-row">
+          <button className="primary-button" onClick={onStart} type="button">
+            {t("routine.open.start")}
+          </button>
+        </div>
       </section>
     </div>
   );

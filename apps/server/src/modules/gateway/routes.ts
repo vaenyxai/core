@@ -4503,7 +4503,34 @@ export async function registerGatewayRoutes(
               "No vision-capable model connected — connect Gemini or Zhipu BigModel under Models first.",
           });
         }
-        return reply.code(502).send({ error: "Photo analysis failed." });
+        if (message === "VISION_NO_KEY") {
+          return reply.code(400).send({
+            error:
+              "That vision model has no API key saved — open Settings → AI Setting → Models and connect it again.",
+          });
+        }
+        // Pass the provider's own reason through. A generic failure leaves the
+        // Owner with nothing to fix; this is their instance and their account,
+        // so the actual message ("model not found", "quota exceeded", "invalid
+        // API key") is exactly what they need.
+        const parts = message.split(":");
+        if (parts[0] === "VISION_DESCRIBE_FAILED") {
+          const status = parts[1] ?? "";
+          const detail = parts.slice(2).join(":").trim();
+          request.log.warn(
+            { status, detail },
+            "vision describe failed at the provider",
+          );
+          return reply.code(502).send({
+            error: detail
+              ? `The vision model refused the photo (${status}): ${detail}`
+              : `The vision model refused the photo (HTTP ${status}).`,
+          });
+        }
+        request.log.warn({ message }, "vision describe failed");
+        return reply
+          .code(502)
+          .send({ error: `Photo analysis failed: ${message || "unknown error"}` });
       }
     },
   );

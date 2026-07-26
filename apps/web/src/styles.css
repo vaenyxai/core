@@ -3816,6 +3816,15 @@ select {
   margin-top: 10px;
 }
 
+/* The one action on the Routine page, alone on its own line at the right. */
+.routine-start-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 /* A Routine's steps, shown before anyone starts using it. */
 .routine-steps {
   margin: 8px 0 14px;
