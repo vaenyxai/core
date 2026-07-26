@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -16,13 +16,23 @@ function createTestConfig(): AppConfig {
   const dataDirectory = mkdtempSync(resolve(tmpdir(), "vaenyx-test-"));
   temporaryDirectories.push(dataDirectory);
 
+  // The library is COPIED, never pointed at the repo's sample-library. Paths
+  // that only ever read were safe to share; the moment one of them writes — a
+  // correction becoming an example, a Method being created — a test run edits
+  // the files that ship in the download. That happened once (2026-07-26) and
+  // the stray example was committed before anyone noticed.
+  const libraryRoot = resolve(dataDirectory, "library");
+  cpSync(resolve("..", "..", "sample-library"), libraryRoot, {
+    recursive: true,
+  });
+
   return {
     corsOrigins: [],
     dataDirectory,
     databasePath: resolve(dataDirectory, "vaenyx.db"),
     host: "127.0.0.1",
-    libraryDirectory: resolve("..", "..", "sample-library", "methods"),
-    routinesDirectory: resolve("..", "..", "sample-library", "routines"),
+    libraryDirectory: resolve(libraryRoot, "methods"),
+    routinesDirectory: resolve(libraryRoot, "routines"),
     docsDirectory: resolve("..", "..", "docs"),
     logLevel: "silent",
     migrationsDirectory: resolve("migrations"),
