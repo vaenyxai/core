@@ -14,6 +14,7 @@ import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
 import {
+  buildImagePrompt,
   generateImage,
   getImageEngineStatus,
   looksLikeImageRequest,
@@ -614,6 +615,10 @@ export async function createAskVaenyxMessage(
   let assistantStatus: "completed" | "failed";
   let webSearchUsed = false;
   let streamed = "";
+  // The backend that answered this turn, captured for the image-prompt rewrite
+  // below — the same model that talked to the Owner translates their request
+  // for the image model, so a pinned provider stays pinned.
+  let turnProvider: Parameters<typeof buildImagePrompt>[0] | null = null;
 
   const baseContext = getConversationProjectContext(database, conversationId);
   let projectContext = baseContext;
@@ -753,6 +758,7 @@ export async function createAskVaenyxMessage(
       ? [projectContext, photoContext].filter(Boolean).join("\n\n")
       : projectContext;
 
+    turnProvider = provider;
     const result = await provider.sendChat(history, contextWithPhoto, {
       onDelta: options?.onDelta
         ? (delta) => {
@@ -791,10 +797,15 @@ export async function createAskVaenyxMessage(
     getImageEngineStatus(options.secretsDirectory).connected
   ) {
     try {
+      // English prompt first: the image model reads English, not the Owner's
+      // language (see buildImagePrompt for the landscape-instead-of-cat story).
+      const imagePrompt = turnProvider
+        ? await buildImagePrompt(turnProvider, content)
+        : content;
       generatedImageId = await generateImage(
         options.secretsDirectory,
         options.dataDirectory,
-        content,
+        imagePrompt,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "";

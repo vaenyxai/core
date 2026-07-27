@@ -253,6 +253,41 @@ export async function setImageEngine(
   return getImageEngineStatus(secretsDirectory);
 }
 
+// Image models are not chat models: flux-schnell in particular does not read
+// Chinese, and handed "再生成一张猫咪的照片" it produced a moonlit landscape
+// with pseudo-calligraphy (Oskar, 2026-07-27) — it pattern-matched the SCRIPT
+// and ignored the words. So the Owner's request is first turned into a short
+// English prompt by the same model that answered the chat. Any failure falls
+// back to the raw text: a worse picture beats no picture.
+export async function buildImagePrompt(
+  provider: {
+    sendChat: (
+      messages: { role: "owner" | "assistant"; content: string }[],
+    ) => Promise<{ answer: string }>;
+  },
+  content: string,
+): Promise<string> {
+  try {
+    const result = await provider.sendChat([
+      {
+        role: "owner",
+        content: `Turn this request into ONE short English image-generation prompt: subject first, then style and details. No preamble, no quotes — output only the prompt itself.\n\nRequest: ${content}`,
+      },
+    ]);
+    const prompt = (result.answer ?? "")
+      .trim()
+      .replace(/^["'“”]+|["'“”]+$/g, "");
+    // A real prompt is one line and reasonably short; a chatty answer that
+    // ignored the instruction would poison the image worse than raw text.
+    if (prompt && prompt.length <= 600 && !prompt.includes("\n\n")) {
+      return prompt;
+    }
+  } catch {
+    // The chat model being unavailable is not a reason to lose the picture.
+  }
+  return content;
+}
+
 // Does this message read like a request for a picture? Deliberately narrow:
 // generating an image nobody asked for wastes the Owner's quota, so an unclear
 // message gets an ordinary reply.

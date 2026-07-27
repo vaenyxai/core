@@ -238,6 +238,20 @@ type Screen =
   | "scheduled"
   | "help";
 
+// The screens a ?view= URL may restore after a refresh. Everything except the
+// chat portal, which is addressed by ?chat= / ?task= instead.
+const RESTORABLE_SCREENS: Screen[] = [
+  "projects",
+  "library",
+  "community",
+  "modes",
+  "settings",
+  "vaenyx-me",
+  "guard",
+  "scheduled",
+  "help",
+];
+
 type PortalView = "chat" | "task" | "new";
 
 const GENERAL_PROJECT_ID = "general";
@@ -16054,28 +16068,48 @@ function VaenyxWorkspace({
     setMobileSidebarOpen(false);
   }
 
-  // A notification opens the thing it is about. Tapping one used to land on
-  // whatever page happened to be open — usually the home screen — which meant
-  // hunting for the result the notification had just announced (Oskar,
-  // 2026-07-27). The target rides in the URL the push carries.
+  // The address bar mirrors where you are, and a load follows it. This is what
+  // makes BOTH of these work: a notification's URL opens the thing it is
+  // about, and a refresh stays on the page you were on instead of dumping you
+  // at home (Oskar, 2026-07-27). The params are deliberately NOT cleared any
+  // more — they are the location now, and the sync effect below keeps them
+  // current as you move around.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const taskId = params.get("task");
     const chatId = params.get("chat");
-    if (!taskId && !chatId) return;
-    // Clear it immediately: a deep link is a one-time instruction, and leaving
-    // it in the address bar would re-open the same thing on every reload.
-    const clean = new URL(window.location.href);
-    clean.searchParams.delete("task");
-    clean.searchParams.delete("chat");
-    window.history.replaceState({}, "", clean.toString());
+    const view = params.get("view");
     if (taskId) {
       openThreadTask(taskId);
     } else if (chatId) {
       openDraftConversation(chatId);
+    } else if (view && RESTORABLE_SCREENS.includes(view as Screen)) {
+      setScreen(view as Screen);
     }
-    // Runs once per load: the params are consumed above.
+    // Runs once per load; afterwards the sync effect owns the URL.
   }, []);
+
+  // Which chat the sidebar selection points at, for the URL below.
+  const selectedThreadConversationId =
+    workspace.threads.find((thread) => thread.id === selectedThreadId)
+      ?.conversationId ?? null;
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("view");
+    url.searchParams.delete("task");
+    url.searchParams.delete("chat");
+    if (screen !== "ask-vaenyx") {
+      url.searchParams.set("view", screen);
+    } else if (focusedTaskId) {
+      url.searchParams.set("task", focusedTaskId);
+    } else if (selectedThreadConversationId) {
+      url.searchParams.set("chat", selectedThreadConversationId);
+    }
+    // replaceState, not pushState: refresh-stays-put needs no back-button
+    // history of every click.
+    window.history.replaceState({}, "", url.toString());
+  }, [screen, focusedTaskId, selectedThreadConversationId]);
 
   // Bulk archive: one call per thread, then a single refresh. Archiving is
   // reversible, so it needs no confirmation.
