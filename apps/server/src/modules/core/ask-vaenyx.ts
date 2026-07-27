@@ -15,6 +15,7 @@ import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
 import {
   buildImagePrompt,
+  classifyImageIntent,
   generateImage,
   isImageFollowUp,
   getImageEngineStatus,
@@ -783,18 +784,24 @@ export async function createAskVaenyxMessage(
       options?.secretsDirectory &&
       getImageEngineStatus(options.secretsDirectory).connected
     ) {
-      // A fresh ask ("draw a cat"), or a follow-up ("再来一张") in a
-      // conversation where a picture was already generated.
-      const wantsImage =
+      // The obvious phrasings take the fast path; everything else is judged by
+      // the main model with the conversation in view (Oskar's call, after two
+      // keyword misses in one afternoon — see classifyImageIntent).
+      const fastYes =
         looksLikeImageRequest(content) ||
         (isImageFollowUp(content) &&
           conversationHasGeneratedImage(database, conversationId));
-      if (wantsImage) {
+      const intent = fastYes
+        ? { draw: true as const, prompt: null }
+        : await classifyImageIntent(provider, history, content);
+      if (intent.draw) {
         let imageNote: string;
         try {
           // English prompt first: the image model reads English, not the
           // Owner's language (see buildImagePrompt for the landscape story).
-          const imagePrompt = await buildImagePrompt(provider, content);
+          // The judge usually hands the prompt over in the same call.
+          const imagePrompt =
+            intent.prompt ?? (await buildImagePrompt(provider, content));
           generatedImageId = await generateImage(
             options.secretsDirectory,
             options.dataDirectory,

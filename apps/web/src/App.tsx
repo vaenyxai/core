@@ -1523,6 +1523,21 @@ function stopReplySpeech(): void {
   }
 }
 
+// Leaving the app pauses whatever is talking (Oskar, 2026-07-27): backgrounding
+// the browser kept the voice going. Pause rather than stop — the element keeps
+// its position, so coming back and tapping play resumes where it left off.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) return;
+    currentReplyAudio?.pause();
+    try {
+      window.speechSynthesis?.pause();
+    } catch {
+      // No TTS on this device.
+    }
+  });
+}
+
 function speakText(text: string): void {
   try {
     if (!("speechSynthesis" in window)) return;

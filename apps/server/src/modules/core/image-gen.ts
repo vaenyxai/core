@@ -313,6 +313,63 @@ export function isImageFollowUp(text: string): boolean {
   return REDO_EN.test(text) || REDO_ZH.test(text);
 }
 
+export interface ImageIntent {
+  draw: boolean;
+  prompt: string | null;
+}
+
+// The main model as the judge (Oskar, 2026-07-27). Keyword gates lost twice in
+// one afternoon — "再来一张" and then "就是一只卡通的猫咪你试一下" both walked
+// straight past them — because people ask for pictures in the words of the
+// conversation, not in trigger phrases. So: the obvious phrasings still take
+// the fast path (no extra call), and EVERY other message is judged by the main
+// model with the recent turns in view. It answers draw/not-draw and, when
+// drawing, hands over the English prompt in the same breath — one call, both
+// jobs. The price is a small extra call on ordinary chat while a picture
+// engine is connected; chosen deliberately over a gate that keeps losing.
+export async function classifyImageIntent(
+  provider: {
+    sendChat: (
+      messages: { role: "owner" | "assistant"; content: string }[],
+    ) => Promise<{ answer: string }>;
+  },
+  recentTurns: { role: string; content: string }[],
+  content: string,
+): Promise<ImageIntent> {
+  const transcript = recentTurns
+    .slice(-6)
+    .map(
+      (message) =>
+        `${message.role === "owner" ? "Owner" : "Assistant"}: ${message.content.slice(0, 300)}`,
+    )
+    .join("\n");
+  try {
+    const result = await provider.sendChat([
+      {
+        role: "owner",
+        content: `Decide whether the Owner's LATEST message is asking for an image to be GENERATED. Count follow-ups that only make sense as a drawing request in this conversation (like "try again" or "just a cartoon cat" after image talk). Do NOT count questions about an existing photo, or ordinary chat.\n\nRecent conversation:\n${transcript}\n\nLatest message: ${content}\n\nAnswer ONLY with JSON, no prose: {"draw": true or false, "prompt": "if draw is true, ONE short English image prompt, subject first; else empty"}`,
+      },
+    ]);
+    const match = /\{[\s\S]*\}/.exec(result.answer ?? "");
+    if (!match) return { draw: false, prompt: null };
+    const parsed = JSON.parse(match[0]) as {
+      draw?: unknown;
+      prompt?: unknown;
+    };
+    return {
+      draw: parsed.draw === true,
+      prompt:
+        typeof parsed.prompt === "string" && parsed.prompt.trim()
+          ? parsed.prompt.trim().slice(0, 600)
+          : null,
+    };
+  } catch {
+    // The judge being unavailable means no picture this turn, said honestly —
+    // never a guessed one.
+    return { draw: false, prompt: null };
+  }
+}
+
 // Ask the configured engine for a picture and store it like any other photo,
 // so it renders in the conversation and rides the local backup.
 export async function generateImage(
