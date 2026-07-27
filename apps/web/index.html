@@ -19,6 +19,10 @@
          for the tab and the home screen. The in-app marks keep the unplated
          master — the UI itself is the dark surface it was drawn for. -->
     <link rel="icon" href="/vaenyx-icon.svg" type="image/svg+xml" />
+    <!-- iOS ignores manifest icons and wants a PNG here; Android launchers get
+         the fixed-size PNGs from the manifest (a rasterized-then-upscaled SVG
+         is where the jagged edges came from - Oskar, 2026-07-28). -->
+    <link rel="apple-touch-icon" href="/vaenyx-icon-192.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Vaenyx</title>
     <script>
