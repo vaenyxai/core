@@ -6071,3 +6071,8 @@ select {
 .auth-model-button:hover { border-color: var(--accent); }
 .auth-model-button.selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 .free-refresh-row { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-2) 0; flex-wrap: wrap; }
+/* The browser gesture that reloads the whole app is off; pulling down inside a
+   conversation refreshes that conversation instead (App.tsx pull handlers). */
+html, body { overscroll-behavior-y: none; }
+.pull-refresh-hint { margin: 0 0 var(--space-2); text-align: center; font-size: var(--fs-sm); color: var(--text-muted); }
+.hard-refresh-button { display: none; }

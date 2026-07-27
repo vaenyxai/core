@@ -272,7 +272,11 @@ async function hardRefresh(): Promise<void> {
   } catch {
     // Best effort; reload anyway.
   }
-  window.location.replace(`${window.location.pathname}?r=${Date.now()}`);
+  // Keep the location params: ?chat / ?task / ?view are WHERE THE OWNER IS,
+  // and dropping them made every refresh land on the home screen.
+  const url = new URL(window.location.href);
+  url.searchParams.set("r", String(Date.now()));
+  window.location.replace(url.toString());
 }
 
 // Dates follow the app language, not the device locale (Oskar, dev.150): an
@@ -5675,6 +5679,35 @@ function AskVaenyxPanel({
     void openConversation(firstConversation.id);
   }, [activeConversationId, conversations, view]);
 
+  // Pulling down at the top of a conversation refreshes THAT conversation —
+  // the browser's whole-page reload gesture is switched off in CSS, because
+  // reloading the entire app to see a new message is a sledgehammer (Oskar,
+  // 2026-07-27).
+  const pullStartY = useRef<number | null>(null);
+  const [pullReady, setPullReady] = useState(false);
+
+  function handleMessagesPullStart(event: React.TouchEvent<HTMLDivElement>) {
+    const atTop =
+      (window.scrollY ?? 0) <= 0 && event.currentTarget.scrollTop <= 0;
+    pullStartY.current = atTop ? (event.touches[0]?.clientY ?? null) : null;
+  }
+
+  function handleMessagesPullMove(event: React.TouchEvent<HTMLDivElement>) {
+    if (pullStartY.current === null) return;
+    const pulled =
+      (event.touches[0]?.clientY ?? pullStartY.current) - pullStartY.current;
+    setPullReady(pulled > 70);
+  }
+
+  async function handleMessagesPullEnd() {
+    pullStartY.current = null;
+    if (!pullReady) return;
+    setPullReady(false);
+    if (view === "chat" && activeConversationId) {
+      await openConversation(activeConversationId);
+    }
+  }
+
   useEffect(() => {
     if (!requestedConversationId) return;
 
@@ -7339,7 +7372,17 @@ function AskVaenyxPanel({
           </Modal>
         ) : null}
 
-        <div className="ask-vaenyx-messages">
+        <div
+          className="ask-vaenyx-messages"
+          onTouchEnd={() => void handleMessagesPullEnd()}
+          onTouchMove={handleMessagesPullMove}
+          onTouchStart={handleMessagesPullStart}
+        >
+          {pullReady ? (
+            <p className="pull-refresh-hint">
+              {lang === "zh" ? "松手刷新这个对话" : "Release to refresh this chat"}
+            </p>
+          ) : null}
           {isRoutine ? (
             capabilityTab === "journal" ? (
               routineJournal.length === 0 ? (
@@ -16263,15 +16306,10 @@ function VaenyxWorkspace({
           onVerified={() => setModePinOk(true)}
         />
       ) : null}
-      <button
-        aria-label="Hard refresh"
-        className="hard-refresh-button"
-        onClick={() => void hardRefresh()}
-        title="Hard refresh — load the latest version"
-        type="button"
-      >
-        ⟳
-      </button>
+      {/* The floating hard-refresh button is gone (Oskar, 2026-07-27): it sat
+          over every screen and, worse, its reload dropped the URL params, so
+          "refresh" meant "lose your place". Loading a genuinely new build is
+          what the update banner below is for. */}
       {systemStatus?.version ? (
         <span className="version-badge">v{systemStatus.version}</span>
       ) : null}
