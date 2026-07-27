@@ -8865,6 +8865,15 @@ function SharingPanel() {
               {zh ? "重新开启分享" : "Turn Sharing Back On"}
             </button>
           </div>
+          {/* K10 stays visible with sharing OFF: someone who contributed
+              before switching off needs this ID to exercise their access and
+              correction rights — hiding it would take the rights with it. */}
+          <p className="settings-card-copy">
+            <code>{state.contributorId}</code>
+          </p>
+          <p className="settings-card-copy text-faint">
+            {t("legal.notice.flywheel.contributorId")}
+          </p>
         </>
       ) : (
         <>
