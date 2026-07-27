@@ -16,6 +16,7 @@ import { schedulePresenceAwarePush } from "./push.js";
 import {
   buildImagePrompt,
   generateImage,
+  isImageFollowUp,
   getImageEngineStatus,
   looksLikeImageRequest,
 } from "./image-gen.js";
@@ -66,6 +67,23 @@ interface ConversationThreadContextRow {
   task_request: string | null;
   task_result: string | null;
   task_status: "waiting" | "running" | "completed" | "failed" | null;
+}
+
+// Did this conversation already produce a generated picture? Decides whether a
+// bare follow-up ("再来一张") should draw again. Assistant messages only: a
+// photo the Owner attached is not a picture Vaenyx made.
+function conversationHasGeneratedImage(
+  database: DatabaseHandle,
+  conversationId: string,
+): boolean {
+  const row = database.sqlite
+    .prepare(
+      `SELECT 1 FROM ask_vaenyx_messages
+        WHERE conversation_id = ? AND role = 'assistant' AND image_id IS NOT NULL
+        ORDER BY created_at DESC LIMIT 1`,
+    )
+    .get(conversationId);
+  return row !== undefined;
 }
 
 const DEFAULT_CHAT_TITLE = "New Vaenyx Chat";
@@ -619,6 +637,7 @@ export async function createAskVaenyxMessage(
   // below — the same model that talked to the Owner translates their request
   // for the image model, so a pinned provider stays pinned.
   let turnProvider: Parameters<typeof buildImagePrompt>[0] | null = null;
+  let generatedImageId: string | null = null;
 
   const baseContext = getConversationProjectContext(database, conversationId);
   let projectContext = baseContext;
@@ -754,11 +773,59 @@ export async function createAskVaenyxMessage(
         // message and visible; the model simply does not get a description.
       }
     }
-    const contextWithPhoto = photoContext
+    let contextWithPhoto = photoContext
       ? [projectContext, photoContext].filter(Boolean).join("\n\n")
       : projectContext;
 
+    // Making a picture — BEFORE the model speaks, so it narrates the truth
+    // instead of guessing. The first version generated after the reply, and
+    // the model cheerfully announced "here is your new cat photo" for a turn
+    // where nothing was generated at all (Oskar, 2026-07-27): it cannot know
+    // what it cannot see, so the outcome is now handed to it in context.
     turnProvider = provider;
+    if (
+      options?.dataDirectory &&
+      options?.secretsDirectory &&
+      getImageEngineStatus(options.secretsDirectory).connected
+    ) {
+      // A fresh ask ("draw a cat"), or a follow-up ("再来一张") in a
+      // conversation where a picture was already generated.
+      const wantsImage =
+        looksLikeImageRequest(content) ||
+        (isImageFollowUp(content) &&
+          conversationHasGeneratedImage(database, conversationId));
+      if (wantsImage) {
+        let imageNote: string;
+        try {
+          // English prompt first: the image model reads English, not the
+          // Owner's language (see buildImagePrompt for the landscape story).
+          const imagePrompt = await buildImagePrompt(provider, content);
+          generatedImageId = await generateImage(
+            options.secretsDirectory,
+            options.dataDirectory,
+            imagePrompt,
+          );
+          imageNote = `The system just generated a real image for the Owner's request (prompt used: "${imagePrompt}") and it is attached to your reply. Refer to it naturally, but do not describe details you cannot see.`;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          const detail = message.split(":").slice(2).join(":").trim();
+          imageNote = `The system tried to generate the image the Owner asked for and FAILED${
+            detail ? ` (provider said: ${detail})` : ""
+          }. Say so plainly. Do not claim any picture was made.`;
+        }
+        contextWithPhoto = [contextWithPhoto, imageNote]
+          .filter(Boolean)
+          .join("\n\n");
+      } else {
+        contextWithPhoto = [
+          contextWithPhoto,
+          "No image is being generated this turn. You cannot create images yourself — never claim a picture was made or attached.",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+    }
+
     const result = await provider.sendChat(history, contextWithPhoto, {
       onDelta: options?.onDelta
         ? (delta) => {
@@ -784,37 +851,10 @@ export async function createAskVaenyxMessage(
     assistantStatus = "failed";
   }
 
-  // Making a picture. A text model cannot return one — it can only claim to,
-  // which is exactly what happened: Vaenyx said "here is your cartoon cat" and
-  // showed nothing (Oskar, 2026-07-27). When the Owner asked for a picture and
-  // an image engine is connected, one is actually made and attached.
-  let generatedImageId: string | null = null;
-  if (
-    assistantStatus === "completed" &&
-    options?.dataDirectory &&
-    options?.secretsDirectory &&
-    looksLikeImageRequest(content) &&
-    getImageEngineStatus(options.secretsDirectory).connected
-  ) {
-    try {
-      // English prompt first: the image model reads English, not the Owner's
-      // language (see buildImagePrompt for the landscape-instead-of-cat story).
-      const imagePrompt = turnProvider
-        ? await buildImagePrompt(turnProvider, content)
-        : content;
-      generatedImageId = await generateImage(
-        options.secretsDirectory,
-        options.dataDirectory,
-        imagePrompt,
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      const parts = message.split(":");
-      const detail = parts.slice(2).join(":").trim();
-      assistantContent = `${assistantContent}\n\n_(The picture could not be made${
-        detail ? `: ${detail}` : "."
-      })_`;
-    }
+  // A failed TURN does not ship a generated image: the picture belonged to a
+  // reply that never happened.
+  if (assistantStatus === "failed") {
+    generatedImageId = null;
   }
 
   const assistantMessageId = randomUUID();

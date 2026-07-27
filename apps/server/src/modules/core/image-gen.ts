@@ -299,6 +299,20 @@ export function looksLikeImageRequest(text: string): boolean {
   return DRAW_EN.test(text) || DRAW_ZH.test(text);
 }
 
+// A redo, said the way people actually say it: "刚才那张不喜欢你再来一张"
+// names no drawing verb and no picture noun, so the request gate above cannot
+// see it (Oskar, 2026-07-27 — the reply claimed a regeneration that never
+// happened). These phrases only count as an image request when the
+// conversation has already produced a generated picture; the caller checks
+// that, because this module cannot see the conversation.
+const REDO_EN =
+  /\b(another one|one more|try again|redo|regenerate|new one|do it again)\b/i;
+const REDO_ZH = /再来一?[张幅个]?|再画|再生成|重画|重新画|重新生成|换一?[张幅个]/;
+
+export function isImageFollowUp(text: string): boolean {
+  return REDO_EN.test(text) || REDO_ZH.test(text);
+}
+
 // Ask the configured engine for a picture and store it like any other photo,
 // so it renders in the conversation and rides the local backup.
 export async function generateImage(
