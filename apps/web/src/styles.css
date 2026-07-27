@@ -6090,3 +6090,10 @@ html, body { overscroll-behavior-y: none; }
 /* Splash held over a conversation whose first load is in flight: deep links go
    splash -> conversation, with no half-built frame between. */
 .chat-splash { position: fixed; inset: 0; z-index: 80; min-height: 100dvh; background: var(--bg); }
+/* The Engines card: intro left, refresh right; four sections with a visible
+   rule between them (Oskar, 2026-07-27 - "看得很复杂" redesign). */
+.engine-intro-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.engine-intro-row .settings-card-copy { margin: 0; }
+.engine-intro-row .secondary-button { flex: none; }
+.engine-section { border-top: 2px solid var(--border); margin-top: var(--space-5); padding-top: var(--space-4); }
+.engine-section > .settings-subhead { margin-top: 0; }

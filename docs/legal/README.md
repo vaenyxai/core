@@ -4,7 +4,7 @@
 
 The legal documents that govern your use of Vaenyx and its Community Library.
 
-**Current set: v3.0 (26 July 2026)** — in-app notices pack at copy version 2.5.
+**Current set: v3.1 (27 July 2026)** — in-app notices pack at copy version 2.8.
 
 The set has three layers. The **core documents** state the durable rules and do not change when a
 feature ships. The **in-app notices** are what you are actually shown at the moment of a decision.

@@ -2067,29 +2067,26 @@ function VoicePanel() {
 
   return (
     <section className="settings-card">
-      <p className="eyebrow">Voice</p>
-      <h2>Voice</h2>
+      <p className="eyebrow">AI</p>
+      <h2>Engines</h2>
 
-      <p className="settings-card-copy">
-        Five slots: the main model under Models, and the four engines here. A
-        key added in either place joins one shared pool — every slot then
-        offers it, and each slot can still pick differently.
-      </p>
-      {/* Free tiers move faster than releases. This asks the Owner's MAIN
-          model what is free right now and swaps the lines below for its dated,
-          attributed answer — the model's claim, never presented as ours. */}
-      <div className="free-refresh-row">
+      {/* One-line purpose + the free-options refresh on the right (Oskar,
+          2026-07-27): what this page IS comes first, everything else is one of
+          four plainly-named sections below. */}
+      <div className="engine-intro-row">
+        <p className="settings-card-copy">
+          Four small models beside your main one — for hearing, speaking,
+          reading pictures and making pictures. Any key joins one shared pool.
+        </p>
         <button
           className="secondary-button"
           disabled={freeBusy}
           onClick={() => void updateFreePicks()}
+          title="Asks your main model what is free right now"
           type="button"
         >
-          {freeBusy ? "Asking Your Model…" : "Update Free Options"}
+          {freeBusy ? "Asking…" : "Update Free Options"}
         </button>
-        <span className="text-faint">
-          Asks your main model what is free right now.
-        </span>
       </div>
       {/* F6, with the answers and never behind a tooltip: attribution alone
           reads as a citation, and a citation is the opposite of a caveat —
@@ -2100,10 +2097,10 @@ function VoicePanel() {
         </p>
       ) : null}
 
-      <h3 className="settings-subhead">Voice Input (Speech To Text)</h3>
+      <section className="engine-section">
+      <h3 className="settings-subhead">Voice Input</h3>
       <p className="settings-card-copy">
-        Turns what you say into text — the mic button in chat. Whisper via
-        Groq (fast, free tier) or OpenAI.
+        The mic button — what you say becomes text.
       </p>
       <FreePick href="https://console.groq.com" pick={freePicks?.items.voiceIn}>
         Groq — free key, no card.
@@ -2136,13 +2133,11 @@ function VoicePanel() {
       />
       {error ? <p className="form-error">{error}</p> : null}
 
-      <div className="settings-card-divider" />
+      </section>
 
-      <h3 className="settings-subhead">Voice Output (Replies Read Aloud)</h3>
-      <p className="settings-card-copy">
-        The voice that reads replies — voice bubbles and the speaker toggle in
-        chat both use it.
-      </p>
+      <section className="engine-section">
+      <h3 className="settings-subhead">Voice Output</h3>
+      <p className="settings-card-copy">Replies read aloud.</p>
       <FreePick pick={freePicks?.items.voiceOut}>
         Local Voice — free forever, works offline.
       </FreePick>
@@ -2408,13 +2403,12 @@ function VoicePanel() {
       ) : null}
       {outputError ? <p className="form-error">{outputError}</p> : null}
 
-      <div className="settings-card-divider" />
+      </section>
 
-      <h3 className="settings-subhead">Vision (Photos)</h3>
+      <section className="engine-section">
+      <h3 className="settings-subhead">Picture Input</h3>
       <p className="settings-card-copy">
-        The camera button turns photos into text (a fridge shot becomes an
-        ingredient list). Powered by a vision-capable model — Gemini, Zhipu
-        BigModel or OpenAI.
+        The camera button — a photo becomes words.
       </p>
       <FreePick
         href="https://aistudio.google.com/apikey"
@@ -2450,15 +2444,14 @@ function VoicePanel() {
       />
       {visionError ? <p className="form-error">{visionError}</p> : null}
 
-      <div className="settings-card-divider" />
+      </section>
 
-      {/* A separate slot from the one above: reading a picture and drawing one
+      <section className="engine-section">
+      {/* A separate slot from Picture Input: reading a picture and drawing one
           are different models. Empty = Vaenyx never tries to draw. */}
-      <h3 className="settings-subhead">Pictures (Making Them)</h3>
+      <h3 className="settings-subhead">Picture Output</h3>
       <p className="settings-card-copy">
-        Ask for a picture in a chat and this engine makes one. Leave it off and
-        Vaenyx will not try — a text model can only claim to have drawn
-        something.
+        Ask in chat and a picture is made. Off means Vaenyx will not try.
       </p>
       <div className="engine-row">
       <label className="chat-font-field">
@@ -2572,6 +2565,7 @@ function VoicePanel() {
         Cloudflare Workers AI — free, about 170 pictures a day.
       </FreePick>
       {imageError ? <p className="form-error">{imageError}</p> : null}
+      </section>
     </section>
   );
 }

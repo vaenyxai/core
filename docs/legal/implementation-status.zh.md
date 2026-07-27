@@ -1,8 +1,8 @@
 # Vaenyx — 当前实现与数据处理明细表
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
-> 明细表版本 **2026-07-27.3** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-27**
-> 客户端 **0.2.1-dev.32** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
+> 明细表版本 **2026-07-27.4** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-27**
+> 客户端 **0.2.1-dev.38** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
 > 法律文件集 **v3.1** · 最低法律文件集 **v3.0** · 最低文案版本 **2.8**
 
 ## 本明细表的地位
@@ -34,9 +34,9 @@
 |---|---|---|---|
 | `feature.community-sharing.preference-ui` | **active** | 否 | 无 |
 | `feature.community-sharing.upload-engine` | **available-off** | 是 | 传输途中的一条已去标识化的示例,取走即删 |
-| `feature.community-sharing.upload-endpoint` | **not-built** | 否 | 无 |
-| `feature.community-sharing.deidentification-pipeline` | **not-built** | — | — |
-| `feature.community-sharing.sensitive-category-gate` | **not-built** | — | — |
+| `feature.community-sharing.upload-endpoint` | **active** | 否 | 传输途中的一条已去标识化的示例,取走即删 |
+| `feature.community-sharing.deidentification-pipeline` | **available-off** | — | — |
+| `feature.community-sharing.sensitive-category-gate` | **available-off** | — | — |
 | `feature.community-sharing.server-evidence-record` | **backend-only** | — | — |
 | `feature.publication.core` | **active** | 是 | 声明式文件 + 已登录身份 |
 | `feature.publication.example-attachment` | **not-built** | — | — |
@@ -61,9 +61,14 @@
 必需的门槛: `legal.consent.flywheel.activate`, `legal.consent.flywheel.receive`, `legal.consent.flywheel.sensitiveAsk`, `flywheel.queue.window`, `flywheel.queue.held`
 实现证据: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written. Verified in production at dev.21: the capability switch is on, every Part K string renders verbatim at copy 2.7, and a real send completed end to end. The evidence block is now discarded rather than written — a test pins the evidence table at zero rows after an accepted send — so the Schedule's statement that we hold no consent record for a contributing household is true in code and in production, not only in intent.
 
-**`feature.community-sharing.upload-endpoint`** — **标记为启用之前必须先完成:**《服务条款》第 7.4 条已不再载有分享所需的许可、保证与精神权利同意机制(v3.0 删除,因其描述的是并不存在的能力)。这些条款必须重新起草、呈示,并依第 18.1A 条作为实质修订被单独接受。继续使用或安装更新,不得被视为接受。
+**`feature.community-sharing.upload-endpoint`** — 改进分享(Part K)的服务端,已在发布服务上线。它校验发送实例出示的凭证并随即丢弃;拒绝在分享关闭状态下产生的发送;发布者未打开接收开关即拒绝,且不存储任何内容;执行 32KB 大小上限与按贡献者的限流,超限拒收而非先存后删;投递仅保存至被取走为止,14 天无人取走即原样删除。
+实现证据: Deployed to production; a real send completed end to end at client dev.21. A test pins the evidence table at zero rows after an accepted send.
 
-**`feature.community-sharing.sensitive-category-gate`** — 随上传能力一同交付,不会更早。
+**`feature.community-sharing.deidentification-pipeline`** — 在贡献用户的设备上、内容进入队列之前运行:自动剥除个人信息,队列会显示处理结果,用户是最后一道检查。自动且不完美,且在所有提及之处均如此描述(K3)。仅在用户开启分享后运作。
+实现证据: Part of the dev.21 production end-to-end send. The shipped K3 consent describes it, and shipped copy is audited verbatim against behaviour.
+
+**`feature.community-sharing.sensitive-category-gate`** — 健康、家人与金钱的内容永不进入自动通道:被扣在队列之外,每次单独询问(K12 扣下、G4 询问)。用户不作为,该条即不发送。仅在分享开启时才有意义 —— 分享关闭时根本不排队。
+实现证据: K12 and the G4 ask string ship in the audited string table at copy 2.7 and later; the held state was part of the dev.21 verified build.
 
 **`feature.community-sharing.server-evidence-record`** — D1 表 flywheel_evidence 已存在(migration 0003),但没有任何代码向其写入,因为不存在上传路径。
 

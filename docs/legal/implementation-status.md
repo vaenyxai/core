@@ -1,8 +1,8 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-27.3** · effective from **2026-07-26** · verified **2026-07-27**
-> Client **0.2.1-dev.32** · Server **vaenyx-core-cloud (migrations 0001-0007)**
+> Schedule version **2026-07-27.4** · effective from **2026-07-26** · verified **2026-07-27**
+> Client **0.2.1-dev.38** · Server **vaenyx-core-cloud (migrations 0001-0007)**
 > Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **2.8**
 
 ## Status of this Schedule
@@ -34,9 +34,9 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 |---|---|---|---|
 | `feature.community-sharing.preference-ui` | **active** | no | none |
 | `feature.community-sharing.upload-engine` | **available-off** | yes | one de-identified example in transit, deleted on collection |
-| `feature.community-sharing.upload-endpoint` | **not-built** | no | none |
-| `feature.community-sharing.deidentification-pipeline` | **not-built** | — | — |
-| `feature.community-sharing.sensitive-category-gate` | **not-built** | — | — |
+| `feature.community-sharing.upload-endpoint` | **active** | no | one de-identified example in transit, deleted on collection |
+| `feature.community-sharing.deidentification-pipeline` | **available-off** | — | — |
+| `feature.community-sharing.sensitive-category-gate` | **available-off** | — | — |
 | `feature.community-sharing.server-evidence-record` | **backend-only** | — | — |
 | `feature.publication.core` | **active** | yes | declarative files + signed-in identity |
 | `feature.publication.example-attachment` | **not-built** | — | — |
@@ -61,9 +61,14 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 Required gates: `legal.consent.flywheel.activate`, `legal.consent.flywheel.receive`, `legal.consent.flywheel.sensitiveAsk`, `flywheel.queue.window`, `flywheel.queue.held`
 Evidence: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written. Verified in production at dev.21: the capability switch is on, every Part K string renders verbatim at copy 2.7, and a real send completed end to end. The evidence block is now discarded rather than written — a test pins the evidence table at zero rows after an accepted send — so the Schedule's statement that we hold no consent record for a contributing household is true in code and in production, not only in intent.
 
-**`feature.community-sharing.upload-endpoint`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance.
+**`feature.community-sharing.upload-endpoint`** — The server side of improvement sharing (Part K), live at the publish service. It validates the evidence a sending instance presents and then discards it; refuses sends marked as made with sharing off; refuses where the publisher has not switched receiving on, storing nothing; enforces the 32 KB size cap and per-contributor rate limits, refusing over-limit sends rather than storing them; and holds a delivery only until it is collected or expires unread at 14 days.
+Evidence: Deployed to production; a real send completed end to end at client dev.21. A test pins the evidence table at zero rows after an accepted send.
 
-**`feature.community-sharing.sensitive-category-gate`** — Ships with the upload capability, not before it.
+**`feature.community-sharing.deidentification-pipeline`** — Runs on the contributing user's device before anything is queued: personal details are stripped automatically, and the queue shows the result, so the user is the last check. Automatic and imperfect, and described as such everywhere it is mentioned (K3). Operates only when the user has turned sharing on.
+Evidence: Part of the dev.21 production end-to-end send. The shipped K3 consent describes it, and shipped copy is audited verbatim against behaviour.
+
+**`feature.community-sharing.sensitive-category-gate`** — Health, family and money content never enters the automatic path: it is held out of the queue and asked about individually, every time (K12 hold, G4 ask). Doing nothing means the item is not sent. Meaningful only while sharing is on — with sharing off, nothing queues at all.
+Evidence: K12 and the G4 ask string ship in the audited string table at copy 2.7 and later; the held state was part of the dev.21 verified build.
 
 **`feature.community-sharing.server-evidence-record`** — D1 table flywheel_evidence exists (migration 0003) but nothing writes to it, because no upload path exists.
 
