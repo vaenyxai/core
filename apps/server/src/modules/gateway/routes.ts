@@ -2551,6 +2551,9 @@ export async function registerGatewayRoutes(
           context.config.routinesDirectory,
           controller.signal,
           context.config.libraryDirectory,
+          // With a picture engine connected, the same single judgment also
+          // decides draw / not-draw — no second classifier anywhere.
+          getImageEngineStatus(context.config.secretsDirectory).connected,
         );
       } catch {
         return {
@@ -2558,6 +2561,11 @@ export async function registerGatewayRoutes(
           routineId: null,
           methodId: null,
           editRequest: null,
+          taskRequest: null,
+          taskSchedule: null,
+          createDescription: null,
+          clarifyQuestion: null,
+          imagePrompt: null,
           note: "",
         };
       }
@@ -2701,6 +2709,9 @@ export async function registerGatewayRoutes(
                 : {}),
               ...(request.body.imageId
                 ? { imageId: request.body.imageId }
+                : {}),
+              ...(request.body.imagePrompt
+                ? { imagePrompt: request.body.imagePrompt }
                 : {}),
               dataDirectory: context.config.dataDirectory,
               secretsDirectory: context.config.secretsDirectory,

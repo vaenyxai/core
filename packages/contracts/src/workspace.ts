@@ -312,6 +312,10 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     // Phase B: an uploaded photo's id — attached to the Owner message and
     // handed to the main model directly when it reads images.
     imageId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    // draw verdict: the classifier already judged this message as asking for a
+    // picture and produced the English prompt — the turn generates with it
+    // instead of judging again (one judgment per message).
+    imagePrompt: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),
   },
   { additionalProperties: false },
 );
@@ -340,6 +344,11 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       // quote one include GST"). The chat proposes the edit and shows what
       // changed; nothing is written until they approve it (copy pack B4).
       Type.Literal("edit-method"),
+      // The Owner wants a picture GENERATED. Only offered while an image
+      // engine is connected; imagePrompt carries the English prompt, so the
+      // one classification answers routine/task/create/draw in a single call
+      // (Oskar, 2026-07-27).
+      Type.Literal("draw"),
     ]),
     routineId: Type.Union([Type.String(), Type.Null()]),
     // For edit-method: which installed Method, and what to change about it.
@@ -373,6 +382,8 @@ export const ClassifyRoutineResponseSchema = Type.Object(
     createDescription: Type.Union([Type.String(), Type.Null()]),
     // For clarify-create: the one question to ask, in the Owner's language.
     clarifyQuestion: Type.Union([Type.String(), Type.Null()]),
+    // For draw: the English image prompt, ready for the picture engine.
+    imagePrompt: Type.Union([Type.String(), Type.Null()]),
     note: Type.String(),
   },
   { additionalProperties: false },

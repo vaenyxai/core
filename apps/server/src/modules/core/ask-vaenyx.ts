@@ -15,7 +15,6 @@ import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
 import {
   buildImagePrompt,
-  classifyImageIntent,
   generateImage,
   isImageFollowUp,
   getImageEngineStatus,
@@ -514,6 +513,10 @@ export interface CreateAskVaenyxMessageOptions {
   // Phase B: an uploaded photo's id attached to this owner message; handed to
   // the main model directly when it reads images.
   imageId?: string;
+  // draw verdict: the message classifier (the ONE per-message judgment) already
+  // decided this asks for a picture and produced the English prompt. The turn
+  // generates with it instead of judging again.
+  imagePrompt?: string;
   // Where stored photos live (needed to build the data URL for the model).
   dataDirectory?: string;
   // Where the model keys live. Needed so a photo can still be READ when the
@@ -784,24 +787,24 @@ export async function createAskVaenyxMessage(
       options?.secretsDirectory &&
       getImageEngineStatus(options.secretsDirectory).connected
     ) {
-      // The obvious phrasings take the fast path; everything else is judged by
-      // the main model with the conversation in view (Oskar's call, after two
-      // keyword misses in one afternoon — see classifyImageIntent).
+      // The classifier that already judges every message (routine / task /
+      // create) now judges draw too, and sends its verdict here as
+      // options.imagePrompt — one judgment per message, no second call
+      // (Oskar, 2026-07-27). The obvious phrasings keep a keyword fast path
+      // as a belt-and-braces for callers that skipped classification.
+      const suppliedPrompt = options?.imagePrompt?.trim() || null;
       const fastYes =
         looksLikeImageRequest(content) ||
         (isImageFollowUp(content) &&
           conversationHasGeneratedImage(database, conversationId));
-      const intent = fastYes
-        ? { draw: true as const, prompt: null }
-        : await classifyImageIntent(provider, history, content);
-      if (intent.draw) {
+      if (suppliedPrompt || fastYes) {
         let imageNote: string;
         try {
           // English prompt first: the image model reads English, not the
           // Owner's language (see buildImagePrompt for the landscape story).
-          // The judge usually hands the prompt over in the same call.
+          // The judge usually handed the prompt over with its verdict.
           const imagePrompt =
-            intent.prompt ?? (await buildImagePrompt(provider, content));
+            suppliedPrompt ?? (await buildImagePrompt(provider, content));
           generatedImageId = await generateImage(
             options.secretsDirectory,
             options.dataDirectory,

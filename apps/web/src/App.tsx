@@ -5420,6 +5420,7 @@ function AskVaenyxPanel({
   // toggle reads finished replies aloud (persisted per device).
   const [voiceReady, setVoiceReady] = useState(false);
   const [visionReady, setVisionReady] = useState(false);
+  const [imageEngineReady, setImageEngineReady] = useState(false);
   // Phase B: an uploaded photo waiting to ride on the next message (direct
   // vision mode); null = no attachment pending.
   const [pendingImageId, setPendingImageId] = useState<string | null>(null);
@@ -5468,6 +5469,11 @@ function AskVaenyxPanel({
       .catch(() => undefined);
     void fetchVisionStatus()
       .then((status) => setVisionReady(status.connected))
+      .catch(() => undefined);
+    // With a picture engine connected, every message is classified (the judge
+    // also decides draw), so the composer needs to know.
+    void fetchImageEngine()
+      .then((status) => setImageEngineReady(status.connected))
       .catch(() => undefined);
   }, []);
   // Read a reply aloud with the best available voice: Gemini TTS when the
@@ -5673,7 +5679,16 @@ function AskVaenyxPanel({
     if (!requestedConversationId) return;
 
     if (requestedConversationId === activeConversationId) {
-      onRequestedConversationHandled();
+      // Same conversation, but reload when nothing is on screen: "already
+      // open" with an emptied message list showed a blank chat until a manual
+      // refresh (Oskar, 2026-07-27).
+      if (messages.length === 0 && !loadingMessages) {
+        void openConversation(requestedConversationId).finally(
+          onRequestedConversationHandled,
+        );
+      } else {
+        onRequestedConversationHandled();
+      }
       return;
     }
 
@@ -6119,6 +6134,7 @@ function AskVaenyxPanel({
     let editRequest: string | null = null;
     let createDescription: string | null = null;
     let clarifyCreateQuestion: string | undefined;
+    let drawPrompt: string | undefined;
     // The FIRST message of a brand-new chat is exactly where people state what
     // they want ("daily AI news at 7am"), so it must be classified too. The
     // classifier needs a conversation to read history from, so create it first
@@ -6141,7 +6157,12 @@ function AskVaenyxPanel({
       activeConversationId ?? preCreatedConversationId;
     if (
       classifyConversationId &&
-      messageMaybeIntent(content, messages, libraryRoutines)
+      // With a picture engine connected, every message goes to the judge:
+      // draw-requests come in the words of the conversation, and the keyword
+      // prefilter cannot see them (Oskar, 2026-07-27). Without one, the
+      // cheaper prefilter stands.
+      (imageEngineReady ||
+        messageMaybeIntent(content, messages, libraryRoutines))
     ) {
       setSending(true);
       let verdict: Awaited<ReturnType<typeof classifyMessage>> | null = null;
@@ -6244,6 +6265,12 @@ function AskVaenyxPanel({
       ) {
         editMethodId = verdict.methodId;
         editRequest = verdict.editRequest;
+      }
+      // draw: the one per-message judgment decided this asks for a picture and
+      // produced the English prompt. It rides along with the send; the server
+      // generates before the model speaks and hands it the truth.
+      if (verdict?.decision === "draw" && verdict.imagePrompt) {
+        drawPrompt = verdict.imagePrompt;
       }
     }
 
@@ -6371,6 +6398,7 @@ function AskVaenyxPanel({
         clarifyCreateQuestion,
         voiceAudioId,
         imageId,
+        drawPrompt,
       );
 
       // Voice replies: a voice turn always answers aloud (it is a spoken
@@ -15706,12 +15734,22 @@ function VaenyxWorkspace({
   const defaultProjectId = generalProjectId ?? workspace.projects[0]?.id ?? "";
   const defaultSkillId = workspace.skills[0]?.id ?? "";
   const [, setError] = useState<string | null>(null);
+  // The URL is read DURING state initialisation, not in an effect: a
+  // notification deep-link or a refresh must paint the target page first
+  // time, not paint home and then jump there (Oskar, 2026-07-27).
+  const bootParams = new URLSearchParams(window.location.search);
+  const bootTaskId = bootParams.get("task");
+  const bootChatId = bootParams.get("chat");
   const [requestedConversationId, setRequestedConversationId] = useState<
     string | null
-  >(null);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [portalView, setPortalView] = useState<PortalView>("new");
-  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
+  >(bootChatId);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
+    bootChatId ?? bootTaskId,
+  );
+  const [portalView, setPortalView] = useState<PortalView>(
+    bootTaskId ? "task" : bootChatId ? "chat" : "new",
+  );
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(bootTaskId);
   const [requestedProjectId, setRequestedProjectId] = useState<string | null>(
     null,
   );
@@ -16083,31 +16121,31 @@ function VaenyxWorkspace({
     setMobileSidebarOpen(false);
   }
 
-  // The address bar mirrors where you are, and a load follows it. This is what
-  // makes BOTH of these work: a notification's URL opens the thing it is
-  // about, and a refresh stays on the page you were on instead of dumping you
-  // at home (Oskar, 2026-07-27). The params are deliberately NOT cleared any
-  // more — they are the location now, and the sync effect below keeps them
-  // current as you move around.
+  // The address bar mirrors where you are, and a load follows it — that is
+  // what makes a notification's URL open the thing it is about, and a refresh
+  // stay on the page you were on. The target states are initialised straight
+  // from the URL above (no paint-home-then-jump); the ?view= restore happens
+  // here because Screen has its own initialiser logic.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const taskId = params.get("task");
-    const chatId = params.get("chat");
-    const view = params.get("view");
-    if (taskId) {
-      openThreadTask(taskId);
-    } else if (chatId) {
-      openDraftConversation(chatId);
-    } else if (view && RESTORABLE_SCREENS.includes(view as Screen)) {
+    const view = bootParams.get("view");
+    if (!bootTaskId && !bootChatId && view && RESTORABLE_SCREENS.includes(view as Screen)) {
       setScreen(view as Screen);
     }
     // Runs once per load; afterwards the sync effect owns the URL.
   }, []);
 
-  // Which chat the sidebar selection points at, for the URL below.
+  // Which chat the sidebar selection points at, for the URL below. The second
+  // clause covers deep-link opens, where selectedThreadId holds the
+  // conversation id itself until the thread row exists.
   const selectedThreadConversationId =
     workspace.threads.find((thread) => thread.id === selectedThreadId)
-      ?.conversationId ?? null;
+      ?.conversationId ??
+    (selectedThreadId &&
+    workspace.threads.some(
+      (thread) => thread.conversationId === selectedThreadId,
+    )
+      ? selectedThreadId
+      : null);
 
   useEffect(() => {
     const url = new URL(window.location.href);

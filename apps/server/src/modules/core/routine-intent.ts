@@ -44,6 +44,7 @@ export async function classifyRoutineIntent(
   routinesDirectory: string,
   signal: AbortSignal,
   libraryDirectory?: string,
+  imageEngineConnected = false,
 ): Promise<ClassifyRoutineResponse> {
   const none: ClassifyRoutineResponse = {
     decision: "none",
@@ -54,6 +55,7 @@ export async function classifyRoutineIntent(
     taskSchedule: null,
     createDescription: null,
     clarifyQuestion: null,
+    imagePrompt: null,
     note: "",
   };
 
@@ -139,6 +141,15 @@ export async function classifyRoutineIntent(
     "  understanding instead. Use it the same way for an edit: if the Owner",
     "  clearly wants an installed Method changed but it is not clear WHICH one,",
     "  ask which Method they mean.",
+    ...(imageEngineConnected
+      ? [
+          '- "draw": the Owner wants a picture GENERATED (drawn/created) — a fresh',
+          '  ask in any wording, or a follow-up that only makes sense as one here',
+          '  ("try again", "就是一只卡通的猫咪你试一下" after image talk). NOT a',
+          "  question about an existing photo. Set imagePrompt to ONE short",
+          "  ENGLISH image prompt, subject first, then style.",
+        ]
+      : []),
     '- "none": ordinary conversation, or a question to answer directly here.',
     "",
     "If the recent conversation shows Vaenyx asked a clarifying question about",
@@ -176,6 +187,7 @@ export async function classifyRoutineIntent(
     '    to build, in the Owner\'s language, else null>",',
     '  "clarifyQuestion": "<for clarify-create, the one question to ask, in the',
     '    Owner\'s language, else null>",',
+    '  "imagePrompt": "<for draw, one short English image prompt, else null>",',
     '  "note": "<one short sentence, or empty>" }',
   ].join("\n");
 
@@ -203,6 +215,9 @@ export async function classifyRoutineIntent(
     "create-routine",
     "clarify-create",
     "edit-method",
+    // draw only counts while an engine is connected; a stray verdict from a
+    // model that ignored the missing option degrades to plain chat.
+    ...(imageEngineConnected ? ["draw"] : []),
   ].includes(parsed.decision as string)
     ? (parsed.decision as ClassifyRoutineResponse["decision"])
     : "none";
@@ -229,6 +244,17 @@ export async function classifyRoutineIntent(
     typeof parsed.clarifyQuestion === "string" && parsed.clarifyQuestion.trim()
       ? parsed.clarifyQuestion.trim().slice(0, 500)
       : null;
+  const imagePrompt =
+    typeof parsed.imagePrompt === "string" && parsed.imagePrompt.trim()
+      ? parsed.imagePrompt.trim().slice(0, 600)
+      : null;
+
+  if (decision === "draw") {
+    // No usable prompt = no draw: generating from a guess is worse than a
+    // plain reply that answers normally.
+    if (!imagePrompt) return none;
+    return { ...none, decision: "draw", imagePrompt, note };
+  }
 
   // Schedule: validated strictly. A malformed time would otherwise become a
   // task that fires at the wrong hour (or never), so anything that does not
@@ -284,6 +310,7 @@ export async function classifyRoutineIntent(
       taskSchedule: null,
       createDescription: null,
       clarifyQuestion: null,
+      imagePrompt: null,
       note,
     };
   }
@@ -299,6 +326,7 @@ export async function classifyRoutineIntent(
       taskSchedule,
       createDescription: null,
       clarifyQuestion: null,
+      imagePrompt: null,
       note,
     };
   }
@@ -315,6 +343,7 @@ export async function classifyRoutineIntent(
       taskSchedule: null,
       createDescription: createDescription ?? content.trim().slice(0, 2000),
       clarifyQuestion: null,
+      imagePrompt: null,
       note,
     };
   }
@@ -339,6 +368,7 @@ export async function classifyRoutineIntent(
       taskSchedule: null,
       createDescription: null,
       clarifyQuestion: null,
+      imagePrompt: null,
       note,
     };
   }
@@ -356,6 +386,7 @@ export async function classifyRoutineIntent(
       taskSchedule: null,
       createDescription: null,
       clarifyQuestion,
+      imagePrompt: null,
       note,
     };
   }
@@ -370,6 +401,7 @@ export async function classifyRoutineIntent(
     taskSchedule,
     createDescription: null,
     clarifyQuestion: null,
+    imagePrompt: null,
     note,
   };
 }

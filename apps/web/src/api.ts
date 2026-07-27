@@ -464,6 +464,7 @@ async function streamMessageRequest(
   clarifyCreate?: string,
   voiceAudioId?: string,
   imageId?: string,
+  imagePrompt?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -480,6 +481,7 @@ async function streamMessageRequest(
       ...(clarifyCreate ? { clarifyCreate } : {}),
       ...(voiceAudioId ? { voiceAudioId } : {}),
       ...(imageId ? { imageId } : {}),
+      ...(imagePrompt ? { imagePrompt } : {}),
     }),
     signal: callbacks.signal,
   });
@@ -550,6 +552,7 @@ export function streamAskVaenyxMessage(
   clarifyCreate?: string,
   voiceAudioId?: string,
   imageId?: string,
+  imagePrompt?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -561,6 +564,7 @@ export function streamAskVaenyxMessage(
     clarifyCreate,
     voiceAudioId,
     imageId,
+    imagePrompt,
   );
 }
 
