@@ -1794,7 +1794,7 @@ const GEMINI_TTS_VOICES = [
 ];
 
 function VoicePanel() {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [vision, setVision] = useState<VisionStatus | null>(null);
@@ -2529,6 +2529,11 @@ function VoicePanel() {
             Workers AI template. The Account ID is in the address bar once you
             are signed in — dash.cloudflare.com/&lt;that long code&gt;. A token
             made from the template cannot tell us its account, so paste both.
+          </p>
+          {/* F1 / TPN n.3: this token field connects a cloud model, so the
+              third-party notice renders here like every other such surface. */}
+          <p className="context-disclaimer">
+            {t("legal.notice.modelConnect.cloud")}
           </p>
         </>
       ) : null}
@@ -8799,6 +8804,7 @@ function SlotKeyAdd({
   onConnected: () => void;
   providers: ModelProviderInfo[];
 }) {
+  const { t } = useI18n();
   const candidates = providers.filter(
     (provider) =>
       !provider.connected &&
@@ -8889,6 +8895,9 @@ function SlotKeyAdd({
       >
         Cancel
       </button>
+      {/* F1 / TPN n.3: every surface that connects a cloud model renders the
+          third-party notice — this inline add is such a surface. */}
+      <p className="context-disclaimer">{t("legal.notice.modelConnect.cloud")}</p>
       {error ? <p className="form-error">{error}</p> : null}
     </div>
   );
