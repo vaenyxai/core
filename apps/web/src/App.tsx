@@ -5718,6 +5718,9 @@ function AskVaenyxPanel({
 
   function statusLabel(code: string): string {
     const zh = lang === "zh";
+    if (code === "classifying") {
+      return zh ? "正在理解你的要求…" : "Working out what you're asking…";
+    }
     if (code === "image-prompt") {
       return zh ? "正在把要求写成画图 prompt…" : "Writing the picture prompt…";
     }
@@ -6256,12 +6259,43 @@ function AskVaenyxPanel({
         messageMaybeIntent(content, messages, libraryRoutines))
     ) {
       setSending(true);
+      // The judge takes a model round-trip, and for its first hours the screen
+      // showed NOTHING until it came back — the Owner's own message appeared
+      // five seconds after Send (Oskar, 2026-07-27). The bubble now appears
+      // immediately with a status line; the judgment happens behind it.
+      setPrompt("");
+      setStreamStatus("classifying");
+      const pendingId = `pending-owner-${crypto.randomUUID()}`;
+      setMessages((current) => [
+        ...current,
+        {
+          id: pendingId,
+          conversationId: classifyConversationId,
+          role: "owner",
+          content,
+          status: "completed",
+          webSearchUsed: false,
+          createdAt: new Date().toISOString(),
+          voice: false,
+          audioId: null,
+          imageId: imageId ?? null,
+          imagePrompt: null,
+        },
+      ]);
+      // The streaming send below adds its own owner bubble; this early one
+      // hands over the moment any later path takes charge.
+      const removePending = () =>
+        setMessages((current) =>
+          current.filter((message) => message.id !== pendingId),
+        );
       let verdict: Awaited<ReturnType<typeof classifyMessage>> | null = null;
       try {
         verdict = await classifyMessage(classifyConversationId, content);
       } catch {
         // Best-effort: leave verdict null and fall through to a plain reply.
       }
+      setStreamStatus(null);
+      removePending();
       if (verdict?.decision === "use-routine" && verdict.routineId) {
         try {
           await attachRoutineToChat(classifyConversationId, verdict.routineId);
@@ -7458,7 +7492,11 @@ function AskVaenyxPanel({
         ) : null}
 
         <div
-          className="ask-vaenyx-messages"
+          className={
+            pendingImageId
+              ? "ask-vaenyx-messages composer-grown"
+              : "ask-vaenyx-messages"
+          }
           onTouchEnd={() => void handleMessagesPullEnd()}
           onTouchMove={handleMessagesPullMove}
           onTouchStart={handleMessagesPullStart}

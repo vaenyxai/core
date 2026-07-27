@@ -2143,17 +2143,22 @@ select {
   max-height: none;
   overflow: visible;
   /* The bottom padding has to clear the sticky composer, or the last lines of
-     a long reply come to rest underneath it — which is what happened on the
-     phone (Oskar, 2026-07-26). Generous on purpose: the composer grows when a
-     photo is attached. */
-  padding: 44px max(18px, calc((100% - 820px) / 2)) 200px;
+     a long reply come to rest underneath it (the 2026-07-26 phone bug). It was
+     a flat 200px "to be generous", which read as a wall of dead space under
+     every finished conversation (Oskar, 2026-07-27) — now it matches the
+     composer's normal height, and grows only while a photo is attached. */
+  padding: 44px max(18px, calc((100% - 820px) / 2)) 120px;
+}
+
+.ask-vaenyx-messages.composer-grown {
+  padding-bottom: 210px;
 }
 
 /* Scroll target after a send: land the newest message clear of the sticky
    composer instead of underneath it. */
 .chat-end-anchor {
   height: 1px;
-  scroll-margin-bottom: 150px;
+  scroll-margin-bottom: 120px;
 }
 
 .ask-vaenyx-message {

@@ -1072,20 +1072,22 @@ class CodexAskVaenyxSession {
     // code silently dropped. Their text is the model's own working notes —
     // shown live in the chat and gone when the reply lands.
     if (item?.type === "reasoning") {
+      const partsText = (parts: unknown): string =>
+        Array.isArray(parts)
+          ? parts
+              .map((part) =>
+                typeof part === "string"
+                  ? part
+                  : typeof (part as { text?: unknown })?.text === "string"
+                    ? String((part as { text: string }).text)
+                    : "",
+              )
+              .join("\n")
+          : "";
       const text =
         typeof item.text === "string" && item.text.trim()
           ? item.text
-          : Array.isArray(item.summary)
-            ? item.summary
-                .map((part) =>
-                  typeof part === "string"
-                    ? part
-                    : typeof (part as { text?: unknown })?.text === "string"
-                      ? String((part as { text: string }).text)
-                      : "",
-                )
-                .join("\n")
-            : "";
+          : partsText(item.summary).trim() || partsText(item.content);
       if (this.#turn.onThinking && text.trim()) {
         this.#turn.onThinking(`${text.trim()}\n`);
       }
