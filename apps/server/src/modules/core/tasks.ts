@@ -1027,8 +1027,12 @@ function buildResearchContext(
 // A run must hand back the finished, ready-to-read deliverable — without this
 // the model tends to return a thin recap (~300 chars) instead of the thing the
 // Owner actually wants to read.
+// "Not an acknowledgement" is in here because it happened, twice: with the
+// tuning discussion in view, the model read the run as "the Owner restated
+// their preferences" and replied 收到/明白 + a bullet list of the rules —
+// a receipt where the newspaper should be (Oskar, 2026-07-27).
 const RUN_RESULT_INSTRUCTION =
-  "This is a background run of a saved task. Produce the complete, ready-to-read result now — organized for reading, with source links where relevant — not a plan, and not a recap of what you would do.";
+  "This is a background run of a saved task, executing NOW. Produce the complete, ready-to-read deliverable itself — organized for reading, with source links where relevant. Never reply with an acknowledgement, a confirmation of rules, a restatement of preferences, or a plan: if you find yourself writing '收到', '明白', 'Understood' or listing the task's own settings, stop and produce the actual result instead.";
 
 // Any format, scope or preference the Owner tuned in the task's conversation
 // carries into every later run — chatting with the task IS how it is tuned.
@@ -1059,7 +1063,7 @@ function buildTaskConversationContext(
         `${message.role === "owner" ? "Owner" : "Vaenyx"}: ${message.content.slice(0, 1500)}`,
     )
     .join("\n");
-  return `The Owner and Vaenyx have discussed this task before. Honor any format, scope or preference agreed in that discussion:\n${transcript}`;
+  return `The Owner and Vaenyx have discussed this task before. Honor any format, scope or preference agreed there — but that discussion is FINISHED SETTINGS, not the current request. Do not reply to it and do not confirm it; apply it silently to this run's deliverable:\n${transcript}`;
 }
 
 // Re-run a codex-harness task by id: Forge (read-only repo) or Vaenyx research
