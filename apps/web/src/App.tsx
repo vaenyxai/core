@@ -649,7 +649,7 @@ function AuthScreen({
     <main className="auth-shell">
       <section className="auth-card">
         <div className="brand auth-brand">
-          <span className="brand-mark">V</span>
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
           <span>Vaenyx</span>
         </div>
 
@@ -7282,7 +7282,7 @@ function AskVaenyxPanel({
         {loadingMessages && messages.length === 0 ? (
           <div className="loading-screen chat-splash">
             <div>
-              <span className="brand-mark">V</span>
+              <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
               <p>{lang === "zh" ? "正在打开对话…" : "Opening the chat…"}</p>
             </div>
           </div>
@@ -16596,7 +16596,7 @@ function VaenyxWorkspace({
       ) : null}
       <aside className={`sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`}>
         <div className="brand sidebar-brand">
-          <span className="brand-mark">V</span>
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
           <span>{workspace.mode?.agentName?.trim() || "Vaenyx"}</span>
           {/* The mode marker sits with the identity it belongs to (Oskar,
               dev.171) instead of floating over the sign-out row. */}
@@ -17179,7 +17179,7 @@ function InstallAcceptanceGate({ children }: { children: ReactNode }) {
     return (
       <main className="loading-screen">
         <div>
-          <span className="brand-mark">V</span>
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
           <p>Loading…</p>
         </div>
       </main>
@@ -17327,7 +17327,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
     return (
       <main className="acceptance-screen">
         <div className="acceptance-card">
-          <span className="brand-mark">V</span>
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
           <h2>{zh ? "都设好了" : "You're set up"}</h2>
           <p className="settings-card-copy">
             {zh
@@ -17378,7 +17378,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   return (
     <main className="acceptance-screen">
       <div className="acceptance-card">
-        <span className="brand-mark">V</span>
+        <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
         <h2>{zh ? "连接第一个模型" : "Connect your first model"}</h2>
         <p className="settings-card-copy">
           {zh
@@ -17552,7 +17552,7 @@ function ModelConnectGate({ children }: { children: ReactNode }) {
   if (ready === null) {
     return (
       <main className="loading-screen">
-        <span className="brand-mark">V</span>
+        <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
         <p>Loading…</p>
       </main>
     );
@@ -17596,7 +17596,7 @@ function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
   return (
     <main className="acceptance-screen">
       <div className="acceptance-card">
-        <span className="brand-mark">V</span>
+        <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
         <p className="acceptance-ai">
           {t("legal.disclaimer.aiGeneral.firstRun")}
         </p>
@@ -17679,7 +17679,7 @@ export function App() {
     return (
       <main className="loading-screen">
         <div>
-          <span className="brand-mark">V</span>
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
           <h1>Vaenyx needs attention.</h1>
           <p>{fatalError}</p>
         </div>
@@ -17691,7 +17691,7 @@ export function App() {
     return (
       <main className="loading-screen">
         <div>
-          <span className="brand-mark">V</span>
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
           <p>Starting your private Vaenyx Instance...</p>
         </div>
       </main>
@@ -17714,7 +17714,7 @@ export function App() {
     return (
       <main className="loading-screen">
         <div>
-          <span className="brand-mark">V</span>
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
           <p>Loading your workspace...</p>
         </div>
       </main>

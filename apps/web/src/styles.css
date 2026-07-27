@@ -6101,3 +6101,7 @@ html, body { overscroll-behavior-y: none; }
 .sharing-status { margin: 0 0 var(--space-3); font-size: var(--fs-md); font-weight: 600; color: var(--accent); }
 .sharing-actions { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; margin: var(--space-2) 0 var(--space-3); }
 .sharing-mode-field { flex: 0 1 320px; }
+/* The real mark everywhere the styled letter V used to sit (Oskar,
+   2026-07-27: swapping the asset alone changed nothing visible - the UI drew
+   its own V). The circle chrome stays; the letter becomes the moon-embrace. */
+.brand-mark-img { padding: 5px; object-fit: contain; font-size: 0; }
