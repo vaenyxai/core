@@ -1,8 +1,10 @@
 {
+  "id": "vaenyx-app",
   "name": "Vaenyx",
   "short_name": "Vaenyx",
   "description": "Self-hosted, local-first personal agent framework.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#262624",
   "theme_color": "#262624",
