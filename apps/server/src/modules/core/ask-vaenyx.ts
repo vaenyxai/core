@@ -633,10 +633,6 @@ export async function createAskVaenyxMessage(
   let assistantStatus: "completed" | "failed";
   let webSearchUsed = false;
   let streamed = "";
-  // The backend that answered this turn, captured for the image-prompt rewrite
-  // below — the same model that talked to the Owner translates their request
-  // for the image model, so a pinned provider stays pinned.
-  let turnProvider: Parameters<typeof buildImagePrompt>[0] | null = null;
   let generatedImageId: string | null = null;
 
   const baseContext = getConversationProjectContext(database, conversationId);
@@ -782,7 +778,6 @@ export async function createAskVaenyxMessage(
     // the model cheerfully announced "here is your new cat photo" for a turn
     // where nothing was generated at all (Oskar, 2026-07-27): it cannot know
     // what it cannot see, so the outcome is now handed to it in context.
-    turnProvider = provider;
     if (
       options?.dataDirectory &&
       options?.secretsDirectory &&
