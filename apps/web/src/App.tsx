@@ -16491,6 +16491,10 @@ function VaenyxWorkspace({
     url.searchParams.delete("view");
     url.searchParams.delete("task");
     url.searchParams.delete("chat");
+    // A hard-refresh's cache-busting ?r must not linger: a home-screen
+    // shortcut created while it sat in the address bar would open with it
+    // forever, busting the cache on every launch.
+    url.searchParams.delete("r");
     if (screen !== "ask-vaenyx") {
       url.searchParams.set("view", screen);
     } else if (focusedTaskId) {
