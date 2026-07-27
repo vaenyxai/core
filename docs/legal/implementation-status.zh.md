@@ -1,8 +1,8 @@
 # Vaenyx — 当前实现与数据处理明细表
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
-> 明细表版本 **2026-07-27.1** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-27**
-> 客户端 **0.2.1-dev.7** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
+> 明细表版本 **2026-07-27.2** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-27**
+> 客户端 **0.2.1-dev.31** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
 > 法律文件集 **v3.1** · 最低法律文件集 **v3.0** · 最低文案版本 **2.7**
 
 ## 本明细表的地位
@@ -53,12 +53,13 @@
 | `feature.remote-access` | **available-off** | 是 | 无 |
 | `feature.community.discord` | **active** | 是 | 官方服务器内的 Discord 资料、帖子与管理记录 |
 | `feature.skill-interop` | **active** | 否 | 无 |
+| `feature.pictures.generation` | **available-off** | 是 | 无 |
 
 **`feature.community-sharing.preference-ui`** — 仅记录一项本机偏好。不构成对任何上传的同意。参见 gate.community-sharing.initial。
 
 **`feature.community-sharing.upload-engine`** — **已上线,且默认关闭,除非用户自己打开。** 传输通道已建成并部署;没有启用同意记录(文案包 K3),就不会排队、也不会扫描,而早期版本中记录的那项 Sharing 偏好不能代替它 —— 那项偏好是在「什么都无法离开本机」的年代选择的,因此无法承载对一项当时并不存在的上传行为的同意。
 必需的门槛: `legal.consent.flywheel.activate`, `legal.consent.flywheel.receive`, `legal.consent.flywheel.sensitiveAsk`, `flywheel.queue.window`, `flywheel.queue.held`
-实现证据: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written.
+实现证据: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written. Verified in production at dev.21: the capability switch is on, every Part K string renders verbatim at copy 2.7, and a real send completed end to end. The evidence block is now discarded rather than written — a test pins the evidence table at zero rows after an accepted send — so the Schedule's statement that we hold no consent record for a contributing household is true in code and in production, not only in intent.
 
 **`feature.community-sharing.upload-endpoint`** — **标记为启用之前必须先完成:**《服务条款》第 7.4 条已不再载有分享所需的许可、保证与精神权利同意机制(v3.0 删除,因其描述的是并不存在的能力)。这些条款必须重新起草、呈示,并依第 18.1A 条作为实质修订被单独接受。继续使用或安装更新,不得被视为接受。
 
@@ -97,6 +98,10 @@
 **`feature.skill-interop`** — 把 Skill 导入为 Method、以及把 Method 导出为 Skill。服务端已建成 —— SKILL.md 解析、逐条列出因依赖代码而被丢弃的具体步骤、把 provenance(来源、到达时的许可证、时间、原文件哈希)写入 method.json 且不进内容哈希(因此记录来源不会迫使所有 app 重新授权)、按 provenance 触发的发布关卡,以及导出端点。导入与导出界面已随 0.2.1-dev.7 上线,能力开关已打开,用户可以进入。两个方向都在本机进行,导入或导出的任何内容都不会到达运营方。当此类 Method 被发布时,provenance 会随之公开 —— 这是有意为之:公开来源与原始许可证,正是履行多数上游许可证所要求的署名。
 必需的门槛: `legal.notice.skill.import`, `legal.notice.skill.importedPublish`, `legal.notice.skill.export`
 实现证据: Verified on a temporary instance rather than by reading the code: preview listed scripts/extract.py and the step that ran it while keeping the rest, import wrote provenance into method.json, the Method appeared in importedMethodIds so the L2 gate fires on provenance, and export returned the instructions intact. The temporary instance was deleted; the live instance was untouched throughout.
+
+**`feature.pictures.generation`** — Owner 在聊天里要一张图;主模型把该请求改写成一句英文 prompt,发送给 Owner 用自己的 key 连接的图片服务商。生成的图片写入本地 userdata,并纳入本地备份。运营方不在此路径中,不接收任何内容。有两项事实必须披露,因为两者都无法凭直觉猜到:这句 prompt 是由能够看到已保存上下文的主模型写的,因此它可能写进 Owner 并没有打出来的内容;以及该图片服务商可能与聊天服务商并非同一家公司。
+必需的门槛: `legal.notice.modelConnect.pictures`
+实现证据: The draw option does not exist until an image engine is connected. What the model says about the picture is constrained by construction: generation happens before the model speaks and the result — success, the provider's own failure text, or nothing generated this turn — is injected into its context, so it cannot claim to have drawn something it did not.
 
 ## 投诉与合规记录
 

@@ -398,6 +398,44 @@ consent for it is sought at that point.
 - **ZH:** "你正在连接第三方 AI 服务商。你的消息,连同 Vaenyx 添加的上下文(如已保存的记忆、你的档案、项目摘要与附件),将发送给你所选的服务商,受其条款、隐私政策及其收费约束。Vaenyx 无法控制该服务商。"
 - **Behaviour:** Point-of-action (every new provider connection); proceeding past the screen is recorded per provider. The context-injection disclosure is mandatory: describing the outbound flow as "prompts only" would understate it.
 
+**F5 — `legal.notice.modelConnect.pictures`** *(the image-provider slot — a variant is needed, and not for the reason you would guess)*
+
+Coding rendered F1 here, which was the right instinct and the wrong string. F1
+says memories, profile, project summaries and attached files go to the provider.
+For an image provider **that is not true**, and a notice that overstates what
+leaves is not a safe default: someone refuses a connection over a risk that does
+not exist, which is its own kind of misleading.
+
+But there is a real disclosure hiding underneath, and it is the reason this
+string exists rather than a trimmed F1. **The prompt is written by the main
+model, and the main model can see the context** — memories, profile, project
+summaries. So the English sentence that reaches the image provider can contain
+things the person never typed into that message. Nobody would guess that from
+"I asked it to draw a cat".
+
+- **EN:** "You're connecting a third-party image provider. What gets sent is a single English prompt, written by your main model from what you asked for — not your memories, profile, project summaries or attached files, and not the rest of the conversation. It goes to the provider you choose, under its terms, privacy policy and any fees it charges. Because your main model writes that prompt, it can word things you did not type, so Vaenyx shows you the prompt it sent."
+- **ZH:** "你正在连接第三方图片服务商。发送出去的是**一句英文 prompt**,由你的主模型根据你的要求写成 —— 不包含你的记忆、档案、项目摘要或附件,也不包含对话的其余部分。它会发送给你所选的服务商,受其条款、隐私政策及其收费约束。由于这句 prompt 是主模型写的,它可能写进你并没有打出来的内容,因此 Vaenyx 会把实际发送的 prompt 显示给你看。"
+- **Behaviour:** Point-of-action, on the image-provider connect box. **The last
+  clause is a promise, so it has to be kept:** the prompt actually sent must be
+  visible to the user — on or beside the resulting image is enough, and after the
+  fact is enough. If it is not shown, cut the clause instead of shipping a
+  sentence that is not true. There is no third option.
+
+**F6 — `legal.notice.freeOptions.modelAnswer`** *(the "Update Free Options" result)*
+
+Coding labels the answer with model name, date and whether web search was on, and
+never claims human verification. That is most of the way there. What it does not
+yet say is that the answer can simply be wrong — and this is a statement about
+**someone else's prices**, surfaced in our interface, where being wrong means a
+person connects a service expecting free and gets a bill. Models state pricing
+with great confidence and no knowledge of it.
+
+- **EN:** "Answered by {model} on {date}{, with web search}. This is the model's answer, not ours, and not checked by anyone — prices and free tiers change, and models get them wrong. Check the provider's own pricing page before you rely on it."
+- **ZH:** "由 {model} 于 {date} 作答{,已联网搜索}。这是模型的答案,不是我们的答案,也没有经过任何人核实 —— 价格与免费额度会变,模型也会答错。在你据此作出决定之前,请到该服务商自己的价格页面上确认。"
+- **Behaviour:** Shown with the answer, not behind a tooltip or an info icon. The
+  attribution and the warning travel together; attribution alone reads as a
+  citation, which is the opposite of a caveat.
+
 **F2 — `legal.notice.modelConnect.local`**
 - **Placement:** Connect screen when adding a local model backend (any OpenAI-compatible endpoint, e.g. Ollama or LM Studio).
 - **EN** (renders only when a technical check confirms the entered address is loopback — this machine itself): "This backend address points at your own machine. Vaenyx sends chats for this backend only to that address, under the model's own licence terms."

@@ -1,8 +1,8 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-27.1** · effective from **2026-07-26** · verified **2026-07-27**
-> Client **0.2.1-dev.7** · Server **vaenyx-core-cloud (migrations 0001-0007)**
+> Schedule version **2026-07-27.2** · effective from **2026-07-26** · verified **2026-07-27**
+> Client **0.2.1-dev.31** · Server **vaenyx-core-cloud (migrations 0001-0007)**
 > Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **2.7**
 
 ## Status of this Schedule
@@ -53,12 +53,13 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 | `feature.remote-access` | **available-off** | yes | none |
 | `feature.community.discord` | **active** | yes | Discord profile, posts and moderation records for the official server |
 | `feature.skill-interop` | **active** | no | none |
+| `feature.pictures.generation` | **available-off** | yes | none |
 
 **`feature.community-sharing.preference-ui`** — Records a local preference only. Not consent to any upload. See gate.community-sharing.initial.
 
 **`feature.community-sharing.upload-engine`** — Live and off unless the user turns it on. The transport is built and deployed; nothing queues or scans without the activation consent record (copy pack K3), and the Sharing preference recorded in earlier versions does not stand in for it — that preference was chosen when nothing could leave the machine, so it cannot carry consent to an upload that did not then exist.
 Required gates: `legal.consent.flywheel.activate`, `legal.consent.flywheel.receive`, `legal.consent.flywheel.sensitiveAsk`, `flywheel.queue.window`, `flywheel.queue.held`
-Evidence: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written.
+Evidence: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written. Verified in production at dev.21: the capability switch is on, every Part K string renders verbatim at copy 2.7, and a real send completed end to end. The evidence block is now discarded rather than written — a test pins the evidence table at zero rows after an accepted send — so the Schedule's statement that we hold no consent record for a contributing household is true in code and in production, not only in intent.
 
 **`feature.community-sharing.upload-endpoint`** — BEFORE this can be marked active: Terms of Service clause 7.4 no longer carries the licence, warranty and moral-rights machinery for sharing (removed at v3.0 because it described a capability that does not exist). Those terms must be drafted, presented and separately accepted as a material amendment under clause 18.1A. Continued use or an update must not be treated as acceptance.
 
@@ -97,6 +98,10 @@ Required gates: `legal.notice.community.discord`
 **`feature.skill-interop`** — Importing a Skill as a Method and exporting a Method as a Skill. The server side is built — SKILL.md parsing, enumeration of the specific steps dropped because they depended on code, provenance (source, licence on arrival, time, original file hash) written into method.json outside the content hash so recording it does not force every app grant to be re-granted, the publish gate that fires on provenance, and the export endpoint. The import and export screens shipped in 0.2.1-dev.7 and the capability switch is on, so a user can reach it. Both directions are local; nothing about an import or export reaches the Operator. Provenance does become public when such a Method is published, and that is intended — publishing the source and the original licence is what discharges the attribution most upstream licences require.
 Required gates: `legal.notice.skill.import`, `legal.notice.skill.importedPublish`, `legal.notice.skill.export`
 Evidence: Verified on a temporary instance rather than by reading the code: preview listed scripts/extract.py and the step that ran it while keeping the rest, import wrote provenance into method.json, the Method appeared in importedMethodIds so the L2 gate fires on provenance, and export returned the instructions intact. The temporary instance was deleted; the live instance was untouched throughout.
+
+**`feature.pictures.generation`** — Owner asks for a picture in chat; the main model rewrites the request as one English prompt and sends it to an image provider the Owner connected with their own key. The generated image is written to local userdata and included in local backups. The Operator is not in this path and receives nothing. Two facts are disclosed because neither is guessable: the prompt is written by the main model, which can see saved context, so it may word things the Owner never typed; and the image provider may be a different company from the chat provider.
+Required gates: `legal.notice.modelConnect.pictures`
+Evidence: The draw option does not exist until an image engine is connected. What the model says about the picture is constrained by construction: generation happens before the model speaks and the result — success, the provider's own failure text, or nothing generated this turn — is injected into its context, so it cannot claim to have drawn something it did not.
 
 ## Complaint and compliance records
 
