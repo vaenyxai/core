@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <!-- App icon: the light crescent-embrace on its own night plate. Launchers
+       give a transparent icon a WHITE backdrop, which turned the home-screen
+       tile light (Oskar, 2026-07-28) - so the dark background is baked in.
+       Artwork scaled to ~70% so it stays inside the maskable safe zone. -->
+  <rect width="96" height="96" fill="#1a1826"/>
+  <g transform="translate(48 48) scale(0.7) translate(-48 -48)">
+    <path d="M55 14 A34 34 0 1 0 55 82 A44 44 0 0 1 55 14 Z" fill="#f2f1f7"/>
+    <circle cx="65" cy="48" r="9.5" fill="#8f8bc0"/>
+  </g>
+</svg>
