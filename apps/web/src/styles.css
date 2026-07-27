@@ -1904,6 +1904,7 @@ select {
 }
 
 .ask-vaenyx-chat {
+  position: relative; /* anchors the chat-area splash */
   display: grid;
   /* The composer sits at the bottom of the screen, always (Oskar, 2026-07-26).
      It used to follow the content, so a short conversation left it floating in
@@ -6089,7 +6090,7 @@ html, body { overscroll-behavior-y: none; }
 .thinking-text { margin: 0; font-size: var(--fs-sm); color: var(--text-faint); font-style: italic; white-space: pre-line; max-height: 9em; overflow: hidden; display: flex; flex-direction: column-reverse; }
 /* Splash held over a conversation whose first load is in flight: deep links go
    splash -> conversation, with no half-built frame between. */
-.chat-splash { position: fixed; inset: 0; z-index: 80; min-height: 100dvh; background: var(--bg); }
+.chat-splash { position: absolute; inset: 0; z-index: 40; min-height: 0; background: var(--bg); }
 /* The Engines card: intro left, refresh right; four sections with a visible
    rule between them (Oskar, 2026-07-27 - "看得很复杂" redesign). */
 .engine-intro-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }

@@ -5734,6 +5734,18 @@ function AskVaenyxPanel({
     return code;
   }
 
+  // The chat splash's safety cap: after 4 seconds the normal loading row takes
+  // over, so a slow or hung fetch never leaves a covered screen.
+  const [splashExpired, setSplashExpired] = useState(false);
+  useEffect(() => {
+    if (!(loadingMessages && messages.length === 0)) {
+      setSplashExpired(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setSplashExpired(true), 4000);
+    return () => window.clearTimeout(timer);
+  }, [loadingMessages, messages.length]);
+
   // Pulling down at the top of a conversation refreshes THAT conversation —
   // the browser's whole-page reload gesture is switched off in CSS, because
   // reloading the entire app to see a new message is a sledgehammer (Oskar,
@@ -7283,13 +7295,13 @@ function AskVaenyxPanel({
         }
       >
         {/* A deep link (notification, refresh) must go splash → conversation
-            with nothing in between. While the FIRST load of a conversation is
-            in flight there is nothing real to show, and the half-empty chat
-            frame underneath read as "flashed the home page" (Oskar,
-            2026-07-27) — so the splash simply stays up until the messages
-            arrive. Switching between loaded chats keeps the old messages on
-            screen and never hits this. */}
-        {loadingMessages && messages.length === 0 ? (
+            with nothing in between. The splash covers ONLY the chat area — the
+            first version covered the whole viewport, which over Tailscale on a
+            phone read as "the app takes seconds to open" (Oskar, 2026-07-28):
+            the sidebar and navigation are usable instantly, only the loading
+            conversation hides its half-built frame. splashExpired is the
+            4-second cap, so a hung fetch can never brick the screen. */}
+        {loadingMessages && messages.length === 0 && !splashExpired ? (
           <div className="loading-screen chat-splash">
             <div>
               <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />

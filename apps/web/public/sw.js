@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v4";
+const CACHE_NAME = "vaenyx-shell-v5";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -47,8 +47,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Vaenyx", {
       body: data.body || "",
-      icon: "/vaenyx-mark.svg",
-      badge: "/vaenyx-mark.svg",
+      icon: "/vaenyx-icon-192.png",
+      badge: "/vaenyx-icon-192.png",
       data: { url: data.url || "/" },
     }),
   );
