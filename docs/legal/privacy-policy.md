@@ -1,6 +1,6 @@
 # Vaenyx — Core Privacy Policy
 
-> **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
+> **FINAL v3.1 (2026-07-27).** This document forms part of Vaenyx Legal Set v3.1; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Operator:** Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724), of Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**")
 **Effective date:** 26 July 2026

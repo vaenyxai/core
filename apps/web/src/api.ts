@@ -1284,7 +1284,7 @@ export function fetchImageEngine(): Promise<VisionStatus> {
 }
 
 export function setImageEngineChoice(
-  provider: "none" | "cloudflare" | "gemini" | "openai" | "zhipu",
+  provider: "none" | "workersai" | "gemini" | "openai" | "zhipu",
   apiKey?: string,
 ): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/images/engine", {

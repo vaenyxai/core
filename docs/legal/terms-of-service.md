@@ -1,6 +1,6 @@
 ﻿# Vaenyx — Terms of Service & End User Licence Agreement
 
-> **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
+> **FINAL v3.1 (2026-07-27).** This document forms part of Vaenyx Legal Set v3.1; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Effective date:** 26 July 2026. These Terms take effect from the install-time acceptance flow in which they are first presented; that flow and the clause 12.3 health acknowledgement gate are live in the shipped build.
 **Operator:** Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724), a proprietary limited company registered in Victoria, Australia ("**we**", "**us**", "**our**", the "**Operator**").

@@ -1,6 +1,6 @@
 ﻿# Vaenyx — Third-Party Notices
 
-> **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
+> **FINAL v3.1 (2026-07-27).** This document forms part of Vaenyx Legal Set v3.1; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 **Product:** Vaenyx (the exact third-party contents of each release build are fixed by the per-release manifest described in Section 3)
 **Operator:** Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724), a proprietary limited company registered in Victoria, Australia

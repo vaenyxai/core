@@ -1,6 +1,6 @@
 ﻿# Vaenyx — In-App Contextual Disclaimers (Copy Pack)
 
-> **FINAL v3.0 (2026-07-25).** This document forms part of Vaenyx Legal Set v3.0; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
+> **FINAL v3.1 (2026-07-27).** This document forms part of Vaenyx Legal Set v3.1; current capability and data-flow facts appear only in the dated Current Implementation and Data-Handling Schedule. It is provided for your information and is not legal advice.
 
 | Field | Value |
 |---|---|

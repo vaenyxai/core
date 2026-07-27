@@ -13,20 +13,17 @@
 // currently renders it" is not a control — the next person to wire up a
 // component would not know.
 export const CAPABILITIES = {
-  // feature.community-sharing.upload-engine  — Schedule: not-built
-  // feature.community-sharing.upload-endpoint — Schedule: not-built
-  // feature.community-sharing.deidentification-pipeline — Schedule: not-built
-  // The whole of copy pack Part K depends on these three.
+  // feature.community-sharing.upload-engine — Schedule: available-off
+  // (2026-07-27, Legal Set v3.1): "Live and off unless the user turns it on."
   //
-  // STILL FALSE as of 2026-07-27 even though all three are now BUILT and
-  // deployed (queue + 48-hour window + de-identification on this machine; the
-  // pipe live at publish.vaenyx.ai; the publisher's receive switch). Part K
-  // says it plainly: "Until the Schedule marks the capability active, none of
-  // these strings may render." Built is not the same as scheduled-active, and
-  // this switch mirrors the Schedule rather than the code — otherwise the
-  // Schedule stops being the thing that decides. Flip it when the Schedule
-  // entries move, in the same change.
-  flywheelUpload: false,
+  // ON because the Schedule moved, not because the code exists — the switch
+  // mirrors the Schedule, and for a day the code was deployed while this stayed
+  // false for exactly that reason. With it on, the K3 activation surface
+  // renders; nothing uploads without that consent record, and the server also
+  // refuses for any publisher who has not opted in. (upload-endpoint — the
+  // community-public licence flow under ToS 18.1A — is a separate entry and
+  // remains not-built; nothing here renders its strings.)
+  flywheelUpload: true,
   // Importing the instructions from an Agent Skill, and exporting a Method as
   // one. Copy pack Part L. Never describe this as "Skill compatible", "runs
   // Skills" or "works with Skills" (L4): our interoperability statements are

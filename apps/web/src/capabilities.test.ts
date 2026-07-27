@@ -7,16 +7,21 @@ import { CAPABILITIES, GATED_KEYS, isKeyRenderable } from "./capabilities.js";
 // notice describing a mechanism that does not exist tells the user something
 // untrue about the software they are running.
 describe("capability gate", () => {
-  it("keeps every Part K string unrenderable while the upload half is not built", () => {
-    // If this fails because the capability was switched on, the Schedule entry
-    // and the Part A data-flow entry have to move at the same time.
-    expect(CAPABILITIES.flywheelUpload).toBe(false);
+  it("renders Part K only while the Schedule marks the upload engine available", () => {
+    // ON since 2026-07-27: Schedule entry feature.community-sharing.
+    // upload-engine = available-off (shipped, off by default), Legal Set v3.1.
+    // If this is ever switched back off, every Part K string must go dark with
+    // it — and switching it ON again requires the Schedule to move first.
     for (const key of [
       "legal.consent.flywheel.activate",
       "legal.notice.flywheel.item",
       "legal.notice.flywheel.remove",
+      "flywheel.queue.window",
+      "flywheel.queue.held",
+      "legal.consent.flywheel.receive.label",
+      "legal.notice.flywheel.contributorId",
     ]) {
-      expect(isKeyRenderable(key)).toBe(false);
+      expect(isKeyRenderable(key)).toBe(CAPABILITIES.flywheelUpload);
     }
   });
 

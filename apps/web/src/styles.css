@@ -6039,3 +6039,26 @@ select {
 .free-pick a { word-break: break-all; }
 .free-pick code { font-size: 0.95em; }
 .legal-multiline { white-space: pre-line; }
+/* Free-option links: an affordance, not a beacon - the default link blue
+   fights every theme this app has. */
+.free-pick a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 2px; }
+/* Engine rows: short select, status chip beside it instead of a line below. */
+.engine-row { display: flex; align-items: flex-end; gap: var(--space-3); flex-wrap: wrap; }
+.engine-row .chat-font-field { flex: 0 1 300px; min-width: 220px; margin: 0; }
+.engine-row .library-chip { margin-bottom: 8px; }
+.field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+@media (max-width: 560px) { .field-pair { grid-template-columns: 1fr; } }
+.slot-key-open { margin-top: var(--space-1); }
+.slot-key-add { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; margin-top: var(--space-2); }
+.slot-key-add .task-select { flex: 0 1 170px; }
+.slot-key-add input { flex: 1 1 200px; }
+/* The archive window: compact pickable rows. */
+.archive-modal { display: flex; flex-direction: column; gap: var(--space-2); min-width: min(420px, 80vw); }
+.archive-modal-toolbar { display: flex; justify-content: space-between; align-items: center; }
+.archive-modal-list { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; }
+.archive-row { display: flex; gap: var(--space-2); align-items: center; padding: 6px 8px; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; border-radius: var(--r-sm); font-size: var(--fs-md); }
+.archive-row:hover { background: var(--accent-soft); }
+.archive-row.picked { background: var(--accent-soft); }
+.archive-row-mark { width: 1em; color: var(--accent); flex: none; }
+.archive-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archive-modal-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }

@@ -1766,7 +1766,7 @@ function VoicePanel() {
   const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
   const [imageEngine, setImageEngine] = useState<VisionStatus | null>(null);
   const [imageEngineChoice, setImageEngineChoiceState] = useState<
-    "none" | "cloudflare" | "gemini" | "openai" | "zhipu"
+    "none" | "workersai" | "gemini" | "openai" | "zhipu"
   >("none");
   const [cloudflareToken, setCloudflareToken] = useState("");
   const [imageError, setImageError] = useState<string | null>(null);
@@ -1784,7 +1784,9 @@ function VoicePanel() {
   const [outputError, setOutputError] = useState<string | null>(null);
   const [visionError, setVisionError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // One loader for first mount AND for after a key is added in any slot: a new
+  // connection can auto-fill empty slots server-side, so everything re-reads.
+  const refreshEngines = useCallback(() => {
     void fetchVoiceStatus()
       .then(setStatus)
       .catch(() => undefined);
@@ -1806,12 +1808,23 @@ function VoicePanel() {
       .then(setVision)
       .catch(() => undefined);
     void fetchImageEngine()
-      .then(setImageEngine)
+      .then((current) => {
+        setImageEngine(current);
+        // Seed the dropdown from what is saved — without this the select shows
+        // "none" after a reload even while the engine is connected.
+        if (current.provider) {
+          setImageEngineChoiceState(
+            current.provider as "workersai" | "gemini" | "openai" | "zhipu",
+          );
+        }
+      })
       .catch(() => undefined);
     void fetchLocalTts()
       .then(setLocalTts)
       .catch(() => undefined);
   }, []);
+
+  useEffect(refreshEngines, [refreshEngines]);
 
   // While the 150 MB local-voice download runs, poll for progress; the moment
   // it lands, switch the engine over (that is what the download was for).
@@ -1888,13 +1901,13 @@ function VoicePanel() {
   }
 
   async function applyImageEngine(
-    next: "none" | "cloudflare" | "gemini" | "openai" | "zhipu",
+    next: "none" | "workersai" | "gemini" | "openai" | "zhipu",
     apiKey?: string,
   ) {
     setImageEngineChoiceState(next);
     // Cloudflare with no token yet is a half-made choice: show its field and
     // wait, rather than saving something that cannot work.
-    if (next === "cloudflare" && !apiKey && !imageEngine?.connected) return;
+    if (next === "workersai" && !apiKey && !imageEngine?.connected) return;
     setBusy(true);
     setImageError(null);
     try {
@@ -1994,9 +2007,9 @@ function VoicePanel() {
       <h2>Voice</h2>
 
       <p className="settings-card-copy">
-        API keys live in one place — Models. Connect a model there once and
-        these three engines fill in by themselves when it is capable;
-        change any of them here whenever you like.
+        Five slots: the main model under Models, and the four engines here. A
+        key added in either place joins one shared pool — every slot then
+        offers it, and each slot can still pick differently.
       </p>
 
       <h3 className="settings-subhead">Voice Input (Speech To Text)</h3>
@@ -2008,6 +2021,7 @@ function VoicePanel() {
         Groq gives Whisper away on a free key — no card, 20 recordings a minute
         and 2,000 a day, which no household will reach.
       </FreePick>
+      <div className="engine-row">
       <label className="chat-font-field">
         Engine
         <select
@@ -2024,14 +2038,15 @@ function VoicePanel() {
           <EngineOptions capability="voice-in" providers={providers} />
         </select>
       </label>
-      {status?.connected ? (
-        <div className="model-card-head">
+        {status?.connected ? (
           <span className="library-chip chip-published">Connected</span>
-          {status.model ? (
-            <small className="model-card-model">{status.model}</small>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
+      <SlotKeyAdd
+        capability="voice-in"
+        onConnected={refreshEngines}
+        providers={providers}
+      />
       {error ? <p className="form-error">{error}</p> : null}
 
       <div className="settings-card-divider" />
@@ -2046,6 +2061,7 @@ function VoicePanel() {
         then works offline, forever, on this machine. Browser Voice is free too
         and needs no download, but sounds more robotic.
       </FreePick>
+      <div className="engine-row">
       <label className="chat-font-field">
         Engine
         <select
@@ -2067,30 +2083,35 @@ function VoicePanel() {
           }}
           value={outputEngine}
         >
-          <option value="none">None — Replies Not Read Aloud</option>
-          <option value="gemini">
-            Gemini TTS — Natural Voice (Gemini Under Models)
-          </option>
-          <option value="local">
-            Local Voice — Offline, No Key (150 MB Download)
-          </option>
-          <option value="browser">Browser — Basic, No Key Needed</option>
+          <option value="none">None</option>
+          <option value="gemini">Gemini TTS — Natural</option>
+          <option value="local">Local Voice — Offline, Free</option>
+          <option value="browser">Browser — Basic, Free</option>
         </select>
       </label>
+        {outputEngine === "gemini" && output?.engine === "gemini" ? (
+          <span className="library-chip chip-published">Connected</span>
+        ) : outputEngine === "local" && localTts?.installed ? (
+          <span className="library-chip chip-published">
+            {output?.engine === "local" ? "Active" : "Installed"}
+          </span>
+        ) : null}
+      </div>
+      <SlotKeyAdd
+        capability="voice-out"
+        onConnected={refreshEngines}
+        providers={providers}
+      />
       {outputEngine === "local" ? (
         <>
           {localTts?.installed ? (
             <>
-              <div className="model-card-head">
-                <span className="library-chip chip-published">
-                  {output?.engine === "local" ? "Active" : "Installed"}
-                </span>
-              </div>
               <p className="settings-card-copy">
                 Speech is generated on this computer — nothing leaves it and
                 there is no per-use cost. The right voice is used per reply
                 by its language.
               </p>
+              <div className="field-pair">
               <label className="chat-font-field">
                 English Voice
                 <select
@@ -2131,6 +2152,7 @@ function VoicePanel() {
                     ))}
                 </select>
               </label>
+              </div>
               {localTts.status === "downloading" ? (
                 <>
                   <p className="settings-card-copy">
@@ -2260,9 +2282,6 @@ function VoicePanel() {
       ) : outputEngine === "gemini" ? (
         output?.engine === "gemini" ? (
           <>
-            <div className="model-card-head">
-              <span className="library-chip chip-published">Connected</span>
-            </div>
             <label className="chat-font-field">
               Voice
               <select
@@ -2316,6 +2335,7 @@ function VoicePanel() {
         A free Google AI Studio key reads photos at no charge. (The same key
         cannot MAKE pictures — see below for why.)
       </FreePick>
+      <div className="engine-row">
       <label className="chat-font-field">
         Engine
         <select
@@ -2332,23 +2352,15 @@ function VoicePanel() {
           <EngineOptions capability="vision" providers={providers} />
         </select>
       </label>
-      {vision?.connected ? (
-        <div className="model-card-head">
+        {vision?.connected ? (
           <span className="library-chip chip-published">Connected</span>
-          <small className="model-card-model">
-            Powered by {vision.provider === "gemini"
-              ? "Gemini"
-              : vision.provider === "zhipu"
-                ? "Zhipu BigModel"
-                : "OpenAI"}
-          </small>
-        </div>
-      ) : (
-        <p className="settings-card-copy">
-          Off. Connect Gemini or Zhipu BigModel under Models (a free key
-          works) and this fills in by itself.
-        </p>
-      )}
+        ) : null}
+      </div>
+      <SlotKeyAdd
+        capability="vision"
+        onConnected={refreshEngines}
+        providers={providers}
+      />
       {visionError ? <p className="form-error">{visionError}</p> : null}
 
       <div className="settings-card-divider" />
@@ -2361,6 +2373,7 @@ function VoicePanel() {
         Vaenyx will not try — a text model can only claim to have drawn
         something.
       </p>
+      <div className="engine-row">
       <label className="chat-font-field">
         Engine
         <select
@@ -2368,12 +2381,12 @@ function VoicePanel() {
           disabled={busy}
           onChange={(event) =>
             void applyImageEngine(
-              event.target.value as "none" | "gemini" | "openai" | "zhipu",
+              event.target.value as "none" | "workersai" | "gemini" | "openai" | "zhipu",
             )
           }
           value={imageEngineChoice}
         >
-          <option value="none">None — Vaenyx Will Not Draw</option>
+          <option value="none">None — Will Not Draw</option>
           {/* Workers AI is offered even when not yet signed in, because unlike
               the others its token is entered right here. */}
           <option value="workersai">Cloudflare Workers AI — Free</option>
@@ -2384,12 +2397,22 @@ function VoicePanel() {
           />
         </select>
       </label>
+        {imageEngine?.connected ? (
+          <span className="library-chip chip-published">Connected</span>
+        ) : null}
+      </div>
+      <SlotKeyAdd
+        capability="image"
+        exclude={["workersai"]}
+        onConnected={refreshEngines}
+        providers={providers}
+      />
       {/* Cloudflare's token is typed HERE rather than under Models: it is the
           one engine a household adds solely to make pictures, and sending them
           to a different page to paste it is how a working setting turns into an
           abandoned one. The account id is looked up from the token, so this
           field is the only thing anyone has to find. */}
-      {imageEngineChoice === "cloudflare" && !imageEngine?.connected ? (
+      {imageEngineChoice === "workersai" && !imageEngine?.connected ? (
         <>
           <label className="chat-font-field">
             Workers AI Token
@@ -2405,7 +2428,7 @@ function VoicePanel() {
           <button
             className="primary-button"
             disabled={busy || cloudflareToken.trim().length === 0}
-            onClick={() => void applyImageEngine("cloudflare", cloudflareToken)}
+            onClick={() => void applyImageEngine("workersai", cloudflareToken)}
             type="button"
           >
             Save Token
@@ -2416,11 +2439,6 @@ function VoicePanel() {
             its own.
           </p>
         </>
-      ) : null}
-      {imageEngine?.connected ? (
-        <div className="model-card-head">
-          <span className="library-chip chip-published">Connected</span>
-        </div>
       ) : null}
       <FreePick href="https://bigmodel.cn">
         Zhipu BigModel gives CogView-3-Flash away free — set the model to{" "}
@@ -8602,6 +8620,111 @@ function EngineOptions({
   );
 }
 
+// A key can be added right where it is needed (Oskar, 2026-07-27): each engine
+// slot offers to take a key for any capable backend that is not yet connected.
+// It lands in the SAME shared pool as a key added under Models — connections
+// accumulate wherever they were typed, and every slot chooses from all of them.
+function SlotKeyAdd({
+  capability,
+  exclude = [],
+  onConnected,
+  providers,
+}: {
+  capability: string;
+  exclude?: string[];
+  onConnected: () => void;
+  providers: ModelProviderInfo[];
+}) {
+  const candidates = providers.filter(
+    (provider) =>
+      !provider.connected &&
+      provider.needsKey &&
+      provider.kind !== "cli-login" &&
+      provider.capabilities.includes(capability) &&
+      !exclude.includes(provider.id),
+  );
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState("");
+  const [key, setKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const first = candidates[0];
+  if (!first) return null;
+  const chosen = candidates.some((candidate) => candidate.id === pick)
+    ? pick
+    : first.id;
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await connectModelProvider(chosen, { apiKey: key.trim() });
+      setOpen(false);
+      setKey("");
+      onConnected();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error ? saveError.message : "Could not connect.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        className="text-button slot-key-open"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        + Add A Key Here
+      </button>
+    );
+  }
+  return (
+    <div className="slot-key-add">
+      <select
+        className="task-select"
+        disabled={saving}
+        onChange={(event) => setPick(event.target.value)}
+        value={chosen}
+      >
+        {candidates.map((candidate) => (
+          <option key={candidate.id} value={candidate.id}>
+            {candidate.name}
+          </option>
+        ))}
+      </select>
+      <input
+        autoComplete="off"
+        disabled={saving}
+        onChange={(event) => setKey(event.target.value)}
+        placeholder="API key"
+        type="password"
+        value={key}
+      />
+      <button
+        className="primary-button"
+        disabled={saving || key.trim().length === 0}
+        onClick={() => void save()}
+        type="button"
+      >
+        Save
+      </button>
+      <button
+        className="secondary-button"
+        disabled={saving}
+        onClick={() => setOpen(false)}
+        type="button"
+      >
+        Cancel
+      </button>
+      {error ? <p className="form-error">{error}</p> : null}
+    </div>
+  );
+}
+
 // The free way to do each of the four things Vaenyx needs an outside model for
 // (Oskar, 2026-07-27). Someone who cannot pay should still be able to run the
 // whole app, and finding that out should not require reading four pricing pages.
@@ -12713,7 +12836,12 @@ function CreateRoutinePanel({
 // version: it changes whenever any string changes, and it is what gets recorded
 // against an acknowledgement, so a record always says exactly which text the
 // Owner was shown.
-const LEGAL_COPY_VERSION = "2.6";
+// 2.7 = Part K finalized (2026-07-27). The publish service's
+// MIN_ACCEPTED_COPY_VERSION deliberately STAYS 2.6: the floor moves only when
+// an EXISTING consent string materially changes, because moving it re-asks
+// everyone. K3 is a brand-new consent point nobody has answered yet — it
+// invalidates nothing already recorded.
+const LEGAL_COPY_VERSION = "2.7";
 
 // The consent floor, and the only thing that re-asks the Owner (Oskar, 2026-07-25).
 // It moves ONLY when a consent-class string (`legal.consent.*`) changes in
@@ -15233,7 +15361,10 @@ function SidebarThreadTree({
   onBulkDelete: (threads: VaenyxThread[]) => void;
 }) {
   const { t } = useI18n();
-  const [showArchived, setShowArchived] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [pickedArchived, setPickedArchived] = useState<Set<string>>(new Set());
+  // Deleting archived chats is the one destructive act here — two clicks.
+  const [confirmArchiveDelete, setConfirmArchiveDelete] = useState(false);
   const visibleThreads = workspace.threads.filter(
     (thread) => thread.status !== "archived",
   );
@@ -15306,55 +15437,125 @@ function SidebarThreadTree({
           {renderThreadItems(unsortedThreads, "No chats yet")}
         </SidebarDetails>
       </div>
-      {/* Archived chats live behind one click: out of the way, but somewhere
-          you can get back to them and, if you are sure, delete them for good
-          (Oskar, 2026-07-27). */}
+      {/* The archive is one button and one window (Oskar, 2026-07-27): the
+          sidebar stays for live chats, and everything archived is dealt with in
+          a compact list — click rows to pick several, then restore or delete
+          the lot. */}
       {archivedThreads.length > 0 ? (
         <div className="project-thread-folders archived-section">
           <button
             className="thread-show-more"
-            onClick={() => setShowArchived((open) => !open)}
+            onClick={() => setArchiveOpen(true)}
             type="button"
           >
-            {showArchived ? "▾" : "▸"} {t("threads.archived")} (
-            {archivedThreads.length})
+            {t("threads.archived")} ({archivedThreads.length})
           </button>
-          {showArchived ? (
-            <div className="thread-items">
-              {archivedThreads.map((thread) => (
-                <div className="thread-item-row" key={thread.id}>
+        </div>
+      ) : null}
+      {archiveOpen ? (
+        <Modal
+          onClose={() => {
+            setArchiveOpen(false);
+            setPickedArchived(new Set());
+            setConfirmArchiveDelete(false);
+          }}
+          title={`${t("threads.archived")} (${archivedThreads.length})`}
+        >
+          <div className="archive-modal">
+            <div className="archive-modal-toolbar">
+              <button
+                className="text-button"
+                onClick={() =>
+                  setPickedArchived(
+                    pickedArchived.size === archivedThreads.length
+                      ? new Set()
+                      : new Set(archivedThreads.map((thread) => thread.id)),
+                  )
+                }
+                type="button"
+              >
+                {pickedArchived.size === archivedThreads.length
+                  ? "Clear Selection"
+                  : "Select All"}
+              </button>
+              <span className="text-faint">
+                {pickedArchived.size > 0 ? `${pickedArchived.size} picked` : ""}
+              </span>
+            </div>
+            <div className="archive-modal-list">
+              {archivedThreads.map((thread) => {
+                const picked = pickedArchived.has(thread.id);
+                return (
                   <button
-                    className="thread-item"
+                    className={
+                      picked ? "archive-row picked" : "archive-row"
+                    }
+                    key={thread.id}
                     onClick={() => {
-                      if (thread.kind === "chat" && thread.conversationId) {
-                        onOpenChat(thread.conversationId, thread.id);
-                      } else if (thread.kind === "task" && thread.taskId) {
-                        onOpenTask(thread.taskId, thread.id);
-                      }
+                      const next = new Set(pickedArchived);
+                      if (picked) next.delete(thread.id);
+                      else next.add(thread.id);
+                      setPickedArchived(next);
+                      setConfirmArchiveDelete(false);
                     }}
                     type="button"
                   >
-                    <strong>{thread.title.trim() || "New chat"}</strong>
+                    <span className="archive-row-mark">
+                      {picked ? "✓" : ""}
+                    </span>
+                    <span className="archive-row-title">
+                      {thread.title.trim() || "New chat"}
+                    </span>
                   </button>
-                  <button
-                    className="text-button"
-                    onClick={() => onSetThreadStatus(thread, "active")}
-                    type="button"
-                  >
-                    {t("threads.archived.restore")}
-                  </button>
-                  <button
-                    className="text-button danger"
-                    onClick={() => onBulkDelete([thread])}
-                    type="button"
-                  >
-                    {t("threads.bulk.delete")}
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          ) : null}
-        </div>
+            <div className="archive-modal-actions">
+              <button
+                className="secondary-button"
+                disabled={pickedArchived.size === 0}
+                onClick={() => {
+                  for (const thread of archivedThreads) {
+                    if (pickedArchived.has(thread.id)) {
+                      onSetThreadStatus(thread, "active");
+                    }
+                  }
+                  setPickedArchived(new Set());
+                }}
+                type="button"
+              >
+                {t("threads.archived.restore")}
+              </button>
+              {confirmArchiveDelete ? (
+                <button
+                  className="primary-button danger"
+                  disabled={pickedArchived.size === 0}
+                  onClick={() => {
+                    onBulkDelete(
+                      archivedThreads.filter((thread) =>
+                        pickedArchived.has(thread.id),
+                      ),
+                    );
+                    setPickedArchived(new Set());
+                    setConfirmArchiveDelete(false);
+                  }}
+                  type="button"
+                >
+                  Really Delete ({pickedArchived.size})
+                </button>
+              ) : (
+                <button
+                  className="secondary-button danger"
+                  disabled={pickedArchived.size === 0}
+                  onClick={() => setConfirmArchiveDelete(true)}
+                  type="button"
+                >
+                  {t("threads.bulk.delete")}
+                </button>
+              )}
+            </div>
+          </div>
+        </Modal>
       ) : null}
     </section>
   );
