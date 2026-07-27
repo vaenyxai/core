@@ -1,9 +1,9 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-27.2** · effective from **2026-07-26** · verified **2026-07-27**
-> Client **0.2.1-dev.31** · Server **vaenyx-core-cloud (migrations 0001-0007)**
-> Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **2.7**
+> Schedule version **2026-07-27.3** · effective from **2026-07-26** · verified **2026-07-27**
+> Client **0.2.1-dev.32** · Server **vaenyx-core-cloud (migrations 0001-0007)**
+> Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **2.8**
 
 ## Status of this Schedule
 
@@ -101,7 +101,7 @@ Evidence: Verified on a temporary instance rather than by reading the code: prev
 
 **`feature.pictures.generation`** — Owner asks for a picture in chat; the main model rewrites the request as one English prompt and sends it to an image provider the Owner connected with their own key. The generated image is written to local userdata and included in local backups. The Operator is not in this path and receives nothing. Two facts are disclosed because neither is guessable: the prompt is written by the main model, which can see saved context, so it may word things the Owner never typed; and the image provider may be a different company from the chat provider.
 Required gates: `legal.notice.modelConnect.pictures`
-Evidence: The draw option does not exist until an image engine is connected. What the model says about the picture is constrained by construction: generation happens before the model speaks and the result — success, the provider's own failure text, or nothing generated this turn — is injected into its context, so it cannot claim to have drawn something it did not.
+Evidence: The draw option does not exist until an image engine is connected. What the model says about the picture is constrained by construction: generation happens before the model speaks and the result — success, the provider's own failure text, or nothing generated this turn — is injected into its context, so it cannot claim to have drawn something it did not. The F5 promise is kept rather than trimmed: the prompt actually sent is stored and displayed beneath each generated image (dev.32).
 
 ## Complaint and compliance records
 
@@ -115,7 +115,7 @@ Two regimes overlap here and are deliberately satisfied by one rule. The Basic O
 
 ## Point-of-use copy
 
-Copy version **2.7** · consent floor **2.6**
+Copy version **2.8** · consent floor **2.6**
 
 Two versions are tracked separately. The copy version moves whenever any string changes and is what gets recorded against an acknowledgement, so a record always says which text the person was shown. The consent floor moves only when a consent-class string changes in substance, and only the floor re-asks anyone. The last substantive consent change was 2.6.
 

@@ -1,9 +1,9 @@
 # Vaenyx — 当前实现与数据处理明细表
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
-> 明细表版本 **2026-07-27.2** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-27**
-> 客户端 **0.2.1-dev.31** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
-> 法律文件集 **v3.1** · 最低法律文件集 **v3.0** · 最低文案版本 **2.7**
+> 明细表版本 **2026-07-27.3** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-27**
+> 客户端 **0.2.1-dev.32** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
+> 法律文件集 **v3.1** · 最低法律文件集 **v3.0** · 最低文案版本 **2.8**
 
 ## 本明细表的地位
 
@@ -101,7 +101,7 @@
 
 **`feature.pictures.generation`** — Owner 在聊天里要一张图;主模型把该请求改写成一句英文 prompt,发送给 Owner 用自己的 key 连接的图片服务商。生成的图片写入本地 userdata,并纳入本地备份。运营方不在此路径中,不接收任何内容。有两项事实必须披露,因为两者都无法凭直觉猜到:这句 prompt 是由能够看到已保存上下文的主模型写的,因此它可能写进 Owner 并没有打出来的内容;以及该图片服务商可能与聊天服务商并非同一家公司。
 必需的门槛: `legal.notice.modelConnect.pictures`
-实现证据: The draw option does not exist until an image engine is connected. What the model says about the picture is constrained by construction: generation happens before the model speaks and the result — success, the provider's own failure text, or nothing generated this turn — is injected into its context, so it cannot claim to have drawn something it did not.
+实现证据: The draw option does not exist until an image engine is connected. What the model says about the picture is constrained by construction: generation happens before the model speaks and the result — success, the provider's own failure text, or nothing generated this turn — is injected into its context, so it cannot claim to have drawn something it did not. The F5 promise is kept rather than trimmed: the prompt actually sent is stored and displayed beneath each generated image (dev.32).
 
 ## 投诉与合规记录
 
@@ -115,7 +115,7 @@
 
 ## 点位文案
 
-最低文案版本 **2.7** · 同意门槛 **2.6**
+最低文案版本 **2.8** · 同意门槛 **2.6**
 
 两个版本号分开跟踪。**文案版本**在任何字符串改动时都会上升,并被记录在每一次确认里,因此记录总能说明当事人当时看到的是哪一版文字。**同意门槛**只在同意类字符串发生实质变化时上升,而且只有它会重新打扰用户。最近一次实质性的同意变化是 2.6。
 
