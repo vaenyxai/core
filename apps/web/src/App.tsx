@@ -8686,29 +8686,40 @@ function HelpPage() {
   );
 }
 
-// Settings → Sharing (copy pack I1): the flywheel sharing mode selector. The
-// install-time A3 choice maps accept → Automatic and decline → Off; a change
-// here appends a fresh consent record (clause 2.3) with the mode as the choice.
-// No sharing engine uploads anything yet — the recorded mode is the operative
-// choice the engine honours when flywheel sharing ships.
+// Sharing as ONE state machine (Oskar, 2026-07-27: "点一个按钮突然变成三个,
+// 非常奇怪"). The card's anatomy never changes — status line on top, one body
+// below it — and every state names itself:
+//
+//   OFF, never asked   → the K3 consent text + Turn On Sharing / Not Now
+//   ON                 → status "On — Automatic", a mode dropdown, Turn Off,
+//                        the waiting queue and the contributor ID
+//   OFF, after consent → one line + Turn Sharing Back On (consent already
+//                        given once; switching back on is a preference, not a
+//                        re-consent)
+//
+// Turning on the first time records BOTH the K3 activation consent and the
+// Automatic mode, so the panel lands in a fully-described ON state instead of
+// morphing into unexplained new controls.
 function SharingPanel() {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const [mode, setMode] = useState<"automatic" | "review-each" | "off" | null>(
     null,
   );
+  const [state, setState] = useState<FlywheelState | null>(null);
   const [busy, setBusy] = useState(false);
-  const [activated, setActivated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const zh = lang === "zh";
 
-  useEffect(() => {
-    let active = true;
+  const refresh = useCallback(() => {
+    fetchFlywheel()
+      .then(setState)
+      .catch(() => setState(null));
     fetchLegalAcks()
       .then((acks) => {
-        if (!active) return;
         const row = acks.find(
           (ack) => ack.keyName === "legal.consent.flywheel",
         );
         const choice = row?.choice ?? null;
-        // No recorded choice reads as Off: nothing is shared until chosen.
         setMode(
           choice === "accept" || choice === "automatic"
             ? "automatic"
@@ -8717,139 +8728,57 @@ function SharingPanel() {
               : "off",
         );
       })
-      .catch(() => {
-        if (active) setMode("off");
-      });
-    return () => {
-      active = false;
-    };
+      .catch(() => setMode("off"));
   }, []);
-
-  function choose(next: "automatic" | "review-each" | "off") {
-    if (busy || mode === next) return;
-    setBusy(true);
-    recordLegalAck({
-      keyName: "legal.consent.flywheel",
-      copyVersion: LEGAL_COPY_VERSION,
-      language: lang,
-      choice: next,
-    })
-      .then(() => setMode(next))
-      .catch(() => {})
-      .finally(() => setBusy(false));
-  }
-
-  return (
-    <section className="settings-card">
-      <p className="eyebrow">Community</p>
-      <h2>Sharing</h2>
-      {/* ONE flow, not two stacked controls (Oskar, 2026-07-27). Until the K3
-          activation consent exists, the mode buttons have nothing to govern —
-          and the old I1 note ("this version does not upload") stopped being
-          true the day the channel went live, so it no longer renders; flagged
-          to private for a pack revision. After activation, the mode selector
-          is the operating control K3's own text points at. */}
-      {activated ? (
-        <>
-          <p className="settings-card-copy">
-            How corrections are shared: automatically after the waiting period,
-            only after you review each one, or not at all.
-          </p>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            {(
-              [
-                ["automatic", "Automatic"],
-                ["review-each", "Review Each"],
-                ["off", "Off"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                className={
-                  mode === value ? "primary-button" : "secondary-button"
-                }
-                disabled={busy || mode === null}
-                key={value}
-                onClick={() => choose(value)}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </>
-      ) : null}
-      <FlywheelQueuePanel onActivatedChange={setActivated} />
-    </section>
-  );
-}
-
-// The outbound queue (copy pack Part K), and the two things the Owner can do
-// about it: turn the sending on in the first place, and pull an item back out
-// before it goes.
-//
-// The 48-hour wait shown here is a WITHDRAWAL window, not a consent step. Consent
-// was given once, on the activation button below, on a surface describing the
-// whole mechanism — silence over two days is not agreement to anything.
-function FlywheelQueuePanel({
-  onActivatedChange,
-}: {
-  onActivatedChange?: (activated: boolean) => void;
-}) {
-  const { lang, t } = useI18n();
-  const [state, setState] = useState<FlywheelState | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(() => {
-    fetchFlywheel()
-      .then((next) => {
-        setState(next);
-        onActivatedChange?.(next.activated);
-      })
-      .catch(() => setState(null));
-    // The parent only needs the activation flag; a new callback identity each
-    // render must not refetch.
-    // (onActivatedChange is stable enough in practice — a setState setter.)
-  }, [onActivatedChange]);
 
   useEffect(refresh, [refresh]);
 
-  async function activate() {
-    setBusy(true);
-    setError(null);
+  async function recordChoice(
+    keyName: string,
+    choice: string,
+  ): Promise<boolean> {
     try {
       await recordLegalAck({
-        keyName: "legal.consent.flywheel.activate",
+        keyName,
         copyVersion: LEGAL_COPY_VERSION,
         language: lang,
-        choice: "accept",
+        choice,
       });
-      refresh();
+      return true;
     } catch {
-      setError("That could not be saved.");
-    } finally {
-      setBusy(false);
+      setError(zh ? "没保存上,请再试一次。" : "That could not be saved.");
+      return false;
     }
   }
 
-  // Declining is a complete answer: it is recorded so the question is not put
-  // again on a timer, which is what the pack means by "must not be re-asked".
-  async function decline() {
+  // First turn-on: the K3 consent AND the Automatic mode in one step.
+  async function turnOnFirstTime() {
     setBusy(true);
     setError(null);
-    try {
-      await recordLegalAck({
-        keyName: "legal.consent.flywheel.activate",
-        copyVersion: LEGAL_COPY_VERSION,
-        language: lang,
-        choice: "decline",
-      });
-      refresh();
-    } catch {
-      setError("That could not be saved.");
-    } finally {
-      setBusy(false);
-    }
+    const consented = await recordChoice(
+      "legal.consent.flywheel.activate",
+      "accept",
+    );
+    if (consented) await recordChoice("legal.consent.flywheel", "automatic");
+    refresh();
+    setBusy(false);
+  }
+
+  async function declineFirstTime() {
+    setBusy(true);
+    setError(null);
+    await recordChoice("legal.consent.flywheel.activate", "decline");
+    refresh();
+    setBusy(false);
+  }
+
+  async function setSharingMode(next: "automatic" | "review-each" | "off") {
+    if (busy || mode === next) return;
+    setBusy(true);
+    setError(null);
+    await recordChoice("legal.consent.flywheel", next);
+    refresh();
+    setBusy(false);
   }
 
   async function withdraw(id: string) {
@@ -8858,60 +8787,124 @@ function FlywheelQueuePanel({
       await withdrawFlywheelItem(id);
       refresh();
     } catch {
-      setError("That item could not be withdrawn.");
+      setError(
+        zh ? "这一条没能移除。" : "That item could not be withdrawn.",
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  // The whole surface waits on its copy. An activation button with no
-  // description of what it activates is worse than no button: this panel exists
-  // to explain a mechanism, so until the copy is cleared it does not render and
-  // (because the server needs the activation record) nothing can be sent.
-  if (!state || !CAPABILITIES.flywheelUpload) return null;
+  // The whole surface waits on its copy and its capability: an activation
+  // button with no description of what it activates is worse than no button.
+  if (!CAPABILITIES.flywheelUpload || !state) return null;
+
+  const on = state.activated && mode !== "off" && mode !== null;
+  const statusLine = on
+    ? `${zh ? "分享:开启" : "Sharing: On"} — ${
+        mode === "automatic"
+          ? zh
+            ? "自动"
+            : "Automatic"
+          : zh
+            ? "逐条审"
+            : "Review Each"
+      }`
+    : zh
+      ? "分享:关闭"
+      : "Sharing: Off";
 
   return (
-    <div className="flywheel-queue">
-      <h3 className="settings-subhead">Sending Corrections Back</h3>
-      {state.activated ? null : (
+    <section className="settings-card">
+      <p className="eyebrow">Community</p>
+      <h2>Sharing</h2>
+      <p className="sharing-status">{statusLine}</p>
+
+      {!state.activated ? (
         <>
           {/* K3, the only consent point in Part K. Long on purpose: it is the
-              one screen that describes the whole mechanism, and the 48 hours
-              below are a chance to change your mind, not what permits any of
-              this. Two choices, neither pre-selected; declining is a complete
-              answer and is not re-asked on a timer. */}
+              one screen that describes the whole mechanism. Two choices,
+              neither pre-selected; declining is a complete answer and is not
+              re-asked on a timer. */}
           <p className="settings-card-copy legal-multiline">
             {t("legal.consent.flywheel.activate")}
           </p>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div className="sharing-actions">
             <button
               className="primary-button"
               disabled={busy}
-              onClick={() => void activate()}
+              onClick={() => void turnOnFirstTime()}
               type="button"
             >
-              {lang === "zh" ? "开启分享" : "Turn On Sharing"}
+              {zh ? "开启分享" : "Turn On Sharing"}
             </button>
             <button
               className="secondary-button"
               disabled={busy}
-              onClick={() => void decline()}
+              onClick={() => void declineFirstTime()}
               type="button"
             >
-              {lang === "zh" ? "暂不" : "Not Now"}
+              {zh ? "暂不" : "Not Now"}
             </button>
           </div>
         </>
-      )}
-
-      {state.activated ? (
+      ) : !on ? (
+        <>
+          <p className="settings-card-copy">
+            {zh
+              ? "你同意过分享机制,现在处于关闭状态 — 什么都不会发送。"
+              : "You have agreed to the sharing mechanism; it is currently switched off — nothing is sent."}
+          </p>
+          <div className="sharing-actions">
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() => void setSharingMode("automatic")}
+              type="button"
+            >
+              {zh ? "重新开启分享" : "Turn Sharing Back On"}
+            </button>
+          </div>
+        </>
+      ) : (
         <>
           <p className="settings-card-copy legal-multiline">
             {t("flywheel.queue.window")}
           </p>
+          <div className="sharing-actions">
+            <label className="chat-font-field sharing-mode-field">
+              {zh ? "方式" : "Mode"}
+              <select
+                className="task-select"
+                disabled={busy}
+                onChange={(event) =>
+                  void setSharingMode(
+                    event.target.value as "automatic" | "review-each",
+                  )
+                }
+                value={mode ?? "automatic"}
+              >
+                <option value="automatic">
+                  {zh ? "自动(等待期后发送)" : "Automatic — sends after the wait"}
+                </option>
+                <option value="review-each">
+                  {zh ? "逐条审(每条经你确认)" : "Review Each — you confirm every one"}
+                </option>
+              </select>
+            </label>
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => void setSharingMode("off")}
+              type="button"
+            >
+              {zh ? "关闭分享" : "Turn Off Sharing"}
+            </button>
+          </div>
+
           {state.items.length === 0 ? (
             <p className="settings-card-copy">
-              {lang === "zh"
+              {zh
                 ? "目前没有等待发送的内容。"
                 : "Nothing is waiting to be sent."}
             </p>
@@ -8925,11 +8918,11 @@ function FlywheelQueuePanel({
                     <p className="text-faint">
                       {item.sensitive
                         ? t("flywheel.queue.held")
-                        : `${lang === "zh" ? "发送时间" : "Sends after"} ${new Date(
+                        : `${zh ? "发送时间" : "Sends after"} ${new Date(
                             item.sendAfter,
                           ).toLocaleString()}`}
                       {item.redactions > 0
-                        ? ` · ${item.redactions} ${lang === "zh" ? "处细节已移除" : "detail(s) removed"}`
+                        ? ` · ${item.redactions} ${zh ? "处细节已移除" : "detail(s) removed"}`
                         : ""}
                     </p>
                   </div>
@@ -8939,7 +8932,7 @@ function FlywheelQueuePanel({
                     onClick={() => void withdraw(item.id)}
                     type="button"
                   >
-                    {lang === "zh" ? "移除" : "Remove"}
+                    {zh ? "移除" : "Remove"}
                   </button>
                 </li>
               ))}
@@ -8954,15 +8947,15 @@ function FlywheelQueuePanel({
           </p>
           {state.configured ? null : (
             <p className="settings-card-copy text-faint">
-              {lang === "zh"
+              {zh
                 ? "尚未配置发布服务,因此这台机器无法发送任何内容。"
                 : "No publish service is configured, so nothing can be sent from this machine."}
             </p>
           )}
         </>
-      ) : null}
+      )}
       {error ? <p className="form-error">{error}</p> : null}
-    </div>
+    </section>
   );
 }
 
@@ -16241,35 +16234,40 @@ function VaenyxWorkspace({
     }
   }
 
-  async function openGuard() {
+  // Navigation switches the screen FIRST and loads data behind it. These used
+  // to await their fetches before setScreen, so one failed request meant the
+  // click did nothing at all — which is exactly how Guard "stopped working"
+  // (Oskar, 2026-07-27). A screen with stale-or-empty data beats a dead button.
+  function openGuard() {
     setSelectedThreadId(null);
     setMobileSidebarOpen(false);
-    setAuditEvents(await fetchAuditEvents());
     setScreen("guard");
+    void fetchAuditEvents()
+      .then(setAuditEvents)
+      .catch(() => undefined);
   }
 
-  async function openLibrary() {
+  function refreshLibraryData(): void {
+    void fetchLibraryMethods()
+      .then(setLibraryMethods)
+      .catch(() => undefined);
+    void fetchLibraryRoutines()
+      .then(setLibraryRoutines)
+      .catch(() => undefined);
+  }
+
+  function openLibrary() {
     setSelectedThreadId(null);
     setMobileSidebarOpen(false);
-    const [methods, routines] = await Promise.all([
-      fetchLibraryMethods(),
-      fetchLibraryRoutines(),
-    ]);
-    setLibraryMethods(methods);
-    setLibraryRoutines(routines);
     setScreen("library");
+    refreshLibraryData();
   }
 
-  async function openCommunity() {
+  function openCommunity() {
     setSelectedThreadId(null);
     setMobileSidebarOpen(false);
-    const [methods, routines] = await Promise.all([
-      fetchLibraryMethods(),
-      fetchLibraryRoutines(),
-    ]);
-    setLibraryMethods(methods);
-    setLibraryRoutines(routines);
     setScreen("community");
+    refreshLibraryData();
   }
 
   function openScreen(nextScreen: Screen) {

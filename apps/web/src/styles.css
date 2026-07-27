@@ -6097,3 +6097,7 @@ html, body { overscroll-behavior-y: none; }
 .engine-intro-row .secondary-button { flex: none; }
 .engine-section { border-top: 2px solid var(--border); margin-top: var(--space-5); padding-top: var(--space-4); }
 .engine-section > .settings-subhead { margin-top: 0; }
+/* The Sharing card's state line + control rows (one anatomy across states). */
+.sharing-status { margin: 0 0 var(--space-3); font-size: var(--fs-md); font-weight: 600; color: var(--accent); }
+.sharing-actions { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; margin: var(--space-2) 0 var(--space-3); }
+.sharing-mode-field { flex: 0 1 320px; }
