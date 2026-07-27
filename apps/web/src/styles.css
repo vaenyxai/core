@@ -2142,23 +2142,22 @@ select {
   min-height: 0;
   max-height: none;
   overflow: visible;
-  /* The bottom padding has to clear the sticky composer, or the last lines of
-     a long reply come to rest underneath it (the 2026-07-26 phone bug). It was
-     a flat 200px "to be generous", which read as a wall of dead space under
-     every finished conversation (Oskar, 2026-07-27) — now it matches the
-     composer's normal height, and grows only while a photo is attached. */
-  padding: 44px max(18px, calc((100% - 820px) / 2)) 120px;
-}
-
-.ask-vaenyx-messages.composer-grown {
-  padding-bottom: 210px;
+  /* Bottom padding is BREATHING SPACE ONLY (Oskar, 2026-07-27, third round).
+     The sticky composer carries its own fade gradient precisely so content may
+     scroll underneath it mid-read; reserving composer-height here as well
+     produced a scrollable wall of nothing under every conversation. Landing
+     the LAST message clear of the composer is the anchor's job — see
+     .chat-end-anchor's scroll-margin — not this padding's. */
+  padding: 44px max(18px, calc((100% - 820px) / 2)) 24px;
 }
 
 /* Scroll target after a send: land the newest message clear of the sticky
    composer instead of underneath it. */
 .chat-end-anchor {
   height: 1px;
-  scroll-margin-bottom: 120px;
+  /* Clears the sticky composer (and its taller photo-attached form), so the
+     newest message always lands above it after a send or an open. */
+  scroll-margin-bottom: 190px;
 }
 
 .ask-vaenyx-message {
@@ -6088,3 +6087,6 @@ html, body { overscroll-behavior-y: none; }
 .thinking-status { margin: 0 0 4px; font-size: var(--fs-sm); color: var(--text-muted); }
 .thinking-status::before { content: "\2699 "; }
 .thinking-text { margin: 0; font-size: var(--fs-sm); color: var(--text-faint); font-style: italic; white-space: pre-line; max-height: 9em; overflow: hidden; display: flex; flex-direction: column-reverse; }
+/* Splash held over a conversation whose first load is in flight: deep links go
+   splash -> conversation, with no half-built frame between. */
+.chat-splash { position: fixed; inset: 0; z-index: 80; min-height: 100dvh; background: var(--bg); }

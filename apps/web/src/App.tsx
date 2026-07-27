@@ -5945,13 +5945,28 @@ function AskVaenyxPanel({
     }
   }, [focusedTaskId, focusedTaskStatus, view]);
 
+  // Photos load after the text does, and each one pushes the page down under
+  // the anchored position — which is how opening a picture conversation kept
+  // landing on the FIRST photo instead of the end (Oskar, 2026-07-27). The
+  // anchor time is remembered; every photo that finishes loading inside that
+  // window re-anchors to the true end.
+  const lastAnchorAtRef = useRef(0);
+
+  function reanchorAfterImageLoad() {
+    if (Date.now() - lastAnchorAtRef.current > 3000) return;
+    const target = view === "task" ? taskEndRef.current : chatEndRef.current;
+    target?.scrollIntoView({ block: "end" });
+  }
+
   useEffect(() => {
     if (view !== "chat") return;
+    lastAnchorAtRef.current = Date.now();
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [loadingMessages, messages.length, sending, view]);
 
   useEffect(() => {
     if (view !== "task") return;
+    lastAnchorAtRef.current = Date.now();
     taskEndRef.current?.scrollIntoView({ block: "end" });
   }, [loadingTaskMessages, sendingTaskMessage, taskMessages.length, view]);
 
@@ -7257,6 +7272,21 @@ function AskVaenyxPanel({
             : "ask-vaenyx-chat"
         }
       >
+        {/* A deep link (notification, refresh) must go splash → conversation
+            with nothing in between. While the FIRST load of a conversation is
+            in flight there is nothing real to show, and the half-empty chat
+            frame underneath read as "flashed the home page" (Oskar,
+            2026-07-27) — so the splash simply stays up until the messages
+            arrive. Switching between loaded chats keeps the old messages on
+            screen and never hits this. */}
+        {loadingMessages && messages.length === 0 ? (
+          <div className="loading-screen chat-splash">
+            <div>
+              <span className="brand-mark">V</span>
+              <p>{lang === "zh" ? "正在打开对话…" : "Opening the chat…"}</p>
+            </div>
+          </div>
+        ) : null}
         <header className="ask-vaenyx-chat-header">
           <div className="focused-title-line">
             <h2>{activeConversation?.title?.trim() || "Vaenyx Chat"}</h2>
@@ -7492,11 +7522,7 @@ function AskVaenyxPanel({
         ) : null}
 
         <div
-          className={
-            pendingImageId
-              ? "ask-vaenyx-messages composer-grown"
-              : "ask-vaenyx-messages"
-          }
+          className="ask-vaenyx-messages"
           onTouchEnd={() => void handleMessagesPullEnd()}
           onTouchMove={handleMessagesPullMove}
           onTouchStart={handleMessagesPullStart}
@@ -7617,6 +7643,7 @@ function AskVaenyxPanel({
                   <img
                     alt=""
                     className="message-photo"
+                    onLoad={reanchorAfterImageLoad}
                     src={`/v1/vision/image/${message.imageId}`}
                   />
                 ) : null}
