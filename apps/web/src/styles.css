@@ -6105,3 +6105,8 @@ html, body { overscroll-behavior-y: none; }
    2026-07-27: swapping the asset alone changed nothing visible - the UI drew
    its own V). The circle chrome stays; the letter becomes the moon-embrace. */
 .brand-mark-img { padding: 5px; object-fit: contain; font-size: 0; }
+/* While a run is in flight and the thread is short, the working indicator sits
+   just above the composer instead of stranding mid-screen with a void below
+   (Oskar, 2026-07-27). margin-top:auto takes the grid slack ABOVE it. */
+.ask-vaenyx-messages > .ask-vaenyx-message:last-child:has(.streaming-pending) { margin-top: auto; }
+.thinking-block { margin-top: auto; }

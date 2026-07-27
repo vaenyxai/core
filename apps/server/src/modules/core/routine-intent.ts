@@ -56,6 +56,7 @@ export async function classifyRoutineIntent(
     createDescription: null,
     clarifyQuestion: null,
     imagePrompt: null,
+    taskTitle: null,
     note: "",
   };
 
@@ -180,6 +181,8 @@ export async function classifyRoutineIntent(
     '  "editRequest": "<for edit-method, what to change, in the Owner\'s',
     '    language, else null>",',
     '  "taskRequest": "<for use-task, the thing to do, else null>",',
+    '  "taskTitle": "<for use-task, a title of 2-6 words in the Owner\'s',
+    '    language (e.g. 墨尔本建筑新闻早报), else null>",',
     '  "taskSchedule": { "cadence": "hourly"|"daily"|"weekly"|"monthly",',
     '      "time": "HH:MM" or null, "dayOfWeek": 0-6 or null,',
     '      "dayOfMonth": 1-31 or null } or null,',
@@ -230,6 +233,10 @@ export async function classifyRoutineIntent(
   const editRequest =
     typeof parsed.editRequest === "string" && parsed.editRequest.trim()
       ? parsed.editRequest.trim().slice(0, 2000)
+      : null;
+  const taskTitle =
+    typeof parsed.taskTitle === "string" && parsed.taskTitle.trim()
+      ? parsed.taskTitle.trim().slice(0, 80)
       : null;
   const taskRequest =
     typeof parsed.taskRequest === "string" && parsed.taskRequest.trim()
@@ -311,6 +318,7 @@ export async function classifyRoutineIntent(
       createDescription: null,
       clarifyQuestion: null,
       imagePrompt: null,
+      taskTitle,
       note,
     };
   }
@@ -327,6 +335,7 @@ export async function classifyRoutineIntent(
       createDescription: null,
       clarifyQuestion: null,
       imagePrompt: null,
+      taskTitle,
       note,
     };
   }
@@ -344,6 +353,7 @@ export async function classifyRoutineIntent(
       createDescription: createDescription ?? content.trim().slice(0, 2000),
       clarifyQuestion: null,
       imagePrompt: null,
+      taskTitle,
       note,
     };
   }
@@ -369,6 +379,7 @@ export async function classifyRoutineIntent(
       createDescription: null,
       clarifyQuestion: null,
       imagePrompt: null,
+      taskTitle,
       note,
     };
   }
@@ -387,6 +398,7 @@ export async function classifyRoutineIntent(
       createDescription: null,
       clarifyQuestion,
       imagePrompt: null,
+      taskTitle,
       note,
     };
   }
@@ -402,6 +414,7 @@ export async function classifyRoutineIntent(
     createDescription: null,
     clarifyQuestion: null,
     imagePrompt: null,
+    taskTitle,
     note,
   };
 }

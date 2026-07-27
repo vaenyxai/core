@@ -388,6 +388,9 @@ export const ClassifyRoutineResponseSchema = Type.Object(
     clarifyQuestion: Type.Union([Type.String(), Type.Null()]),
     // For draw: the English image prompt, ready for the picture engine.
     imagePrompt: Type.Union([Type.String(), Type.Null()]),
+    // For use-task: a few-word title in the Owner's language, for the task
+    // header and thread list ("墨尔本建筑新闻早报", not the whole request).
+    taskTitle: Type.Union([Type.String(), Type.Null()]),
     note: Type.String(),
   },
   { additionalProperties: false },
@@ -763,6 +766,10 @@ export const WorkspaceSchema = Type.Object(
 export const CreateTaskRequestSchema = Type.Object(
   {
     request: Type.String({ minLength: 1, maxLength: 10_000 }),
+    // A short human title (a few words). Absent = derived from the request,
+    // which for a long instruction makes an unreadable header — the intent
+    // classifier supplies one in the Owner's language.
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
     projectId: Type.String({ minLength: 1 }),
     skillId: Type.Optional(Type.String({ minLength: 1 })),
     sourceChatId: Type.Optional(

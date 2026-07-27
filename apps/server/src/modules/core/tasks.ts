@@ -607,7 +607,11 @@ export function createResearchTask(
   const request = input.request.trim();
   const id = randomUUID();
   const now = new Date().toISOString();
-  const title = request.length > 64 ? `${request.slice(0, 61)}...` : request;
+  // A supplied short title wins; deriving from the request is the fallback,
+  // and for a long instruction it makes an unreadable header.
+  const title =
+    input.title?.trim() ||
+    (request.length > 64 ? `${request.slice(0, 61)}...` : request);
   const memories = listTaskProjectMemories(database, project.id);
   const sourceChat = getSourceChat(database, input.sourceChatId ?? null, ownerId);
 

@@ -2573,6 +2573,7 @@ export async function registerGatewayRoutes(
           createDescription: null,
           clarifyQuestion: null,
           imagePrompt: null,
+          taskTitle: null,
           note: "",
         };
       }

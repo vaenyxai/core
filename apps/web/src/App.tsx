@@ -5415,6 +5415,7 @@ function AskVaenyxPanel({
     content: string,
     sourceChatId?: string | null,
     projectId?: string | null,
+    title?: string,
   ) => Promise<Task>;
   onDraftConversationStarted: (conversationId: string) => void;
   onLibraryRefresh: () => void;
@@ -5768,8 +5769,10 @@ function AskVaenyxPanel({
     if (requestedConversationId === activeConversationId) {
       // Same conversation, but reload when nothing is on screen: "already
       // open" with an emptied message list showed a blank chat until a manual
-      // refresh (Oskar, 2026-07-27).
-      if (messages.length === 0 && !loadingMessages) {
+      // refresh (Oskar, 2026-07-27). Never while a send is in flight — the
+      // send owns the message list, and a refetch would wipe its optimistic
+      // bubbles.
+      if (messages.length === 0 && !loadingMessages && !sending) {
         void openConversation(requestedConversationId).finally(
           onRequestedConversationHandled,
         );
@@ -6257,6 +6260,12 @@ function AskVaenyxPanel({
         preCreatedConversationId = conversation.id;
         onConversationsChange(upsertConversation(conversations, conversation));
         setActiveConversationId(conversation.id);
+        // Switch into the chat view NOW, not after classification: the judge
+        // takes a model round-trip, and on the compose screen the Owner
+        // watched ~10 silent seconds before anything moved (Oskar,
+        // 2026-07-27). With the view flipped, the optimistic bubble and the
+        // "working out what you're asking" status below are actually visible.
+        onDraftConversationStarted(conversation.id);
         await applyNewChatModelChoice(conversation.id);
       } catch {
         // Could not pre-create: fall through to the normal (unclassified) path.
@@ -6334,6 +6343,7 @@ function AskVaenyxPanel({
             verdict.taskRequest,
             classifyConversationId,
             activeThread?.projectId ?? null,
+            verdict.taskTitle ?? undefined,
           );
           // Recurring ask ("every morning at 7"): schedule it in the same step
           // and tell the Owner in the chat, so it never silently stays one-off.
@@ -16321,6 +16331,7 @@ function VaenyxWorkspace({
     content: string,
     sourceChatId: string | null = null,
     requestedProjectId: string | null = null,
+    title?: string,
   ): Promise<Task> {
     setError(null);
     const nextProjectId = requestedProjectId || defaultProjectId;
@@ -16331,6 +16342,7 @@ function VaenyxWorkspace({
 
     const task = await createTask({
       request: content,
+      ...(title ? { title } : {}),
       projectId: nextProjectId,
       ...(defaultSkillId ? { skillId: defaultSkillId } : {}),
       ...(sourceChatId ? { sourceChatId } : {}),
