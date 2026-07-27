@@ -5705,6 +5705,28 @@ function AskVaenyxPanel({
     void openConversation(firstConversation.id);
   }, [activeConversationId, conversations, view]);
 
+  // Watch-it-work (Oskar, 2026-07-27): while a reply is being made, the chat
+  // shows what is happening — a status line for the steps Vaenyx itself runs
+  // (translating the picture prompt, generating the picture), and the model's
+  // own thinking where the backend streams it. Both vanish when the reply
+  // lands, Claude-Code style: the workings are watchable, the record is clean.
+  const [streamStatus, setStreamStatus] = useState<string | null>(null);
+  const [streamThinking, setStreamThinking] = useState("");
+
+  function statusLabel(code: string): string {
+    const zh = lang === "zh";
+    if (code === "image-prompt") {
+      return zh ? "正在把要求写成画图 prompt…" : "Writing the picture prompt…";
+    }
+    if (code === "image-generating") {
+      return zh ? "正在生成图片…" : "Generating the picture…";
+    }
+    if (code === "answering") {
+      return zh ? "思考中…" : "Thinking…";
+    }
+    return code;
+  }
+
   // Pulling down at the top of a conversation refreshes THAT conversation —
   // the browser's whole-page reload gesture is switched off in CSS, because
   // reloading the entire app to see a new message is a sledgehammer (Oskar,
@@ -6442,6 +6464,9 @@ function AskVaenyxPanel({
             ),
           onDelta: (text) => {
             maybePrewarmSpeech(text);
+            // The answer is arriving: the working status has served its
+            // purpose. Thinking stays visible until the turn finishes.
+            setStreamStatus(null);
             setMessages((current) =>
               current.map((message) =>
                 message.id === tempAssistantId
@@ -6450,6 +6475,9 @@ function AskVaenyxPanel({
               ),
             );
           },
+          onStatus: (code) => setStreamStatus(code),
+          onThinking: (text) =>
+            setStreamThinking((current) => (current + text).slice(-4000)),
         },
         suggestRoutineId,
         suggestTask,
@@ -6559,6 +6587,10 @@ function AskVaenyxPanel({
     } finally {
       streamControllerRef.current = null;
       setSending(false);
+      // The workings vanish when the reply lands (or fails): the transcript
+      // keeps only the answer.
+      setStreamStatus(null);
+      setStreamThinking("");
     }
   }
 
@@ -7576,6 +7608,18 @@ function AskVaenyxPanel({
               </article>
             ))
           )}
+          {/* The live workings: status + thinking while the reply is made,
+              gone the moment it lands. */}
+          {sending && (streamStatus || streamThinking) ? (
+            <div className="thinking-block">
+              {streamStatus ? (
+                <p className="thinking-status">{statusLabel(streamStatus)}</p>
+              ) : null}
+              {streamThinking ? (
+                <p className="thinking-text">{streamThinking}</p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="chat-end-anchor" ref={chatEndRef} />
         </div>
         <JumpToLatest

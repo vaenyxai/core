@@ -519,6 +519,11 @@ export interface CreateAskVaenyxMessageOptions {
   // decided this asks for a picture and produced the English prompt. The turn
   // generates with it instead of judging again.
   imagePrompt?: string;
+  // Live progress for the Owner (Oskar, 2026-07-27): what the turn is doing
+  // while nothing is streaming yet ("image-generating"…), and the model's own
+  // thinking where the backend exposes it. Both vanish when the reply lands.
+  onStatus?: (code: string) => void;
+  onThinking?: (text: string) => void;
   // Where stored photos live (needed to build the data URL for the model).
   dataDirectory?: string;
   // Where the model keys live. Needed so a photo can still be READ when the
@@ -809,8 +814,10 @@ export async function createAskVaenyxMessage(
           // English prompt first: the image model reads English, not the
           // Owner's language (see buildImagePrompt for the landscape story).
           // The judge usually handed the prompt over with its verdict.
+          if (!suppliedPrompt) options?.onStatus?.("image-prompt");
           const imagePrompt =
             suppliedPrompt ?? (await buildImagePrompt(provider, content));
+          options?.onStatus?.("image-generating");
           generatedImageId = await generateImage(
             options.secretsDirectory,
             options.dataDirectory,
@@ -838,6 +845,7 @@ export async function createAskVaenyxMessage(
       }
     }
 
+    options?.onStatus?.("answering");
     const result = await provider.sendChat(history, contextWithPhoto, {
       onDelta: options?.onDelta
         ? (delta) => {
@@ -845,6 +853,7 @@ export async function createAskVaenyxMessage(
             options.onDelta?.(delta);
           }
         : undefined,
+      onThinking: options?.onThinking,
       signal: options?.signal,
       reasoningEffort: settingsRow?.reasoning_effort ?? "medium",
       ...(settingsRow?.model_name ? { model: settingsRow.model_name } : {}),

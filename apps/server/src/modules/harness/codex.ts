@@ -514,6 +514,7 @@ interface PendingChatTurn {
 interface PendingAskVaenyxTurn {
   finalAnswer: string;
   onDelta?: (text: string) => void;
+  onThinking?: (text: string) => void;
   reject: (reason?: unknown) => void;
   resolve: (value: AskVaenyxResult) => void;
   safetyViolation: Error | undefined;
@@ -903,6 +904,7 @@ class CodexAskVaenyxSession {
     messages: AskVaenyxInputMessage[],
     projectContext?: string,
     onDelta?: (text: string) => void,
+    onThinking?: (text: string) => void,
   ): Promise<AskVaenyxResult> {
     await this.#initialized;
 
@@ -938,6 +940,7 @@ class CodexAskVaenyxSession {
         transcript,
       ].join("\n"),
       onDelta,
+      onThinking,
     );
   }
 
@@ -1023,6 +1026,21 @@ class CodexAskVaenyxSession {
       return;
     }
 
+    // The model's reasoning, streamed live where the CLI streams it (higher
+    // effort levels) — probed 2026-07-27: reasoning arrives as items, and a
+    // delta method exists for it in the protocol family. Either way it feeds
+    // the same thinking channel.
+    if (
+      message.method?.includes("reasoning") &&
+      message.method.endsWith("/delta")
+    ) {
+      const delta = (message.params as { delta?: unknown } | undefined)?.delta;
+      if (this.#turn?.onThinking && typeof delta === "string") {
+        this.#turn.onThinking(delta);
+      }
+      return;
+    }
+
     if (message.method === "item/completed") {
       this.#handleTurnItem(message);
       return;
@@ -1045,8 +1063,34 @@ class CodexAskVaenyxSession {
           phase?: string | null;
           text?: string;
           type?: string;
+          summary?: unknown;
+          content?: unknown;
         }
       | undefined;
+
+    // Thinking (probe, 2026-07-27): the turn carries reasoning ITEMS the old
+    // code silently dropped. Their text is the model's own working notes —
+    // shown live in the chat and gone when the reply lands.
+    if (item?.type === "reasoning") {
+      const text =
+        typeof item.text === "string" && item.text.trim()
+          ? item.text
+          : Array.isArray(item.summary)
+            ? item.summary
+                .map((part) =>
+                  typeof part === "string"
+                    ? part
+                    : typeof (part as { text?: unknown })?.text === "string"
+                      ? String((part as { text: string }).text)
+                      : "",
+                )
+                .join("\n")
+            : "";
+      if (this.#turn.onThinking && text.trim()) {
+        this.#turn.onThinking(`${text.trim()}\n`);
+      }
+      return;
+    }
 
     if (item?.type === "webSearch" || item?.type === "web_search") {
       this.#turn.webSearchUsed = true;
@@ -1130,6 +1174,7 @@ class CodexAskVaenyxSession {
     threadId: string,
     request: string,
     onDelta?: (text: string) => void,
+    onThinking?: (text: string) => void,
   ): Promise<AskVaenyxResult> {
     if (this.#turn) throw new Error("CODEX_ASK_VAENYX_SESSION_BUSY");
 
@@ -1137,6 +1182,7 @@ class CodexAskVaenyxSession {
       this.#turn = {
         finalAnswer: "",
         onDelta,
+        onThinking,
         reject,
         resolve,
         safetyViolation: undefined,
@@ -1168,6 +1214,10 @@ let askVaenyxSessionQueue: Promise<void> = Promise.resolve();
 
 export interface RunAskVaenyxOptions {
   onDelta?: (text: string) => void;
+  // The model's own working notes (reasoning items/deltas), streamed live so
+  // the Owner can watch the thinking and see it fold away when the reply
+  // lands. Backends without a reasoning channel simply never call it.
+  onThinking?: (text: string) => void;
   signal?: AbortSignal;
   reasoningEffort?: string;
   // Per-conversation model override ("model within the provider"). Key-based
@@ -1224,7 +1274,12 @@ export async function runAskVaenyxChat(
       }
     }
 
-    return await session.run(messages, projectContext, options?.onDelta);
+    return await session.run(
+      messages,
+      projectContext,
+      options?.onDelta,
+      options?.onThinking,
+    );
   } finally {
     if (options?.signal && onAbort) {
       options.signal.removeEventListener("abort", onAbort);

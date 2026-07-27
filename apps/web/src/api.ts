@@ -451,6 +451,11 @@ export function setDefaultModelProvider(
 export interface StreamMessageCallbacks {
   onOwner?: (message: AskVaenyxMessage) => void;
   onDelta?: (text: string) => void;
+  // Transient progress: a status code for what the turn is doing before text
+  // streams, and the model's own thinking where the backend exposes it. Both
+  // are display-only and vanish when the reply lands.
+  onStatus?: (code: string) => void;
+  onThinking?: (text: string) => void;
   signal?: AbortSignal;
 }
 
@@ -516,6 +521,10 @@ async function streamMessageRequest(
       callbacks.onOwner?.(data as AskVaenyxMessage);
     } else if (event === "delta") {
       callbacks.onDelta?.((data as { text: string }).text);
+    } else if (event === "status") {
+      callbacks.onStatus?.((data as { code: string }).code);
+    } else if (event === "thinking") {
+      callbacks.onThinking?.((data as { text: string }).text);
     } else if (event === "done") {
       result = data as CreateAskVaenyxMessageResponse;
     } else if (event === "error") {

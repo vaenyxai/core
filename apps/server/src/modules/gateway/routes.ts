@@ -805,6 +805,12 @@ export async function registerGatewayRoutes(
       const response = await run({
         onOwnerMessage: (message) => send("owner", message),
         onDelta: (text) => send("delta", { text }),
+        // Live progress: what the turn is doing before anything streams, and
+        // the model's own thinking where the backend exposes it. Both are
+        // transient — the web shows them while working and drops them when
+        // the reply lands.
+        onStatus: (code) => send("status", { code }),
+        onThinking: (text) => send("thinking", { text }),
         signal: controller.signal,
       });
       audit(response);
