@@ -679,6 +679,20 @@ export function createResearchTask(
 // In-flight task executions, keyed by task id, so the Owner can cancel them.
 const runningTasks = new Map<string, AbortController>();
 
+// The model's live thinking for a run in flight, so the open task view can
+// watch it work (Oskar, 2026-07-27). In-memory only: it exists while the run
+// does and vanishes with it — the durable record is the run's result.
+const liveRunThinking = new Map<string, string>();
+
+export function appendRunThinking(taskId: string, text: string): void {
+  const current = liveRunThinking.get(taskId) ?? "";
+  liveRunThinking.set(taskId, (current + text).slice(-4000));
+}
+
+export function getRunThinking(taskId: string): string {
+  return liveRunThinking.get(taskId) ?? "";
+}
+
 const TASK_ERROR_COPY: Record<string, string> = {
   CODEX_TASK_CANCELLED: "This task was cancelled.",
   CODEX_NOT_INSTALLED:
@@ -792,6 +806,7 @@ async function executeTaskRun(
     status = "failed";
   } finally {
     runningTasks.delete(id);
+    liveRunThinking.delete(id);
   }
 
   await finishTaskRun(database, id, runId, trigger, result, status);
@@ -1115,6 +1130,7 @@ function runTaskById(
     run = (signal) =>
       getDefaultProvider().sendChat([{ content: task.request, role: "owner" }], context, {
         signal,
+        onThinking: (text) => appendRunThinking(task.id, text),
       }).then((reply) => reply.answer);
   }
 

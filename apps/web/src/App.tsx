@@ -193,6 +193,7 @@ import {
   setMethodTags,
   streamAskVaenyxMessage,
   streamTaskMessage,
+  fetchTaskLive,
   retryTask,
   setTaskSchedule,
   setupOwner,
@@ -5712,6 +5713,8 @@ function AskVaenyxPanel({
   // lands, Claude-Code style: the workings are watchable, the record is clean.
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [streamThinking, setStreamThinking] = useState("");
+  // A task RUN's thinking arrives by poll, not stream (runs are detached).
+  const [runThinking, setRunThinking] = useState("");
 
   function statusLabel(code: string): string {
     const zh = lang === "zh";
@@ -5900,10 +5903,17 @@ function AskVaenyxPanel({
   useEffect(() => {
     if (!focusedTaskId) return undefined;
     if (focusedTaskStatus !== "running" && focusedTaskStatus !== "waiting") {
+      // The run is over; its workings go with it.
+      setRunThinking("");
       return undefined;
     }
     const timer = window.setInterval(() => {
       void onWorkspaceRefresh();
+      // A run executes detached on the server (a locked phone still gets its
+      // reply), so its thinking cannot stream here — the open view polls it.
+      void fetchTaskLive(focusedTaskId)
+        .then((live) => setRunThinking(live.thinking))
+        .catch(() => undefined);
       void fetchTaskRuns(focusedTaskId)
         .then(setTaskRuns)
         .catch(() => undefined);
@@ -6668,6 +6678,11 @@ function AskVaenyxPanel({
               message.id === tempOwnerId ? ownerMessage : message,
             ),
           ),
+        // Same watch-it-work channel the plain chat has — the task thread was
+        // missed on the first pass (Oskar, 2026-07-27).
+        onStatus: (code) => setStreamStatus(code),
+        onThinking: (text) =>
+          setStreamThinking((current) => (current + text).slice(-4000)),
         onDelta: (text) =>
           setTaskMessages((current) =>
             current.map((message) =>
@@ -6716,6 +6731,8 @@ function AskVaenyxPanel({
     } finally {
       streamControllerRef.current = null;
       setSendingTaskMessage(false);
+      setStreamStatus(null);
+      setStreamThinking("");
     }
   }
 
@@ -8231,7 +8248,26 @@ function AskVaenyxPanel({
                   <strong>{agentName}</strong>
                 </div>
                 <ThinkingIndicator />
+                {/* The run's live thinking, polled while it works — a run is
+                    detached from any one screen, so it cannot stream. */}
+                {runThinking ? (
+                  <p className="thinking-text">{runThinking}</p>
+                ) : null}
               </article>
+            ) : null}
+            {/* Chatting in the task thread gets the same watch-it-work block
+                as the plain chat. */}
+            {sendingTaskMessage && (streamStatus || streamThinking) ? (
+              <div className="thinking-block">
+                {streamStatus ? (
+                  <p className="thinking-status">
+                    {statusLabel(streamStatus)}
+                  </p>
+                ) : null}
+                {streamThinking ? (
+                  <p className="thinking-text">{streamThinking}</p>
+                ) : null}
+              </div>
             ) : null}
             <div className="chat-end-anchor" ref={taskEndRef} />
           </div>

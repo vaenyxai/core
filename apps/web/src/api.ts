@@ -601,6 +601,15 @@ export async function classifyMessage(
   return verdict;
 }
 
+// The in-flight run's live thinking, polled by the open task view — a run is
+// detached from any one screen (a locked phone still gets its reply), so its
+// workings cannot stream the way chat replies do.
+export function fetchTaskLive(id: string): Promise<{ thinking: string }> {
+  return requestJson<{ thinking: string }>(
+    `/v1/tasks/${encodeURIComponent(id)}/live`,
+  );
+}
+
 export function streamTaskMessage(
   taskId: string,
   content: string,

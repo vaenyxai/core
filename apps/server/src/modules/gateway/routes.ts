@@ -418,6 +418,7 @@ import {
   listTaskRuns,
   listTasks,
   retryTask,
+  getRunThinking,
   setTaskSchedule,
   stampTaskMode,
 } from "../core/tasks.js";
@@ -3319,6 +3320,19 @@ export async function registerGatewayRoutes(
         }
         throw error;
       }
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/tasks/:id/live",
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      // The in-flight run's thinking, for the open task view to watch. Empty
+      // when nothing is running (or the backend has no reasoning channel).
+      return { thinking: getRunThinking(request.params.id) };
     },
   );
 
