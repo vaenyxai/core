@@ -1823,6 +1823,12 @@ function VoicePanel() {
   const [outputError, setOutputError] = useState<string | null>(null);
   const [visionError, setVisionError] = useState<string | null>(null);
   const [freePicks, setFreePicks] = useState<FreePicksState | null>(null);
+  const firstFreePick =
+    freePicks?.items.voiceIn ??
+    freePicks?.items.voiceOut ??
+    freePicks?.items.vision ??
+    freePicks?.items.image ??
+    null;
   const [freeBusy, setFreeBusy] = useState(false);
 
   async function updateFreePicks() {
@@ -2084,6 +2090,14 @@ function VoicePanel() {
           Asks your main model what is free right now.
         </span>
       </div>
+      {/* F6, with the answers and never behind a tooltip: attribution alone
+          reads as a citation, and a citation is the opposite of a caveat —
+          these are someone else's prices, and the model can simply be wrong. */}
+      {firstFreePick ? (
+        <p className="context-disclaimer">
+          {freeAnswerNotice(t, lang, firstFreePick)}
+        </p>
+      ) : null}
 
       <h3 className="settings-subhead">Voice Input (Speech To Text)</h3>
       <p className="settings-card-copy">
@@ -2483,6 +2497,7 @@ function VoicePanel() {
           <label className="chat-font-field">
             Workers AI Token
             <input
+              autoCapitalize="off"
               autoComplete="off"
               className="key-input"
               disabled={busy}
@@ -2506,6 +2521,7 @@ function VoicePanel() {
           <label className="chat-font-field">
             Account ID
             <input
+              autoCapitalize="off"
               autoComplete="off"
               className="key-input"
               disabled={busy}
@@ -2530,16 +2546,21 @@ function VoicePanel() {
             are signed in — dash.cloudflare.com/&lt;that long code&gt;. A token
             made from the template cannot tell us its account, so paste both.
           </p>
-          {/* F1 / TPN n.3: this token field connects a cloud model, so the
-              third-party notice renders here like every other such surface. */}
+          {/* F5, not F1: the generic cloud notice claims memories, profile and
+              attachments go to the provider, which is NOT true of an image
+              provider — one English prompt goes. The real disclosure is the
+              other way round: the main model WRITES that prompt and can see
+              context, so it can word things the Owner never typed — which is
+              why the sent prompt is shown beside every generated picture. */}
           <p className="context-disclaimer">
-            {t("legal.notice.modelConnect.cloud")}
+            {t("legal.notice.modelConnect.pictures")}
           </p>
         </>
       ) : null}
       <SlotKeyAdd
         capability="image"
         exclude={["workersai"]}
+        notice="legal.notice.modelConnect.pictures"
         onConnected={refreshEngines}
         providers={providers}
       />
@@ -7502,6 +7523,15 @@ function AskVaenyxPanel({
                     src={`/v1/vision/image/${message.imageId}`}
                   />
                 ) : null}
+                {/* F5's promise, kept: the exact prompt that went to the image
+                    provider sits beside the picture — the main model wrote it,
+                    so it can contain words the Owner never typed. */}
+                {message.imageId && message.imagePrompt ? (
+                  <p className="sent-prompt">
+                    {lang === "zh" ? "发送的 prompt:" : "Prompt sent: "}
+                    {message.imagePrompt}
+                  </p>
+                ) : null}
                 {message.voice && message.role === "owner" ? (
                   <VoiceBubble
                     audioId={message.audioId}
@@ -8757,6 +8787,30 @@ function FlywheelQueuePanel() {
   );
 }
 
+// F6 (copy pack): the model's free-options answer must carry, on the same
+// screen, that it may simply be wrong. The pack string holds {model} / {date}
+// and an optional web-search clause; one refresh answers all four slots, so
+// one rendered instance covers them.
+function freeAnswerNotice(
+  t: (key: string) => string,
+  lang: string,
+  pick: { source: string; checkedAt: string },
+): string {
+  const webSuffix = ", web search";
+  const searched = pick.source.endsWith(webSuffix);
+  const model = searched
+    ? pick.source.slice(0, -webSuffix.length)
+    : pick.source;
+  const date = new Date(pick.checkedAt).toLocaleDateString(
+    lang === "zh" ? "zh-CN" : "en-AU",
+  );
+  return t("legal.notice.freeOptions.modelAnswer")
+    .replaceAll("{model}", model)
+    .replaceAll("{date}", date)
+    .replace("{, with web search}", searched ? ", with web search" : "")
+    .replace("{,已联网搜索}", searched ? ",已联网搜索" : "");
+}
+
 // The engine pickers offer what the household has actually signed in to
 // (Oskar, 2026-07-27). Signing in ADDS a backend and never replaces one, so
 // every slot — the main agent and the four side engines — chooses from the
@@ -8796,11 +8850,16 @@ function EngineOptions({
 function SlotKeyAdd({
   capability,
   exclude = [],
+  notice = "legal.notice.modelConnect.cloud",
   onConnected,
   providers,
 }: {
   capability: string;
   exclude?: string[];
+  /** Which third-party notice fits this slot: the generic cloud one (F1) by
+   *  default; the pictures slot passes F5, because what leaves the device for
+   *  an image provider is one prompt, not the F1 list. */
+  notice?: string;
   onConnected: () => void;
   providers: ModelProviderInfo[];
 }) {
@@ -8870,6 +8929,7 @@ function SlotKeyAdd({
           login, and password fields make the browser offer to save it in its
           password manager. */}
       <input
+        autoCapitalize="off"
         autoComplete="off"
         className="key-input"
         disabled={saving}
@@ -8895,9 +8955,9 @@ function SlotKeyAdd({
       >
         Cancel
       </button>
-      {/* F1 / TPN n.3: every surface that connects a cloud model renders the
+      {/* TPN n.3: every surface that connects a cloud model renders the
           third-party notice — this inline add is such a surface. */}
-      <p className="context-disclaimer">{t("legal.notice.modelConnect.cloud")}</p>
+      <p className="context-disclaimer">{t(notice)}</p>
       {error ? <p className="form-error">{error}</p> : null}
     </div>
   );
@@ -9137,6 +9197,7 @@ function ModelsPanel() {
         ) : null}
         {provider.needsKey ? (
           <input
+            autoCapitalize="off"
             autoComplete="off"
             className="method-rename-input key-input"
             spellCheck={false}
@@ -13027,12 +13088,13 @@ function CreateRoutinePanel({
 // version: it changes whenever any string changes, and it is what gets recorded
 // against an acknowledgement, so a record always says exactly which text the
 // Owner was shown.
-// 2.7 = Part K finalized (2026-07-27). The publish service's
-// MIN_ACCEPTED_COPY_VERSION deliberately STAYS 2.6: the floor moves only when
-// an EXISTING consent string materially changes, because moving it re-asks
-// everyone. K3 is a brand-new consent point nobody has answered yet — it
-// invalidates nothing already recorded.
-const LEGAL_COPY_VERSION = "2.7";
+// 2.8 = F5 (pictures third-party notice, with the shown-prompt promise kept)
+// and F6 (the free-options answer carries "this may simply be wrong") land,
+// 2026-07-27. The publish service's MIN_ACCEPTED_COPY_VERSION deliberately
+// STAYS 2.6: the floor moves only when an EXISTING consent string materially
+// changes, because moving it re-asks everyone — F5/F6 are notices, not consent
+// strings, and 2.7's K3 was a brand-new consent point nobody had answered.
+const LEGAL_COPY_VERSION = "2.8";
 
 // The consent floor, and the only thing that re-asks the Owner (Oskar, 2026-07-25).
 // It moves ONLY when a consent-class string (`legal.consent.*`) changes in
@@ -17170,6 +17232,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
             </a>
           ) : null}
           <input
+            autoCapitalize="off"
             autoComplete="off"
             className="method-rename-input key-input"
             onChange={(event) => setApiKey(event.target.value)}

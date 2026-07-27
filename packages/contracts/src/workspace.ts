@@ -271,6 +271,10 @@ export const AskVaenyxMessageSchema = Type.Object(
     // Phase B: a photo attached to the message (shown as a thumbnail; a
     // vision-capable main model sees the original directly).
     imageId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // Generated pictures only: the exact English prompt that was sent to the
+    // image provider, shown beside the picture (F5's promise — the main model
+    // writes the prompt, so it can word things the Owner never typed).
+    imagePrompt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );

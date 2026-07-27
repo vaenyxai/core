@@ -6076,3 +6076,4 @@ select {
 html, body { overscroll-behavior-y: none; }
 .pull-refresh-hint { margin: 0 0 var(--space-2); text-align: center; font-size: var(--fs-sm); color: var(--text-muted); }
 .hard-refresh-button { display: none; }
+.sent-prompt { margin: 4px 0 0; font-size: var(--fs-sm); color: var(--text-muted); max-width: 480px; }

@@ -325,6 +325,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "Waiting to be sent — nothing here has left this computer yet. Anything still here in 48 hours goes out. Remove what you don't want sent, or turn sharing off to stop all of it. The wait is a chance to change your mind, not what makes this allowed: you allowed it when you turned sharing on, and you can turn it off again whenever you like.",
     "flywheel.queue.held":
       "Held back — this looks like it touches health, family or money. Vaenyx never sends these automatically. Open it, read it, and decide on this one by itself. If you do nothing, it is not sent.",
+    "legal.notice.modelConnect.pictures":
+      "You're connecting a third-party image provider. What gets sent is a single English prompt, written by your main model from what you asked for — not your memories, profile, project summaries or attached files, and not the rest of the conversation. It goes to the provider you choose, under its terms, privacy policy and any fees it charges. Because your main model writes that prompt, it can word things you did not type, so Vaenyx shows you the prompt it sent.",
+    "legal.notice.freeOptions.modelAnswer":
+      "Answered by {model} on {date}{, with web search}. This is the model's answer, not ours, and not checked by anyone — prices and free tiers change, and models get them wrong. Check the provider's own pricing page before you rely on it.",
     "legal.consent.flywheel.settingsNote":
       "This version does not upload improvement patterns. This setting records a preference only. If community improvement sharing becomes available, it will remain off until you are shown current information and make a fresh affirmative choice.",
     "legal.notice.modelConnect.local":
@@ -615,6 +619,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "等待发送 —— 这里的内容都还没有离开这台电脑。48 小时后仍在此处的,会被发送出去。把你不想发的移除,或者直接关掉分享、让全部内容都不发送。这段等待是给你反悔的机会,**并不是**这件事被允许的依据:允许它的是你开启分享时所作的选择,而你随时可以再把它关掉。",
     "flywheel.queue.held":
       "已扣下 —— 这一条看起来涉及健康、家人或金钱。Vaenyx 永远不会自动发送这类内容。请打开它、读一遍,然后单独就这一条作出决定。你什么都不做,它就不会被发送。",
+    "legal.notice.modelConnect.pictures":
+      "你正在连接第三方图片服务商。发送出去的是**一句英文 prompt**,由你的主模型根据你的要求写成 —— 不包含你的记忆、档案、项目摘要或附件,也不包含对话的其余部分。它会发送给你所选的服务商,受其条款、隐私政策及其收费约束。由于这句 prompt 是主模型写的,它可能写进你并没有打出来的内容,因此 Vaenyx 会把实际发送的 prompt 显示给你看。",
+    "legal.notice.freeOptions.modelAnswer":
+      "由 {model} 于 {date} 作答{,已联网搜索}。这是模型的答案,不是我们的答案,也没有经过任何人核实 —— 价格与免费额度会变,模型也会答错。在你据此作出决定之前,请到该服务商自己的价格页面上确认。",
     "legal.consent.flywheel.settingsNote":
       "本版本不会上传任何改进模式。此处只是记录一项偏好。若将来提供社区改进分享,它依旧保持关闭,直到向你展示当时的说明并由你重新做出一次肯定性选择。",
     "legal.notice.modelConnect.local":

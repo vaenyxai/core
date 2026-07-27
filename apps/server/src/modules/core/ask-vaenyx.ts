@@ -54,6 +54,7 @@ interface AskVaenyxMessageRow {
   voice: 0 | 1;
   audio_id: string | null;
   image_id: string | null;
+  image_prompt: string | null;
 }
 
 interface ConversationThreadContextRow {
@@ -118,6 +119,7 @@ function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
     voice: row.voice === 1,
     audioId: row.audio_id ?? null,
     imageId: row.image_id ?? null,
+    imagePrompt: row.image_prompt ?? null,
   };
 }
 
@@ -638,6 +640,10 @@ export async function createAskVaenyxMessage(
   let webSearchUsed = false;
   let streamed = "";
   let generatedImageId: string | null = null;
+  // The exact sentence that reached the image provider, stored with the reply
+  // and shown beside the picture — F5's closing sentence promises it, and the
+  // main model can word things the Owner never typed.
+  let sentImagePrompt: string | null = null;
 
   const baseContext = getConversationProjectContext(database, conversationId);
   let projectContext = baseContext;
@@ -810,6 +816,7 @@ export async function createAskVaenyxMessage(
             options.dataDirectory,
             imagePrompt,
           );
+          sentImagePrompt = imagePrompt;
           imageNote = `The system just generated a real image for the Owner's request (prompt used: "${imagePrompt}") and it is attached to your reply. Refer to it naturally, but do not describe details you cannot see.`;
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
@@ -869,8 +876,8 @@ export async function createAskVaenyxMessage(
     .prepare(
       `INSERT INTO ask_vaenyx_messages (
         id, conversation_id, role, content, status, web_search_used, created_at,
-        voice, image_id
-      ) VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?)`,
+        voice, image_id, image_prompt
+      ) VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       assistantMessageId,
@@ -881,6 +888,7 @@ export async function createAskVaenyxMessage(
       completedAt,
       options?.voiceAudioId && assistantStatus === "completed" ? 1 : 0,
       generatedImageId,
+      generatedImageId ? sentImagePrompt : null,
     );
 
   database.sqlite
