@@ -4535,17 +4535,20 @@ export async function registerGatewayRoutes(
     }
   });
 
-  app.post<{ Body: { provider: string; apiKey?: string } }>(
+  app.post<{ Body: { provider: string; apiKey?: string; accountId?: string } }>(
     "/v1/images/engine",
     {
       schema: {
         body: Type.Object(
           {
             provider: Type.String({ minLength: 1 }),
-            // Only Cloudflare uses this: its token is typed into the Pictures
+            // Only Cloudflare uses these: its token is typed into the Pictures
             // setting itself rather than under Models, because it is the one
-            // engine a household adds solely to make pictures.
+            // engine a household adds solely to make pictures. The account id
+            // is asked for only when the token cannot name it (a Workers AI
+            // template token cannot).
             apiKey: Type.Optional(Type.String({ maxLength: 500 })),
+            accountId: Type.Optional(Type.String({ maxLength: 64 })),
           },
           { additionalProperties: false },
         ),
@@ -4566,6 +4569,7 @@ export async function registerGatewayRoutes(
           context.config.secretsDirectory,
           request.body.provider as ImageEngineChoice,
           request.body.apiKey,
+          request.body.accountId,
         );
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
@@ -4583,10 +4587,23 @@ export async function registerGatewayRoutes(
               "Cloudflare would not accept that token. Check it was copied whole, and that it has the Workers AI permission.",
           });
         }
-        if (code === "IMAGE_CF_NO_ACCOUNT") {
+        if (code === "IMAGE_CF_NEED_ACCOUNT") {
+          // Not a dead end: the UI opens an Account ID field on this message.
           return reply.code(400).send({
             error:
-              "That token works but is not attached to any Cloudflare account.",
+              "That token works, but it is not allowed to name its own account — normal for a Workers AI token. Paste your Account ID as well.",
+          });
+        }
+        if (code === "IMAGE_CF_BAD_ACCOUNT_ID") {
+          return reply.code(400).send({
+            error:
+              "An Account ID is 32 letters and digits. Copy it from the address bar after you sign in to Cloudflare — dash.cloudflare.com/<that code>.",
+          });
+        }
+        if (code.startsWith("IMAGE_CF_PAIR_REJECTED")) {
+          return reply.code(400).send({
+            error:
+              "Cloudflare refused that token for that account — one of the two is wrong, or the token is missing the Workers AI permission.",
           });
         }
         throw error;

@@ -43,7 +43,11 @@ interface CloudflareConnection {
 }
 
 /** Which account does this token belong to? Asked once, when the token is
- *  saved, and stored — a token scoped to one account answers with that one. */
+ *  saved. Works for broadly-scoped tokens; a token made from the Workers AI
+ *  template CANNOT answer (listing accounts needs a permission it does not
+ *  have — the /accounts list comes back empty, which is also why wrangler
+ *  makes people type their account id). Verified against a real such token,
+ *  2026-07-27. The caller then asks the Owner for the id instead. */
 export async function discoverCloudflareAccount(
   apiKey: string,
   fetchImpl: typeof fetch = fetch,
@@ -59,9 +63,34 @@ export async function discoverCloudflareAccount(
   };
   const first = body.result?.[0]?.id;
   if (typeof first !== "string" || !first) {
-    throw new Error("IMAGE_CF_NO_ACCOUNT");
+    throw new Error("IMAGE_CF_NEED_ACCOUNT");
   }
   return first;
+}
+
+/** Can this token actually use Workers AI on this account? Asked at save time
+ *  so a wrong pairing errors while the Owner is still looking at the field.
+ *  The models catalogue is the cheapest authenticated Workers AI call: 200 =
+ *  good, 401/403 = wrong token or wrong account. Anything else (the endpoint
+ *  moved, Cloudflare is down) is INCONCLUSIVE and does not block the save —
+ *  drawing will surface the real error with the provider's own words. */
+async function verifyWorkersAiAccess(
+  apiKey: string,
+  accountId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetchImpl(
+      `${CLOUDFLARE_API}/accounts/${accountId}/ai/models/search?per_page=1`,
+      { headers: { authorization: `Bearer ${apiKey}` } },
+    );
+  } catch {
+    return;
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(`IMAGE_CF_PAIR_REJECTED:${response.status}`);
+  }
 }
 
 async function generateWithCloudflare(
@@ -175,6 +204,7 @@ export async function setImageEngine(
   secretsDirectory: string,
   choice: ImageEngineChoice,
   apiKey?: string,
+  accountIdInput?: string,
 ): Promise<ReturnType<typeof getImageEngineStatus>> {
   const connections = readProviderConnections(secretsDirectory);
   if (choice === "none") {
@@ -188,9 +218,18 @@ export async function setImageEngine(
   if (choice === "workersai") {
     const key = apiKey?.trim() || (connections.workersai as CloudflareConnection | undefined)?.apiKey;
     if (!key) throw new Error("IMAGE_NO_KEY");
-    // Look the account up now rather than at drawing time: a token that is
-    // wrong should say so while the Owner is still looking at the field.
-    const accountId = await discoverCloudflareAccount(key);
+    // The account id: typed by the Owner (a template token cannot name it),
+    // already stored, or discovered from a broad token — in that order. Then
+    // the pair is verified with a real Workers AI call, so a wrong id says so
+    // while the Owner is still looking at the field.
+    const accountId =
+      accountIdInput?.trim().toLowerCase() ||
+      (connections.workersai as CloudflareConnection | undefined)?.accountId ||
+      (await discoverCloudflareAccount(key));
+    if (!/^[0-9a-f]{32}$/.test(accountId)) {
+      throw new Error("IMAGE_CF_BAD_ACCOUNT_ID");
+    }
+    await verifyWorkersAiAccess(key, accountId);
     connections.workersai = {
       ...(connections.workersai as CloudflareConnection | undefined),
       apiKey: key,

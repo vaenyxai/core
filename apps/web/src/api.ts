@@ -1315,10 +1315,15 @@ export function fetchImageEngine(): Promise<VisionStatus> {
 export function setImageEngineChoice(
   provider: "none" | "workersai" | "gemini" | "openai" | "zhipu",
   apiKey?: string,
+  accountId?: string,
 ): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/images/engine", {
     method: "POST",
-    body: JSON.stringify(apiKey ? { provider, apiKey } : { provider }),
+    body: JSON.stringify({
+      provider,
+      ...(apiKey ? { apiKey } : {}),
+      ...(accountId ? { accountId } : {}),
+    }),
   });
 }
 

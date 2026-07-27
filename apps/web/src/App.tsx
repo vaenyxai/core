@@ -1772,6 +1772,10 @@ function VoicePanel() {
     "none" | "workersai" | "gemini" | "openai" | "zhipu"
   >("none");
   const [cloudflareToken, setCloudflareToken] = useState("");
+  // Asked for only when the token cannot name its own account (a Workers AI
+  // template token cannot — verified 2026-07-27).
+  const [cfAccountId, setCfAccountId] = useState("");
+  const [needCfAccount, setNeedCfAccount] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [outputEngine, setOutputEngine] = useState<
     "none" | "browser" | "gemini" | "local"
@@ -1930,14 +1934,20 @@ function VoicePanel() {
     setBusy(true);
     setImageError(null);
     try {
-      setImageEngine(await setImageEngineChoice(next, apiKey));
+      setImageEngine(
+        await setImageEngineChoice(next, apiKey, cfAccountId.trim() || undefined),
+      );
       setCloudflareToken("");
+      setNeedCfAccount(false);
     } catch (nextError) {
-      setImageError(
+      const message =
         nextError instanceof Error
           ? nextError.message
-          : "Could not change the picture engine.",
-      );
+          : "Could not change the picture engine.";
+      // A Workers AI template token cannot name its own account; the server
+      // says so, and the answer is one more field, not a dead end.
+      if (message.includes("Account ID")) setNeedCfAccount(true);
+      setImageError(message);
     } finally {
       setBusy(false);
     }
@@ -2435,12 +2445,6 @@ function VoicePanel() {
           <span className="library-chip chip-published">Connected</span>
         ) : null}
       </div>
-      <SlotKeyAdd
-        capability="image"
-        exclude={["workersai"]}
-        onConnected={refreshEngines}
-        providers={providers}
-      />
       {/* Cloudflare's token is typed HERE rather than under Models: it is the
           one engine a household adds solely to make pictures, and sending them
           to a different page to paste it is how a working setting turns into an
@@ -2461,9 +2465,28 @@ function VoicePanel() {
               value={cloudflareToken}
             />
           </label>
+          {needCfAccount ? (
+            <label className="chat-font-field">
+              Account ID
+              <input
+                autoComplete="off"
+                className="key-input"
+                disabled={busy}
+                onChange={(event) => setCfAccountId(event.target.value)}
+                placeholder="32 letters and digits"
+                spellCheck={false}
+                type="text"
+                value={cfAccountId}
+              />
+            </label>
+          ) : null}
           <button
             className="primary-button"
-            disabled={busy || cloudflareToken.trim().length === 0}
+            disabled={
+              busy ||
+              cloudflareToken.trim().length === 0 ||
+              (needCfAccount && cfAccountId.trim().length === 0)
+            }
             onClick={() => void applyImageEngine("workersai", cloudflareToken)}
             type="button"
           >
@@ -2471,11 +2494,19 @@ function VoicePanel() {
           </button>
           <p className="settings-card-copy text-faint">
             Cloudflare dashboard → My Profile → API Tokens → Create Token →
-            Workers AI template. Vaenyx works out which account it belongs to on
-            its own.
+            Workers AI template.
+            {needCfAccount
+              ? " The Account ID is in the address bar after you sign in — dash.cloudflare.com/<that long code>."
+              : ""}
           </p>
         </>
       ) : null}
+      <SlotKeyAdd
+        capability="image"
+        exclude={["workersai"]}
+        onConnected={refreshEngines}
+        providers={providers}
+      />
       <FreePick
         href="https://dash.cloudflare.com/profile/api-tokens"
         pick={freePicks?.items.image}
