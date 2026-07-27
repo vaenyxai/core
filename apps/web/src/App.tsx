@@ -6730,9 +6730,19 @@ function AskVaenyxPanel({
 
   function retryTaskMessage(list: AskVaenyxMessage[], failedIndex: number) {
     if (sendingTaskMessage) return;
-    const content = precedingOwnerContent(list, failedIndex);
-    if (content) {
-      void sendTaskContent(content);
+    // Two different failures wear the same bubble (Oskar, 2026-07-27). A reply
+    // that failed RIGHT AFTER something the Owner typed is a chat failure —
+    // resend that input. Anything else is a failed RUN (the 7am schedule): the
+    // thing to retry is the task's own instruction, through the task runner,
+    // which also moves the FAILED chip — the chat path never touches task
+    // status, which is why retrying used to leave it red.
+    const previous = failedIndex > 0 ? list[failedIndex - 1] : undefined;
+    if (previous?.role === "owner") {
+      void sendTaskContent(previous.content);
+      return;
+    }
+    if (focusedTaskId) {
+      void retryFocusedTask(focusedTaskId);
     }
   }
 
