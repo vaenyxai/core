@@ -232,6 +232,7 @@ type Screen =
   | "projects"
   | "library"
   | "community"
+  | "discord"
   | "modes"
   | "settings"
   | "vaenyx-me"
@@ -245,6 +246,7 @@ const RESTORABLE_SCREENS: Screen[] = [
   "projects",
   "library",
   "community",
+  "discord",
   "modes",
   "settings",
   "vaenyx-me",
@@ -2102,9 +2104,6 @@ function VoicePanel() {
       <p className="settings-card-copy">
         The mic button — what you say becomes text.
       </p>
-      <FreePick href="https://console.groq.com" pick={freePicks?.items.voiceIn}>
-        Groq — free key, no card.
-      </FreePick>
       <div className="engine-row">
       <label className="chat-font-field">
         Engine
@@ -2132,15 +2131,14 @@ function VoicePanel() {
         providers={providers}
       />
       {error ? <p className="form-error">{error}</p> : null}
-
+      <FreePick href="https://console.groq.com" pick={freePicks?.items.voiceIn}>
+        Groq — free key, no card.
+      </FreePick>
       </section>
 
       <section className="engine-section">
       <h3 className="settings-subhead">Voice Output</h3>
       <p className="settings-card-copy">Replies read aloud.</p>
-      <FreePick pick={freePicks?.items.voiceOut}>
-        Local Voice — free forever, works offline.
-      </FreePick>
       <div className="engine-row">
       <label className="chat-font-field">
         Engine
@@ -2402,7 +2400,9 @@ function VoicePanel() {
         )
       ) : null}
       {outputError ? <p className="form-error">{outputError}</p> : null}
-
+      <FreePick pick={freePicks?.items.voiceOut}>
+        Local Voice — free forever, works offline.
+      </FreePick>
       </section>
 
       <section className="engine-section">
@@ -2410,12 +2410,6 @@ function VoicePanel() {
       <p className="settings-card-copy">
         The camera button — a photo becomes words.
       </p>
-      <FreePick
-        href="https://aistudio.google.com/apikey"
-        pick={freePicks?.items.vision}
-      >
-        Gemini — free Google AI Studio key.
-      </FreePick>
       <div className="engine-row">
       <label className="chat-font-field">
         Engine
@@ -2443,7 +2437,12 @@ function VoicePanel() {
         providers={providers}
       />
       {visionError ? <p className="form-error">{visionError}</p> : null}
-
+      <FreePick
+        href="https://aistudio.google.com/apikey"
+        pick={freePicks?.items.vision}
+      >
+        Gemini — free Google AI Studio key.
+      </FreePick>
       </section>
 
       <section className="engine-section">
@@ -3709,6 +3708,13 @@ function GuardPanel({ events }: { events: AuditEvent[] }) {
   const visibleEvents = showAllAudit ? events : events.slice(0, 5);
   return (
     <div className="guard-layout">
+      {/* "guard 是干什么用的,不知道" (Oskar, 2026-07-27) — the page now says
+          so before anything else. */}
+      <p className="settings-card-copy">
+        Guard is Vaenyx's safety record: what Vaenyx is allowed to do on its
+        own, and a log of every permission decision — which app asked for what,
+        and what was allowed or refused.
+      </p>
       <section className="guard-summary">
         <div>
           <p className="eyebrow">Autonomy policy</p>
@@ -8686,11 +8692,12 @@ function HelpPage() {
 // No sharing engine uploads anything yet — the recorded mode is the operative
 // choice the engine honours when flywheel sharing ships.
 function SharingPanel() {
-  const { lang, t } = useI18n();
+  const { lang } = useI18n();
   const [mode, setMode] = useState<"automatic" | "review-each" | "off" | null>(
     null,
   );
   const [busy, setBusy] = useState(false);
+  const [activated, setActivated] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -8736,29 +8743,42 @@ function SharingPanel() {
     <section className="settings-card">
       <p className="eyebrow">Community</p>
       <h2>Sharing</h2>
-      <p className="settings-card-copy">
-        {t("legal.consent.flywheel.settingsNote")}
-      </p>
-      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-        {(
-          [
-            ["automatic", "Automatic"],
-            ["review-each", "Review Each"],
-            ["off", "Off"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            className={mode === value ? "primary-button" : "secondary-button"}
-            disabled={busy || mode === null}
-            key={value}
-            onClick={() => choose(value)}
-            type="button"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <FlywheelQueuePanel />
+      {/* ONE flow, not two stacked controls (Oskar, 2026-07-27). Until the K3
+          activation consent exists, the mode buttons have nothing to govern —
+          and the old I1 note ("this version does not upload") stopped being
+          true the day the channel went live, so it no longer renders; flagged
+          to private for a pack revision. After activation, the mode selector
+          is the operating control K3's own text points at. */}
+      {activated ? (
+        <>
+          <p className="settings-card-copy">
+            How corrections are shared: automatically after the waiting period,
+            only after you review each one, or not at all.
+          </p>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {(
+              [
+                ["automatic", "Automatic"],
+                ["review-each", "Review Each"],
+                ["off", "Off"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                className={
+                  mode === value ? "primary-button" : "secondary-button"
+                }
+                disabled={busy || mode === null}
+                key={value}
+                onClick={() => choose(value)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+      <FlywheelQueuePanel onActivatedChange={setActivated} />
     </section>
   );
 }
@@ -8770,7 +8790,11 @@ function SharingPanel() {
 // The 48-hour wait shown here is a WITHDRAWAL window, not a consent step. Consent
 // was given once, on the activation button below, on a surface describing the
 // whole mechanism — silence over two days is not agreement to anything.
-function FlywheelQueuePanel() {
+function FlywheelQueuePanel({
+  onActivatedChange,
+}: {
+  onActivatedChange?: (activated: boolean) => void;
+}) {
   const { lang, t } = useI18n();
   const [state, setState] = useState<FlywheelState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -8778,9 +8802,15 @@ function FlywheelQueuePanel() {
 
   const refresh = useCallback(() => {
     fetchFlywheel()
-      .then(setState)
+      .then((next) => {
+        setState(next);
+        onActivatedChange?.(next.activated);
+      })
       .catch(() => setState(null));
-  }, []);
+    // The parent only needs the activation flag; a new callback identity each
+    // render must not refetch.
+    // (onActivatedChange is stable enough in practice — a setState setter.)
+  }, [onActivatedChange]);
 
   useEffect(refresh, [refresh]);
 
@@ -14012,28 +14042,13 @@ function CommunityArea({
   );
   return (
     <div className="library-area">
+      {/* Same skeleton as Library (Oskar, 2026-07-27): one line saying what
+          this place is, then straight to the tabs, then search and the list.
+          Discord moved to its own screen. */}
       <section className="library-intro community-intro">
-        <div className="library-intro-head">
-          <div>
-            <p className="eyebrow">{t("title.community")}</p>
-            <h2>{t("title.community")}</h2>
-          </div>
-        </div>
         <p>{t("community.intro")}</p>
         <p className="context-disclaimer">
           {t("legal.disclaimer.community.browse")}
-        </p>
-        {/* D5 (copy pack): the notice travels with the link, so it is rendered
-            here and not behind a click. vaenyx.ai/discord is a redirect the
-            operator controls — a changed invite is one line on the website,
-            never an app release. */}
-        <p className="settings-card-copy">
-          <a href="https://vaenyx.ai/discord" rel="noopener" target="_blank">
-            {t("community.discord.link")}
-          </a>
-        </p>
-        <p className="context-disclaimer">
-          {t("legal.notice.community.discord")}
         </p>
       </section>
       <nav aria-label="Community sections" className="library-subtabs">
@@ -14774,6 +14789,14 @@ function LibraryArea({
 
   return (
     <div className="library-area">
+      {/* Mirrors the Community screen's skeleton: one line on what this place
+          is, then the tabs. */}
+      <section className="library-intro">
+        <p>
+          Your own Methods and Routines, on this machine — yours to use, edit
+          and publish.
+        </p>
+      </section>
       <nav aria-label="Library sections" className="library-subtabs">
         <button
           className={tab === "routines" ? "active" : ""}
@@ -16755,6 +16778,13 @@ function VaenyxWorkspace({
                 {t("title.community")}
               </button>
               <button
+                className={screen === "discord" ? "active" : ""}
+                onClick={() => openScreen("discord")}
+                type="button"
+              >
+                Discord
+              </button>
+              <button
                 className={screen === "vaenyx-me" ? "active" : ""}
                 onClick={() => openScreen("vaenyx-me")}
                 type="button"
@@ -16904,6 +16934,27 @@ function VaenyxWorkspace({
               void fetchLibraryRoutines().then(setLibraryRoutines);
             }}
           />
+        ) : screen === "discord" ? (
+          // Discord got its own screen (Oskar, 2026-07-27): what it is, the
+          // link, and the third-party notice that travels with it (D5) —
+          // instead of crowding the top of the Community list.
+          <section className="settings-card">
+            <p className="eyebrow">Community</p>
+            <h2>Discord</h2>
+            <p className="settings-card-copy">
+              {lang === "zh"
+                ? "Vaenyx 用户聊天的地方 — 提问、展示你做的东西、看公告。"
+                : "Where Vaenyx users talk — questions, showing what you built, and announcements."}
+            </p>
+            <p className="settings-card-copy">
+              <a href="https://vaenyx.ai/discord" rel="noopener" target="_blank">
+                {t("community.discord.link")}
+              </a>
+            </p>
+            <p className="context-disclaimer">
+              {t("legal.notice.community.discord")}
+            </p>
+          </section>
         ) : screen === "scheduled" ? (
           <ScheduledPanel
             tasks={workspace.tasks}
