@@ -6111,3 +6111,8 @@ html, body { overscroll-behavior-y: none; }
    (Oskar, 2026-07-27). margin-top:auto takes the grid slack ABOVE it. */
 .ask-vaenyx-messages > .ask-vaenyx-message:last-child:has(.streaming-pending) { margin-top: auto; }
 .thinking-block { margin-top: auto; }
+/* The unread breathing dot (Oskar, 2026-07-28): new activity in a thread this
+   device has not opened since. Dies the moment the thread is opened. */
+.unread-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #e5484d; animation: unread-breathe 2s ease-in-out infinite; }
+@keyframes unread-breathe { 0%, 100% { opacity: 0.5; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .unread-dot { animation: none; } }

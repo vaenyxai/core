@@ -15634,12 +15634,37 @@ const THREAD_LIST_STEP = 10;
 
 // A folder's chat list, capped so a long folder (e.g. Unsorted) shows the first
 // few and reveals more in steps via "Show more".
+// Per-device read tracking for the sidebar's unread dots (Oskar, 2026-07-28):
+// a thread is unread when its last activity is newer than the last time THIS
+// device had it open. Device-local on purpose — read state is a property of
+// the person at the screen, and it needs no server schema.
+const THREAD_SEEN_KEY = "vaenyx-thread-seen";
+
+function readThreadSeen(): Record<string, string> {
+  try {
+    return JSON.parse(
+      localStorage.getItem(THREAD_SEEN_KEY) ?? "",
+    ) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function writeThreadSeen(map: Record<string, string>): void {
+  try {
+    localStorage.setItem(THREAD_SEEN_KEY, JSON.stringify(map));
+  } catch {
+    // Storage full or blocked: the dots just stay conservative.
+  }
+}
+
 function ThreadList({
   threads,
   emptyLabel,
   selectedThreadId,
   tasks,
   projects,
+  unreadIds,
   onOpenChat,
   onOpenTask,
   onMoveThreadProject,
@@ -15650,6 +15675,7 @@ function ThreadList({
 }: {
   threads: VaenyxThread[];
   emptyLabel: string;
+  unreadIds: ReadonlySet<string>;
   selectedThreadId: string | null;
   tasks: Task[];
   projects: Project[];
@@ -15780,6 +15806,9 @@ function ThreadList({
                 className={`status-light status-light--${light}`}
               />
               <strong>{thread.title.trim() || "New chat"}</strong>
+              {unreadIds.has(thread.id) ? (
+                <span aria-label="Unread" className="unread-dot" />
+              ) : null}
               <ThreadChipRow chips={threadStatusChips(thread, tasks)} />
               {thread.status === "pinned" ? (
                 <span aria-label="Pinned" className="thread-pin">
@@ -15836,6 +15865,48 @@ function SidebarThreadTree({
   const [pickedArchived, setPickedArchived] = useState<Set<string>>(new Set());
   // Deleting archived chats is the one destructive act here — two clicks.
   const [confirmArchiveDelete, setConfirmArchiveDelete] = useState(false);
+  // Unread dots: last-seen per thread, this device only.
+  const [threadSeen, setThreadSeen] = useState<Record<string, string>>(
+    readThreadSeen,
+  );
+
+  // The feature's first run counts everything existing as read — a sidebar
+  // that lights up wall-to-wall on update would say nothing.
+  useEffect(() => {
+    if (workspace.threads.length === 0) return;
+    if (localStorage.getItem(THREAD_SEEN_KEY) !== null) return;
+    const seeded: Record<string, string> = {};
+    for (const thread of workspace.threads) {
+      seeded[thread.id] = thread.updatedAt;
+    }
+    writeThreadSeen(seeded);
+    setThreadSeen(seeded);
+  }, [workspace.threads]);
+
+  // The open thread is always read: opening marks it, and activity arriving
+  // while it is open keeps it marked.
+  useEffect(() => {
+    if (!selectedThreadId) return;
+    const thread = workspace.threads.find(
+      (candidate) => candidate.id === selectedThreadId,
+    );
+    if (!thread) return;
+    if ((threadSeen[thread.id] ?? "") >= thread.updatedAt) return;
+    const next = { ...threadSeen, [thread.id]: thread.updatedAt };
+    setThreadSeen(next);
+    writeThreadSeen(next);
+  }, [selectedThreadId, workspace.threads, threadSeen]);
+
+  const unreadIds: ReadonlySet<string> = new Set(
+    workspace.threads
+      .filter(
+        (thread) =>
+          thread.status !== "archived" &&
+          thread.id !== selectedThreadId &&
+          (threadSeen[thread.id] ?? "") < thread.updatedAt,
+      )
+      .map((thread) => thread.id),
+  );
   const visibleThreads = workspace.threads.filter(
     (thread) => thread.status !== "archived",
   );
@@ -15873,6 +15944,7 @@ function SidebarThreadTree({
         selectedThreadId={selectedThreadId}
         tasks={workspace.tasks}
         threads={threads}
+        unreadIds={unreadIds}
       />
     );
   }
