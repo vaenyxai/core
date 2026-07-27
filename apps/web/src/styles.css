@@ -4843,7 +4843,7 @@ select {
 
 .modal-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 560px;
   max-height: calc(100vh - 36px);
   padding: 20px;
   overflow-y: auto;
@@ -6062,3 +6062,12 @@ select {
 .archive-row-mark { width: 1em; color: var(--accent); flex: none; }
 .archive-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .archive-modal-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+/* Key/token fields: masked by CSS, NOT type="password" - a model key is not a
+   login, and password inputs make the browser offer to store them. (Chromium
+   and WebKit mask via text-security; Firefox shows the text plainly.) */
+.key-input { -webkit-text-security: disc; }
+/* Login-page model chips: readable, not a wall of identical pills. */
+.auth-model-button { color: var(--text); background: var(--accent-soft); }
+.auth-model-button:hover { border-color: var(--accent); }
+.auth-model-button.selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.free-refresh-row { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-2) 0; flex-wrap: wrap; }

@@ -357,6 +357,8 @@ import {
   type ImageEngineChoice,
 } from "../core/image-gen.js";
 import { classifyRoutineIntent } from "../core/routine-intent.js";
+import { getFreePicks, refreshFreePicks } from "../core/free-picks.js";
+import { getDefaultProvider } from "../models/registry.js";
 import { fetchCatalogue, installRoutine, installMethod } from "../core/catalogue.js";
 import {
   recordLegalAcknowledgement,
@@ -4502,6 +4504,36 @@ export async function registerGatewayRoutes(
       return getImageEngineStatus(context.config.secretsDirectory);
     },
   );
+
+  // The Free-option refresh: ask the Owner's main model what is free NOW and
+  // store its dated, attributed answer. See free-picks.ts for the honesty rule.
+  app.get("/v1/free-picks", async (request, reply) => {
+    const owner = requireOwner(request);
+    if (!owner) {
+      return reply.code(401).send({ error: "Owner login required." });
+    }
+    return getFreePicks(context.database) ?? { items: {} };
+  });
+
+  app.post("/v1/free-picks/refresh", async (request, reply) => {
+    const owner = requireOwner(request);
+    if (!owner) {
+      return reply.code(401).send({ error: "Owner login required." });
+    }
+    const provider = getDefaultProvider();
+    if (!provider.healthCheck().ok) {
+      return reply
+        .code(503)
+        .send({ error: "Connect a main model first — it does the checking." });
+    }
+    try {
+      return await refreshFreePicks(context.database, provider);
+    } catch {
+      return reply.code(502).send({
+        error: "The model did not give a usable answer. Try again.",
+      });
+    }
+  });
 
   app.post<{ Body: { provider: string; apiKey?: string } }>(
     "/v1/images/engine",

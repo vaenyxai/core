@@ -1277,6 +1277,35 @@ export function withdrawFlywheelItem(id: string): Promise<{ ok: boolean }> {
   );
 }
 
+// The Free-option lines and their refresh: the stored answer is the Owner's own
+// model's, labelled with its name and date — never blended into the shipped,
+// hand-verified lines.
+export interface FreePickItem {
+  text: string;
+  checkedAt: string;
+  source: string;
+}
+
+export interface FreePicksState {
+  items: {
+    voiceIn?: FreePickItem;
+    voiceOut?: FreePickItem;
+    vision?: FreePickItem;
+    image?: FreePickItem;
+  };
+}
+
+export function fetchFreePicks(): Promise<FreePicksState> {
+  return requestJson<FreePicksState>("/v1/free-picks");
+}
+
+export function refreshFreePicks(): Promise<FreePicksState> {
+  return requestJson<FreePicksState>("/v1/free-picks/refresh", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 // The picture-MAKING engine. Separate from the vision slot above, which reads
 // pictures: the two are rarely the same model.
 export function fetchImageEngine(): Promise<VisionStatus> {

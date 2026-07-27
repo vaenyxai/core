@@ -151,6 +151,9 @@ import {
   type PushDiagnostics,
   fetchVisionStatus,
   fetchFlywheel,
+  fetchFreePicks,
+  refreshFreePicks,
+  type FreePicksState,
   withdrawFlywheelItem,
   type FlywheelState,
   fetchImageEngine,
@@ -1783,6 +1786,19 @@ function VoicePanel() {
   const [error, setError] = useState<string | null>(null);
   const [outputError, setOutputError] = useState<string | null>(null);
   const [visionError, setVisionError] = useState<string | null>(null);
+  const [freePicks, setFreePicks] = useState<FreePicksState | null>(null);
+  const [freeBusy, setFreeBusy] = useState(false);
+
+  async function updateFreePicks() {
+    setFreeBusy(true);
+    try {
+      setFreePicks(await refreshFreePicks());
+    } catch {
+      // requestJson already raised the toast with the server's reason.
+    } finally {
+      setFreeBusy(false);
+    }
+  }
 
   // One loader for first mount AND for after a key is added in any slot: a new
   // connection can auto-fill empty slots server-side, so everything re-reads.
@@ -1821,6 +1837,9 @@ function VoicePanel() {
       .catch(() => undefined);
     void fetchLocalTts()
       .then(setLocalTts)
+      .catch(() => undefined);
+    void fetchFreePicks()
+      .then(setFreePicks)
       .catch(() => undefined);
   }, []);
 
@@ -2011,15 +2030,30 @@ function VoicePanel() {
         key added in either place joins one shared pool — every slot then
         offers it, and each slot can still pick differently.
       </p>
+      {/* Free tiers move faster than releases. This asks the Owner's MAIN
+          model what is free right now and swaps the lines below for its dated,
+          attributed answer — the model's claim, never presented as ours. */}
+      <div className="free-refresh-row">
+        <button
+          className="secondary-button"
+          disabled={freeBusy}
+          onClick={() => void updateFreePicks()}
+          type="button"
+        >
+          {freeBusy ? "Asking Your Model…" : "Update Free Options"}
+        </button>
+        <span className="text-faint">
+          Asks your main model what is free right now.
+        </span>
+      </div>
 
       <h3 className="settings-subhead">Voice Input (Speech To Text)</h3>
       <p className="settings-card-copy">
         Turns what you say into text — the mic button in chat. Whisper via
         Groq (fast, free tier) or OpenAI.
       </p>
-      <FreePick href="https://console.groq.com">
-        Groq gives Whisper away on a free key — no card, 20 recordings a minute
-        and 2,000 a day, which no household will reach.
+      <FreePick href="https://console.groq.com" pick={freePicks?.items.voiceIn}>
+        Groq — free key, no card.
       </FreePick>
       <div className="engine-row">
       <label className="chat-font-field">
@@ -2056,10 +2090,8 @@ function VoicePanel() {
         The voice that reads replies — voice bubbles and the speaker toggle in
         chat both use it.
       </p>
-      <FreePick>
-        This one needs no website and no account: Local Voice downloads once and
-        then works offline, forever, on this machine. Browser Voice is free too
-        and needs no download, but sounds more robotic.
+      <FreePick pick={freePicks?.items.voiceOut}>
+        Local Voice — free forever, works offline.
       </FreePick>
       <div className="engine-row">
       <label className="chat-font-field">
@@ -2331,9 +2363,11 @@ function VoicePanel() {
         ingredient list). Powered by a vision-capable model — Gemini, Zhipu
         BigModel or OpenAI.
       </p>
-      <FreePick href="https://aistudio.google.com/apikey">
-        A free Google AI Studio key reads photos at no charge. (The same key
-        cannot MAKE pictures — see below for why.)
+      <FreePick
+        href="https://aistudio.google.com/apikey"
+        pick={freePicks?.items.vision}
+      >
+        Gemini — free Google AI Studio key.
       </FreePick>
       <div className="engine-row">
       <label className="chat-font-field">
@@ -2418,10 +2452,12 @@ function VoicePanel() {
             Workers AI Token
             <input
               autoComplete="off"
+              className="key-input"
               disabled={busy}
               onChange={(event) => setCloudflareToken(event.target.value)}
               placeholder="Paste the token from Cloudflare"
-              type="password"
+              spellCheck={false}
+              type="text"
               value={cloudflareToken}
             />
           </label>
@@ -2440,12 +2476,11 @@ function VoicePanel() {
           </p>
         </>
       ) : null}
-      <FreePick href="https://bigmodel.cn">
-        Zhipu BigModel gives CogView-3-Flash away free — set the model to{" "}
-        <code>cogview-3-flash</code>. Sign-up needs a Chinese phone number.
-        Google is NOT an option here: it gives image models a free quota of
-        zero, so a free Gemini key that reads photos perfectly well still
-        answers &quot;quota 0&quot; when asked to draw one.
+      <FreePick
+        href="https://dash.cloudflare.com/profile/api-tokens"
+        pick={freePicks?.items.image}
+      >
+        Cloudflare Workers AI — free, about 170 pictures a day.
       </FreePick>
       {imageError ? <p className="form-error">{imageError}</p> : null}
     </section>
@@ -8696,12 +8731,17 @@ function SlotKeyAdd({
           </option>
         ))}
       </select>
+      {/* type="text" + CSS masking, NOT type="password": a model key is not a
+          login, and password fields make the browser offer to save it in its
+          password manager. */}
       <input
         autoComplete="off"
+        className="key-input"
         disabled={saving}
         onChange={(event) => setKey(event.target.value)}
         placeholder="API key"
-        type="password"
+        spellCheck={false}
+        type="text"
         value={key}
       />
       <button
@@ -8734,21 +8774,32 @@ function SlotKeyAdd({
 // copies of a date is four chances for the UI to claim a check that never
 // happened. Every claim under it was verified against the provider, not
 // remembered — Google's image quota of zero is exactly what that catches.
-const FREE_PICK_CHECKED = "July 2026";
+const FREE_PICK_CHECKED = "27 Jul 2026";
 
 function FreePick({
   children,
   href,
+  pick,
 }: {
   children: ReactNode;
   href?: string;
+  /** A fresher suggestion from the Owner's own model (the Update button). It
+   *  replaces the shipped line but is labelled as the model's answer, dated —
+   *  the shipped line was verified by hand, this one was not. */
+  pick?: { text: string; checkedAt: string; source: string } | undefined;
 }) {
   return (
     <p className="free-pick">
       <strong>Free option</strong>{" "}
-      <span className="text-faint">(checked {FREE_PICK_CHECKED})</span>{" "}
-      {children}
-      {href ? (
+      <span className="text-faint">
+        (checked{" "}
+        {pick
+          ? `${new Date(pick.checkedAt).toLocaleDateString()} by ${pick.source}`
+          : FREE_PICK_CHECKED}
+        )
+      </span>{" "}
+      {pick ? pick.text : children}
+      {!pick && href ? (
         <>
           {" "}
           <a href={href} rel="noreferrer noopener" target="_blank">
@@ -8948,8 +8999,10 @@ function ModelsPanel() {
         ) : null}
         {provider.needsKey ? (
           <input
-            className="method-rename-input"
-            type="password"
+            autoComplete="off"
+            className="method-rename-input key-input"
+            spellCheck={false}
+            type="text"
             placeholder="API key"
             value={draftFor(provider.id).apiKey}
             onChange={(event) =>
@@ -16955,10 +17008,11 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
           ) : null}
           <input
             autoComplete="off"
-            className="method-rename-input"
+            className="method-rename-input key-input"
             onChange={(event) => setApiKey(event.target.value)}
             placeholder={zh ? "粘贴 API key" : "Paste the API key"}
-            type="password"
+            spellCheck={false}
+            type="text"
             value={apiKey}
           />
           {/* F1 / TPN n.3: the third-party notice must render on every
