@@ -54,7 +54,7 @@ function acks(
   const rows = [
     {
       keyName: "legal.consent.flywheel",
-      copyVersion: "2.6",
+      copyVersion: "2.9",
       choice: overrides.mode ?? "automatic",
       createdAt: "2026-07-01T00:00:00.000Z",
     },
@@ -62,7 +62,7 @@ function acks(
   if (overrides.activated !== false) {
     rows.push({
       keyName: "legal.consent.flywheel.activate",
-      copyVersion: "2.6",
+      copyVersion: "2.9",
       choice: "accept",
       createdAt: "2026-07-20T00:00:00.000Z",
     });
@@ -87,6 +87,19 @@ describe("readSharingChoice", () => {
     expect(readSharingChoice(acks({ mode: "review-each" })).mode).toBe(
       "review-each",
     );
+  });
+
+  it("treats a K3 given under an older copy version as not given", () => {
+    // The 2.9 K3 added "how they go" (they go out on their own after the
+    // wait); a yes recorded under 2.8 was a yes to different words.
+    const rows = acks();
+    const activation = rows.find(
+      (row) => row.keyName === "legal.consent.flywheel.activate",
+    );
+    if (activation) activation.copyVersion = "2.8";
+    const choice = readSharingChoice(rows);
+    expect(choice.mode).toBe("off");
+    expect(choice.activated).toBe(false);
   });
 });
 

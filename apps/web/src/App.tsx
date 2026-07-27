@@ -8708,6 +8708,8 @@ function SharingPanel() {
   const [state, setState] = useState<FlywheelState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The copy version the K3 acceptance was given under, for the floor check.
+  const [activateVersion, setActivateVersion] = useState<string | null>(null);
   const zh = lang === "zh";
 
   const refresh = useCallback(() => {
@@ -8726,6 +8728,12 @@ function SharingPanel() {
             : choice === "review-each"
               ? "review-each"
               : "off",
+        );
+        const activate = acks.find(
+          (ack) => ack.keyName === "legal.consent.flywheel.activate",
+        );
+        setActivateVersion(
+          activate?.choice === "accept" ? activate.copyVersion : null,
         );
       })
       .catch(() => setMode("off"));
@@ -8799,7 +8807,14 @@ function SharingPanel() {
   // button with no description of what it activates is worse than no button.
   if (!CAPABILITIES.flywheelUpload || !state) return null;
 
-  const on = state.activated && mode !== "off" && mode !== null;
+  // Consent below the floor is treated as not given: the K3 text changed
+  // materially at 2.9 ("how they go"), so an older yes was a yes to different
+  // words. Re-opening walks through K3 again — never a silent re-enable.
+  const consentCurrent =
+    state.activated &&
+    activateVersion !== null &&
+    Number.parseFloat(activateVersion) >= Number.parseFloat(K3_CONSENT_FLOOR);
+  const on = consentCurrent && mode !== "off" && mode !== null;
   const statusLine = on
     ? `${zh ? "分享:开启" : "Sharing: On"} — ${
         mode === "automatic"
@@ -8820,7 +8835,7 @@ function SharingPanel() {
       <h2>Sharing</h2>
       <p className="sharing-status">{statusLine}</p>
 
-      {!state.activated ? (
+      {!consentCurrent ? (
         <>
           {/* K3, the only consent point in Part K. Long on purpose: it is the
               one screen that describes the whole mechanism. Two choices,
@@ -13269,13 +13284,20 @@ function CreateRoutinePanel({
 // version: it changes whenever any string changes, and it is what gets recorded
 // against an acknowledgement, so a record always says exactly which text the
 // Owner was shown.
-// 2.8 = F5 (pictures third-party notice, with the shown-prompt promise kept)
-// and F6 (the free-options answer carries "this may simply be wrong") land,
-// 2026-07-27. The publish service's MIN_ACCEPTED_COPY_VERSION deliberately
-// STAYS 2.6: the floor moves only when an EXISTING consent string materially
-// changes, because moving it re-asks everyone — F5/F6 are notices, not consent
-// strings, and 2.7's K3 was a brand-new consent point nobody had answered.
-const LEGAL_COPY_VERSION = "2.8";
+// 2.9 = K3 gains the "How they go" sentence (2026-07-27): 2.8's K3 never said
+// corrections go out ON THEIR OWN after the wait, so a person could read it as
+// "Vaenyx asks me each time" — and a consent read that way cannot carry
+// mode=automatic. This IS a material change to an existing consent string, so
+// the floor moves with it (K3_CONSENT_FLOOR below, and the publish service's
+// MIN_ACCEPTED_COPY_VERSION): anyone who consented under 2.8 is asked again.
+// Cheap now, precisely because almost nobody has answered yet.
+const LEGAL_COPY_VERSION = "2.9";
+
+// The K3 activation floor: a recorded activation below this is treated as not
+// given — re-opening sharing walks through K3 again instead of silently
+// re-enabling. Consent goes stale when the THING CONSENTED TO changed, and
+// that is what this constant tracks (private, 2026-07-27).
+const K3_CONSENT_FLOOR = "2.9";
 
 // The consent floor, and the only thing that re-asks the Owner (Oskar, 2026-07-25).
 // It moves ONLY when a consent-class string (`legal.consent.*`) changes in

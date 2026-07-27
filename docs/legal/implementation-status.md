@@ -1,9 +1,9 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-27.4** · effective from **2026-07-26** · verified **2026-07-27**
-> Client **0.2.1-dev.38** · Server **vaenyx-core-cloud (migrations 0001-0007)**
-> Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **2.8**
+> Schedule version **2026-07-27.5** · effective from **2026-07-26** · verified **2026-07-27**
+> Client **0.2.1-dev.42** · Server **vaenyx-core-cloud (migrations 0001-0007)**
+> Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **2.9**
 
 ## Status of this Schedule
 
@@ -120,9 +120,9 @@ Two regimes overlap here and are deliberately satisfied by one rule. The Basic O
 
 ## Point-of-use copy
 
-Copy version **2.8** · consent floor **2.6**
+Copy version **2.9** · consent floor **2.9**
 
-Two versions are tracked separately. The copy version moves whenever any string changes and is what gets recorded against an acknowledgement, so a record always says which text the person was shown. The consent floor moves only when a consent-class string changes in substance, and only the floor re-asks anyone. The last substantive consent change was 2.6.
+Two versions are tracked separately. The copy version moves whenever any string changes and is what gets recorded against an acknowledgement, so a record always says which text the person was shown. The consent floor moves only when a consent-class string changes in substance, and only the floor re-asks anyone. The last substantive consent change was 2.6. The floor moved to 2.9 on 2026-07-27: K3 gained the sentence saying each correction leaves on its own after 48 hours unless removed. Recording a default mode of 'automatic' against that consent is only honest if the consent screen said the sending is automatic, and at 2.8 it did not. Anyone who accepted under 2.8 is asked again.
 
 **Drafted but not shipped.** These strings exist in the copy pack and are not missing from the product — the surface they belong to does not exist.
 

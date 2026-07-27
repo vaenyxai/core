@@ -9,6 +9,20 @@ on your own hardware.
 > Status: pre-1.0, under active development. Interfaces and data formats may
 > still change between versions.
 
+## Install from the release zip (recommended)
+
+1. Download `vaenyx-setup.zip` from the
+   [latest release](https://github.com/vaenyxai/core/releases/latest).
+2. Unzip it anywhere and double-click **`Vaenyx-Setup.cmd`**. It walks you
+   through setup and starts Vaenyx; afterwards the app keeps itself up to date
+   from inside Settings.
+3. Open `http://localhost:3000` in your browser.
+
+Cloning this repository with git also works (see below) and is the right path
+for development — but note that a git checkout deliberately does **not**
+self-update from releases; it updates with `git pull`. The release zip is the
+install every guide and the website assume.
+
 ## What it does
 
 - **Chat + projects + memory** — a personal assistant that keeps its context on

@@ -72,6 +72,12 @@ interface AckRow {
  *  sending also needs the activation record (K3), taken on a surface that
  *  describes the whole mechanism. Until that exists this returns off, whatever
  *  the older setting says. */
+// A K3 acceptance recorded below this copy version is treated as not given:
+// the activation text changed materially at 2.9 (it now says corrections go
+// out on their own after the wait), so an older yes was a yes to different
+// words. Mirrors K3_CONSENT_FLOOR in the web app.
+const K3_CONSENT_FLOOR = 2.9;
+
 export function readSharingChoice(acks: AckRow[]): {
   mode: "automatic" | "review-each" | "off";
   copyVersion: string;
@@ -82,7 +88,9 @@ export function readSharingChoice(acks: AckRow[]): {
   const activation = acks.find(
     (ack) => ack.keyName === "legal.consent.flywheel.activate",
   );
-  const activated = activation?.choice === "accept";
+  const activated =
+    activation?.choice === "accept" &&
+    Number.parseFloat(activation.copyVersion) >= K3_CONSENT_FLOOR;
   const choice = row?.choice ?? null;
   const setting =
     choice === "accept" || choice === "automatic"

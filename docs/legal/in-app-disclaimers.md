@@ -536,10 +536,23 @@ with great confidence and no knowledge of it.
 
 ### Part I — Settings
 
-**I1 — `legal.consent.flywheel.settingsNote`**
-- **EN:** "This version does not upload improvement patterns. This setting records a preference only. If community improvement sharing becomes available, it will remain off until you are shown current information and make a fresh affirmative choice."
-- **ZH:** "本版本不会上传任何改进模式。此处只是记录一项偏好。若将来提供社区改进分享，它依旧保持关闭，直到向你展示当时的说明并由你重新做出一次肯定性选择。"
-- **Behaviour:** Shown in Settings → Sharing beside the three modes.
+**I1 — `legal.consent.flywheel.settingsNote` — RETIRED 2026-07-27, do not reinstate**
+
+This string existed to tell the truth of a version where nothing could leave the
+machine: *"This version does not upload improvement patterns. This setting records
+a preference only."* Part K shipped, so it became false, and coding correctly
+stopped rendering it before asking what to do.
+
+**It is retired rather than rewritten.** A rewrite would put a second description
+of the sharing mechanism next to K3, K11 and K10, which already say it at the
+point of action — and two strings saying the same thing is precisely how the two
+drift apart, after which one of them is wrong and nobody knows which. Anything
+the Sharing panel still needs is a **state label** ("Off", "On — automatic",
+"On — review each"), not a notice: a label states what is true right now and
+cannot silently rot into a false representation.
+
+Retired strings stay listed here, with the reason, so that a later reader finds
+the decision rather than an unexplained gap.
 
 **I2 — `legal.notice.settings.legalLinks`**
 - **Placement:** Settings → About / Legal, as the section intro above links to the A-class documents.
@@ -763,6 +776,8 @@ agrees.
 
   **Once an example is sent, it cannot be recalled.** You can stop future sends at any time, and turning this off stops everything from then on.
 
+  **How they go:** each correction waits 48 hours in a list you can see, and then goes on its own unless you remove it. If you would rather approve each one yourself, you can switch to that at any time.
+
   Health, family and money are never sent automatically. Vaenyx asks you about those separately, every time.
 
   This is off unless you turn it on now."
@@ -777,6 +792,8 @@ agrees.
   **它会去哪里:**先到我们的服务器,而服务器只保存到发布者自己的 app 来取走为止,取走的那一刻即删除。14 天内无人取走的,原样删除、不会被阅读。我们的服务器在澳大利亚境外,且我们能够读到正在等待中的内容。只有主动要求接收的发布者才会收到示例。
 
   **示例一经发出便无法收回。**你可以随时停止此后的发送;关掉此项,从那一刻起就什么都不再发送。
+
+  **它们怎么发出去:**每一条纠正会在一个你看得到的列表里等待 48 小时,之后便自行发出 —— 除非你把它移除。若你更愿意逐条自己批准,随时可以切换成那种方式。
 
   健康、家人与金钱的内容永远不会自动发送。Vaenyx 每一次都会就这些内容单独询问你。
 
