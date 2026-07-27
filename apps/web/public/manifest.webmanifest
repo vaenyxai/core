@@ -8,7 +8,7 @@
   "theme_color": "#262624",
   "icons": [
     {
-      "src": "/vaenyx-mark.svg",
+      "src": "/vaenyx-mark-dark.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
