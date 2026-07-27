@@ -2,7 +2,7 @@
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
 > 明细表版本 **2026-07-27.5** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-27**
-> 客户端 **0.2.1-dev.42** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
+> 客户端 **0.2.1-dev.44** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
 > 法律文件集 **v3.1** · 最低法律文件集 **v3.0** · 最低文案版本 **2.9**
 
 ## 本明细表的地位
@@ -59,7 +59,7 @@
 
 **`feature.community-sharing.upload-engine`** — **已上线,且默认关闭,除非用户自己打开。** 传输通道已建成并部署;没有启用同意记录(文案包 K3),就不会排队、也不会扫描,而早期版本中记录的那项 Sharing 偏好不能代替它 —— 那项偏好是在「什么都无法离开本机」的年代选择的,因此无法承载对一项当时并不存在的上传行为的同意。
 必需的门槛: `legal.consent.flywheel.activate`, `legal.consent.flywheel.receive`, `legal.consent.flywheel.sensitiveAsk`, `flywheel.queue.window`, `flywheel.queue.held`
-实现证据: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written. Verified in production at dev.21: the capability switch is on, every Part K string renders verbatim at copy 2.7, and a real send completed end to end. The evidence block is now discarded rather than written — a test pins the evidence table at zero rows after an accepted send — so the Schedule's statement that we hold no consent record for a contributing household is true in code and in production, not only in intent.
+实现证据: Server enforces, in order: activation record present, publisher receiving switch on (403 if not, so nothing is stored), payload under 32 KB, 20 sends per contributor per day and 5 per contributor per Method per day counted against both the contributor label and a hashed connection, over-limit refused rather than stored. Delivery rows are deleted on collection and expire at 14 days; rate-limiting rows at 7. The instance identifier and consent-event identifier are validated and discarded, never written. Verified in production at dev.21: the capability switch is on, every Part K string renders verbatim at copy 2.7, and a real send completed end to end. The evidence block is now discarded rather than written — a test pins the evidence table at zero rows after an accepted send — so the Schedule's statement that we hold no consent record for a contributing household is true in code and in production, not only in intent. The 2.9 consent floor is enforced in three places that must agree - client, server and the publish service secret - and a test pins the behaviour that matters: an activation recorded under copy 2.8 leaves sharing OFF, so a 2.8-era acceptance cannot be reused for a mechanism it never described.
 
 **`feature.community-sharing.upload-endpoint`** — 改进分享(Part K)的服务端,已在发布服务上线。它校验发送实例出示的凭证并随即丢弃;拒绝在分享关闭状态下产生的发送;发布者未打开接收开关即拒绝,且不存储任何内容;执行 32KB 大小上限与按贡献者的限流,超限拒收而非先存后删;投递仅保存至被取走为止,14 天无人取走即原样删除。
 实现证据: Deployed to production; a real send completed end to end at client dev.21. A test pins the evidence table at zero rows after an accepted send.

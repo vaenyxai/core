@@ -4,15 +4,46 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
-## Unreleased (0.2.1-dev line)
+## v0.3.0 — 2026-07-27
 
-Since v0.2.0 the development line has added, among other things: chat-driven
-Method editing with visibility notices, picture generation behind an
-Owner-connected image engine (including a free Cloudflare Workers AI option)
-with the sent prompt shown beside each image, per-slot engine keys, live task
-watching (status and the model's thinking while a run works), retry and scroll
-fixes, and the in-app legal set updated to v3.1 / copy 2.8. See the commit log
-for the full list until these ship in the next tagged release.
+**Pictures.** Ask for a picture in chat, in your own words, and Vaenyx makes
+one — including follow-ups like "one more". A free option exists (Cloudflare
+Workers AI, roughly 170 pictures a day); paste its token straight into
+Settings → AI → Picture Output. The exact prompt that was sent to the image
+provider is shown under every generated picture, and Vaenyx never claims a
+picture was made when one wasn't.
+
+**Engines.** The AI settings page is now four plain sections — Voice Input,
+Voice Output, Picture Input, Picture Output. Each slot picks from whatever
+you have signed in to, keys can be added right where they are needed, every
+section carries a dated free recommendation, and an Update Free Options
+button asks your own main model what is free right now (clearly labelled as
+its answer, not ours).
+
+**Watch it work.** While a reply is being made, the chat shows what is
+happening — a status line for steps like generating a picture, and the
+model's own thinking where the backend streams it. Task runs show the same
+while you watch them. Everything vanishes once the reply lands.
+
+**Community sharing, live.** With your explicit consent (off by default),
+a correction you make to an installed Method can be sent to its publisher so
+they can fix it for everyone. Corrections wait 48 hours in a visible list you
+can remove them from; health, family and money are never sent automatically;
+publishers only receive if they opted in; and your contributions carry a
+permanent contributor ID that credits you without naming you.
+
+**Getting around.** Refreshing stays on the page you were on; notification
+taps open the exact chat or task directly; conversations open at their end;
+pulling down inside a chat refreshes just that chat; archived chats live in
+one window with multi-select restore and delete; Discord has its own page;
+Library and Community share one layout; and the moon-embrace mark replaces
+the letter V.
+
+**Scheduled tasks.** Retry on a failed run re-runs the task itself (and moves
+the status), and runs produce the deliverable — never a restatement of their
+own settings.
+
+In-app legal set v3.1, copy version 2.9.
 
 ## v0.2.0 — 2026-07-25
 
