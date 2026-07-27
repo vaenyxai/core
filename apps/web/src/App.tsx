@@ -1772,10 +1772,9 @@ function VoicePanel() {
     "none" | "workersai" | "gemini" | "openai" | "zhipu"
   >("none");
   const [cloudflareToken, setCloudflareToken] = useState("");
-  // Asked for only when the token cannot name its own account (a Workers AI
-  // template token cannot — verified 2026-07-27).
+  // A Workers AI-template token cannot name its own account (verified
+  // 2026-07-27), so the id has its own always-visible field.
   const [cfAccountId, setCfAccountId] = useState("");
-  const [needCfAccount, setNeedCfAccount] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [outputEngine, setOutputEngine] = useState<
     "none" | "browser" | "gemini" | "local"
@@ -1938,16 +1937,12 @@ function VoicePanel() {
         await setImageEngineChoice(next, apiKey, cfAccountId.trim() || undefined),
       );
       setCloudflareToken("");
-      setNeedCfAccount(false);
     } catch (nextError) {
-      const message =
+      setImageError(
         nextError instanceof Error
           ? nextError.message
-          : "Could not change the picture engine.";
-      // A Workers AI template token cannot name its own account; the server
-      // says so, and the answer is one more field, not a dead end.
-      if (message.includes("Account ID")) setNeedCfAccount(true);
-      setImageError(message);
+          : "Could not change the picture engine.",
+      );
     } finally {
       setBusy(false);
     }
@@ -2465,28 +2460,32 @@ function VoicePanel() {
               value={cloudflareToken}
             />
           </label>
-          {needCfAccount ? (
-            <label className="chat-font-field">
-              Account ID
-              <input
-                autoComplete="off"
-                className="key-input"
-                disabled={busy}
-                onChange={(event) => setCfAccountId(event.target.value)}
-                placeholder="32 letters and digits"
-                spellCheck={false}
-                type="text"
-                value={cfAccountId}
-              />
-            </label>
+          {cloudflareToken.trim().length > 0 &&
+          cloudflareToken.trim().length < 40 ? (
+            <p className="settings-card-copy text-faint">
+              That looks shorter than a Cloudflare token (40 characters) — make
+              sure the whole value was copied.
+            </p>
           ) : null}
+          {/* Always visible, not revealed-on-error: "where do I paste the id"
+              must never be a puzzle (Oskar, 2026-07-27). A broad token can
+              leave it empty; a Workers AI-template token needs it. */}
+          <label className="chat-font-field">
+            Account ID
+            <input
+              autoComplete="off"
+              className="key-input"
+              disabled={busy}
+              onChange={(event) => setCfAccountId(event.target.value)}
+              placeholder="32 letters and digits"
+              spellCheck={false}
+              type="text"
+              value={cfAccountId}
+            />
+          </label>
           <button
             className="primary-button"
-            disabled={
-              busy ||
-              cloudflareToken.trim().length === 0 ||
-              (needCfAccount && cfAccountId.trim().length === 0)
-            }
+            disabled={busy || cloudflareToken.trim().length === 0}
             onClick={() => void applyImageEngine("workersai", cloudflareToken)}
             type="button"
           >
@@ -2494,10 +2493,9 @@ function VoicePanel() {
           </button>
           <p className="settings-card-copy text-faint">
             Cloudflare dashboard → My Profile → API Tokens → Create Token →
-            Workers AI template.
-            {needCfAccount
-              ? " The Account ID is in the address bar after you sign in — dash.cloudflare.com/<that long code>."
-              : ""}
+            Workers AI template. The Account ID is in the address bar once you
+            are signed in — dash.cloudflare.com/&lt;that long code&gt;. A token
+            made from the template cannot tell us its account, so paste both.
           </p>
         </>
       ) : null}
