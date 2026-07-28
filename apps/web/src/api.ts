@@ -470,6 +470,7 @@ async function streamMessageRequest(
   voiceAudioId?: string,
   imageId?: string,
   imagePrompt?: string,
+  annotate?: boolean,
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -487,6 +488,7 @@ async function streamMessageRequest(
       ...(voiceAudioId ? { voiceAudioId } : {}),
       ...(imageId ? { imageId } : {}),
       ...(imagePrompt ? { imagePrompt } : {}),
+      ...(annotate ? { annotate: true } : {}),
     }),
     signal: callbacks.signal,
   });
@@ -562,6 +564,7 @@ export function streamAskVaenyxMessage(
   voiceAudioId?: string,
   imageId?: string,
   imagePrompt?: string,
+  annotate?: boolean,
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -574,6 +577,7 @@ export function streamAskVaenyxMessage(
     voiceAudioId,
     imageId,
     imagePrompt,
+    annotate,
   );
 }
 

@@ -45,6 +45,7 @@ export async function classifyRoutineIntent(
   signal: AbortSignal,
   libraryDirectory?: string,
   imageEngineConnected = false,
+  photoAvailable = false,
 ): Promise<ClassifyRoutineResponse> {
   const none: ClassifyRoutineResponse = {
     decision: "none",
@@ -151,6 +152,16 @@ export async function classifyRoutineIntent(
           "  ENGLISH image prompt, subject first, then style.",
         ]
       : []),
+    ...(photoAvailable
+      ? [
+          '- "annotate": the Owner wants the things in a photo ALREADY in this',
+          "  conversation pointed out ON the picture — marked, labelled, circled,",
+          '  named in place ("标出来", "在照片上标一下", "mark them on the photo",',
+          '  "show me which is which"). Understand the intent, not keywords. NOT',
+          "  a request to generate a picture, and NOT a plain question about the",
+          "  photo that a written answer serves.",
+        ]
+      : []),
     '- "none": ordinary conversation, or a question to answer directly here.',
     "",
     "If the recent conversation shows Vaenyx asked a clarifying question about",
@@ -218,9 +229,10 @@ export async function classifyRoutineIntent(
     "create-routine",
     "clarify-create",
     "edit-method",
-    // draw only counts while an engine is connected; a stray verdict from a
-    // model that ignored the missing option degrades to plain chat.
+    // draw/annotate only count while their engines can actually run; a stray
+    // verdict from a model that ignored the missing option degrades to chat.
     ...(imageEngineConnected ? ["draw"] : []),
+    ...(photoAvailable ? ["annotate"] : []),
   ].includes(parsed.decision as string)
     ? (parsed.decision as ClassifyRoutineResponse["decision"])
     : "none";
@@ -261,6 +273,10 @@ export async function classifyRoutineIntent(
     // plain reply that answers normally.
     if (!imagePrompt) return none;
     return { ...none, decision: "draw", imagePrompt, note };
+  }
+
+  if (decision === "annotate") {
+    return { ...none, decision: "annotate", note };
   }
 
   // Schedule: validated strictly. A malformed time would otherwise become a

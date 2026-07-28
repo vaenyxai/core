@@ -5885,6 +5885,9 @@ function AskVaenyxPanel({
     if (code === "image-generating") {
       return zh ? "正在生成图片…" : "Generating the picture…";
     }
+    if (code === "annotating") {
+      return zh ? "正在标注照片…" : "Marking the photo…";
+    }
     if (code === "answering") {
       return zh ? "思考中…" : "Thinking…";
     }
@@ -6416,6 +6419,7 @@ function AskVaenyxPanel({
     let createDescription: string | null = null;
     let clarifyCreateQuestion: string | undefined;
     let drawPrompt: string | undefined;
+    let annotateRide = false;
     // The FIRST message of a brand-new chat is exactly where people state what
     // they want ("daily AI news at 7am"), so it must be classified too. The
     // classifier needs a conversation to read history from, so create it first
@@ -6446,9 +6450,12 @@ function AskVaenyxPanel({
       classifyConversationId &&
       // With a picture engine connected, every message goes to the judge:
       // draw-requests come in the words of the conversation, and the keyword
-      // prefilter cannot see them (Oskar, 2026-07-27). Without one, the
-      // cheaper prefilter stands.
+      // prefilter cannot see them (Oskar, 2026-07-27). Same when a vision
+      // engine is connected — "标出来" in any wording is the judge's call,
+      // never a keyword's (Oskar, 2026-07-28). Without either, the cheaper
+      // prefilter stands.
       (imageEngineReady ||
+        visionReady ||
         messageMaybeIntent(content, messages, libraryRoutines))
     ) {
       setSending(true);
@@ -6591,6 +6598,11 @@ function AskVaenyxPanel({
       if (verdict?.decision === "draw" && verdict.imagePrompt) {
         drawPrompt = verdict.imagePrompt;
       }
+      // annotate: the judge understood the Owner wants the conversation's
+      // photo marked. The server marks it before the model replies.
+      if (verdict?.decision === "annotate") {
+        annotateRide = true;
+      }
     }
 
     setSending(true);
@@ -6724,6 +6736,7 @@ function AskVaenyxPanel({
         voiceAudioId,
         imageId,
         drawPrompt,
+        annotateRide,
       );
 
       // Voice replies: a voice turn always answers aloud (it is a spoken

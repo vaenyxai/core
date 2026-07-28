@@ -22,6 +22,7 @@ import {
   looksLikeImageRequest,
 } from "./image-gen.js";
 import {
+  annotateImage,
   describeImage,
   imageDataUrl,
   imageFilePath,
@@ -85,6 +86,22 @@ function conversationHasGeneratedImage(
       `SELECT 1 FROM ask_vaenyx_messages
         WHERE conversation_id = ? AND role = 'assistant' AND image_id IS NOT NULL
         ORDER BY created_at DESC LIMIT 1`,
+    )
+    .get(conversationId);
+  return row !== undefined;
+}
+
+// Any photo at all (owner-attached or generated): gates whether the judge is
+// offered "annotate" — marking needs a picture to mark.
+export function conversationHasPhoto(
+  database: DatabaseHandle,
+  conversationId: string,
+): boolean {
+  const row = database.sqlite
+    .prepare(
+      `SELECT 1 FROM ask_vaenyx_messages
+        WHERE conversation_id = ? AND image_id IS NOT NULL
+        LIMIT 1`,
     )
     .get(conversationId);
   return row !== undefined;
@@ -542,6 +559,9 @@ export interface CreateAskVaenyxMessageOptions {
   // decided this asks for a picture and produced the English prompt. The turn
   // generates with it instead of judging again.
   imagePrompt?: string;
+  // annotate verdict from the same judge: mark the conversation's latest photo
+  // (dots + names) before replying.
+  annotate?: boolean;
   // Live progress for the Owner (Oskar, 2026-07-27): what the turn is doing
   // while nothing is streaming yet ("image-generating"…), and the model's own
   // thinking where the backend exposes it. Both vanish when the reply lands.
@@ -815,6 +835,59 @@ export async function createAskVaenyxMessage(
     let contextWithPhoto = photoContext
       ? [projectContext, photoContext].filter(Boolean).join("\n\n")
       : projectContext;
+
+    // Marking a photo — the judge understood the Owner wants the things in an
+    // existing photo pointed out ON the picture ("标出来", any wording). Runs
+    // BEFORE the model speaks, same truth-note pattern as generation: the
+    // reply narrates what actually happened, never a guess.
+    if (options?.annotate && options.dataDirectory && options.secretsDirectory) {
+      options.onStatus?.("annotating");
+      const latestPhoto = database.sqlite
+        .prepare(
+          `SELECT image_id FROM ask_vaenyx_messages
+           WHERE conversation_id = ? AND image_id IS NOT NULL
+           ORDER BY created_at DESC LIMIT 1`,
+        )
+        .get(conversationId) as { image_id: string } | undefined;
+      let annotateNote =
+        "The Owner asked for the photo to be marked, but no photo could be found in this conversation. Say so briefly.";
+      if (latestPhoto) {
+        try {
+          const found = readImage(options.dataDirectory, latestPhoto.image_id);
+          if (found) {
+            const items = await annotateImage(
+              options.secretsDirectory,
+              found.image,
+              found.mimeType,
+              /[一-鿿]/.test(content) ? "zh" : "en",
+            );
+            database.sqlite
+              .prepare(
+                `INSERT INTO image_annotations (image_id, items, created_at)
+                 VALUES (?, ?, ?)
+                 ON CONFLICT(image_id) DO UPDATE SET items = excluded.items,
+                   created_at = excluded.created_at`,
+              )
+              .run(
+                latestPhoto.image_id,
+                JSON.stringify(items),
+                new Date().toISOString(),
+              );
+            annotateNote = `The system just MARKED the conversation's latest photo: each of these items now has a visible dot and name label on the picture the Owner sees — ${items
+              .map((item) => item.name)
+              .join(
+                ", ",
+              )}. Refer to the marks naturally; never claim you cannot mark photos.`;
+          }
+        } catch {
+          annotateNote =
+            "The system tried to mark the photo the Owner asked about and FAILED. Say so plainly and suggest trying again.";
+        }
+      }
+      contextWithPhoto = [contextWithPhoto, annotateNote]
+        .filter(Boolean)
+        .join("\n\n");
+    }
 
     // Making a picture — BEFORE the model speaks, so it narrates the truth
     // instead of guessing. The first version generated after the reply, and

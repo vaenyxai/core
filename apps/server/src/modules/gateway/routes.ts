@@ -402,6 +402,7 @@ import {
 } from "../core/memory.js";
 import {
   appendAssistantNote,
+  conversationHasPhoto,
   createAskVaenyxConversation,
   createAskVaenyxMessage,
   deleteAskVaenyxConversation,
@@ -2566,6 +2567,10 @@ export async function registerGatewayRoutes(
           // With a picture engine connected, the same single judgment also
           // decides draw / not-draw — no second classifier anywhere.
           getImageEngineStatus(context.config.secretsDirectory).connected,
+          // Annotate is offered to the judge only when it could actually run:
+          // a vision engine is connected AND this conversation has a photo.
+          getVisionStatus(context.config.secretsDirectory).connected &&
+            conversationHasPhoto(context.database, request.params.id),
         );
       } catch {
         return {
@@ -2726,6 +2731,7 @@ export async function registerGatewayRoutes(
               ...(request.body.imagePrompt
                 ? { imagePrompt: request.body.imagePrompt }
                 : {}),
+              ...(request.body.annotate ? { annotate: true } : {}),
               dataDirectory: context.config.dataDirectory,
               secretsDirectory: context.config.secretsDirectory,
             },

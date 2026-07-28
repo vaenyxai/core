@@ -352,6 +352,9 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     // picture and produced the English prompt — the turn generates with it
     // instead of judging again (one judgment per message).
     imagePrompt: Type.Optional(Type.String({ minLength: 1, maxLength: 800 })),
+    // annotate verdict: the classifier judged this message as asking for the
+    // conversation's photo to be marked — the turn marks it before replying.
+    annotate: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
@@ -385,6 +388,11 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       // one classification answers routine/task/create/draw in a single call
       // (Oskar, 2026-07-27).
       Type.Literal("draw"),
+      // The Owner wants the things in a photo already in this conversation
+      // MARKED on the picture (dots + names). Understood by the model, never
+      // by keywords (Oskar, 2026-07-28); offered only when a vision engine is
+      // connected and the conversation has a photo.
+      Type.Literal("annotate"),
     ]),
     routineId: Type.Union([Type.String(), Type.Null()]),
     // For edit-method: which installed Method, and what to change about it.

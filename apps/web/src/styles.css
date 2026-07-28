@@ -2012,13 +2012,15 @@ select {
 .ask-vaenyx-chat {
   position: relative; /* anchors the chat-area splash */
   display: grid;
-  /* The composer sits at the bottom of the screen, always (Oskar, 2026-07-26).
-     It used to follow the content, so a short conversation left it floating in
-     the middle of the screen with dead space underneath. The middle row takes
-     the slack instead. */
+  /* The composer sits at the bottom of the screen, ALWAYS — every width, every
+     amount of content (Oskar, 2026-07-26; re-broken on phones and re-fixed
+     2026-07-28: a mobile override used to drop this, so short chats floated
+     mid-screen). dvh because phone browsers lie about vh while the URL bar
+     animates; the vh line is the fallback for engines without dvh. The middle
+     row absorbs the spare height, which is what pins the composer. */
   min-height: calc(100vh - 74px);
-  /* header · messages · composer. The messages row absorbs the spare height,
-     which is what holds the composer on the bottom edge. */
+  min-height: calc(100dvh - 74px);
+  /* header · messages · composer. */
   grid-template-rows: auto 1fr auto;
   align-content: stretch;
   overflow: visible;
@@ -2030,6 +2032,7 @@ select {
 .focused-workspace {
   display: grid;
   min-height: calc(100vh - 74px);
+  min-height: calc(100dvh - 74px);
 }
 
 /* Same rule in the focused layouts: the composer belongs on the bottom edge,
@@ -2037,6 +2040,7 @@ select {
 .ask-vaenyx-chat.focused-chat,
 .focused-task-panel {
   min-height: calc(100vh - 74px);
+  min-height: calc(100dvh - 74px);
 }
 
 .focused-title-line {
@@ -5623,10 +5627,15 @@ select {
     scroll-margin-bottom: 230px;
   }
 
+  /* The composer stays pinned on phones too. A `min-height: auto` override
+     here used to undo the pinning, which is exactly the "对话框不在最下面"
+     Oskar kept hitting on mobile (2026-07-28). The phone chrome above the
+     panel is shorter than the desktop's, hence the smaller offset. */
   .focused-workspace,
   .ask-vaenyx-chat.focused-chat,
   .focused-task-panel {
-    min-height: auto;
+    min-height: calc(100vh - 46px);
+    min-height: calc(100dvh - 46px);
   }
 
   .profiles-section {
