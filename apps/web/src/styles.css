@@ -2501,14 +2501,16 @@ select {
 }
 
 /* End-of-output marker under each finished Vaenyx reply, so the Owner can tell
-   the answer is complete (not still streaming). */
+   the answer is complete (not still streaming). The rule sits BELOW the time
+   and speak button (Oskar, 2026-07-28): it separates this reply from the next
+   one, so everything belonging to this reply stays above it. */
 .message-footer {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(240, 238, 229, 0.08);
+  margin-top: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(240, 238, 229, 0.08);
   color: #6b685f;
   font-size: 11px;
 }
