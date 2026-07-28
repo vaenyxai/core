@@ -40,7 +40,9 @@ export class AnthropicProvider implements ModelProvider {
     this.#baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.#apiKey = config.apiKey;
     this.#model = config.model;
-    this.#maxTokens = config.maxTokens ?? 4096;
+    // 16000, not 4096: Claude 5 spends thinking and answer from the same
+    // max_tokens budget, and 4096 cut answers off mid-sentence.
+    this.#maxTokens = config.maxTokens ?? 16_000;
   }
 
   async sendChat(
@@ -48,13 +50,38 @@ export class AnthropicProvider implements ModelProvider {
     projectContext?: string,
     options?: ModelChatOptions,
   ): Promise<ModelChatResult> {
+    const apiMessages: Record<string, unknown>[] = messages.map((message) => ({
+      role: message.role === "owner" ? "user" : "assistant",
+      content: message.content,
+    }));
+    // Vision: Claude takes images as native content blocks, not OpenAI-style
+    // image_url. The photo rides on the LAST owner message as a block array.
+    if (options?.imageDataUrl) {
+      const match = /^data:([^;]+);base64,(.+)$/.exec(options.imageDataUrl);
+      if (match) {
+        for (let index = apiMessages.length - 1; index >= 0; index -= 1) {
+          const entry = apiMessages[index];
+          if (entry && entry.role === "user") {
+            entry.content = [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: match[1],
+                  data: match[2],
+                },
+              },
+              { type: "text", text: String(entry.content ?? "") },
+            ];
+            break;
+          }
+        }
+      }
+    }
     const body: Record<string, unknown> = {
       model: options?.model?.trim() || this.#model,
       max_tokens: this.#maxTokens,
-      messages: messages.map((message) => ({
-        role: message.role === "owner" ? "user" : "assistant",
-        content: message.content,
-      })),
+      messages: apiMessages,
     };
     if (projectContext && projectContext.trim()) {
       body.system = projectContext;

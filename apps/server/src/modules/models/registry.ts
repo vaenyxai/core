@@ -4,6 +4,7 @@
 // a specific backend. Today only the Codex provider is registered; multi-model
 // registers OpenAI / Claude / Gemini / local alongside it.
 import { AnthropicProvider } from "./anthropic-provider.js";
+import { ClaudeSubscriptionProvider } from "./claude-subscription-provider.js";
 import { CodexProvider } from "./codex-provider.js";
 import {
   readDefaultProviderId,
@@ -116,6 +117,12 @@ export function initModelRegistry(config: {
   next.register(new CodexProvider(), true);
 
   const connections = readProviderConnections(config.secretsDirectory);
+  // The Claude-subscription mirror of Codex: always registered (its health
+  // check reports the real sign-in state), token from the pasted
+  // `claude setup-token` value when the Owner connected one.
+  next.register(
+    new ClaudeSubscriptionProvider(connections["claude-sub"]?.apiKey ?? null),
+  );
   // Every key-based OpenAI-compatible backend registers the same way — one
   // table, not one hand-rolled block per provider. Groq / Cerebras / OpenRouter
   // are the free-tier presets (2026-07-22): generous free quotas, no card.

@@ -78,8 +78,15 @@ export function imageFilePath(
 // Backends whose chat endpoint accepts image parts directly — the Phase B
 // "first-hand" path. Everything else falls back to the describe layer.
 // "codex" reads the photo via a localImage file path (probe-verified
-// 2026-07-28); the key-based providers take a data URL.
-export const VISION_DIRECT_PROVIDER_IDS = ["gemini", "zhipu", "openai", "codex"];
+// 2026-07-28); "anthropic" via native base64 image blocks; the OpenAI-style
+// providers take a data URL.
+export const VISION_DIRECT_PROVIDER_IDS = [
+  "gemini",
+  "zhipu",
+  "openai",
+  "codex",
+  "anthropic",
+];
 
 // Order of preference among the Owner's existing Models connections — all
 // free-tier friendly, no separate vision setup needed.

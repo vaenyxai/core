@@ -38,8 +38,21 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
   },
   {
     id: "anthropic",
-    name: "Claude",
+    name: "Claude (API Key)",
     kind: "anthropic",
+    needsKey: true,
+    needsBaseUrl: false,
+  },
+  // The subscription mirror of Codex (2026-07-29): the Owner's own Claude
+  // plan via the Agent SDK. The "key" is a `claude setup-token` value, not an
+  // API key — the connect card labels it accordingly. Wording rule: never
+  // state plan quota numbers anywhere; only "uses your own Claude plan,
+  // subject to that plan's limits" (quota policy changed three times in four
+  // months — a written number becomes a false claim on the next change).
+  {
+    id: "claude-sub",
+    name: "Claude (Subscription)",
+    kind: "api-key",
     needsKey: true,
     needsBaseUrl: false,
   },

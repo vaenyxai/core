@@ -10263,7 +10263,11 @@ function ModelsPanel() {
             className="method-rename-input key-input"
             spellCheck={false}
             type="text"
-            placeholder="API key"
+            placeholder={
+              provider.id === "claude-sub"
+                ? "Setup token (from: claude setup-token)"
+                : "API key"
+            }
             value={draftFor(provider.id).apiKey}
             onChange={(event) =>
               patchDraft(provider.id, { apiKey: event.target.value })
@@ -14284,6 +14288,11 @@ const CONNECTABLE_MODELS: Array<{
 // almost always means the provider may use your data under its own terms —
 // the standard third-party notice still gates every connect.
 const MODEL_FREE_TIER_NOTES: Record<string, string> = {
+  // Wording rule (2026-07-29): NEVER a quota number for the Claude plan —
+  // the policy moved three times in four months, and a written number becomes
+  // a false statement on the next move.
+  "claude-sub":
+    "Uses your own Claude plan, subject to that plan's limits. In a terminal run: claude setup-token — then paste the token below.",
   gemini: "Free tier: ~1,500 requests/day via Google AI Studio, no card needed.",
   groq: "Free tier: ~1,000 requests/day, very fast responses. No card needed.",
   cerebras: "Free tier: ~1M tokens/day, fastest responses. No card needed.",
@@ -14299,7 +14308,7 @@ const MODEL_FREE_TIER_NOTES: Record<string, string> = {
 
 // Backends whose chat endpoint reads images directly (Phase B) — must mirror
 // the server's VISION_DIRECT_PROVIDER_IDS.
-const VISION_DIRECT_IDS = ["gemini", "zhipu", "openai", "codex"];
+const VISION_DIRECT_IDS = ["gemini", "zhipu", "openai", "codex", "anthropic"];
 
 // Per-provider model shortlists for the in-chat picker (curated 2026-07-22;
 // the provider's own configured model always remains the Default option, and

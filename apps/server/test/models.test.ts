@@ -169,6 +169,7 @@ describe("initModelRegistry", () => {
     expect(registry.default().id).toBe("codex");
     expect(registry.list().map((provider) => provider.id).sort()).toEqual([
       "anthropic",
+      "claude-sub",
       "codex",
       "gemini",
       "grok",
@@ -181,11 +182,17 @@ describe("initModelRegistry", () => {
     expect(getModelRegistry().get("grok")?.name).toBe("Grok");
   });
 
-  it("is Codex-only when nothing is configured", () => {
+  // The two always-registered subscription channels: Codex (default) and its
+  // Claude mirror, whose health check reports the real sign-in state.
+  it("registers Codex and the Claude subscription channel when nothing is configured", () => {
     const dir = mkdtempSync(resolve(tmpdir(), "vaenyx-models-"));
     temporaryDirectories.push(dir);
     const registry = initModelRegistry({ secretsDirectory: dir });
-    expect(registry.list().map((provider) => provider.id)).toEqual(["codex"]);
+    expect(registry.list().map((provider) => provider.id)).toEqual([
+      "codex",
+      "claude-sub",
+    ]);
+    expect(registry.default().id).toBe("codex");
   });
 });
 
@@ -199,6 +206,7 @@ describe("provider-settings", () => {
     expect(list.map((provider) => provider.id).sort()).toEqual([
       "anthropic",
       "cerebras",
+      "claude-sub",
       "codex",
       "gemini",
       "grok",
