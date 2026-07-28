@@ -2311,12 +2311,13 @@ function VoicePanel() {
   const [freeBusy, setFreeBusy] = useState(false);
 
   // A "Set It Up" jump from a routine chat parked an intent: land scrolled to
-  // this card, then clear the flag so an ordinary visit opens normally.
+  // the Engines card (where the tool gets configured), then clear the flag so
+  // an ordinary visit opens normally.
   useEffect(() => {
     try {
       if (localStorage.getItem("vaenyx.toolsIntent")) {
         localStorage.removeItem("vaenyx.toolsIntent");
-        document.getElementById("tools")?.scrollIntoView({ block: "start" });
+        document.getElementById("engines")?.scrollIntoView({ block: "start" });
       }
     } catch {
       // Storage blocked: the settings page still opened.
@@ -2557,18 +2558,19 @@ function VoicePanel() {
   }
 
   return (
-    <section className="settings-card" id="tools">
+    <section className="settings-card" id="engines">
       <p className="eyebrow">AI</p>
-      <h2>Tools</h2>
+      <h2>Engines</h2>
 
-      {/* Renamed from "Engines" (Oskar's tools plan, 2026-07-28): one page for
-          everything Vaenyx can do beyond chat. Built-in tools first (always
-          on), then the four engine-backed ones — same controls as before. */}
+      {/* One-line purpose + the free-options refresh on the right (Oskar,
+          2026-07-27): what this page IS comes first, everything else is one of
+          four plainly-named sections below. The Tools OVERVIEW lives on its
+          own settings tab (Oskar, 2026-07-29); the voice/picture engines stay
+          right here in AI Settings. */}
       <div className="engine-intro-row">
         <p className="settings-card-copy">
-          Everything Vaenyx can do beyond chat. Built-in tools are always on;
-          the four below run on small models beside your main one, and any key
-          joins one shared pool.
+          Four small models beside your main one — for hearing, speaking,
+          reading pictures and making pictures. Any key joins one shared pool.
         </p>
         <button
           className="secondary-button"
@@ -2580,23 +2582,6 @@ function VoicePanel() {
           {freeBusy ? "Asking…" : "Update Free Options"}
         </button>
       </div>
-
-      <section className="engine-section">
-        <h3 className="settings-subhead">Built-In</h3>
-        <div className="engine-row">
-          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
-            Photo Marks — dots and names on any photo; rename, add or remove
-            them yourself.
-          </p>
-          <span className="library-chip chip-published">Always On</span>
-        </div>
-        <div className="engine-row">
-          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
-            Photo Viewer — tap any photo to open it full screen and zoom.
-          </p>
-          <span className="library-chip chip-published">Always On</span>
-        </div>
-      </section>
       {/* F6, with the answers and never behind a tooltip: attribution alone
           reads as a citation, and a citation is the opposite of a caveat —
           these are someone else's prices, and the model can simply be wrong. */}
@@ -3072,10 +3057,73 @@ function VoicePanel() {
       </FreePick>
       {imageError ? <p className="form-error">{imageError}</p> : null}
       </section>
+    </section>
+  );
+}
 
-      {/* The suggestion channel (Oskar, 2026-07-28): a tool Vaenyx does not
-          have is a request, not a dead end. Tools ship only from us — that is
-          the household safety line — so wanting one means telling us. */}
+// The Tools page (its own settings tab, Oskar 2026-07-29): what Vaenyx can do
+// beyond chat — built-in tools that are always on, and what may come next.
+// The voice/picture ENGINES stay under AI Settings; this page is the map, the
+// suggestion channel, and the safety line: tools ship only from Vaenyx, and
+// community content can only NAME tools from this list, never bring its own.
+function ToolsPanel() {
+  return (
+    <section className="settings-card" id="tools">
+      <p className="eyebrow">App</p>
+      <h2>Tools</h2>
+      <p className="settings-card-copy">
+        What Vaenyx can do beyond chat. Built-in tools are always on and never
+        leave this machine. Hearing, speaking and picture engines are set up
+        under AI Settings → Engines.
+      </p>
+
+      <section className="engine-section">
+        <h3 className="settings-subhead">Built-In</h3>
+        <div className="engine-row">
+          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
+            Photo Marks — dots and names on any photo; rename, add or remove
+            them yourself.
+          </p>
+          <span className="library-chip chip-published">Always On</span>
+        </div>
+        <div className="engine-row">
+          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
+            Photo Viewer — tap any photo to open it full screen and zoom.
+          </p>
+          <span className="library-chip chip-published">Always On</span>
+        </div>
+        <div className="engine-row">
+          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
+            Spoken Replies — any reply or result read aloud from its own
+            speaker button.
+          </p>
+          <span className="library-chip chip-published">Always On</span>
+        </div>
+      </section>
+
+      <section className="engine-section">
+        <h3 className="settings-subhead">Coming Soon</h3>
+        {[
+          "Calendar & Reminders — Routines that know your family's schedule.",
+          "Document Reading — feed a PDF or file the way you feed a photo.",
+          "Web Page Reading — hand Vaenyx a link instead of pasting text.",
+          "Weather — local conditions for planning Routines.",
+          "Smart Home — read and act on devices you approve, one by one.",
+        ].map((line) => (
+          <div className="engine-row" key={line}>
+            <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
+              {line}
+            </p>
+            <span className="library-chip">Coming Soon</span>
+          </div>
+        ))}
+        <p className="settings-card-copy text-faint">
+          Every new tool is built and reviewed by Vaenyx — Routines and
+          Community content can only use tools from this list, never bring
+          their own. That is the household safety line.
+        </p>
+      </section>
+
       <p className="settings-card-copy text-faint">
         Missing a tool you need? Suggest it on{" "}
         <a href="https://vaenyx.ai/discord" rel="noopener" target="_blank">
@@ -11009,6 +11057,7 @@ function SettingsPanel({
   const [settingsTab, setSettingsTab] = useState<
     | "user"
     | "ai"
+    | "tools"
     | "notifications"
     | "backup"
     | "sharing"
@@ -11222,6 +11271,13 @@ function SettingsPanel({
               type="button"
             >
               AI Settings
+            </button>
+            <button
+              className={activeTab === "tools" ? "active" : ""}
+              onClick={() => setSettingsTab("tools")}
+              type="button"
+            >
+              Tools
             </button>
             <button
               className={activeTab === "notifications" ? "active" : ""}
@@ -11733,6 +11789,7 @@ function SettingsPanel({
       ) : null}
       {activeTab === "ai" ? <ModelsPanel /> : null}
       {activeTab === "ai" ? <VoicePanel /> : null}
+      {activeTab === "tools" ? <ToolsPanel /> : null}
       {activeTab === "notifications" ? <NotificationsPanel /> : null}
       {activeTab === "backup" ? <BackupPanel /> : null}
       {activeTab === "sharing" ? (
