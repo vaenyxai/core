@@ -15675,11 +15675,15 @@ const THREAD_LIST_STEP = 10;
 // a thread is unread when its last activity is newer than the last time THIS
 // device had it open. Device-local on purpose — read state is a property of
 // the person at the screen, and it needs no server schema.
-// Bumping the suffix wipes the slate on every device: the seeding effect finds
-// nothing stored and marks everything as read, so only activity from that
-// moment on lights a dot (Oskar, 2026-07-28 — the first run had lit rows he
-// had already read).
+//
+// TWO parts, and the watermark is the important one. The per-thread map alone
+// meant "no entry = unread", so every chat missing from the map — anything the
+// map was not written with — stayed lit forever ("红点全部都在"). The watermark
+// is the moment this device started tracking: activity older than it is read,
+// full stop. So a thread's floor is its own entry when it has one, else the
+// watermark, and unknown chats simply do not light up for old activity.
 const THREAD_SEEN_KEY = "vaenyx-thread-seen-2";
+const THREAD_SEEN_SINCE_KEY = "vaenyx-thread-seen-since";
 
 function readThreadSeen(): Record<string, string> {
   try {
@@ -15688,6 +15692,14 @@ function readThreadSeen(): Record<string, string> {
     ) as Record<string, string>;
   } catch {
     return {};
+  }
+}
+
+function readThreadSeenSince(): string {
+  try {
+    return localStorage.getItem(THREAD_SEEN_SINCE_KEY) ?? "";
+  } catch {
+    return "";
   }
 }
 
@@ -15906,28 +15918,26 @@ function SidebarThreadTree({
   const [pickedArchived, setPickedArchived] = useState<Set<string>>(new Set());
   // Deleting archived chats is the one destructive act here — two clicks.
   const [confirmArchiveDelete, setConfirmArchiveDelete] = useState(false);
-  // Unread dots: last-seen per thread, this device only.
+  // Unread dots: last-seen per thread, plus the tracking watermark. Device only.
   const [threadSeen, setThreadSeen] = useState<Record<string, string>>(
     readThreadSeen,
   );
+  const [seenSince, setSeenSince] = useState<string>(readThreadSeenSince);
 
-  // The feature's first run counts everything existing as read — a sidebar
-  // that lights up wall-to-wall on update would say nothing.
+  // First run on this device: everything that already happened counts as read.
+  // A sidebar that lights up wall-to-wall on update says nothing.
   useEffect(() => {
-    if (workspace.threads.length === 0) return;
-    if (localStorage.getItem(THREAD_SEEN_KEY) !== null) return;
-    const seeded: Record<string, string> = {};
-    for (const thread of workspace.threads) {
-      seeded[thread.id] = thread.updatedAt;
-    }
-    writeThreadSeen(seeded);
-    setThreadSeen(seeded);
+    if (seenSince) return;
+    const now = new Date().toISOString();
     try {
+      localStorage.setItem(THREAD_SEEN_SINCE_KEY, now);
+      // Superseded keys from earlier attempts at this.
       localStorage.removeItem("vaenyx-thread-seen");
     } catch {
-      // Tidying the superseded key is best-effort.
+      // Storage blocked: the dots just stay quiet this session.
     }
-  }, [workspace.threads]);
+    setSeenSince(now);
+  }, [seenSince]);
 
   // The open thread is always read: opening marks it, and activity arriving
   // while it is open keeps it marked.
@@ -15949,7 +15959,10 @@ function SidebarThreadTree({
         (thread) =>
           thread.status !== "archived" &&
           thread.id !== selectedThreadId &&
-          (threadSeen[thread.id] ?? "") < thread.updatedAt,
+          // Its own last-read moment, or — never opened here — the moment this
+          // device started tracking. No watermark yet = nothing is unread.
+          Boolean(seenSince) &&
+          (threadSeen[thread.id] ?? seenSince) < thread.updatedAt,
       )
       .map((thread) => thread.id),
   );
