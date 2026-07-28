@@ -361,14 +361,17 @@ export function runRoutineInChat(
   content: string,
   input?: Record<string, unknown>,
   learn?: boolean,
+  imageId?: string,
 ): Promise<RoutineRunResult | RoutineRunNeedsInput> {
   return requestJson<RoutineRunResult | RoutineRunNeedsInput>(
     `/v1/ask-vaenyx/conversations/${conversationId}/routine-run`,
     {
       method: "POST",
-      body: JSON.stringify(
-        input ? { content, input, ...(learn ? { learn: true } : {}) } : { content },
-      ),
+      body: JSON.stringify({
+        content,
+        ...(input ? { input, ...(learn ? { learn: true } : {}) } : {}),
+        ...(imageId ? { imageId } : {}),
+      }),
     },
   );
 }

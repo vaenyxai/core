@@ -2127,6 +2127,36 @@ export async function registerGatewayRoutes(
         if (!reply.raw.writableEnded) controller.abort();
       });
 
+      // A fed photo stays a PHOTO in the journal; its contents are extracted
+      // here, behind the scenes, and joined to the typed words for the parse
+      // ("visual first" — the Owner never sees a text dump, Oskar 2026-07-28).
+      let effectiveContent = request.body.content;
+      if (request.body.imageId && !request.body.input) {
+        const found = readImage(
+          context.config.dataDirectory,
+          request.body.imageId,
+        );
+        if (found) {
+          try {
+            const extracted = await describeImage(
+              context.config.secretsDirectory,
+              found.image,
+              found.mimeType,
+              /[一-鿿]/.test(request.body.content) ? "zh" : "en",
+            );
+            if (extracted.trim()) {
+              effectiveContent =
+                request.body.content.trim() &&
+                request.body.content.trim() !== "(Photo)"
+                  ? `${request.body.content.trim()}\n${extracted.trim()}`
+                  : extracted.trim();
+            }
+          } catch {
+            // No vision model or it refused: the typed words still run.
+          }
+        }
+      }
+
       // Confirmed structured input runs as-is (the run's own step validation
       // still applies). A plain message is wrapped (single field) or AI-parsed
       // into a confirm payload (multi-field).
@@ -2148,7 +2178,7 @@ export async function registerGatewayRoutes(
           context.config.routinesDirectory,
           context.config.libraryDirectory,
           thread.routineId,
-          request.body.content,
+          effectiveContent,
         );
         if (wrapped.ok) {
           journalInput = wrapped.input;
@@ -2158,7 +2188,7 @@ export async function registerGatewayRoutes(
               context.config.routinesDirectory,
               context.config.libraryDirectory,
               thread.routineId,
-              request.body.content,
+              effectiveContent,
               controller.signal,
               undefined,
               listParseExamples(context.database, thread.routineId, 3),
@@ -2169,7 +2199,13 @@ export async function registerGatewayRoutes(
                   "Vaenyx could not work out this routine's input from a chat message.",
               });
             }
-            return { needsInput: true as const, ...parsed };
+            // The confirm round sends this content back, so the learn example
+            // pairs the parse with the text it actually saw.
+            return {
+              needsInput: true as const,
+              ...parsed,
+              content: effectiveContent,
+            };
           } catch (error) {
             return reply
               .code(502)
@@ -2186,7 +2222,10 @@ export async function registerGatewayRoutes(
           thread.routineId,
           journalInput,
           controller.signal,
-          { chatId: request.params.id },
+          {
+            chatId: request.params.id,
+            imageId: request.body.imageId ?? null,
+          },
         );
         touchChatThread(
           context.database,

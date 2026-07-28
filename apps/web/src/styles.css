@@ -1295,9 +1295,9 @@ textarea::placeholder {
 /* Inline variant: chips sit on the title line, right of the title. */
 .chat-chips--inline {
   min-width: 0;
-  flex-wrap: nowrap;
+  /* Wrap rather than hide: a clipped chip reads as a broken screen. */
+  flex-wrap: wrap;
   margin-top: 0;
-  overflow: hidden;
 }
 
 /* Sidebar rows are dense — chips there go one notch smaller than the base. */
@@ -2047,6 +2047,10 @@ select {
   display: flex;
   min-width: 0;
   align-items: center;
+  /* Chips flow to a second row instead of clipping off-screen — the phone
+     header showed "Dinner …" with the VISION chip cut in half (Oskar,
+     2026-07-28). */
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -2054,9 +2058,13 @@ select {
   flex: 0 0 auto;
 }
 
+/* The header ⋮ sits at the row's right edge, so the popover hangs LEFT from
+   it — anchored right, clamped to the viewport. (It was left-anchored, which
+   pushed half the menu off a phone screen.) */
 .focused-title-line .thread-action-popover {
-  right: auto;
-  left: 0;
+  right: 0;
+  left: auto;
+  max-width: calc(100vw - 32px);
 }
 
 .chat-header-actions {

@@ -25,6 +25,9 @@ interface JournalRow {
   chat_id: string | null;
   content: string;
   created_at: string;
+  image_id: string | null;
+  // From the LEFT JOIN on image_annotations (absent on the by-id lookup).
+  annotation_items?: string | null;
 }
 
 interface GalleryRow {
@@ -38,12 +41,26 @@ interface GalleryRow {
 }
 
 function toJournalEntry(row: JournalRow): RoutineJournalEntry {
+  let imageAnnotations: RoutineJournalEntry["imageAnnotations"] = null;
+  if (row.annotation_items) {
+    try {
+      const parsed = JSON.parse(row.annotation_items) as unknown;
+      if (Array.isArray(parsed)) {
+        imageAnnotations =
+          parsed as NonNullable<RoutineJournalEntry["imageAnnotations"]>;
+      }
+    } catch {
+      // A corrupt row just means no overlay.
+    }
+  }
   return {
     id: row.id,
     routineId: row.routine_id,
     chatId: row.chat_id,
     content: JSON.parse(row.content),
     createdAt: row.created_at,
+    imageId: row.image_id ?? null,
+    imageAnnotations,
   };
 }
 
@@ -61,15 +78,26 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
 
 export function addJournalEntry(
   database: DatabaseHandle,
-  input: { routineId: string; chatId?: string | null; content: unknown },
+  input: {
+    routineId: string;
+    chatId?: string | null;
+    content: unknown;
+    imageId?: string | null;
+  },
 ): RoutineJournalEntry {
   const id = randomUUID();
   database.sqlite
     .prepare(
-      `INSERT INTO routine_journal (id, routine_id, chat_id, content)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO routine_journal (id, routine_id, chat_id, content, image_id)
+       VALUES (?, ?, ?, ?, ?)`,
     )
-    .run(id, input.routineId, input.chatId ?? null, JSON.stringify(input.content ?? null));
+    .run(
+      id,
+      input.routineId,
+      input.chatId ?? null,
+      JSON.stringify(input.content ?? null),
+      input.imageId ?? null,
+    );
 
   const row = database.sqlite
     .prepare("SELECT * FROM routine_journal WHERE id = ?")
@@ -82,18 +110,23 @@ export function listJournalEntries(
   routineId: string,
   chatId?: string | null,
 ): RoutineJournalEntry[] {
+  // Photos bring their stored marks along, so a journal photo keeps its
+  // overlay when the chat reopens (same join as chat messages).
+  const select = `SELECT j.*, a.items AS annotation_items
+                  FROM routine_journal j
+                  LEFT JOIN image_annotations a ON a.image_id = j.image_id`;
   const rows = (
     chatId === undefined
       ? database.sqlite
           .prepare(
-            `SELECT * FROM routine_journal WHERE routine_id = ?
-             ORDER BY created_at DESC, id DESC`,
+            `${select} WHERE j.routine_id = ?
+             ORDER BY j.created_at DESC, j.id DESC`,
           )
           .all(routineId)
       : database.sqlite
           .prepare(
-            `SELECT * FROM routine_journal WHERE routine_id = ? AND chat_id IS ?
-             ORDER BY created_at DESC, id DESC`,
+            `${select} WHERE j.routine_id = ? AND j.chat_id IS ?
+             ORDER BY j.created_at DESC, j.id DESC`,
           )
           .all(routineId, chatId)
   ) as unknown as JournalRow[];

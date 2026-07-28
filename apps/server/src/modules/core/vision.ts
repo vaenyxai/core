@@ -167,10 +167,13 @@ export async function describeImage(
   const connection = connections[candidate.id];
   const apiKey = connection?.apiKey ?? "";
   const dataUrl = `data:${mimeType};base64,${image.toString("base64")}`;
+  // Dot points, never prose (app-wide rule, Oskar 2026-07-28): this text lands
+  // in front of the Owner (routine confirm cards, composer surfaces), so it
+  // must read as short scannable lines, not a markdown essay.
   const prompt =
     lang === "zh"
-      ? "精确、实用地描述这张照片的内容。如果是食材/冰箱/购物照片,逐项列出所有能辨认的食物和大致数量。如果是文档或票据,提取关键文字信息。其它内容就简洁描述要点。只输出内容本身,不要客套话。"
-      : "Describe this photo's contents precisely and usefully. If it shows food, groceries or a fridge, list every identifiable item with a rough quantity. If it is a document or receipt, extract the key text. Otherwise describe the key contents concisely. Output the content only, no preamble.";
+      ? "把这张照片的内容写成清单:一行一项,格式如「牛肉 ×1」。食材/冰箱/购物照片就逐项列出能辨认的食物和数量;文档或票据就一行一条列关键信息;其它内容一行一个要点。禁止 markdown、星号、标题、分区、段落——只要干净的行。只输出清单本身,不要客套话。"
+      : "Write this photo's contents as a list: one item per line, like 'beef steak x1'. For food/fridge/grocery photos list every identifiable item with a rough quantity; for documents or receipts one key fact per line; otherwise one short point per line. NO markdown, NO asterisks, NO headings, NO sections, NO paragraphs — clean lines only. Output the list itself, no preamble.";
 
   const response = await fetch(
     `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,

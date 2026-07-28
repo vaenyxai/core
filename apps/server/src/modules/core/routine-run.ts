@@ -80,6 +80,9 @@ export async function runRoutine(
     // External (token) runs are stateless: run the flow, return the result, and
     // write nothing to the owner's local Journal/Gallery (the app keeps its data).
     stateless?: boolean;
+    // The photo this run was fed with — kept on the journal entry so the chat
+    // shows a picture, never a text dump ("visual first", Oskar 2026-07-28).
+    imageId?: string | null;
   } = {},
 ): Promise<RoutineRunResult> {
   const routine = loadRoutine(routinesDirectory, libraryDirectory, id);
@@ -98,7 +101,12 @@ export async function runRoutine(
 
   const journalEntry =
     routine.storage.journal && !stateless
-      ? addJournalEntry(database, { routineId: id, chatId, content: journalInput })
+      ? addJournalEntry(database, {
+          routineId: id,
+          chatId,
+          content: journalInput,
+          imageId: options.imageId ?? null,
+        })
       : null;
 
   const steps: RoutineStepResult[] = [];

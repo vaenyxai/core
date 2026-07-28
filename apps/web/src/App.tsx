@@ -1011,21 +1011,17 @@ async function downscalePhoto(file: File): Promise<Blob> {
 // lands in the composer for the Owner to top up and send (so Routines like
 // Dinner Planner receive a ready ingredient list). Mirrors the voice flow.
 function CameraButton({
-  describeToo,
   disabled,
   lang,
   onAttach,
   onText,
 }: {
-  // Attach the photo AND put a description in the box. For surfaces that
-  // consume text (a Routine) the description is what they can act on, while
-  // the photo still belongs in the conversation.
-  describeToo?: boolean;
   disabled?: boolean;
   lang: string;
-  // Phase B direct mode: the photo attaches to the message itself (the main
-  // model sees the original). When absent, the describe fallback fills the
-  // composer with extracted text instead.
+  // The photo attaches to the message itself and STAYS a photo everywhere —
+  // chat and Routines alike; any text extraction happens server-side, out of
+  // sight ("visual first", Oskar 2026-07-28). When absent (a surface with no
+  // attachment slot), the describe fallback fills the box with text instead.
   onAttach?: (imageId: string) => void;
   onText: (text: string) => void;
 }) {
@@ -1050,10 +1046,6 @@ function CameraButton({
       if (onAttach) {
         const { imageId } = await uploadPhoto(blob);
         onAttach(imageId);
-        if (describeToo) {
-          const text = await describePhoto(blob, lang);
-          if (text) onText(text);
-        }
       } else {
         // Surfaces with no attachment slot (the start-work box) still get the
         // description in text form, because there is nowhere to hang a photo.
@@ -5730,6 +5722,7 @@ function AskVaenyxPanel({
     conversationId: string;
     routineId: string;
     content: string;
+    imageId: string | null;
     fields: RoutineInputField[];
     values: Record<string, string>;
     checks: Record<string, boolean>;
@@ -6155,6 +6148,7 @@ function AskVaenyxPanel({
     content: string,
     input?: Record<string, unknown>,
     learn?: boolean,
+    imageId?: string,
   ): Promise<void> {
     setSending(true);
     setError(null);
@@ -6163,7 +6157,14 @@ function AskVaenyxPanel({
     const tempId = `pending-journal-${crypto.randomUUID()}`;
     const startedAt = new Date().toISOString();
     setRoutineJournal((current) => [
-      { id: tempId, routineId, chatId: conversationId, content, createdAt: startedAt },
+      {
+        id: tempId,
+        routineId,
+        chatId: conversationId,
+        content,
+        createdAt: startedAt,
+        imageId: imageId ?? null,
+      },
       ...current,
     ]);
     try {
@@ -6172,6 +6173,7 @@ function AskVaenyxPanel({
         content,
         input,
         learn,
+        imageId,
       );
       if (result && typeof result === "object" && "needsInput" in result) {
         // Nothing ran yet: take the pending note back out and open the confirm
@@ -6199,7 +6201,11 @@ function AskVaenyxPanel({
         setRoutineInputConfirm({
           conversationId,
           routineId,
-          content,
+          // What the parser actually read (typed words + a photo's extracted
+          // lines) — the confirm round sends it back so the learn example
+          // pairs the parse with its real source.
+          content: result.content ?? content,
+          imageId: imageId ?? null,
           fields: result.fields,
           values,
           checks,
@@ -6269,6 +6275,7 @@ function AskVaenyxPanel({
       confirm.content,
       input,
       edited,
+      confirm.imageId ?? undefined,
     );
   }
 
@@ -6403,6 +6410,9 @@ function AskVaenyxPanel({
         activeConversationId,
         activeThread.routineId,
         content,
+        undefined,
+        undefined,
+        imageId,
       );
       return;
     }
@@ -7403,19 +7413,6 @@ function AskVaenyxPanel({
           (routine) => routine.id === activeThread.routineId,
         ) ?? null
       : null;
-    // Phase B: photos attach to the message itself when the conversation's
-    // effective model reads images (and the chat isn't a Routine — Routines
-    // consume text, so they keep the describe fallback).
-    const effectiveChatProviderId = (
-      chatProviders.find(
-        (candidate) => candidate.id === activeConversation?.modelProviderId,
-      ) ?? chatProviders.find((candidate) => candidate.isDefault)
-    )?.id;
-    // A Routine consumes text, so a photo sent to one is described as well as
-    // attached: the picture stays in the conversation, and the Routine still
-    // gets something it can parse.
-    const describePhotoToo =
-      isRoutine || !VISION_DIRECT_IDS.includes(effectiveChatProviderId ?? "");
     // Header chips (spec §2a): same real-state chips as the sidebar, but the
     // Routine chip shows the Routine's actual name, and an in-flight build adds
     // a Building chip alongside the in-conversation banner.
@@ -7810,6 +7807,25 @@ function AskVaenyxPanel({
                         <strong>You</strong>
                         <small>{formatTime(node.at)}</small>
                       </div>
+                      {/* A fed photo stays a photo — with the same mark
+                          button as chat photos (visual first). */}
+                      {node.entry.imageId ? (
+                        <AnnotatedPhoto
+                          annotations={node.entry.imageAnnotations ?? null}
+                          imageId={node.entry.imageId}
+                          lang={lang}
+                          onAnnotated={(items) =>
+                            setRoutineJournal((current) =>
+                              current.map((candidate) =>
+                                candidate.id === node.entry.id
+                                  ? { ...candidate, imageAnnotations: items }
+                                  : candidate,
+                              ),
+                            )
+                          }
+                          onLoad={reanchorAfterImageLoad}
+                        />
+                      ) : null}
                       <p>{journalText(node.entry.content)}</p>
                     </article>
                   ) : (
@@ -8011,7 +8027,6 @@ function AskVaenyxPanel({
               // belongs in the conversation; how it gets read is the server's
               // problem, not a reason to throw the picture away.
               <CameraButton
-                describeToo={describePhotoToo}
                 disabled={sending}
                 lang={lang}
                 onAttach={(id) => setPendingImageId(id)}
@@ -8289,7 +8304,9 @@ function AskVaenyxPanel({
                   chips={taskChips}
                   className="chat-chips chat-chips--inline"
                 />
-                {renderThreadHeaderMenu(focusedTaskThread)}
+                <div className="chat-header-actions">
+                  {renderThreadHeaderMenu(focusedTaskThread)}
+                </div>
               </div>
               {focusedTask.harness === "codex-harness" ? (
                 <div className="task-toolbar">

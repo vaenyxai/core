@@ -1484,6 +1484,12 @@ export const RoutineJournalEntrySchema = Type.Object(
     chatId: Type.Union([Type.String(), Type.Null()]),
     content: Type.Unknown(),
     createdAt: Type.String(),
+    // The photo this entry was fed with, shown as a photo in the chat/journal
+    // ("visual first", Oskar 2026-07-28) — plus any stored marks on it.
+    imageId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    imageAnnotations: Type.Optional(
+      Type.Union([Type.Array(ImageAnnotationItemSchema), Type.Null()]),
+    ),
   },
   { additionalProperties: false },
 );
@@ -2161,6 +2167,10 @@ export const RoutineRunChatRequestSchema = Type.Object(
     // With `input`: the Owner edited the parsed fields, so save this
     // message -> confirmed input as a local, private few-shot parse example.
     learn: Type.Optional(Type.Boolean()),
+    // A photo fed to the Routine ("visual first", Oskar 2026-07-28): it shows
+    // as a photo in the journal, and the server extracts its contents into the
+    // run's input behind the scenes — no text dump in the composer.
+    imageId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   },
   { additionalProperties: false },
 );
@@ -2172,6 +2182,10 @@ export const RoutineRunNeedsInputSchema = Type.Object(
     // Best-effort AI parse of the message, keyed by field; the card prefills it.
     parsed: Type.Record(Type.String(), Type.Unknown()),
     missingRequired: Type.Array(Type.String()),
+    // What the parser actually read (typed words + a photo's extracted lines).
+    // The confirm round sends THIS back so the learn example pairs the parse
+    // with the text it really saw.
+    content: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );
