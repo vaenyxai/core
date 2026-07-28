@@ -1163,6 +1163,32 @@ textarea::placeholder {
   min-height: 34px;
 }
 
+/* A Routine's tool status, said out loud: needs setup (with the jump) or
+   "Vaenyx does not have this tool yet" (with the suggestion channel). */
+.tool-notices {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.tool-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0.5px solid rgba(240, 190, 100, 0.35);
+  border-radius: var(--r-sm);
+  background: rgba(240, 190, 100, 0.08);
+  color: var(--text);
+  font-size: var(--fs-label);
+}
+
+.tool-notice a {
+  color: var(--accent);
+}
+
 .composer-attachment {
   position: relative;
   display: inline-flex;

@@ -347,6 +347,7 @@ import {
   listRoutineSummaries,
   loadRoutine,
   planRoutineSpec,
+  routineAnnotateFocus,
   toLibraryRoutine,
 } from "../core/routines.js";
 import {
@@ -2155,6 +2156,10 @@ export async function registerGatewayRoutes(
             found.image,
             found.mimeType,
             runLanguage,
+            routineAnnotateFocus(
+              context.config.routinesDirectory,
+              thread.routineId,
+            ),
           ).catch(() => null);
           try {
             const extracted = await describeImage(

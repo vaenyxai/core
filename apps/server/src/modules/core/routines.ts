@@ -177,24 +177,39 @@ function readRoutineMeta(
 }
 
 // What a Routine plugs into beyond text (step 4, Oskar 2026-07-28). Unknown
-// values are dropped, not errors — a routine.json written for a future Vaenyx
-// still loads today. Like view/tags, capabilities are NOT hashed: declaring
-// one never breaks a version lock.
-const KNOWN_CAPABILITIES = ["vision", "voice-out", "draw"] as const;
-
+// names are KEPT (sanitized), not dropped: the app decides what it knows, and
+// a declaration it does not recognise becomes a visible "Vaenyx does not have
+// this tool yet — suggest it" notice instead of silently vanishing (Oskar's
+// tools plan, 2026-07-28). Like view/tags, capabilities are NOT hashed:
+// declaring one never breaks a version lock.
 function readCapabilities(source: unknown): string[] {
   if (!Array.isArray(source)) return [];
   const capabilities: string[] = [];
-  for (const entry of source) {
-    if (
-      typeof entry === "string" &&
-      (KNOWN_CAPABILITIES as readonly string[]).includes(entry) &&
-      !capabilities.includes(entry)
-    ) {
-      capabilities.push(entry);
+  for (const entry of source.slice(0, 10)) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim().slice(0, 40);
+    if (trimmed && !capabilities.includes(trimmed)) {
+      capabilities.push(trimmed);
     }
   }
   return capabilities;
+}
+
+// A tool preference, not an instruction set: plain words the annotate tool
+// folds into its prompt ("only mark food"). Declarative like everything else
+// a Routine carries — never code, never hashed.
+export function routineAnnotateFocus(
+  routinesDirectory: string,
+  id: string,
+): string | null {
+  try {
+    const meta = readRoutineMeta(routinesDirectory, id);
+    return typeof meta.annotateFocus === "string" && meta.annotateFocus.trim()
+      ? meta.annotateFocus.trim().slice(0, 120)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function toSummary(

@@ -241,6 +241,7 @@ export async function annotateImage(
   image: Buffer,
   mimeType: string,
   lang: string,
+  focus?: string | null,
 ): Promise<ImageAnnotationItem[]> {
   const connections = readProviderConnections(secretsDirectory);
   const candidate = pickCandidate(connections);
@@ -252,6 +253,9 @@ export async function annotateImage(
   const dataUrl = `data:${mimeType};base64,${image.toString("base64")}`;
   const prompt = [
     "Detect the most prominent distinct objects in this photo (at most 10).",
+    // A Routine's declared focus ("food and drink items"): the tool narrows
+    // itself instead of every Routine re-explaining the world.
+    ...(focus ? [`ONLY mark ${focus}; skip everything else.`] : []),
     lang === "zh"
       ? 'Return ONLY a JSON array, each entry {"name": string (short Chinese name, 2-6 characters), "box_2d": [ymin, xmin, ymax, xmax]} with coordinates normalized to 0-1000.'
       : 'Return ONLY a JSON array, each entry {"name": string (short English name, 1-3 words), "box_2d": [ymin, xmin, ymax, xmax]} with coordinates normalized to 0-1000.',

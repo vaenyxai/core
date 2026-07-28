@@ -2310,6 +2310,19 @@ function VoicePanel() {
     null;
   const [freeBusy, setFreeBusy] = useState(false);
 
+  // A "Set It Up" jump from a routine chat parked an intent: land scrolled to
+  // this card, then clear the flag so an ordinary visit opens normally.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("vaenyx.toolsIntent")) {
+        localStorage.removeItem("vaenyx.toolsIntent");
+        document.getElementById("tools")?.scrollIntoView({ block: "start" });
+      }
+    } catch {
+      // Storage blocked: the settings page still opened.
+    }
+  }, []);
+
   async function updateFreePicks() {
     setFreeBusy(true);
     try {
@@ -2544,17 +2557,18 @@ function VoicePanel() {
   }
 
   return (
-    <section className="settings-card">
+    <section className="settings-card" id="tools">
       <p className="eyebrow">AI</p>
-      <h2>Engines</h2>
+      <h2>Tools</h2>
 
-      {/* One-line purpose + the free-options refresh on the right (Oskar,
-          2026-07-27): what this page IS comes first, everything else is one of
-          four plainly-named sections below. */}
+      {/* Renamed from "Engines" (Oskar's tools plan, 2026-07-28): one page for
+          everything Vaenyx can do beyond chat. Built-in tools first (always
+          on), then the four engine-backed ones — same controls as before. */}
       <div className="engine-intro-row">
         <p className="settings-card-copy">
-          Four small models beside your main one — for hearing, speaking,
-          reading pictures and making pictures. Any key joins one shared pool.
+          Everything Vaenyx can do beyond chat. Built-in tools are always on;
+          the four below run on small models beside your main one, and any key
+          joins one shared pool.
         </p>
         <button
           className="secondary-button"
@@ -2566,6 +2580,23 @@ function VoicePanel() {
           {freeBusy ? "Asking…" : "Update Free Options"}
         </button>
       </div>
+
+      <section className="engine-section">
+        <h3 className="settings-subhead">Built-In</h3>
+        <div className="engine-row">
+          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
+            Photo Marks — dots and names on any photo; rename, add or remove
+            them yourself.
+          </p>
+          <span className="library-chip chip-published">Always On</span>
+        </div>
+        <div className="engine-row">
+          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
+            Photo Viewer — tap any photo to open it full screen and zoom.
+          </p>
+          <span className="library-chip chip-published">Always On</span>
+        </div>
+      </section>
       {/* F6, with the answers and never behind a tooltip: attribution alone
           reads as a citation, and a citation is the opposite of a caveat —
           these are someone else's prices, and the model can simply be wrong. */}
@@ -3041,6 +3072,17 @@ function VoicePanel() {
       </FreePick>
       {imageError ? <p className="form-error">{imageError}</p> : null}
       </section>
+
+      {/* The suggestion channel (Oskar, 2026-07-28): a tool Vaenyx does not
+          have is a request, not a dead end. Tools ship only from us — that is
+          the household safety line — so wanting one means telling us. */}
+      <p className="settings-card-copy text-faint">
+        Missing a tool you need? Suggest it on{" "}
+        <a href="https://vaenyx.ai/discord" rel="noopener" target="_blank">
+          Discord
+        </a>{" "}
+        or email <a href="mailto:hello@vaenyx.ai">hello@vaenyx.ai</a>.
+      </p>
     </section>
   );
 }
@@ -7842,6 +7884,31 @@ function AskVaenyxPanel({
 
     // Friendly-input confirm card: required fields still blank (booleans always
     // count as filled).
+    // The tools contract, visible (Oskar's tools plan, 2026-07-28): a Routine
+    // declares what it plugs into; the app answers with one of three truths —
+    // ready, needs setting up (jump to Tools), or "Vaenyx does not have this
+    // tool yet" with the suggestion channel. Never a silent failure.
+    const knownToolStatus: Record<string, { label: string; ready: boolean }> = {
+      vision: {
+        label: lang === "zh" ? "看图" : "Vision",
+        ready: visionReady,
+      },
+      // Speaking always works — the device voice is the floor.
+      "voice-out": { label: lang === "zh" ? "说话" : "Speak", ready: true },
+      draw: {
+        label: lang === "zh" ? "画图" : "Draw",
+        ready: imageEngineReady,
+      },
+    };
+    const toolNotices: { kind: "unknown" | "setup"; name: string }[] = [];
+    for (const capability of activeRoutine?.capabilities ?? []) {
+      const known = knownToolStatus[capability];
+      if (!known) toolNotices.push({ kind: "unknown", name: capability });
+      else if (!known.ready) {
+        toolNotices.push({ kind: "setup", name: known.label });
+      }
+    }
+
     const confirmMissing = routineInputConfirm
       ? routineInputConfirm.fields
           .filter((field) => {
@@ -7918,6 +7985,48 @@ function AskVaenyxPanel({
             </div>
           ) : null}
         </header>
+
+        {toolNotices.length > 0 ? (
+          <div className="tool-notices">
+            {toolNotices.map((notice) =>
+              notice.kind === "setup" ? (
+                <p className="tool-notice" key={`setup-${notice.name}`}>
+                  {lang === "zh"
+                    ? `这个 Routine 需要「${notice.name}」工具,还没配置。`
+                    : `This Routine needs the ${notice.name} tool — not set up yet.`}
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      try {
+                        localStorage.setItem("vaenyx.toolsIntent", "1");
+                      } catch {
+                        // Storage blocked: settings still opens, just unscrolled.
+                      }
+                      onOpenSettings();
+                    }}
+                    type="button"
+                  >
+                    {lang === "zh" ? "去配置" : "Set It Up"}
+                  </button>
+                </p>
+              ) : (
+                <p className="tool-notice" key={`unknown-${notice.name}`}>
+                  {lang === "zh"
+                    ? `这个 Routine 需要「${notice.name}」,Vaenyx 还没有这个工具。想要它?告诉我们:`
+                    : `This Routine needs "${notice.name}" — Vaenyx does not have that tool yet. Want it? Tell us:`}{" "}
+                  <a
+                    href="https://vaenyx.ai/discord"
+                    rel="noopener"
+                    target="_blank"
+                  >
+                    Discord
+                  </a>{" "}
+                  · <a href="mailto:hello@vaenyx.ai">hello@vaenyx.ai</a>
+                </p>
+              ),
+            )}
+          </div>
+        ) : null}
 
         {/* B4: the Owner approves an edit by reading it, so the changed lines
             are shown against the current recipe — never a rewritten whole.
@@ -10908,7 +11017,12 @@ function SettingsPanel({
     | "legal"
     // A sign-in-page model button parked a connect intent: open on AI Settings
     // so the chosen provider's card is front and centre.
-  >(() => (localStorage.getItem(CONNECT_MODEL_INTENT) ? "ai" : "user"));
+  >(() =>
+    localStorage.getItem(CONNECT_MODEL_INTENT) ||
+    localStorage.getItem("vaenyx.toolsIntent")
+      ? "ai"
+      : "user",
+  );
   const [stoppingVaenyx, setStoppingVaenyx] = useState(false);
   const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
   const [shutdownError, setShutdownError] = useState<string | null>(null);
