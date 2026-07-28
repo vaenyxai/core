@@ -513,7 +513,14 @@ function chatLightLabel(light: ChatLight): string {
 type ThreadChip = {
   key: string;
   label: string;
-  tone: "routine" | "scheduled" | "working" | "done" | "failed" | "building";
+  tone:
+    | "routine"
+    | "scheduled"
+    | "working"
+    | "done"
+    | "failed"
+    | "building"
+    | "capability";
   title?: string;
 };
 
@@ -6720,10 +6727,17 @@ function AskVaenyxPanel({
       );
 
       // Voice replies: a voice turn always answers aloud (it is a spoken
-      // conversation); text turns answer aloud when the speaker toggle is on.
+      // conversation); text turns answer aloud when the speaker toggle is on;
+      // a Routine that declares voice-out always speaks its results (step 4).
       // The reply's own SpeakButton does the talking, so pause/stop are right
       // there on the message.
-      if (voiceAudioId || voiceReplies) {
+      const routineSpeaksAloud = Boolean(
+        activeThread?.routineId &&
+          libraryRoutines
+            .find((routine) => routine.id === activeThread.routineId)
+            ?.capabilities?.includes("voice-out"),
+      );
+      if (voiceAudioId || voiceReplies || routineSpeaksAloud) {
         const assistantReply = [...response.messages]
           .reverse()
           .find(
@@ -7399,6 +7413,21 @@ function AskVaenyxPanel({
             : chip,
         )
       : [];
+    // The Routine's declared capabilities as chips (step 4): what this chat
+    // plugs into beyond text — real declarations from routine.json, never
+    // decoration.
+    for (const capability of activeRoutine?.capabilities ?? []) {
+      chatChips.push({
+        key: `capability-${capability}`,
+        label:
+          capability === "vision"
+            ? "Vision"
+            : capability === "voice-out"
+              ? "Speak"
+              : "Draw",
+        tone: "capability",
+      });
+    }
     if (building && building.conversationId === activeConversationId) {
       chatChips.push({ key: "building", label: "Building…", tone: "building" });
     }

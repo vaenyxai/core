@@ -1428,6 +1428,12 @@ export const LibraryRoutineSummarySchema = Type.Object(
     stepCount: Type.Integer({ minimum: 0 }),
     view: Type.Optional(Type.Unknown()),
     origin: ItemOriginSchema,
+    // What this Routine plugs into beyond text (step 4, Oskar 2026-07-28):
+    // "vision" (reads photos), "voice-out" (speaks its results), "draw"
+    // (makes pictures). Additive UI/behaviour hints — never hashed, so
+    // declaring one never breaks a version lock; unknown values are dropped
+    // at load so future capabilities stay forward-compatible.
+    capabilities: Type.Optional(Type.Array(Type.String())),
   },
   { additionalProperties: false },
 );
@@ -1457,6 +1463,7 @@ export const LibraryRoutineSchema = Type.Object(
     contentHash: Type.String(),
     resolved: Type.Boolean(),
     missingDeps: Type.Array(Type.String()),
+    capabilities: Type.Optional(Type.Array(Type.String())),
   },
   { additionalProperties: false },
 );

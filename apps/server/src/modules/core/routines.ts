@@ -176,6 +176,27 @@ function readRoutineMeta(
   return parseJsonOrThrow(raw, `${id}/routine.json`) as Record<string, unknown>;
 }
 
+// What a Routine plugs into beyond text (step 4, Oskar 2026-07-28). Unknown
+// values are dropped, not errors — a routine.json written for a future Vaenyx
+// still loads today. Like view/tags, capabilities are NOT hashed: declaring
+// one never breaks a version lock.
+const KNOWN_CAPABILITIES = ["vision", "voice-out", "draw"] as const;
+
+function readCapabilities(source: unknown): string[] {
+  if (!Array.isArray(source)) return [];
+  const capabilities: string[] = [];
+  for (const entry of source) {
+    if (
+      typeof entry === "string" &&
+      (KNOWN_CAPABILITIES as readonly string[]).includes(entry) &&
+      !capabilities.includes(entry)
+    ) {
+      capabilities.push(entry);
+    }
+  }
+  return capabilities;
+}
+
 function toSummary(
   id: string,
   meta: Record<string, unknown>,
@@ -195,6 +216,7 @@ function toSummary(
     view: meta.view ?? null,
     // Provenance: absent on legacy / self-made items -> "self". Not hashed.
     origin: meta.origin === "community" ? "community" : "self",
+    capabilities: readCapabilities(meta.capabilities),
   };
 }
 
@@ -302,6 +324,7 @@ export function toLibraryRoutine(routine: LoadedRoutine): LibraryRoutine {
     contentHash: routine.contentHash,
     resolved: routine.resolved,
     missingDeps: routine.missingDeps,
+    capabilities: routine.capabilities,
   };
 }
 
