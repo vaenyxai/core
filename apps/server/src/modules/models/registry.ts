@@ -117,12 +117,14 @@ export function initModelRegistry(config: {
   next.register(new CodexProvider(), true);
 
   const connections = readProviderConnections(config.secretsDirectory);
-  // The Claude-subscription mirror of Codex: always registered (its health
-  // check reports the real sign-in state), token from the pasted
-  // `claude setup-token` value when the Owner connected one.
-  next.register(
-    new ClaudeSubscriptionProvider(connections["claude-sub"]?.apiKey ?? null),
-  );
+  // The Claude-subscription mirror of Codex — registered ONLY once the Owner
+  // has connected it (pasted `claude setup-token` value), so it flows through
+  // the same Add a Model path as every other backend instead of squatting in
+  // the connected list as "needs attention" (Oskar, 2026-07-29).
+  const claudeSub = connections["claude-sub"];
+  if (claudeSub?.apiKey) {
+    next.register(new ClaudeSubscriptionProvider(claudeSub.apiKey));
+  }
   // Every key-based OpenAI-compatible backend registers the same way — one
   // table, not one hand-rolled block per provider. Groq / Cerebras / OpenRouter
   // are the free-tier presets (2026-07-22): generous free quotas, no card.

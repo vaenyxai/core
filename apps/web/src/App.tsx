@@ -10487,7 +10487,12 @@ function ModelsPanel() {
             {availableProviders.map((provider) => (
               <option key={provider.id} value={provider.id}>
                 {provider.name}
-                {MODEL_FREE_TIER_NOTES[provider.id] ? " — Free Tier" : ""}
+                {/* claude-sub has a connect note but is NOT a free tier —
+                    its usage comes out of the Owner's own Claude plan. */}
+                {MODEL_FREE_TIER_NOTES[provider.id] &&
+                provider.id !== "claude-sub"
+                  ? " — Free Tier"
+                  : ""}
               </option>
             ))}
           </select>

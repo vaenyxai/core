@@ -160,6 +160,7 @@ describe("initModelRegistry", () => {
         openai: { apiKey: "sk-x", model: "gpt-4o" },
         local: { baseUrl: "http://127.0.0.1:11434/v1", model: "hermes" },
         anthropic: { apiKey: "sk-ant" },
+        "claude-sub": { apiKey: "sk-ant-oat-token" },
         gemini: { apiKey: "g-key" },
         grok: { apiKey: "xai-key" },
       }),
@@ -182,17 +183,11 @@ describe("initModelRegistry", () => {
     expect(getModelRegistry().get("grok")?.name).toBe("Grok");
   });
 
-  // The two always-registered subscription channels: Codex (default) and its
-  // Claude mirror, whose health check reports the real sign-in state.
-  it("registers Codex and the Claude subscription channel when nothing is configured", () => {
+  it("is Codex-only when nothing is configured", () => {
     const dir = mkdtempSync(resolve(tmpdir(), "vaenyx-models-"));
     temporaryDirectories.push(dir);
     const registry = initModelRegistry({ secretsDirectory: dir });
-    expect(registry.list().map((provider) => provider.id)).toEqual([
-      "codex",
-      "claude-sub",
-    ]);
-    expect(registry.default().id).toBe("codex");
+    expect(registry.list().map((provider) => provider.id)).toEqual(["codex"]);
   });
 });
 
