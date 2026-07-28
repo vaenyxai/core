@@ -153,7 +153,10 @@ export async function buildApp(
     reply.header("referrer-policy", "no-referrer");
     reply.header(
       "content-security-policy",
-      "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-Cc6SW17wUziVQgAlHEal9mloRMoe9l5ARVVylyZsQWA='; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'",
+      // blob: in img-src carries the instant photo thumbnail (a local object
+      // URL shown while the upload runs) — same-origin blobs only, no remote
+      // fetch is opened up by it.
+      "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-Cc6SW17wUziVQgAlHEal9mloRMoe9l5ARVVylyZsQWA='; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; frame-ancestors 'none'",
     );
 
     // The HTML shell references hash-named assets, so it must never be cached
