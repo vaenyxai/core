@@ -4,7 +4,7 @@
 // The image goes browser → this local server → a vision-capable connected
 // provider (auto-picked); the key never reaches the browser.
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { readProviderConnections } from "../models/connections.js";
@@ -63,9 +63,23 @@ export function imageDataUrl(
   return `data:${found.mimeType};base64,${found.image.toString("base64")}`;
 }
 
+// The stored photo's path on disk, for backends that take a file path instead
+// of a data URL (Codex app-server's localImage input item). Same strict id
+// validation as readImage — an id is never joined into a path unchecked.
+export function imageFilePath(
+  dataDirectory: string,
+  imageId: string,
+): string | null {
+  if (!IMAGE_ID_PATTERN.test(imageId)) return null;
+  const path = resolve(dataDirectory, "images", imageId);
+  return existsSync(path) ? path : null;
+}
+
 // Backends whose chat endpoint accepts image parts directly — the Phase B
 // "first-hand" path. Everything else falls back to the describe layer.
-export const VISION_DIRECT_PROVIDER_IDS = ["gemini", "zhipu", "openai"];
+// "codex" reads the photo via a localImage file path (probe-verified
+// 2026-07-28); the key-based providers take a data URL.
+export const VISION_DIRECT_PROVIDER_IDS = ["gemini", "zhipu", "openai", "codex"];
 
 // Order of preference among the Owner's existing Models connections — all
 // free-tier friendly, no separate vision setup needed.

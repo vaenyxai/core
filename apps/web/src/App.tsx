@@ -13477,7 +13477,7 @@ const MODEL_FREE_TIER_NOTES: Record<string, string> = {
 
 // Backends whose chat endpoint reads images directly (Phase B) — must mirror
 // the server's VISION_DIRECT_PROVIDER_IDS.
-const VISION_DIRECT_IDS = ["gemini", "zhipu", "openai"];
+const VISION_DIRECT_IDS = ["gemini", "zhipu", "openai", "codex"];
 
 // Per-provider model shortlists for the in-chat picker (curated 2026-07-22;
 // the provider's own configured model always remains the Default option, and

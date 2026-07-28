@@ -23,6 +23,7 @@ import {
 import {
   describeImage,
   imageDataUrl,
+  imageFilePath,
   readImage,
   VISION_DIRECT_PROVIDER_IDS,
 } from "./vision.js";
@@ -724,7 +725,10 @@ export async function createAskVaenyxMessage(
     // Phase B: a vision-direct backend sees the photo first-hand. The most
     // recent photo in the last few messages rides along too, so follow-up
     // questions about it ("what's the jar on the left?") keep working.
+    // Codex takes the photo as a file path; key-based backends as a data URL —
+    // both are offered and each provider reads its own form.
     let imageAttachment: string | undefined;
+    let imageAttachmentPath: string | undefined;
     if (
       options?.dataDirectory &&
       VISION_DIRECT_PROVIDER_IDS.includes(provider.id)
@@ -751,6 +755,8 @@ export async function createAskVaenyxMessage(
         if (recentWithImage) {
           imageAttachment =
             imageDataUrl(options.dataDirectory, effectiveImageId) ?? undefined;
+          imageAttachmentPath =
+            imageFilePath(options.dataDirectory, effectiveImageId) ?? undefined;
         }
       }
     }
@@ -858,6 +864,7 @@ export async function createAskVaenyxMessage(
       reasoningEffort: settingsRow?.reasoning_effort ?? "medium",
       ...(settingsRow?.model_name ? { model: settingsRow.model_name } : {}),
       ...(imageAttachment ? { imageDataUrl: imageAttachment } : {}),
+      ...(imageAttachmentPath ? { imagePath: imageAttachmentPath } : {}),
     });
     assistantContent = result.answer;
     assistantStatus = "completed";
