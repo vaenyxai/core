@@ -397,7 +397,6 @@ import {
 } from "../core/memory.js";
 import {
   appendAssistantNote,
-  summarizeConversationForSpeech,
   createAskVaenyxConversation,
   createAskVaenyxMessage,
   deleteAskVaenyxConversation,
@@ -2514,54 +2513,6 @@ export async function registerGatewayRoutes(
         }
 
         throw error;
-      }
-    },
-  );
-
-  // One tap reads a spoken digest of the conversation aloud; this produces the
-  // words, the client's existing sentence-first TTS does the speaking.
-  app.post<{ Params: { id: string }; Body: { language?: string } }>(
-    "/v1/ask-vaenyx/conversations/:id/spoken-summary",
-    {
-      schema: {
-        params: Type.Object(
-          { id: Type.String({ minLength: 1 }) },
-          { additionalProperties: false },
-        ),
-        body: Type.Object(
-          { language: Type.Optional(Type.String({ maxLength: 8 })) },
-          { additionalProperties: false },
-        ),
-      },
-    },
-    async (request, reply) => {
-      const owner = requireOwner(request);
-      if (!owner) {
-        return reply.code(401).send({ error: "Owner login required." });
-      }
-      try {
-        const summary = await summarizeConversationForSpeech(
-          context.database,
-          request.params.id,
-          owner.id,
-          request.body.language === "zh" ? "zh" : "en",
-        );
-        return { summary };
-      } catch (error) {
-        const code = error instanceof Error ? error.message : "";
-        if (code === "NOTHING_TO_SUMMARIZE") {
-          return reply
-            .code(400)
-            .send({ error: "There is nothing to summarize yet." });
-        }
-        if (code === "ASK_VAENYX_CONVERSATION_NOT_FOUND") {
-          return reply
-            .code(404)
-            .send({ error: "Vaenyx Chat conversation not found." });
-        }
-        return reply
-          .code(502)
-          .send({ error: "The summary could not be made. Try again." });
       }
     },
   );

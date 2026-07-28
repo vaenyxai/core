@@ -914,16 +914,43 @@ textarea::placeholder {
   }
 }
 
-/* WeChat-style voice bubble: play control + the short transcript. */
+/* WeChat-style voice bubble: the transcript with its replay control tucked at
+   the passage's bottom-right ("按钮放在整段话的右下角", Oskar 2026-07-28). */
 .voice-bubble {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 10px;
   max-width: 480px;
   padding: 8px 12px;
   border: 0.5px solid var(--border);
   border-radius: var(--r-md);
   background: var(--bg-raised);
+}
+
+.voice-bubble p {
+  flex: 1;
+}
+
+/* The one speech element (SpeakButton): play/pause + stop pair. In a message
+   footer it hangs at the right edge = the reply's bottom-right corner. */
+.speak-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.message-speak {
+  margin-left: auto;
+}
+
+.message-speak .voice-bubble-play {
+  width: 26px;
+  height: 26px;
+}
+
+.message-speak .voice-bubble-play svg {
+  width: 13px;
+  height: 13px;
 }
 
 .voice-bubble-play {
@@ -6113,9 +6140,9 @@ html, body { overscroll-behavior-y: none; }
 .thinking-block { margin-top: auto; }
 /* The unread breathing dot (Oskar, 2026-07-28): new activity in a thread this
    device has not opened since. Dies the moment the thread is opened. */
-.unread-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #e5484d; animation: unread-breathe 2s ease-in-out infinite; }
-@keyframes unread-breathe { 0%, 100% { opacity: 0.5; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
+/* Deliberately tiny (Oskar, 2026-07-28): at 8px with a scale pulse it read as
+   a second status light. 5px + opacity-only breathing keeps it a marker, not
+   a peer of the colored dot at the row's front. */
+.unread-dot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: #e5484d; animation: unread-breathe 2s ease-in-out infinite; }
+@keyframes unread-breathe { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .unread-dot { animation: none; } }
-.speak-summary-button { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-raised); color: var(--text); cursor: pointer; font-size: 15px; display: grid; place-items: center; }
-.speak-summary-button:hover { border-color: var(--accent); }
-.speak-summary-button:disabled { opacity: 0.6; cursor: default; }

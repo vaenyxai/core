@@ -194,7 +194,6 @@ import {
   streamAskVaenyxMessage,
   streamTaskMessage,
   fetchTaskLive,
-  fetchSpokenSummary,
   retryTask,
   setTaskSchedule,
   setupOwner,
@@ -1290,32 +1289,50 @@ function IconCheck() {
   );
 }
 
-// A WeChat-style voice bubble: play ↔ pause on the main control (pause keeps
-// the position), with a stop button alongside while anything is in flight
-// (stop rewinds and folds back to a single play button). Owner bubbles replay
-// the original recording; assistant bubbles speak through the chosen voice
-// engine (Gemini TTS audio, else the device voice). One voice at a time —
-// starting any playback silences whatever else is talking.
-function VoiceBubble({
+// THE speech element ("同类功能必须统一", Oskar 2026-07-28): every spoken
+// thing in the app goes through this one control — replaying an Owner voice
+// recording, reading any reply aloud on tap, and the automatic read-out of a
+// voice conversation (autoStart). Play ↔ pause on the main control (pause
+// keeps the position), a stop button alongside while anything is in flight.
+// TTS plays sentence-first: the opening sentence starts while the rest still
+// generates, and autoStart reuses the clip prewarmed during streaming. One
+// voice at a time — starting any playback silences whatever else is talking.
+function SpeakButton({
   audioId,
+  autoStart = false,
+  className,
   engine = "browser",
+  onAutoConsumed,
+  prewarm,
   text,
 }: {
   audioId?: string | null;
+  autoStart?: boolean;
+  className?: string;
   engine?: "none" | "browser" | "gemini" | "local";
+  onAutoConsumed?: () => void;
+  prewarm?: SpeechPrewarm | null;
   text: string;
 }) {
   const [state, setState] = useState<
     "idle" | "loading" | "playing" | "paused"
   >("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // False until the element carries the real clip (it may hold the silent
-  // autoplay-unlock blip first).
-  const audioReadyRef = useRef(false);
+  // The clips to play in order (a recording is one clip; TTS is 1-2 sentence
+  // chunks), synthesis already in flight. Built once, then replayable.
+  const pendingRef = useRef<Promise<{ audioId: string }>[] | null>(null);
+  const indexRef = useRef(0);
+  // Bumped on stop/unmount so an in-flight chunk advance goes quiet.
+  const sessionRef = useRef(0);
+  // False until the element carries a real clip — the silent autoplay-unlock
+  // blip must not chain into "play the next chunk" when it ends.
+  const clipLoadedRef = useRef(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const autoConsumedRef = useRef(false);
 
   useEffect(
     () => () => {
+      sessionRef.current += 1;
       audioRef.current?.pause();
       if (utteranceRef.current) {
         try {
@@ -1328,47 +1345,41 @@ function VoiceBubble({
     [],
   );
 
-  async function ensureAudio(): Promise<HTMLAudioElement | null> {
-    if (audioRef.current && audioReadyRef.current) return audioRef.current;
-    let id = audioId ?? null;
-    // Gemini and Local both generate server-side audio files.
-    if (!id && (engine === "gemini" || engine === "local")) {
-      const clean = cleanSpeechText(text).slice(0, 4000);
-      if (!clean) return null;
-      setState("loading");
-      id = (await synthesizeSpeech(clean)).audioId;
+  async function playChunk(
+    audio: HTMLAudioElement,
+    index: number,
+    session: number,
+  ) {
+    const request = pendingRef.current?.[index];
+    if (!request) {
+      indexRef.current = 0;
+      setState("idle");
+      return;
     }
-    if (!id) return null;
-    // Reuse the tap-blessed element when one exists (mobile autoplay).
-    const audio = audioRef.current ?? new Audio();
-    audio.src = `/v1/voice/audio/${id}`;
-    audio.onended = () => setState("idle");
-    // A global stop (another playback starting) pauses us mid-flight — show
-    // that as paused so Resume works naturally.
-    audio.onpause = () => {
-      if (!audio.ended) {
-        setState((current) => (current === "playing" ? "paused" : current));
+    try {
+      const { audioId: clipId } = await request;
+      if (sessionRef.current !== session) return;
+      // Someone else started talking while this chunk generated — stay quiet.
+      if (currentReplyAudio !== null && currentReplyAudio !== audio) {
+        setState((current) => (current === "loading" ? "idle" : current));
+        return;
       }
-    };
-    audioRef.current = audio;
-    audioReadyRef.current = true;
-    return audio;
+      indexRef.current = index;
+      clipLoadedRef.current = true;
+      audio.src = `/v1/voice/audio/${clipId}`;
+      audio.currentTime = 0;
+      currentReplyAudio = audio;
+      await audio.play();
+      setState("playing");
+    } catch {
+      if (sessionRef.current === session) setState("idle");
+    }
   }
 
   async function play() {
     stopReplySpeech();
+    const session = (sessionRef.current += 1);
     try {
-      if (
-        !audioReadyRef.current &&
-        !audioRef.current &&
-        (engine === "gemini" || engine === "local")
-      ) {
-        // Consume the tap NOW: a silent blip blesses this element so the
-        // real clip may start after a seconds-long generation.
-        const blip = new Audio(SILENT_WAV);
-        void blip.play().catch(() => undefined);
-        audioRef.current = blip;
-      }
       if (!audioId && engine !== "gemini" && engine !== "local") {
         // Device TTS path, with pause/resume support.
         if (!("speechSynthesis" in window)) return;
@@ -1385,15 +1396,47 @@ function VoiceBubble({
         setState("playing");
         return;
       }
-      const audio = await ensureAudio();
-      if (!audio) {
-        setState("idle");
-        return;
+      if (!pendingRef.current) {
+        if (audioId) {
+          pendingRef.current = [Promise.resolve({ audioId })];
+        } else {
+          const clean = cleanSpeechText(text).slice(0, 4000);
+          if (!clean) return;
+          setState("loading");
+          pendingRef.current = splitForSpeech(clean).map((chunk, index) =>
+            index === 0 && prewarm && prewarm.text === chunk
+              ? prewarm.promise
+              : synthesizeSpeech(chunk),
+          );
+          pendingRef.current.forEach((request) =>
+            request.catch(() => undefined),
+          );
+        }
       }
-      currentReplyAudio = audio;
-      audio.currentTime = 0;
-      await audio.play();
-      setState("playing");
+      // Reuse the tap-blessed element when one exists (mobile autoplay): the
+      // blip consumes the tap so a clip may start after seconds of synthesis,
+      // and chaining chunks through the same element keeps the blessing.
+      let audio = audioRef.current;
+      if (!audio) {
+        const created = new Audio(SILENT_WAV);
+        void created.play().catch(() => undefined);
+        created.onended = () => {
+          if (!clipLoadedRef.current) return;
+          void playChunk(created, indexRef.current + 1, sessionRef.current);
+        };
+        // A global stop (another playback starting) pauses us mid-flight —
+        // show that as paused so Resume works naturally.
+        created.onpause = () => {
+          if (!created.ended) {
+            setState((current) =>
+              current === "playing" ? "paused" : current,
+            );
+          }
+        };
+        audioRef.current = created;
+        audio = created;
+      }
+      await playChunk(audio, 0, session);
     } catch {
       setState("idle");
     }
@@ -1426,6 +1469,8 @@ function VoiceBubble({
     try {
       const audio = audioRef.current;
       if (!audio) return;
+      stopReplySpeech();
+      sessionRef.current += 1;
       currentReplyAudio = audio;
       await audio.play();
       setState("playing");
@@ -1435,6 +1480,7 @@ function VoiceBubble({
   }
 
   function stop() {
+    sessionRef.current += 1;
     if (utteranceRef.current) {
       try {
         window.speechSynthesis?.cancel();
@@ -1448,18 +1494,29 @@ function VoiceBubble({
       audio.pause();
       audio.currentTime = 0;
     }
+    indexRef.current = 0;
     setState("idle");
   }
 
+  // A voice conversation answers aloud by itself: the finished reply's own
+  // button starts playing, so pausing or stopping it is the same gesture as
+  // for any other message. Consumed exactly once per reply.
+  useEffect(() => {
+    if (!autoStart || autoConsumedRef.current) return;
+    autoConsumedRef.current = true;
+    onAutoConsumed?.();
+    void play();
+  }, [autoStart]);
+
   return (
-    <div className="voice-bubble">
+    <span className={className ? `speak-button ${className}` : "speak-button"}>
       <button
         aria-label={
           state === "playing"
             ? "Pause"
             : state === "paused"
               ? "Resume"
-              : "Play voice message"
+              : "Play as speech"
         }
         className="voice-bubble-play"
         disabled={state === "loading"}
@@ -1488,8 +1545,7 @@ function VoiceBubble({
           <IconStop />
         </button>
       ) : null}
-      <p>{text}</p>
-    </div>
+    </span>
   );
 }
 
@@ -1516,12 +1572,9 @@ function cleanSpeechText(text: string): string {
 
 // One reply speaks at a time: starting a new playback (or flipping the toggle
 // off) silences whatever is still talking — TTS audio and device speech both.
-// The token invalidates an in-flight sentence chain when a new one takes over.
 let currentReplyAudio: HTMLAudioElement | null = null;
-let currentReplyToken: object | null = null;
 
 function stopReplySpeech(): void {
-  currentReplyToken = null;
   currentReplyAudio?.pause();
   currentReplyAudio = null;
   try {
@@ -1591,20 +1644,6 @@ function splitForSpeech(text: string): string[] {
 interface SpeechPrewarm {
   text: string;
   promise: Promise<{ audioId: string }>;
-}
-
-function playReplyAudio(audioId: string): Promise<void> {
-  return new Promise((resolvePlayback) => {
-    const audio = new Audio(`/v1/voice/audio/${audioId}`);
-    currentReplyAudio = audio;
-    audio.onended = () => resolvePlayback();
-    audio.onerror = () => resolvePlayback();
-    audio.onpause = () => {
-      // Pause = someone else took over (stopReplySpeech); end this chain.
-      if (currentReplyAudio !== audio) resolvePlayback();
-    };
-    void audio.play().catch(() => resolvePlayback());
-  });
 }
 
 // Push-to-talk mic: tap to record, tap again to stop; the utterance goes to the
@@ -5509,59 +5548,13 @@ function AskVaenyxPanel({
       .then((status) => setImageEngineReady(status.connected))
       .catch(() => undefined);
   }, []);
-  // Read a reply aloud with the best available voice: Gemini TTS when the
-  // Owner picked it (server-generated audio, cached), else the device TTS.
-  // Sentence-first: the opening sentence generates and starts playing while
-  // the rest generates in parallel, so sound starts in about a second.
-  // "总结并用语音念出来" (Oskar, 2026-07-28): one tap → the model writes a
-  // spoken digest of this conversation → the normal reply voice reads it. The
-  // tap itself is the user gesture the browser's audio rules want, so it works
-  // straight off a notification too.
-  const [speakingSummary, setSpeakingSummary] = useState(false);
-  async function speakSummary(conversationId: string) {
-    if (speakingSummary) return;
-    setSpeakingSummary(true);
-    try {
-      const { summary } = await fetchSpokenSummary(conversationId, lang);
-      await playReplyAloud(summary);
-    } catch {
-      // requestJson already raised the toast with the server's reason.
-    } finally {
-      setSpeakingSummary(false);
-    }
-  }
-
-  async function playReplyAloud(text: string, prewarmed?: SpeechPrewarm) {
-    stopReplySpeech();
-    const token = {};
-    currentReplyToken = token;
-    if (
-      voiceOutput &&
-      (voiceOutput.engine === "gemini" || voiceOutput.engine === "local")
-    ) {
-      try {
-        const clean = cleanSpeechText(text).slice(0, 4000);
-        if (!clean) return;
-        const chunks = splitForSpeech(clean);
-        const pending = chunks.map((chunk, index) =>
-          index === 0 && prewarmed && prewarmed.text === chunk
-            ? prewarmed.promise
-            : synthesizeSpeech(chunk),
-        );
-        for (const request of pending) {
-          const { audioId } = await request;
-          if (currentReplyToken !== token) return; // superseded/stopped
-          await playReplyAudio(audioId);
-          if (currentReplyToken !== token) return;
-        }
-        return;
-      } catch {
-        if (currentReplyToken !== token) return;
-        // Fall back to the device voice below.
-      }
-    }
-    speakText(text);
-  }
+  // A finished voice-conversation reply speaks through its OWN message button
+  // (the one speech element, see SpeakButton): this marks which reply should
+  // start itself, carrying the clip prewarmed while the text streamed.
+  const [autoSpeak, setAutoSpeak] = useState<{
+    messageId: string;
+    prewarm: SpeechPrewarm | null;
+  } | null>(null);
   function toggleVoiceReplies() {
     setVoiceReplies((current) => {
       const next = !current;
@@ -6590,6 +6583,8 @@ function AskVaenyxPanel({
 
       // Voice replies: a voice turn always answers aloud (it is a spoken
       // conversation); text turns answer aloud when the speaker toggle is on.
+      // The reply's own SpeakButton does the talking, so pause/stop are right
+      // there on the message.
       if (voiceAudioId || voiceReplies) {
         const assistantReply = [...response.messages]
           .reverse()
@@ -6598,7 +6593,10 @@ function AskVaenyxPanel({
               message.role === "assistant" && message.status === "completed",
           );
         if (assistantReply?.content) {
-          void playReplyAloud(assistantReply.content, voicePrewarm ?? undefined);
+          setAutoSpeak({
+            messageId: assistantReply.id,
+            prewarm: voicePrewarm,
+          });
         }
       }
 
@@ -7336,18 +7334,6 @@ function AskVaenyxPanel({
               className="chat-chips chat-chips--inline"
             />
             <div className="chat-header-actions">
-              {activeConversationId && messages.length > 0 ? (
-                <button
-                  aria-label="Speak a summary of this conversation"
-                  className="speak-summary-button"
-                  disabled={speakingSummary}
-                  onClick={() => void speakSummary(activeConversationId)}
-                  title={lang === "zh" ? "念摘要" : "Speak Summary"}
-                  type="button"
-                >
-                  {speakingSummary ? "…" : "🔊"}
-                </button>
-              ) : null}
               {renderThreadHeaderMenu(activeThread)}
             </div>
           </div>
@@ -7710,19 +7696,15 @@ function AskVaenyxPanel({
                   </p>
                 ) : null}
                 {message.voice && message.role === "owner" ? (
-                  <VoiceBubble
-                    audioId={message.audioId}
-                    text={message.content}
-                  />
+                  <div className="voice-bubble">
+                    <p>{message.content}</p>
+                    <SpeakButton
+                      audioId={message.audioId}
+                      text={message.content}
+                    />
+                  </div>
                 ) : message.role === "owner" ? (
                   <p>{message.content}</p>
-                ) : message.voice &&
-                  message.content &&
-                  message.status === "completed" ? (
-                  <VoiceBubble
-                    engine={voiceOutput?.engine ?? "browser"}
-                    text={message.content}
-                  />
                 ) : message.content ? (
                   <MarkdownMessage content={message.content} />
                 ) : (
@@ -7748,6 +7730,18 @@ function AskVaenyxPanel({
                   <div className="message-footer">
                     <span aria-hidden="true">✓</span>
                     {formatTime(message.createdAt)}
+                    <SpeakButton
+                      autoStart={autoSpeak?.messageId === message.id}
+                      className="message-speak"
+                      engine={voiceOutput?.engine ?? "browser"}
+                      onAutoConsumed={() => setAutoSpeak(null)}
+                      prewarm={
+                        autoSpeak?.messageId === message.id
+                          ? autoSpeak.prewarm
+                          : null
+                      }
+                      text={message.content}
+                    />
                   </div>
                 ) : null}
               </article>
@@ -8106,23 +8100,6 @@ function AskVaenyxPanel({
                   chips={taskChips}
                   className="chat-chips chat-chips--inline"
                 />
-                {/* The scheduled brief, spoken: same one-tap digest as chats —
-                    tap after the 7am run and hear it instead of reading. */}
-                {focusedTaskThread?.conversationId &&
-                taskMessages.length > 0 ? (
-                  <button
-                    aria-label="Speak a summary of this task"
-                    className="speak-summary-button"
-                    disabled={speakingSummary}
-                    onClick={() =>
-                      void speakSummary(focusedTaskThread.conversationId ?? "")
-                    }
-                    title={lang === "zh" ? "念摘要" : "Speak Summary"}
-                    type="button"
-                  >
-                    {speakingSummary ? "…" : "🔊"}
-                  </button>
-                ) : null}
                 {renderThreadHeaderMenu(focusedTaskThread)}
               </div>
               {focusedTask.harness === "codex-harness" ? (
@@ -8372,6 +8349,11 @@ function AskVaenyxPanel({
                     <div className="message-footer">
                       <span aria-hidden="true">✓</span>
                       {formatTime(message.createdAt)}
+                      <SpeakButton
+                        className="message-speak"
+                        engine={voiceOutput?.engine ?? "browser"}
+                        text={message.content}
+                      />
                     </div>
                   ) : null}
                 </article>

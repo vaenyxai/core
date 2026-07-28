@@ -601,18 +601,6 @@ export async function classifyMessage(
   return verdict;
 }
 
-// One tap in a conversation: summarize it for the ear; the caller feeds the
-// words to the existing TTS.
-export function fetchSpokenSummary(
-  conversationId: string,
-  language: string,
-): Promise<{ summary: string }> {
-  return requestJson<{ summary: string }>(
-    `/v1/ask-vaenyx/conversations/${encodeURIComponent(conversationId)}/spoken-summary`,
-    { method: "POST", body: JSON.stringify({ language }) },
-  );
-}
-
 // The in-flight run's live thinking, polled by the open task view — a run is
 // detached from any one screen (a locked phone still gets its reply), so its
 // workings cannot stream the way chat replies do.
