@@ -1101,6 +1101,17 @@ export function annotatePhoto(
   );
 }
 
+// Persist the Owner's corrected marks (edited on the confirm card).
+export function saveAnnotations(
+  imageId: string,
+  items: { name: string; x: number; y: number }[],
+): Promise<{ message: string }> {
+  return requestJson<{ message: string }>("/v1/vision/annotations", {
+    method: "PUT",
+    body: JSON.stringify({ imageId, items }),
+  });
+}
+
 export async function describePhoto(
   blob: Blob,
   lang: string,

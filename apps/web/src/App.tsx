@@ -161,6 +161,7 @@ import {
   fetchImageEngine,
   setImageEngineChoice,
   annotatePhoto,
+  saveAnnotations,
   describePhoto,
   uploadPhoto,
   type VisionStatus,
@@ -1010,7 +1011,9 @@ function CameraButton({
   disabled,
   lang,
   onAttach,
+  onPreview,
   onText,
+  onUploadStart,
 }: {
   disabled?: boolean;
   lang: string;
@@ -1019,7 +1022,15 @@ function CameraButton({
   // sight ("visual first", Oskar 2026-07-28). When absent (a surface with no
   // attachment slot), the describe fallback fills the box with text instead.
   onAttach?: (imageId: string) => void;
+  // Fires the moment the photo is picked, with a local object URL — the
+  // thumbnail shows instantly instead of after the upload round-trip
+  // ("过了一秒钟才把照片固定住", Oskar 2026-07-28). Empty string = the upload
+  // failed, clear the preview.
+  onPreview?: (localUrl: string) => void;
   onText: (text: string) => void;
+  // The in-flight upload, so a Run pressed before it finishes can await the
+  // imageId instead of losing the photo.
+  onUploadStart?: (upload: Promise<string>) => void;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -1040,8 +1051,10 @@ function CameraButton({
       // model's description as context.
       const blob = await downscalePhoto(file);
       if (onAttach) {
-        const { imageId } = await uploadPhoto(blob);
-        onAttach(imageId);
+        onPreview?.(URL.createObjectURL(blob));
+        const upload = uploadPhoto(blob).then((result) => result.imageId);
+        onUploadStart?.(upload);
+        onAttach(await upload);
       } else {
         // Surfaces with no attachment slot (the start-work box) still get the
         // description in text form, because there is nowhere to hang a photo.
@@ -1058,6 +1071,7 @@ function CameraButton({
       // A tooltip is not an error message on a phone: there is nothing to
       // hover. A photo that silently does nothing reads as a broken button,
       // so the reason is said out loud (Oskar, 2026-07-26).
+      onPreview?.("");
       const message =
         nextError instanceof Error
           ? nextError.message
@@ -1126,6 +1140,129 @@ function CameraButton({
   );
 }
 
+// Fullscreen photo viewer ("点照片应该是放大,全屏可以 zoom in", Oskar
+// 2026-07-28): pinch to zoom, drag to pan, double-tap to toggle 1×/2.5×,
+// tap the backdrop or × to close. Pure pointer events — works with mouse
+// wheel on desktop and two fingers on the phone.
+function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
+  const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
+  const lastTap = useRef(0);
+
+  function clampScale(scale: number): number {
+    return Math.min(6, Math.max(1, scale));
+  }
+
+  function onPointerDown(event: React.PointerEvent) {
+    (event.target as HTMLElement).setPointerCapture?.(event.pointerId);
+    pointers.current.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      if (a && b) {
+        pinchStart.current = {
+          distance: Math.hypot(a.x - b.x, a.y - b.y),
+          scale: transform.scale,
+        };
+      }
+    }
+  }
+
+  function onPointerMove(event: React.PointerEvent) {
+    const previous = pointers.current.get(event.pointerId);
+    if (!previous) return;
+    const next = { x: event.clientX, y: event.clientY };
+    pointers.current.set(event.pointerId, next);
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const [a, b] = [...pointers.current.values()];
+      if (a && b) {
+        const distance = Math.hypot(a.x - b.x, a.y - b.y);
+        setTransform((current) => ({
+          ...current,
+          scale: clampScale(
+            (pinchStart.current?.scale ?? 1) *
+              (distance / (pinchStart.current?.distance ?? distance)),
+          ),
+        }));
+      }
+      return;
+    }
+    if (pointers.current.size === 1 && transform.scale > 1) {
+      setTransform((current) => ({
+        ...current,
+        x: current.x + (next.x - previous.x),
+        y: current.y + (next.y - previous.y),
+      }));
+    }
+  }
+
+  function onPointerUp(event: React.PointerEvent) {
+    pointers.current.delete(event.pointerId);
+    if (pointers.current.size < 2) pinchStart.current = null;
+  }
+
+  function onTap(event: React.MouseEvent) {
+    const now = Date.now();
+    if (now - lastTap.current < 320) {
+      // Double tap: toggle zoom.
+      setTransform((current) =>
+        current.scale > 1
+          ? { scale: 1, x: 0, y: 0 }
+          : { scale: 2.5, x: 0, y: 0 },
+      );
+      lastTap.current = 0;
+      event.stopPropagation();
+      return;
+    }
+    lastTap.current = now;
+    event.stopPropagation();
+  }
+
+  return createPortal(
+    <div
+      className="photo-lightbox"
+      onClick={onClose}
+      onWheel={(event) => {
+        event.preventDefault();
+        setTransform((current) => ({
+          ...current,
+          scale: clampScale(
+            current.scale * (event.deltaY < 0 ? 1.15 : 1 / 1.15),
+          ),
+        }));
+      }}
+      role="dialog"
+      aria-label="Photo"
+    >
+      <img
+        alt=""
+        draggable={false}
+        onClick={onTap}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        src={url}
+        style={{
+          transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+        }}
+      />
+      <button
+        aria-label="Close"
+        className="photo-lightbox-close"
+        onClick={onClose}
+        type="button"
+      >
+        ×
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
 // A conversation photo with its marks ("在照片上把不同的东西mark出来", Oskar
 // 2026-07-28): a dot on each object, a thin line to its name. One button on
 // the photo runs the vision engine the first time, then toggles the overlay;
@@ -1146,6 +1283,7 @@ function AnnotatedPhoto({
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [overlayOn, setOverlayOn] = useState(true);
+  const [zoomed, setZoomed] = useState(false);
   const items = annotations && annotations.length > 0 ? annotations : null;
 
   async function mark() {
@@ -1164,9 +1302,16 @@ function AnnotatedPhoto({
 
   return (
     <div className="annotated-photo">
+      {zoomed ? (
+        <PhotoLightbox
+          onClose={() => setZoomed(false)}
+          url={`/v1/vision/image/${imageId}`}
+        />
+      ) : null}
       <img
         alt=""
         className="message-photo"
+        onClick={() => setZoomed(true)}
         onLoad={onLoad}
         src={`/v1/vision/image/${imageId}`}
       />
@@ -1249,6 +1394,164 @@ function AnnotatedPhoto({
       >
         {busy ? <IconSpinner /> : <IconMarker />}
       </button>
+    </div>
+  );
+}
+
+// The confirm card's marked photo, EDITABLE ("直接在图片上改文字…添加或者删除",
+// Oskar 2026-07-28): tap a label to rename or delete that mark, + Add Mark
+// then tap the photo to place a new one. The marks ARE the input — the
+// picture is the interface, not an illustration of it.
+function AnnotatedPhotoEditor({
+  imageId,
+  marks,
+  onChange,
+}: {
+  imageId: string;
+  marks: ImageAnnotationItem[];
+  onChange: (next: ImageAnnotationItem[]) => void;
+}) {
+  const { t } = useI18n();
+  const [selected, setSelected] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  function addAt(event: React.MouseEvent<HTMLDivElement>) {
+    if (!adding) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x =
+      Math.round(((event.clientX - rect.left) / rect.width) * 1000) / 10;
+    const y =
+      Math.round(((event.clientY - rect.top) / rect.height) * 1000) / 10;
+    onChange([
+      ...marks,
+      { name: "", x: Math.min(100, Math.max(0, x)), y: Math.min(100, Math.max(0, y)) },
+    ]);
+    setSelected(marks.length);
+    setAdding(false);
+  }
+
+  const current = selected !== null ? marks[selected] : undefined;
+
+  return (
+    <div className="annotate-editor">
+      <div
+        className={
+          adding ? "annotated-photo annotate-editor--adding" : "annotated-photo"
+        }
+        onClick={addAt}
+      >
+        <img
+          alt=""
+          className="message-photo"
+          src={`/v1/vision/image/${imageId}`}
+        />
+        <svg
+          aria-hidden="true"
+          className="annotate-lines"
+          preserveAspectRatio="none"
+          viewBox="0 0 100 100"
+        >
+          {marks.map((item, index) => {
+            const toRight = item.x < 55;
+            const labelX = toRight
+              ? Math.min(item.x + 12, 96)
+              : Math.max(item.x - 12, 4);
+            return (
+              <line
+                key={index}
+                vectorEffect="non-scaling-stroke"
+                x1={item.x}
+                x2={labelX}
+                y1={item.y}
+                y2={Math.max(item.y - 5, 2)}
+              />
+            );
+          })}
+        </svg>
+        {marks.map((item, index) => {
+          const toRight = item.x < 55;
+          const labelX = toRight
+            ? Math.min(item.x + 12, 96)
+            : Math.max(item.x - 12, 4);
+          return (
+            <span key={index}>
+              <span
+                className="annotate-dot"
+                style={{ left: `${item.x}%`, top: `${item.y}%` }}
+              />
+              <button
+                className={
+                  (toRight
+                    ? "annotate-label"
+                    : "annotate-label annotate-label--left") +
+                  (selected === index ? " annotate-label--selected" : "")
+                }
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelected(index);
+                  setAdding(false);
+                }}
+                style={{
+                  left: `${labelX}%`,
+                  top: `${Math.max(item.y - 5, 2)}%`,
+                }}
+                type="button"
+              >
+                {item.name || "…"}
+              </button>
+            </span>
+          );
+        })}
+      </div>
+      {current ? (
+        <div className="annotate-edit-row">
+          <input
+            autoFocus
+            maxLength={40}
+            onChange={(event) =>
+              onChange(
+                marks.map((item, index) =>
+                  index === selected
+                    ? { ...item, name: event.target.value }
+                    : item,
+                ),
+              )
+            }
+            value={current.name}
+          />
+          <button
+            aria-label={t("marks.delete")}
+            className="text-button"
+            onClick={() => {
+              onChange(marks.filter((_, index) => index !== selected));
+              setSelected(null);
+            }}
+            type="button"
+          >
+            {t("marks.delete")}
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => setSelected(null)}
+            type="button"
+          >
+            {t("marks.done")}
+          </button>
+        </div>
+      ) : (
+        <div className="annotate-edit-row">
+          <button
+            className="text-button"
+            onClick={() => setAdding((value) => !value)}
+            type="button"
+          >
+            {adding ? t("marks.addCancel") : t("marks.add")}
+          </button>
+          <span className="text-faint">
+            {adding ? t("marks.addHint") : t("marks.editHint")}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -5629,6 +5932,18 @@ function AskVaenyxPanel({
   // Phase B: an uploaded photo waiting to ride on the next message (direct
   // vision mode); null = no attachment pending.
   const [pendingImageId, setPendingImageId] = useState<string | null>(null);
+  // Instant thumbnail: a local object URL shown the moment the photo is
+  // picked, while the upload runs behind it. The ref holds the in-flight
+  // upload so a Run pressed early can await the imageId.
+  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(
+    null,
+  );
+  const pendingUploadRef = useRef<Promise<string> | null>(null);
+  function clearPendingPhoto() {
+    setPendingImageId(null);
+    setPendingPhotoPreview(null);
+    pendingUploadRef.current = null;
+  }
   // New-chat model choice (dev.156): picked before the conversation exists,
   // applied the moment it is created so the very first turn uses it.
   const [newChatProviderId, setNewChatProviderId] = useState<string | null>(
@@ -5719,6 +6034,14 @@ function AskVaenyxPanel({
     routineId: string;
     content: string;
     imageId: string | null;
+    // Spoken in → the eventual result is spoken out, even across the card.
+    speakResult: boolean;
+    // Photo mode (visual first): the marks ARE the primary field's value —
+    // edited on the picture, never in a text blob. primaryKey names the field
+    // they feed; initialMarks (JSON) detects real corrections for learning.
+    marks: ImageAnnotationItem[] | null;
+    initialMarks: string;
+    primaryKey: string | null;
     fields: RoutineInputField[];
     values: Record<string, string>;
     checks: Record<string, boolean>;
@@ -6138,6 +6461,12 @@ function AskVaenyxPanel({
   // Journal, the generated result in the Gallery; we refresh both from the server.
   // A multi-field routine answers with a needs-confirmation payload instead of
   // running — we open the confirm card and re-post with the confirmed `input`.
+  // Spoken in → spoken out for Routines too: a run fed by voice speaks its
+  // result through the result's own SpeakButton; a typed run stays text.
+  const [autoSpeakGalleryId, setAutoSpeakGalleryId] = useState<string | null>(
+    null,
+  );
+
   async function runRoutineMessage(
     conversationId: string,
     routineId: string,
@@ -6145,6 +6474,7 @@ function AskVaenyxPanel({
     input?: Record<string, unknown>,
     learn?: boolean,
     imageId?: string,
+    speakResult?: boolean,
   ): Promise<void> {
     setSending(true);
     setError(null);
@@ -6195,6 +6525,11 @@ function AskVaenyxPanel({
             values[field.key] = "";
           }
         }
+        const marks =
+          imageId && Array.isArray(result.annotations) &&
+          result.annotations.length > 0
+            ? result.annotations
+            : null;
         setRoutineInputConfirm({
           conversationId,
           routineId,
@@ -6203,6 +6538,13 @@ function AskVaenyxPanel({
           // pairs the parse with its real source.
           content: result.content ?? content,
           imageId: imageId ?? null,
+          speakResult: speakResult ?? false,
+          marks,
+          initialMarks: JSON.stringify(marks ?? []),
+          primaryKey:
+            result.fields.find(
+              (field) => field.required && field.type !== "boolean",
+            )?.key ?? null,
           fields: result.fields,
           values,
           checks,
@@ -6216,6 +6558,12 @@ function AskVaenyxPanel({
       const data = await fetchChatRoutineData(conversationId);
       setRoutineJournal(data.journal);
       setRoutineGallery(data.gallery);
+      if (speakResult) {
+        const newest = [...data.gallery].sort((a, b) =>
+          b.createdAt.localeCompare(a.createdAt),
+        )[0];
+        if (newest) setAutoSpeakGalleryId(newest.id);
+      }
       void onWorkspaceRefresh();
     } catch (nextError) {
       setRoutineJournal((current) =>
@@ -6237,10 +6585,21 @@ function AskVaenyxPanel({
   function confirmRoutineInput(): void {
     const confirm = routineInputConfirm;
     if (!confirm) return;
+    // Photo mode: the marks on the picture are the primary field's value.
+    const markNames = confirm.marks
+      ? confirm.marks.map((item) => item.name.trim()).filter(Boolean)
+      : null;
     const input: Record<string, unknown> = {};
     for (const field of confirm.fields) {
       if (field.type === "boolean") {
         input[field.key] = confirm.checks[field.key] === true;
+        continue;
+      }
+      if (markNames && field.key === confirm.primaryKey) {
+        if (markNames.length > 0) {
+          input[field.key] =
+            field.type === "array" ? markNames : markNames.join("\n");
+        }
         continue;
       }
       const raw = confirm.values[field.key] ?? "";
@@ -6257,14 +6616,25 @@ function AskVaenyxPanel({
         input[field.key] = raw;
       }
     }
+    // Corrected marks persist: journal, gallery and the annotate overlay all
+    // read the same store, so the Owner's edit is the truth everywhere.
+    if (confirm.marks && confirm.imageId) {
+      void saveAnnotations(confirm.imageId, confirm.marks).catch(
+        () => undefined,
+      );
+    }
     // Did the Owner edit any field from the AI's prefill? Only a real correction
     // is worth saving as a local few-shot example.
-    const edited = confirm.fields.some((field) =>
-      field.type === "boolean"
-        ? confirm.checks[field.key] !== confirm.initialChecks[field.key]
-        : (confirm.values[field.key] ?? "") !==
-          (confirm.initialValues[field.key] ?? ""),
-    );
+    const edited =
+      confirm.fields.some((field) =>
+        field.type === "boolean"
+          ? confirm.checks[field.key] !== confirm.initialChecks[field.key]
+          : field.key !== confirm.primaryKey &&
+            (confirm.values[field.key] ?? "") !==
+              (confirm.initialValues[field.key] ?? ""),
+      ) ||
+      (confirm.marks !== null &&
+        JSON.stringify(confirm.marks) !== confirm.initialMarks);
     setRoutineInputConfirm(null);
     void runRoutineMessage(
       confirm.conversationId,
@@ -6273,6 +6643,7 @@ function AskVaenyxPanel({
       input,
       edited,
       confirm.imageId ?? undefined,
+      confirm.speakResult,
     );
   }
 
@@ -6395,13 +6766,21 @@ function AskVaenyxPanel({
     voiceAudioId?: string,
   ): Promise<void> {
     // Phase B: a pending photo rides on this message; a photo alone is a
-    // valid message too.
-    const imageId = pendingImageId ?? undefined;
+    // valid message too. A Run pressed while the upload is still in flight
+    // waits for the imageId here instead of dropping the photo.
+    let imageId = pendingImageId ?? undefined;
+    if (!imageId && pendingUploadRef.current) {
+      try {
+        imageId = await pendingUploadRef.current;
+      } catch {
+        // Upload failed: the toast already said so; send goes on without it.
+      }
+    }
     if (!content.trim()) {
       if (!imageId) return;
       content = "(Photo)";
     }
-    setPendingImageId(null);
+    clearPendingPhoto();
     if (activeThread?.routineId && activeConversationId) {
       await runRoutineMessage(
         activeConversationId,
@@ -6410,6 +6789,7 @@ function AskVaenyxPanel({
         undefined,
         undefined,
         imageId,
+        Boolean(voiceAudioId),
       );
       return;
     }
@@ -6746,18 +7126,12 @@ function AskVaenyxPanel({
         annotateRide,
       );
 
-      // Voice replies: a voice turn always answers aloud (it is a spoken
-      // conversation); text turns answer aloud when the speaker toggle is on;
-      // a Routine that declares voice-out always speaks its results (step 4).
+      // Voice replies: spoken in → spoken out ("我输入是语音,你的输出才是
+      // 语音", Oskar 2026-07-28) — a voice turn answers aloud, a typed turn
+      // stays text. The speaker toggle remains the explicit always-on opt-in.
       // The reply's own SpeakButton does the talking, so pause/stop are right
       // there on the message.
-      const routineSpeaksAloud = Boolean(
-        activeThread?.routineId &&
-          libraryRoutines
-            .find((routine) => routine.id === activeThread.routineId)
-            ?.capabilities?.includes("voice-out"),
-      );
-      if (voiceAudioId || voiceReplies || routineSpeaksAloud) {
+      if (voiceAudioId || voiceReplies) {
         const assistantReply = [...response.messages]
           .reverse()
           .find(
@@ -6867,7 +7241,7 @@ function AskVaenyxPanel({
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = prompt.trim();
-    if (!content && !pendingImageId) return;
+    if (!content && !pendingImageId && !pendingPhotoPreview) return;
 
     await sendChatContent(content);
   }
@@ -7212,13 +7586,18 @@ function AskVaenyxPanel({
             <h2>Where should we begin?</h2>
           </div>
 
-          {pendingImageId ? (
+          {pendingPhotoPreview || pendingImageId ? (
             <div className="composer-attachment">
-              <img alt="" src={`/v1/vision/image/${pendingImageId}`} />
+              <img
+                alt=""
+                src={
+                  pendingPhotoPreview ?? `/v1/vision/image/${pendingImageId}`
+                }
+              />
               <button
                 aria-label="Remove photo"
                 className="composer-attachment-remove"
-                onClick={() => setPendingImageId(null)}
+                onClick={clearPendingPhoto}
                 type="button"
               >
                 <IconX />
@@ -7261,10 +7640,22 @@ function AskVaenyxPanel({
                 onAttach={
                   defaultCanAttach ? (id) => setPendingImageId(id) : undefined
                 }
+                onPreview={
+                  defaultCanAttach
+                    ? (url) => setPendingPhotoPreview(url || null)
+                    : undefined
+                }
                 onText={(text) =>
                   setStartWorkPrompt((current) =>
                     current ? `${current}\n${text}` : text,
                   )
+                }
+                onUploadStart={
+                  defaultCanAttach
+                    ? (upload) => {
+                        pendingUploadRef.current = upload;
+                      }
+                    : undefined
                 }
               />
             ) : null}
@@ -7453,12 +7844,20 @@ function AskVaenyxPanel({
     // count as filled).
     const confirmMissing = routineInputConfirm
       ? routineInputConfirm.fields
-          .filter(
-            (field) =>
-              field.required &&
-              field.type !== "boolean" &&
-              (routineInputConfirm.values[field.key] ?? "").trim() === "",
-          )
+          .filter((field) => {
+            if (!field.required || field.type === "boolean") return false;
+            // Photo mode: the primary field is fed by the marks, so it counts
+            // as filled while at least one mark has a name.
+            if (
+              routineInputConfirm.marks &&
+              field.key === routineInputConfirm.primaryKey
+            ) {
+              return !routineInputConfirm.marks.some((item) =>
+                item.name.trim(),
+              );
+            }
+            return (routineInputConfirm.values[field.key] ?? "").trim() === "";
+          })
           .map((field) => field.key)
       : [];
 
@@ -7576,6 +7975,20 @@ function AskVaenyxPanel({
             title={t("routine.confirm.title")}
           >
             <p className="settings-card-copy">{t("routine.confirm.copy")}</p>
+            {/* Photo mode (visual first): the marked photo IS the primary
+                field — rename / add / remove marks on the picture itself.
+                The other fields are secondary and stay compact. */}
+            {routineInputConfirm.marks && routineInputConfirm.imageId ? (
+              <AnnotatedPhotoEditor
+                imageId={routineInputConfirm.imageId}
+                marks={routineInputConfirm.marks}
+                onChange={(next) =>
+                  setRoutineInputConfirm((current) =>
+                    current ? { ...current, marks: next } : current,
+                  )
+                }
+              />
+            ) : null}
             <div
               style={{
                 display: "flex",
@@ -7584,8 +7997,19 @@ function AskVaenyxPanel({
                 margin: "10px 0",
               }}
             >
-              {routineInputConfirm.fields.map((field) => (
+              {routineInputConfirm.fields
+                .filter(
+                  (field) =>
+                    !(
+                      routineInputConfirm.marks &&
+                      field.key === routineInputConfirm.primaryKey
+                    ),
+                )
+                .map((field) => (
                 <label
+                  className={
+                    routineInputConfirm.marks ? "confirm-compact" : undefined
+                  }
                   key={field.key}
                   style={{ display: "flex", flexDirection: "column", gap: "4px" }}
                 >
@@ -7639,7 +8063,13 @@ function AskVaenyxPanel({
                           ? t("routine.confirm.onePerLine")
                           : ""
                       }
-                      rows={field.type === "array" ? 3 : 2}
+                      rows={
+                        routineInputConfirm.marks
+                          ? 1
+                          : field.type === "array"
+                            ? 3
+                            : 2
+                      }
                       value={routineInputConfirm.values[field.key] ?? ""}
                     />
                   )}
@@ -7823,6 +8253,22 @@ function AskVaenyxPanel({
                         output={node.item.output}
                         view={activeRoutine?.view}
                       />
+                      {/* THE speech element on results too: tap speaks a short
+                          digest; a voice-fed run starts it by itself. */}
+                      <div className="message-footer">
+                        <span aria-hidden="true">✓</span>
+                        {formatTime(node.at)}
+                        <SpeakButton
+                          autoStart={autoSpeakGalleryId === node.item.id}
+                          className="message-speak"
+                          engine={voiceOutput?.engine ?? "browser"}
+                          onAutoConsumed={() => setAutoSpeakGalleryId(null)}
+                          text={spokenResultText(
+                            node.item.output,
+                            activeRoutine?.view,
+                          )}
+                        />
+                      </div>
                     </article>
                   ),
                 )}
@@ -7964,13 +8410,18 @@ function AskVaenyxPanel({
         ) : null}
 
         <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
-          {pendingImageId ? (
+          {pendingPhotoPreview || pendingImageId ? (
             <div className="composer-attachment">
-              <img alt="" src={`/v1/vision/image/${pendingImageId}`} />
+              <img
+                alt=""
+                src={
+                  pendingPhotoPreview ?? `/v1/vision/image/${pendingImageId}`
+                }
+              />
               <button
                 aria-label="Remove photo"
                 className="composer-attachment-remove"
-                onClick={() => setPendingImageId(null)}
+                onClick={clearPendingPhoto}
                 type="button"
               >
                 <IconX />
@@ -7992,7 +8443,10 @@ function AskVaenyxPanel({
                   !event.nativeEvent.isComposing
                 ) {
                   event.preventDefault();
-                  if (!sending && (prompt.trim() || pendingImageId)) {
+                  if (
+                    !sending &&
+                    (prompt.trim() || pendingImageId || pendingPhotoPreview)
+                  ) {
                     void sendMessage(
                       event as unknown as FormEvent<HTMLFormElement>,
                     );
@@ -8004,7 +8458,7 @@ function AskVaenyxPanel({
               // 2026-07-28) — `required` used to block Run with the browser's
               // own "please fill in this field" tooltip when only a photo was
               // attached.
-              required={!pendingImageId}
+              required={!pendingImageId && !pendingPhotoPreview}
               rows={2}
               value={prompt}
             />
@@ -8016,11 +8470,15 @@ function AskVaenyxPanel({
                 disabled={sending}
                 lang={lang}
                 onAttach={(id) => setPendingImageId(id)}
+                onPreview={(url) => setPendingPhotoPreview(url || null)}
                 onText={(text) =>
                   setPrompt((current) =>
                     current ? `${current}\n${text}` : text,
                   )
                 }
+                onUploadStart={(upload) => {
+                  pendingUploadRef.current = upload;
+                }}
               />
             ) : null}
             {voiceReady ? (
@@ -14096,6 +14554,42 @@ function RoutineResultView({
 // string field (e.g. {text: "..."}) shows its value; a flat multi-field object
 // (a confirmed friendly input) reads as "key: value · key: value"; anything
 // deeper falls back to compact JSON.
+// The spoken form of a routine result: title + the first bullets field, short
+// phrases for the ear — never the raw structured text with its punctuation
+// ("念出来就是念上面的文字…尽量总结", Oskar 2026-07-28).
+function spokenResultText(output: unknown, view?: unknown): string {
+  if (output === null || typeof output !== "object") return "";
+  const record = output as Record<string, unknown>;
+  const declared = parseRoutineView(view);
+  const parts: string[] = [];
+  if (declared) {
+    const titleKey = declared.fields.find((field) => field.as === "title")?.key;
+    const bulletsKey = declared.fields.find(
+      (field) => field.as === "bullets",
+    )?.key;
+    const title = titleKey ? record[titleKey] : undefined;
+    if (typeof title === "string" && title.trim()) parts.push(title.trim());
+    const bullets = bulletsKey ? record[bulletsKey] : undefined;
+    if (Array.isArray(bullets) && bullets.length > 0) {
+      parts.push(
+        bullets
+          .slice(0, 4)
+          .map((item) => String(item))
+          .join(", "),
+      );
+    }
+  }
+  if (parts.length === 0) {
+    for (const value of Object.values(record)) {
+      if (typeof value === "string" && value.trim()) {
+        parts.push(value.trim());
+        if (parts.length >= 2) break;
+      }
+    }
+  }
+  return parts.join(". ").slice(0, 400);
+}
+
 function journalText(content: unknown): string {
   if (typeof content === "string") return content;
   if (content !== null && typeof content === "object" && !Array.isArray(content)) {

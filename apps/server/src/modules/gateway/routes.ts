@@ -61,6 +61,9 @@ import {
   AnnotateImageRequestSchema,
   type AnnotateImageRequest,
   AnnotateImageResponseSchema,
+  SaveAnnotationsRequestSchema,
+  type SaveAnnotationsRequest,
+  type ImageAnnotationItem,
   type SubscribePushRequest,
   type UnsubscribePushRequest,
   type ConnectVoiceRequest,
@@ -2136,35 +2139,23 @@ export async function registerGatewayRoutes(
           ? "zh"
           : "en";
       let effectiveContent = request.body.content;
+      let photoAnnotations: ImageAnnotationItem[] | null = null;
       if (request.body.imageId && !request.body.input) {
         const found = readImage(
           context.config.dataDirectory,
           request.body.imageId,
         );
         if (found) {
-          // Marks are made in parallel with the run itself ("recipe 可以是
-          // 标着东西的照片", Oskar): by the time the result lands, the journal
-          // photo carries its dots + names without anyone tapping anything.
+          // Marks and extraction run in PARALLEL ("recipe 可以是标着东西的
+          // 照片", Oskar): the confirm card gets the marked photo to edit, and
+          // the marks are stored so journal/result show them too.
           const photoId = request.body.imageId;
-          void annotateImage(
+          const marksPromise = annotateImage(
             context.config.secretsDirectory,
             found.image,
             found.mimeType,
             runLanguage,
-          )
-            .then((items) => {
-              context.database.sqlite
-                .prepare(
-                  `INSERT INTO image_annotations (image_id, items, created_at)
-                   VALUES (?, ?, ?)
-                   ON CONFLICT(image_id) DO UPDATE SET items = excluded.items,
-                     created_at = excluded.created_at`,
-                )
-                .run(photoId, JSON.stringify(items), new Date().toISOString());
-            })
-            .catch(() => {
-              // Best-effort: the run and the photo stand without marks.
-            });
+          ).catch(() => null);
           try {
             const extracted = await describeImage(
               context.config.secretsDirectory,
@@ -2181,6 +2172,21 @@ export async function registerGatewayRoutes(
             }
           } catch {
             // No vision model or it refused: the typed words still run.
+          }
+          photoAnnotations = await marksPromise;
+          if (photoAnnotations) {
+            context.database.sqlite
+              .prepare(
+                `INSERT INTO image_annotations (image_id, items, created_at)
+                 VALUES (?, ?, ?)
+                 ON CONFLICT(image_id) DO UPDATE SET items = excluded.items,
+                   created_at = excluded.created_at`,
+              )
+              .run(
+                photoId,
+                JSON.stringify(photoAnnotations),
+                new Date().toISOString(),
+              );
           }
         }
       }
@@ -2228,11 +2234,13 @@ export async function registerGatewayRoutes(
               });
             }
             // The confirm round sends this content back, so the learn example
-            // pairs the parse with the text it actually saw.
+            // pairs the parse with the text it actually saw. The marks let the
+            // card show the annotated photo for editing (visual first).
             return {
               needsInput: true as const,
               ...parsed,
               content: effectiveContent,
+              ...(photoAnnotations ? { annotations: photoAnnotations } : {}),
             };
           } catch (error) {
             return reply
@@ -5301,6 +5309,52 @@ export async function registerGatewayRoutes(
           error: "The photo could not be marked. Try again.",
         });
       }
+    },
+  );
+
+  // Save the Owner's corrected marks (edited on a confirm card / photo). The
+  // model made the first pass; the Owner's edit is the truth from here on.
+  app.put<{ Body: SaveAnnotationsRequest }>(
+    "/v1/vision/annotations",
+    {
+      schema: {
+        body: SaveAnnotationsRequestSchema,
+        response: {
+          200: MessageResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const found = readImage(context.config.dataDirectory, request.body.imageId);
+      if (!found) {
+        return reply.code(404).send({ error: "Image not found." });
+      }
+      const items = request.body.items
+        .map((item) => ({
+          name: item.name.trim().slice(0, 40),
+          x: Math.min(100, Math.max(0, item.x)),
+          y: Math.min(100, Math.max(0, item.y)),
+        }))
+        .filter((item) => item.name);
+      context.database.sqlite
+        .prepare(
+          `INSERT INTO image_annotations (image_id, items, created_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(image_id) DO UPDATE SET items = excluded.items,
+             created_at = excluded.created_at`,
+        )
+        .run(
+          request.body.imageId,
+          JSON.stringify(items),
+          new Date().toISOString(),
+        );
+      return { message: "Saved." };
     },
   );
 

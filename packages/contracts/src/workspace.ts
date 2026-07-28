@@ -2188,6 +2188,18 @@ export const RoutineRunNeedsInputSchema = Type.Object(
     // The confirm round sends THIS back so the learn example pairs the parse
     // with the text it really saw.
     content: Type.Optional(Type.String()),
+    // The fed photo's marks, so the confirm card can show — and let the Owner
+    // edit — the annotated picture itself (visual first).
+    annotations: Type.Optional(Type.Array(ImageAnnotationItemSchema)),
+  },
+  { additionalProperties: false },
+);
+
+// Save the Owner's corrected marks for a photo (edited on the confirm card).
+export const SaveAnnotationsRequestSchema = Type.Object(
+  {
+    imageId: Type.String({ minLength: 1, maxLength: 100 }),
+    items: Type.Array(ImageAnnotationItemSchema, { maxItems: 20 }),
   },
   { additionalProperties: false },
 );
@@ -2232,6 +2244,7 @@ export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type ImageAnnotationItem = Static<typeof ImageAnnotationItemSchema>;
 export type AnnotateImageRequest = Static<typeof AnnotateImageRequestSchema>;
 export type AnnotateImageResponse = Static<typeof AnnotateImageResponseSchema>;
+export type SaveAnnotationsRequest = Static<typeof SaveAnnotationsRequestSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;
 export type AgentProfile = Static<typeof AgentProfileSchema>;
 export type AppAskRequest = Static<typeof AppAskRequestSchema>;

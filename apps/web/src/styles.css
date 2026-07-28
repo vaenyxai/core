@@ -1081,6 +1081,88 @@ textarea::placeholder {
   height: 14px;
 }
 
+.annotated-photo .message-photo {
+  cursor: zoom-in;
+}
+
+/* Fullscreen photo viewer: pinch/wheel zoom, drag pan, × or backdrop closes. */
+.photo-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.92);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.photo-lightbox img {
+  max-width: 96vw;
+  max-height: 96vh;
+  user-select: none;
+  cursor: grab;
+  transition: transform 60ms linear;
+}
+
+.photo-lightbox-close {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+/* The confirm card's editable marked photo: labels are buttons; the row under
+   the photo edits the selected mark's name or adds a new one. Secondary text
+   fields go compact — the picture is the interface (visual first). */
+.annotate-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.annotate-editor .annotate-label {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 0;
+  font-family: inherit;
+}
+
+.annotate-editor .annotate-label--selected {
+  outline: 2px solid var(--accent);
+}
+
+.annotate-editor--adding .message-photo {
+  cursor: crosshair;
+}
+
+.annotate-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.annotate-edit-row input {
+  flex: 1;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.confirm-compact textarea,
+.confirm-compact input[type="text"] {
+  min-height: 34px;
+}
+
 .composer-attachment {
   position: relative;
   display: inline-flex;
@@ -6007,9 +6089,16 @@ select {
 .routine-result ul {
   margin: 4px 0;
   padding-left: 20px;
+  /* Visible dots ("前面要有一个 dot 才是 dot point", Oskar 2026-07-28) — some
+     reset had swallowed the markers. */
+  list-style: disc;
 }
 .routine-result li {
   margin: 2px 0;
+  list-style: disc;
+}
+.routine-result li::marker {
+  color: var(--accent);
 }
 .routine-result pre {
   background: var(--bg);
