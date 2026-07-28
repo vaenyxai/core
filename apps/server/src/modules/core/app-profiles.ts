@@ -89,6 +89,28 @@ export function countStaleMethodGrants(
   return row?.n ?? 0;
 }
 
+// The Owner edited their OWN method — every grant follows automatically
+// ("token 全自动", Oskar 2026-07-28): the version lock exists so content
+// cannot change behind an app's back WITHOUT the Owner; an origin:"self"
+// method has no author but the Owner, so their edit IS the authorization and
+// asking them to re-grant their own change is pure friction. Community-origin
+// methods never come through here — third-party updates keep the re-grant
+// gate. Returns how many grants moved.
+export function relockMethodGrants(
+  database: DatabaseHandle,
+  methodId: string,
+  contentHash: string,
+): number {
+  const result = database.sqlite
+    .prepare(
+      `UPDATE app_profile_methods
+       SET content_hash = ?
+       WHERE method_id = ? AND content_hash <> ?`,
+    )
+    .run(contentHash, methodId, contentHash);
+  return Number(result.changes ?? 0);
+}
+
 // The content hash an App Profile pinned for a granted method (the version
 // lock), or null if the method is not granted to this profile.
 export function getAppProfileMethodLock(

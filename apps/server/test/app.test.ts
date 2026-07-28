@@ -1,4 +1,11 @@
-import { chmodSync, cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -1651,6 +1658,77 @@ describe("Vaenyx Gateway foundation", () => {
         }),
       ]),
     );
+
+    await app.close();
+  });
+
+  it("auto-relocks grants when the Owner's own method changes; community changes still 409", async () => {
+    const config = createTestConfig();
+    const app = await buildApp(config);
+    const sessionCookie = await createOwnerAndSession(app);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/app-profiles",
+      headers: { cookie: sessionCookie },
+      payload: {
+        name: "Estimating App",
+        kind: "method",
+        allowedMethodIds: ["sample-summary"],
+        fetchRecipe: true,
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const token = created.json().token;
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/v1/library/methods/sample-summary/recipe",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(first.statusCode).toBe(200);
+    const firstHash = first.json().contentHash;
+
+    // The Owner edits their own method (origin "self") — here directly on
+    // disk, the way an assistant edits files. The issued token must keep
+    // working: the lock follows the edit instead of demanding a re-grant.
+    const methodDir = resolve(config.libraryDirectory, "sample-summary");
+    writeFileSync(
+      resolve(methodDir, "recipe.md"),
+      "# Summarize\n\nReturn summary as a short bullet array.\n",
+      "utf8",
+    );
+
+    const afterOwnEdit = await app.inject({
+      method: "GET",
+      url: "/v1/library/methods/sample-summary/recipe",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(afterOwnEdit.statusCode).toBe(200);
+    expect(afterOwnEdit.json().contentHash).not.toBe(firstHash);
+
+    // Same edit on a community-origin method: the re-grant gate holds, because
+    // that content does not come from the Owner.
+    const meta = JSON.parse(
+      readFileSync(resolve(methodDir, "method.json"), "utf8"),
+    ) as Record<string, unknown>;
+    writeFileSync(
+      resolve(methodDir, "method.json"),
+      JSON.stringify({ ...meta, origin: "community" }, null, 2),
+      "utf8",
+    );
+    writeFileSync(
+      resolve(methodDir, "recipe.md"),
+      "# Summarize\n\nA third-party revision the Owner never approved.\n",
+      "utf8",
+    );
+
+    const afterCommunityEdit = await app.inject({
+      method: "GET",
+      url: "/v1/library/methods/sample-summary/recipe",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(afterCommunityEdit.statusCode).toBe(409);
 
     await app.close();
   });

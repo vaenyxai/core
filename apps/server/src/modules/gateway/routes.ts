@@ -216,6 +216,7 @@ import {
 import {
   authenticateAppProfile,
   countStaleMethodGrants,
+  relockMethodGrants,
   createAppProfile,
   deleteAppProfile,
   disableAppProfile,
@@ -6827,6 +6828,13 @@ export async function registerGatewayRoutes(
         return reply.code(400).send({ error: "That recipe could not be saved." });
       }
 
+      // Owner's own method: every grant follows the edit right here, so the
+      // reply reports zero stale grants and no app ever sees a 409. Community-
+      // origin methods keep the explicit re-grant flow.
+      if (updated.origin === "self") {
+        relockMethodGrants(context.database, updated.id, updated.contentHash);
+      }
+
       recordAudit(context.database, {
         actorType: "owner",
         actorId: owner.id,
@@ -6834,7 +6842,9 @@ export async function registerGatewayRoutes(
         action: "library.method.recipe.edit",
         decision: "allowed",
         reason:
-          "Owner approved a recipe edit from chat; the content hash moved, so granted App Profiles must grant again.",
+          updated.origin === "self"
+            ? "Owner approved a recipe edit from chat; grants follow their own edit automatically."
+            : "Owner approved a recipe edit from chat; the content hash moved, so granted App Profiles must grant again.",
         resourceType: "method",
         resourceId: request.params.id,
       });
@@ -7100,20 +7110,37 @@ export async function registerGatewayRoutes(
       }
 
       if (method.contentHash !== lockedHash) {
-        recordAudit(context.database, {
-          actorType: "app",
-          actorId: profile.id,
-          actorName: profile.name,
-          action: "library.method.run",
-          decision: "denied",
-          reason: "Method version changed since it was granted to this app.",
-          resourceType: "method",
-          resourceId: methodId,
-        });
-        return reply.code(409).send({
-          error:
-            "This method changed since it was granted. Ask the Owner to re-grant it.",
-        });
+        // The Owner's own method moved: grants follow automatically. Only a
+        // community-origin change still needs the Owner's explicit re-grant.
+        if (method.origin === "self") {
+          relockMethodGrants(context.database, methodId, method.contentHash);
+          recordAudit(context.database, {
+            actorType: "app",
+            actorId: profile.id,
+            actorName: profile.name,
+            action: "library.method.run",
+            decision: "allowed",
+            reason:
+              "Version lock followed the Owner's own edit of their method.",
+            resourceType: "method",
+            resourceId: methodId,
+          });
+        } else {
+          recordAudit(context.database, {
+            actorType: "app",
+            actorId: profile.id,
+            actorName: profile.name,
+            action: "library.method.run",
+            decision: "denied",
+            reason: "Method version changed since it was granted to this app.",
+            resourceType: "method",
+            resourceId: methodId,
+          });
+          return reply.code(409).send({
+            error:
+              "This method changed since it was granted. Ask the Owner to re-grant it.",
+          });
+        }
       }
 
       const inputCheck = validateAgainstSchema(
@@ -8444,20 +8471,37 @@ export async function registerGatewayRoutes(
       }
 
       if (method.contentHash !== lockedHash) {
-        recordAudit(context.database, {
-          actorType: "app",
-          actorId: profile.id,
-          actorName: profile.name,
-          action: "library.method.fetchRecipe",
-          decision: "denied",
-          reason: "Method version changed since it was granted to this app.",
-          resourceType: "method",
-          resourceId: methodId,
-        });
-        return reply.code(409).send({
-          error:
-            "This method changed since it was granted. Ask the Owner to re-grant it.",
-        });
+        // Same self-heal as the run endpoint: the Owner's own edit never
+        // strands their apps on a 409 — the grant follows the new version.
+        if (method.origin === "self") {
+          relockMethodGrants(context.database, methodId, method.contentHash);
+          recordAudit(context.database, {
+            actorType: "app",
+            actorId: profile.id,
+            actorName: profile.name,
+            action: "library.method.fetchRecipe",
+            decision: "allowed",
+            reason:
+              "Version lock followed the Owner's own edit of their method.",
+            resourceType: "method",
+            resourceId: methodId,
+          });
+        } else {
+          recordAudit(context.database, {
+            actorType: "app",
+            actorId: profile.id,
+            actorName: profile.name,
+            action: "library.method.fetchRecipe",
+            decision: "denied",
+            reason: "Method version changed since it was granted to this app.",
+            resourceType: "method",
+            resourceId: methodId,
+          });
+          return reply.code(409).send({
+            error:
+              "This method changed since it was granted. Ask the Owner to re-grant it.",
+          });
+        }
       }
 
       // ETag caching (§13 ②): the contentHash is the ETag. The first fetch needs
