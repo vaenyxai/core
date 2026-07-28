@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import type {
   AgentProfile,
@@ -8605,7 +8606,12 @@ function Modal({
     };
   }, [onClose]);
 
-  return (
+  // Rendered into <body>, never in place (Oskar, 2026-07-28: the Archived
+  // window came out UNDER the chat). A fixed overlay still obeys any ancestor
+  // that makes a stacking context — the sidebar does — so a modal opened from
+  // inside a panel would be trapped behind its neighbours. Every Modal in the
+  // app goes through here, so this holds everywhere.
+  return createPortal(
     <div className="modal-overlay" role="dialog" aria-label={title} aria-modal="true">
       <div className={variant === "doc" ? "modal-card doc" : "modal-card"}>
         <div className="modal-head">
@@ -8621,7 +8627,8 @@ function Modal({
         </div>
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -15668,7 +15675,11 @@ const THREAD_LIST_STEP = 10;
 // a thread is unread when its last activity is newer than the last time THIS
 // device had it open. Device-local on purpose — read state is a property of
 // the person at the screen, and it needs no server schema.
-const THREAD_SEEN_KEY = "vaenyx-thread-seen";
+// Bumping the suffix wipes the slate on every device: the seeding effect finds
+// nothing stored and marks everything as read, so only activity from that
+// moment on lights a dot (Oskar, 2026-07-28 — the first run had lit rows he
+// had already read).
+const THREAD_SEEN_KEY = "vaenyx-thread-seen-2";
 
 function readThreadSeen(): Record<string, string> {
   try {
@@ -15911,6 +15922,11 @@ function SidebarThreadTree({
     }
     writeThreadSeen(seeded);
     setThreadSeen(seeded);
+    try {
+      localStorage.removeItem("vaenyx-thread-seen");
+    } catch {
+      // Tidying the superseded key is best-effort.
+    }
   }, [workspace.threads]);
 
   // The open thread is always read: opening marks it, and activity arriving
