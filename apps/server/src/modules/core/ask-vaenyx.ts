@@ -5,6 +5,7 @@ import type {
   AskVaenyxMessage,
   CreateAskVaenyxConversationRequest,
   CreateAskVaenyxMessageResponse,
+  ImageAnnotationItem,
   ProjectMemory,
 } from "@vaenyx/contracts";
 
@@ -56,6 +57,7 @@ interface AskVaenyxMessageRow {
   audio_id: string | null;
   image_id: string | null;
   image_prompt: string | null;
+  image_annotations: string | null;
 }
 
 interface ConversationThreadContextRow {
@@ -121,7 +123,21 @@ function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
     audioId: row.audio_id ?? null,
     imageId: row.image_id ?? null,
     imagePrompt: row.image_prompt ?? null,
+    imageAnnotations: parseAnnotations(row.image_annotations),
   };
+}
+
+function parseAnnotations(
+  raw: string | null | undefined,
+): ImageAnnotationItem[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as ImageAnnotationItem[]) : null;
+  } catch {
+    // A corrupt row just means no overlay; the photo itself is untouched.
+    return null;
+  }
 }
 
 function getAskVaenyxFailureMessage(error: unknown): string {
@@ -481,12 +497,18 @@ export function listAskVaenyxMessages(
 ): AskVaenyxMessage[] {
   getConversationRow(database, conversationId, ownerId);
 
+  // image_prompt rides along (it was silently missing from this SELECT, so a
+  // reopened chat lost the F5 "prompt sent" line), and each photo brings any
+  // stored marks with it so the overlay survives reopening.
   const rows = database.sqlite
     .prepare(
-      `SELECT id, conversation_id, role, content, status, web_search_used, created_at, voice, audio_id, image_id
-       FROM ask_vaenyx_messages
-       WHERE conversation_id = ?
-       ORDER BY created_at ASC`,
+      `SELECT m.id, m.conversation_id, m.role, m.content, m.status,
+              m.web_search_used, m.created_at, m.voice, m.audio_id, m.image_id,
+              m.image_prompt, a.items AS image_annotations
+       FROM ask_vaenyx_messages m
+       LEFT JOIN image_annotations a ON a.image_id = m.image_id
+       WHERE m.conversation_id = ?
+       ORDER BY m.created_at ASC`,
     )
     .all(conversationId) as unknown as AskVaenyxMessageRow[];
 

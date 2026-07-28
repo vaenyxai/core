@@ -58,6 +58,9 @@ import {
   type ConnectVisionRequest,
   VisionDescribeResponseSchema,
   VisionUploadResponseSchema,
+  AnnotateImageRequestSchema,
+  type AnnotateImageRequest,
+  AnnotateImageResponseSchema,
   type SubscribePushRequest,
   type UnsubscribePushRequest,
   type ConnectVoiceRequest,
@@ -262,6 +265,7 @@ import {
   stageUpdate,
 } from "../core/updates.js";
 import {
+  annotateImage,
   describeImage,
   getVisionStatus,
   readImage,
@@ -5163,6 +5167,67 @@ export async function registerGatewayRoutes(
         request.headers["content-type"] ?? "image/jpeg",
       );
       return { imageId };
+    },
+  );
+
+  // Mark the objects in a stored photo (Oskar, 2026-07-28): the vision engine
+  // returns each item's position; dots + names are stored per image so the
+  // overlay survives reopening the chat. Re-marking overwrites.
+  app.post<{ Body: AnnotateImageRequest }>(
+    "/v1/vision/annotate",
+    {
+      schema: {
+        body: AnnotateImageRequestSchema,
+        response: {
+          200: AnnotateImageResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const found = readImage(context.config.dataDirectory, request.body.imageId);
+      if (!found) {
+        return reply.code(404).send({ error: "Image not found." });
+      }
+      try {
+        const items = await annotateImage(
+          context.config.secretsDirectory,
+          found.image,
+          found.mimeType,
+          request.body.language === "zh" ? "zh" : "en",
+        );
+        context.database.sqlite
+          .prepare(
+            `INSERT INTO image_annotations (image_id, items, created_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(image_id) DO UPDATE SET items = excluded.items,
+               created_at = excluded.created_at`,
+          )
+          .run(
+            request.body.imageId,
+            JSON.stringify(items),
+            new Date().toISOString(),
+          );
+        return { items };
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        if (code === "VISION_NOT_CONNECTED") {
+          return reply.code(400).send({
+            error:
+              "No vision model is connected, so the photo could not be marked. Connect one under Settings → AI Setting → Models.",
+          });
+        }
+        return reply.code(502).send({
+          error: "The photo could not be marked. Try again.",
+        });
+      }
     },
   );
 

@@ -1080,6 +1080,18 @@ export async function uploadPhoto(blob: Blob): Promise<{ imageId: string }> {
   return { imageId: body.imageId };
 }
 
+// Mark the objects in a stored photo: dots + names, drawn as an overlay. The
+// server keeps them per image, so reopening the chat keeps the marks.
+export function annotatePhoto(
+  imageId: string,
+  language: string,
+): Promise<{ items: { name: string; x: number; y: number }[] }> {
+  return requestJson<{ items: { name: string; x: number; y: number }[] }>(
+    "/v1/vision/annotate",
+    { method: "POST", body: JSON.stringify({ imageId, language }) },
+  );
+}
+
 export async function describePhoto(
   blob: Blob,
   lang: string,

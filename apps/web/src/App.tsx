@@ -21,6 +21,7 @@ import type {
   SkillImportPreviewResponse,
   AskVaenyxConversation,
   AskVaenyxMessage,
+  ImageAnnotationItem,
   ReasoningEffort,
   AuditEvent,
   BackupEntry,
@@ -159,6 +160,7 @@ import {
   type FlywheelState,
   fetchImageEngine,
   setImageEngineChoice,
+  annotatePhoto,
   describePhoto,
   uploadPhoto,
   type VisionStatus,
@@ -963,6 +965,16 @@ function IconAlbum() {
   );
 }
 
+// Mark items on a photo: a map-pin dot with a callout line.
+function IconMarker() {
+  return (
+    <LineIcon>
+      <circle cx="9" cy="9" r="3.5" />
+      <path d="m12 12 7 7" />
+    </LineIcon>
+  );
+}
+
 // Downscale a picked/taken photo before upload: phone originals are 5-15MB;
 // 1280px JPEG keeps every fridge item recognisable at a fraction of the size.
 async function downscalePhoto(file: File): Promise<Blob> {
@@ -1116,6 +1128,133 @@ function CameraButton({
         <IconCamera />
       </button>
     </>
+  );
+}
+
+// A conversation photo with its marks ("在照片上把不同的东西mark出来", Oskar
+// 2026-07-28): a dot on each object, a thin line to its name. One button on
+// the photo runs the vision engine the first time, then toggles the overlay;
+// the marks are stored server-side so a reopened chat still has them.
+function AnnotatedPhoto({
+  annotations,
+  imageId,
+  lang,
+  onAnnotated,
+  onLoad,
+}: {
+  annotations: ImageAnnotationItem[] | null;
+  imageId: string;
+  lang: string;
+  onAnnotated: (items: ImageAnnotationItem[]) => void;
+  onLoad?: () => void;
+}) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [overlayOn, setOverlayOn] = useState(true);
+  const items = annotations && annotations.length > 0 ? annotations : null;
+
+  async function mark() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { items: fresh } = await annotatePhoto(imageId, lang);
+      onAnnotated(fresh);
+      setOverlayOn(true);
+    } catch {
+      // requestJson already raised the toast with the server's reason.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="annotated-photo">
+      <img
+        alt=""
+        className="message-photo"
+        onLoad={onLoad}
+        src={`/v1/vision/image/${imageId}`}
+      />
+      {items && overlayOn ? (
+        <>
+          <svg
+            aria-hidden="true"
+            className="annotate-lines"
+            preserveAspectRatio="none"
+            viewBox="0 0 100 100"
+          >
+            {items.map((item, index) => {
+              const toRight = item.x < 55;
+              const labelX = toRight
+                ? Math.min(item.x + 12, 96)
+                : Math.max(item.x - 12, 4);
+              return (
+                <line
+                  key={index}
+                  vectorEffect="non-scaling-stroke"
+                  x1={item.x}
+                  x2={labelX}
+                  y1={item.y}
+                  y2={Math.max(item.y - 5, 2)}
+                />
+              );
+            })}
+          </svg>
+          {items.map((item, index) => {
+            const toRight = item.x < 55;
+            const labelX = toRight
+              ? Math.min(item.x + 12, 96)
+              : Math.max(item.x - 12, 4);
+            return (
+              <span key={index}>
+                <span
+                  className="annotate-dot"
+                  style={{ left: `${item.x}%`, top: `${item.y}%` }}
+                />
+                <span
+                  className={
+                    toRight
+                      ? "annotate-label"
+                      : "annotate-label annotate-label--left"
+                  }
+                  style={{
+                    left: `${labelX}%`,
+                    top: `${Math.max(item.y - 5, 2)}%`,
+                  }}
+                >
+                  {item.name}
+                </span>
+              </span>
+            );
+          })}
+        </>
+      ) : null}
+      <button
+        aria-label={
+          items
+            ? overlayOn
+              ? t("photo.marks.hide")
+              : t("photo.marks.show")
+            : t("photo.marks.make")
+        }
+        className="voice-bubble-play annotate-button"
+        disabled={busy}
+        onClick={() => {
+          if (items) setOverlayOn((current) => !current);
+          else void mark();
+        }}
+        title={
+          items
+            ? overlayOn
+              ? t("photo.marks.hide")
+              : t("photo.marks.show")
+            : t("photo.marks.make")
+        }
+        type="button"
+      >
+        {busy ? <IconSpinner /> : <IconMarker />}
+      </button>
+    </div>
   );
 }
 
@@ -7678,11 +7817,20 @@ function AskVaenyxPanel({
                   <small>{formatTime(message.createdAt)}</small>
                 </div>
                 {message.imageId ? (
-                  <img
-                    alt=""
-                    className="message-photo"
+                  <AnnotatedPhoto
+                    annotations={message.imageAnnotations ?? null}
+                    imageId={message.imageId}
+                    lang={lang}
+                    onAnnotated={(items) =>
+                      setMessages((current) =>
+                        current.map((candidate) =>
+                          candidate.id === message.id
+                            ? { ...candidate, imageAnnotations: items }
+                            : candidate,
+                        ),
+                      )
+                    }
                     onLoad={reanchorAfterImageLoad}
-                    src={`/v1/vision/image/${message.imageId}`}
                   />
                 ) : null}
                 {/* F5's promise, kept: the exact prompt that went to the image

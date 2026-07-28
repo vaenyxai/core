@@ -254,6 +254,33 @@ export const SetChatModelRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// One marked object on a photo: a dot at (x, y) — percent of the image — with
+// a short name. Produced by the vision engine, drawn by the client.
+export const ImageAnnotationItemSchema = Type.Object(
+  {
+    name: Type.String(),
+    x: Type.Number(),
+    y: Type.Number(),
+  },
+  { additionalProperties: false },
+);
+
+export const AnnotateImageRequestSchema = Type.Object(
+  {
+    imageId: Type.String({ minLength: 1, maxLength: 100 }),
+    // Names come back in the Owner's UI language.
+    language: Type.Optional(Type.String({ maxLength: 8 })),
+  },
+  { additionalProperties: false },
+);
+
+export const AnnotateImageResponseSchema = Type.Object(
+  {
+    items: Type.Array(ImageAnnotationItemSchema),
+  },
+  { additionalProperties: false },
+);
+
 export const AskVaenyxMessageSchema = Type.Object(
   {
     id: Type.String(),
@@ -275,6 +302,11 @@ export const AskVaenyxMessageSchema = Type.Object(
     // image provider, shown beside the picture (F5's promise — the main model
     // writes the prompt, so it can word things the Owner never typed).
     imagePrompt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // Marked photo: dots + names the vision engine placed on this message's
+    // photo (x/y in percent of the image), drawn as an overlay by the client.
+    imageAnnotations: Type.Optional(
+      Type.Union([Type.Array(ImageAnnotationItemSchema), Type.Null()]),
+    ),
   },
   { additionalProperties: false },
 );
@@ -2166,6 +2198,9 @@ export type UpdateStatus = Static<typeof UpdateStatusSchema>;
 export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
+export type ImageAnnotationItem = Static<typeof ImageAnnotationItemSchema>;
+export type AnnotateImageRequest = Static<typeof AnnotateImageRequestSchema>;
+export type AnnotateImageResponse = Static<typeof AnnotateImageResponseSchema>;
 export type AuditEvent = Static<typeof AuditEventSchema>;
 export type AgentProfile = Static<typeof AgentProfileSchema>;
 export type AppAskRequest = Static<typeof AppAskRequestSchema>;
