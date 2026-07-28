@@ -952,6 +952,17 @@ function IconCamera() {
   );
 }
 
+// Photo library: the classic framed-landscape glyph, beside the camera.
+function IconAlbum() {
+  return (
+    <LineIcon>
+      <rect height="14" rx="2" width="16" x="4" y="5" />
+      <circle cx="9" cy="10" r="1.5" />
+      <path d="m5 17 4.5-4.5 3 3L16 12l4 4" />
+    </LineIcon>
+  );
+}
+
 // Downscale a picked/taken photo before upload: phone originals are 5-15MB;
 // 1280px JPEG keeps every fridge item recognisable at a fraction of the size.
 async function downscalePhoto(file: File): Promise<Blob> {
@@ -1002,7 +1013,6 @@ function CameraButton({
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [choosing, setChoosing] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
 
@@ -1052,10 +1062,6 @@ function CameraButton({
     }
   }
 
-  function pick(from: "camera" | "library") {
-    setChoosing(false);
-    (from === "camera" ? cameraRef : inputRef).current?.click();
-  }
 
   return (
     <>
@@ -1087,36 +1093,28 @@ function CameraButton({
         ref={cameraRef}
         type="file"
       />
+      {/* One tap each, no chooser in between ("一步到位", Oskar 2026-07-28):
+          album first (the common case), camera beside it. */}
       <button
-        aria-label={t("photo.add")}
+        aria-label={t("photo.choose")}
         className={`mic-button${busy ? " mic-button--busy" : ""}`}
         disabled={disabled || busy}
-        onClick={() => setChoosing(true)}
-        title={error ?? t("photo.add")}
+        onClick={() => inputRef.current?.click()}
+        title={error ?? t("photo.choose")}
         type="button"
       >
-        {busy ? <IconSpinner /> : <IconCamera />}
+        {busy ? <IconSpinner /> : <IconAlbum />}
       </button>
-      {choosing ? (
-        <Modal onClose={() => setChoosing(false)} title={t("photo.add")}>
-          <div className="photo-choice">
-            <button
-              className="primary-button"
-              onClick={() => pick("camera")}
-              type="button"
-            >
-              {t("photo.take")}
-            </button>
-            <button
-              className="secondary-button"
-              onClick={() => pick("library")}
-              type="button"
-            >
-              {t("photo.choose")}
-            </button>
-          </div>
-        </Modal>
-      ) : null}
+      <button
+        aria-label={t("photo.take")}
+        className="mic-button"
+        disabled={disabled || busy}
+        onClick={() => cameraRef.current?.click()}
+        title={error ?? t("photo.take")}
+        type="button"
+      >
+        <IconCamera />
+      </button>
     </>
   );
 }
