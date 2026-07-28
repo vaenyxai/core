@@ -194,6 +194,7 @@ import {
   streamAskVaenyxMessage,
   streamTaskMessage,
   fetchTaskLive,
+  fetchSpokenSummary,
   retryTask,
   setTaskSchedule,
   setupOwner,
@@ -5512,6 +5513,24 @@ function AskVaenyxPanel({
   // Owner picked it (server-generated audio, cached), else the device TTS.
   // Sentence-first: the opening sentence generates and starts playing while
   // the rest generates in parallel, so sound starts in about a second.
+  // "总结并用语音念出来" (Oskar, 2026-07-28): one tap → the model writes a
+  // spoken digest of this conversation → the normal reply voice reads it. The
+  // tap itself is the user gesture the browser's audio rules want, so it works
+  // straight off a notification too.
+  const [speakingSummary, setSpeakingSummary] = useState(false);
+  async function speakSummary(conversationId: string) {
+    if (speakingSummary) return;
+    setSpeakingSummary(true);
+    try {
+      const { summary } = await fetchSpokenSummary(conversationId, lang);
+      await playReplyAloud(summary);
+    } catch {
+      // requestJson already raised the toast with the server's reason.
+    } finally {
+      setSpeakingSummary(false);
+    }
+  }
+
   async function playReplyAloud(text: string, prewarmed?: SpeechPrewarm) {
     stopReplySpeech();
     const token = {};
@@ -7317,6 +7336,18 @@ function AskVaenyxPanel({
               className="chat-chips chat-chips--inline"
             />
             <div className="chat-header-actions">
+              {activeConversationId && messages.length > 0 ? (
+                <button
+                  aria-label="Speak a summary of this conversation"
+                  className="speak-summary-button"
+                  disabled={speakingSummary}
+                  onClick={() => void speakSummary(activeConversationId)}
+                  title={lang === "zh" ? "念摘要" : "Speak Summary"}
+                  type="button"
+                >
+                  {speakingSummary ? "…" : "🔊"}
+                </button>
+              ) : null}
               {renderThreadHeaderMenu(activeThread)}
             </div>
           </div>
@@ -8075,6 +8106,23 @@ function AskVaenyxPanel({
                   chips={taskChips}
                   className="chat-chips chat-chips--inline"
                 />
+                {/* The scheduled brief, spoken: same one-tap digest as chats —
+                    tap after the 7am run and hear it instead of reading. */}
+                {focusedTaskThread?.conversationId &&
+                taskMessages.length > 0 ? (
+                  <button
+                    aria-label="Speak a summary of this task"
+                    className="speak-summary-button"
+                    disabled={speakingSummary}
+                    onClick={() =>
+                      void speakSummary(focusedTaskThread.conversationId ?? "")
+                    }
+                    title={lang === "zh" ? "念摘要" : "Speak Summary"}
+                    type="button"
+                  >
+                    {speakingSummary ? "…" : "🔊"}
+                  </button>
+                ) : null}
                 {renderThreadHeaderMenu(focusedTaskThread)}
               </div>
               {focusedTask.harness === "codex-harness" ? (

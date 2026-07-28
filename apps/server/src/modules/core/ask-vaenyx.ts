@@ -9,7 +9,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
-import { getModelRegistry, resolveProvider } from "../models/registry.js";
+import { getDefaultProvider, getModelRegistry, resolveProvider } from "../models/registry.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
@@ -530,6 +530,46 @@ export interface CreateAskVaenyxMessageOptions {
   // chat model cannot see images: the vision model describes it and the
   // description rides along as context.
   secretsDirectory?: string;
+}
+
+// One tap in any conversation reads a spoken digest aloud (Oskar, 2026-07-28).
+// Built into every thread rather than as a Routine: a Routine is bound to its
+// own chat, and reading OTHER conversations from one would need cross-thread
+// plumbing this needs none of. The model writes FOR THE EAR — the client's
+// existing sentence-first TTS does the speaking.
+export async function summarizeConversationForSpeech(
+  database: DatabaseHandle,
+  conversationId: string,
+  ownerId: string,
+  language: "en" | "zh",
+): Promise<string> {
+  const messages = listAskVaenyxMessages(database, conversationId, ownerId)
+    .filter((message) => message.status !== "failed")
+    .slice(-15);
+  if (messages.length === 0) throw new Error("NOTHING_TO_SUMMARIZE");
+  const transcript = messages
+    .map(
+      (message) =>
+        `${message.role === "owner" ? "Owner" : "Vaenyx"}: ${message.content.slice(0, 2000)}`,
+    )
+    .join("\n");
+  const result = await getDefaultProvider().sendChat([
+    {
+      role: "owner",
+      content: [
+        "Summarize this conversation TO BE READ ALOUD by a text-to-speech voice.",
+        language === "zh"
+          ? "Write 3-6 short spoken sentences in Chinese."
+          : "Write 3-6 short spoken sentences in English.",
+        "Plain speech only: no markdown, no bullet points, no links, no headings — a person listening, not reading. Lead with the newest substance (the latest result or answer), then anything still open.",
+        "",
+        transcript,
+      ].join("\n"),
+    },
+  ]);
+  const summary = result.answer.trim();
+  if (!summary) throw new Error("NOTHING_TO_SUMMARIZE");
+  return summary;
 }
 
 // Insert a Vaenyx-authored status note into a conversation (e.g. "✔ Routine X
