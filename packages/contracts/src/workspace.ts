@@ -2171,6 +2171,8 @@ export const RoutineRunChatRequestSchema = Type.Object(
     // as a photo in the journal, and the server extracts its contents into the
     // run's input behind the scenes — no text dump in the composer.
     imageId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    // The Owner's UI language — extraction lines and photo marks come back in it.
+    language: Type.Optional(Type.String({ maxLength: 8 })),
   },
   { additionalProperties: false },
 );

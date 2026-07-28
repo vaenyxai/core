@@ -1347,12 +1347,6 @@ textarea::placeholder {
   color: #8fc0f0;
 }
 
-/* A Routine's declared capability (Vision / Speak / Draw): quiet green, a
-   statement of what the chat plugs into, not a state. */
-.thread-chip--capability {
-  background: rgba(125, 200, 140, 0.14);
-  color: #9fd3ab;
-}
 
 .thread-chip--working,
 .thread-chip--building {

@@ -2130,6 +2130,11 @@ export async function registerGatewayRoutes(
       // A fed photo stays a PHOTO in the journal; its contents are extracted
       // here, behind the scenes, and joined to the typed words for the parse
       // ("visual first" — the Owner never sees a text dump, Oskar 2026-07-28).
+      const runLanguage =
+        request.body.language === "zh" ||
+        (!request.body.language && /[一-鿿]/.test(request.body.content))
+          ? "zh"
+          : "en";
       let effectiveContent = request.body.content;
       if (request.body.imageId && !request.body.input) {
         const found = readImage(
@@ -2137,12 +2142,35 @@ export async function registerGatewayRoutes(
           request.body.imageId,
         );
         if (found) {
+          // Marks are made in parallel with the run itself ("recipe 可以是
+          // 标着东西的照片", Oskar): by the time the result lands, the journal
+          // photo carries its dots + names without anyone tapping anything.
+          const photoId = request.body.imageId;
+          void annotateImage(
+            context.config.secretsDirectory,
+            found.image,
+            found.mimeType,
+            runLanguage,
+          )
+            .then((items) => {
+              context.database.sqlite
+                .prepare(
+                  `INSERT INTO image_annotations (image_id, items, created_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(image_id) DO UPDATE SET items = excluded.items,
+                     created_at = excluded.created_at`,
+                )
+                .run(photoId, JSON.stringify(items), new Date().toISOString());
+            })
+            .catch(() => {
+              // Best-effort: the run and the photo stand without marks.
+            });
           try {
             const extracted = await describeImage(
               context.config.secretsDirectory,
               found.image,
               found.mimeType,
-              /[一-鿿]/.test(request.body.content) ? "zh" : "en",
+              runLanguage,
             );
             if (extracted.trim()) {
               effectiveContent =

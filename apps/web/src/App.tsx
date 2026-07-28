@@ -510,17 +510,13 @@ function chatLightLabel(light: ChatLight): string {
 // Status chips pinned on a chat (spec §2a): a thread can carry several states at
 // once (a Routine chat that is also Scheduled), so these render as a row, not a
 // single light. Always derived from real state — never set decoratively.
+// (No "capability" tone: Vision/Speak chips were tried and dropped the same
+// day — those abilities are universal now, so a badge said nothing. Oskar,
+// 2026-07-28.)
 type ThreadChip = {
   key: string;
   label: string;
-  tone:
-    | "routine"
-    | "scheduled"
-    | "working"
-    | "done"
-    | "failed"
-    | "building"
-    | "capability";
+  tone: "routine" | "scheduled" | "working" | "done" | "failed" | "building";
   title?: string;
 };
 
@@ -6174,6 +6170,7 @@ function AskVaenyxPanel({
         input,
         learn,
         imageId,
+        lang,
       );
       if (result && typeof result === "object" && "needsInput" in result) {
         // Nothing ran yet: take the pending note back out and open the confirm
@@ -7423,21 +7420,6 @@ function AskVaenyxPanel({
             : chip,
         )
       : [];
-    // The Routine's declared capabilities as chips (step 4): what this chat
-    // plugs into beyond text — real declarations from routine.json, never
-    // decoration.
-    for (const capability of activeRoutine?.capabilities ?? []) {
-      chatChips.push({
-        key: `capability-${capability}`,
-        label:
-          capability === "vision"
-            ? "Vision"
-            : capability === "voice-out"
-              ? "Speak"
-              : "Draw",
-        tone: "capability",
-      });
-    }
     if (building && building.conversationId === activeConversationId) {
       chatChips.push({ key: "building", label: "Building…", tone: "building" });
     }
@@ -8010,7 +7992,7 @@ function AskVaenyxPanel({
                   !event.nativeEvent.isComposing
                 ) {
                   event.preventDefault();
-                  if (!sending && prompt.trim()) {
+                  if (!sending && (prompt.trim() || pendingImageId)) {
                     void sendMessage(
                       event as unknown as FormEvent<HTMLFormElement>,
                     );
@@ -8018,7 +8000,11 @@ function AskVaenyxPanel({
                 }
               }}
               placeholder={isRoutine ? "Type or paste a note…" : "Ask anything"}
-              required
+              // A photo alone is a complete message ("拍照直接发", Oskar
+              // 2026-07-28) — `required` used to block Run with the browser's
+              // own "please fill in this field" tooltip when only a photo was
+              // attached.
+              required={!pendingImageId}
               rows={2}
               value={prompt}
             />
