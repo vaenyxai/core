@@ -15,8 +15,8 @@
 // second layer, load no settings files, no CLAUDE.md, no MCP servers, one
 // turn only, and a jail working directory that contains nothing.
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -167,21 +167,21 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     }
   }
 
-  // Mirrors CodexProvider.healthCheck's three-step structure: is the channel
-  // present, is it signed in, is it the subscription kind. The SDK ships with
-  // the app (a dependency, not an install), so "present" is a given; sign-in
-  // is a pasted setup token or an existing Claude Code login on this machine.
+  // Mirrors CodexProvider.healthCheck's structure: present → signed in →
+  // subscription kind. The SDK ships with the app, so "present" is a given.
+  // Sign-in is the pasted setup token ONLY: the interactive `claude /login`
+  // stores credentials in the TERMINAL user's profile, which a server running
+  // as a service (Vaenyx's normal life) cannot see — so that path is not
+  // offered, and Anthropic's setup-token is the supported non-interactive
+  // form of the same subscription login.
   healthCheck(): ModelProviderStatus {
     if (this.#setupToken) {
       return { ok: true, detail: "Claude subscription (setup token)." };
     }
-    if (existsSync(join(homedir(), ".claude", ".credentials.json"))) {
-      return { ok: true, detail: "Claude Code sign-in found on this machine." };
-    }
     return {
       ok: false,
       detail:
-        "Not signed in. Run `claude setup-token` in a terminal and paste the token here.",
+        "Not connected. Run `claude setup-token` in a terminal and paste the token here.",
     };
   }
 }
