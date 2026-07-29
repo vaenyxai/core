@@ -1111,6 +1111,21 @@ textarea::placeholder {
   height: 14px;
 }
 
+/* Fullscreen keeps the toggle, at a size a thumb can hit. It sits outside the
+   zoomed stage on purpose: a control should not grow with the picture. */
+.annotate-button--full {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 40px;
+  height: 40px;
+}
+
+.annotate-button--full svg {
+  width: 18px;
+  height: 18px;
+}
+
 
 .annotated-photo .message-photo {
   cursor: zoom-in;
@@ -1128,12 +1143,22 @@ textarea::placeholder {
   touch-action: none;
 }
 
-.photo-lightbox img {
+/* The photo and its marks are ONE stage (Oskar, 2026-07-29: "所有标签也要一起
+   全屏幕…可以 zoom in 去看标签"): the zoom transform is on the stage, so dots,
+   leader lines and labels grow with the picture instead of floating over it. */
+.photo-lightbox-stage {
+  position: relative;
+  width: fit-content;
+  cursor: grab;
+  touch-action: none;
+  transition: transform 60ms linear;
+}
+
+.photo-lightbox-stage img {
+  display: block;
   max-width: 96vw;
   max-height: 96vh;
   user-select: none;
-  cursor: grab;
-  transition: transform 60ms linear;
 }
 
 

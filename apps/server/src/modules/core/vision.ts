@@ -372,6 +372,20 @@ export async function annotateImage(
     if (typeof content !== "string") throw new Error("VISION_ANNOTATE_EMPTY");
     text = content;
   }
+  return parseAnnotations(text);
+}
+
+// Turn the model's answer into marks. Exported so the rule below can be tested
+// against real answers without a network call.
+//
+// The prompt asks for 0-1000 and the model does not always oblige: the same
+// build that placed dots perfectly one hour answered in 0-100 the next, and
+// every dot collapsed into the top-left tenth of the photo (Oskar, 2026-07-29
+// — the marks were right, the ruler was wrong). So the scale is read off the
+// numbers themselves: the largest coordinate anywhere in the answer decides
+// whether they are fractions, percents or thousandths. The prompt's request is
+// a hint, never a promise.
+export function parseAnnotations(text: string): ImageAnnotationItem[] {
   const cleaned = text
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/```\s*$/, "")
@@ -383,7 +397,17 @@ export async function annotateImage(
     throw new Error("VISION_ANNOTATE_UNPARSEABLE");
   }
   if (!Array.isArray(raw)) throw new Error("VISION_ANNOTATE_UNPARSEABLE");
-  const items: ImageAnnotationItem[] = [];
+
+  interface Candidate {
+    name: string;
+    ymin: number;
+    xmin: number;
+    ymax: number;
+    xmax: number;
+    pointY: number;
+    pointX: number;
+  }
+  const candidates: Candidate[] = [];
   for (const entry of raw.slice(0, 10)) {
     if (typeof entry !== "object" || entry === null) continue;
     const record = entry as Record<string, unknown>;
@@ -396,35 +420,61 @@ export async function annotateImage(
         : null;
     if (!name || !box || box.length !== 4) continue;
     const bounds = box.map((value) =>
-      typeof value === "number" ? Math.min(1000, Math.max(0, value)) : NaN,
+      typeof value === "number" ? Math.max(0, value) : NaN,
     );
     const ymin = bounds[0] ?? NaN;
     const xmin = bounds[1] ?? NaN;
     const ymax = bounds[2] ?? NaN;
     const xmax = bounds[3] ?? NaN;
     if ([ymin, xmin, ymax, xmax].some(Number.isNaN)) continue;
+    const point = Array.isArray(record.point_2d) ? record.point_2d : null;
+    candidates.push({
+      name: name.slice(0, 40),
+      ymin,
+      xmin,
+      ymax,
+      xmax,
+      pointY: typeof point?.[0] === "number" ? point[0] : NaN,
+      pointX: typeof point?.[1] === "number" ? point[1] : NaN,
+    });
+  }
+  if (candidates.length === 0) throw new Error("VISION_ANNOTATE_EMPTY");
 
+  let largest = 0;
+  for (const candidate of candidates) {
+    for (const value of [
+      candidate.ymin,
+      candidate.xmin,
+      candidate.ymax,
+      candidate.xmax,
+      candidate.pointY,
+      candidate.pointX,
+    ]) {
+      if (Number.isFinite(value)) largest = Math.max(largest, value);
+    }
+  }
+  // What one unit of the answer is worth as a percentage of the photo.
+  const perUnit = largest <= 1.5 ? 100 : largest <= 100 ? 1 : 0.1;
+
+  return candidates.map((candidate) => {
     // Prefer the model's own point (a spot on the object) over the box centre,
     // which lands on whatever overlaps the middle. Anything outside the box is
     // a bad point and falls back to the centre.
-    const point = Array.isArray(record.point_2d) ? record.point_2d : null;
-    const pointY = typeof point?.[0] === "number" ? point[0] : NaN;
-    const pointX = typeof point?.[1] === "number" ? point[1] : NaN;
     const usePoint =
-      Number.isFinite(pointY) &&
-      Number.isFinite(pointX) &&
-      pointY >= ymin &&
-      pointY <= ymax &&
-      pointX >= xmin &&
-      pointX <= xmax;
-    const x = usePoint ? pointX : (xmin + xmax) / 2;
-    const y = usePoint ? pointY : (ymin + ymax) / 2;
-    items.push({
-      name: name.slice(0, 40),
-      x: Math.round(x / 10) / 10,
-      y: Math.round(y / 10) / 10,
-    });
-  }
-  if (items.length === 0) throw new Error("VISION_ANNOTATE_EMPTY");
-  return items;
+      Number.isFinite(candidate.pointY) &&
+      Number.isFinite(candidate.pointX) &&
+      candidate.pointY >= candidate.ymin &&
+      candidate.pointY <= candidate.ymax &&
+      candidate.pointX >= candidate.xmin &&
+      candidate.pointX <= candidate.xmax;
+    const x = usePoint
+      ? candidate.pointX
+      : (candidate.xmin + candidate.xmax) / 2;
+    const y = usePoint
+      ? candidate.pointY
+      : (candidate.ymin + candidate.ymax) / 2;
+    const clamp = (value: number): number =>
+      Math.round(Math.min(100, Math.max(0, value * perUnit)) * 10) / 10;
+    return { name: candidate.name, x: clamp(x), y: clamp(y) };
+  });
 }

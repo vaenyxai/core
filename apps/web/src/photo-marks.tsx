@@ -48,7 +48,26 @@ function IconLayers() {
 // 2026-07-28): pinch to zoom, drag to pan, double-tap to toggle 1×/2.5×,
 // tap the backdrop or × to close. Pure pointer events — works with mouse
 // wheel on desktop and two fingers on the phone.
-function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
+//
+// The marks come with it ("单击全屏幕的时候,所有标签也要一起全屏幕,而且带着
+// 那个去标签的按钮,这样子可以 zoom in 去看标签", Oskar 2026-07-29): the photo
+// and its overlay are one stage that zooms together, so a label too small to
+// read in the chat is read by zooming into it. The layers button rides along
+// and stays its own size — it is a control, not part of the picture.
+function PhotoLightbox({
+  marks,
+  onClose,
+  onToggleOverlay,
+  overlayOn,
+  url,
+}: {
+  marks: ImageAnnotationItem[] | null;
+  onClose: () => void;
+  onToggleOverlay: () => void;
+  overlayOn: boolean;
+  url: string;
+}) {
+  const { t } = useI18n();
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
@@ -144,19 +163,34 @@ function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
       role="dialog"
       aria-label="Photo"
     >
-      <img
-        alt=""
-        draggable={false}
+      <div
+        className="photo-lightbox-stage"
         onClick={onTap}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        src={url}
         style={{
           transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
         }}
-      />
+      >
+        <img alt="" draggable={false} src={url} />
+        {marks && overlayOn ? <MarksOverlay placed={layoutLabels(marks)} /> : null}
+      </div>
+      {marks ? (
+        <button
+          aria-label={overlayOn ? t("photo.marks.hide") : t("photo.marks.show")}
+          className="voice-bubble-play annotate-button annotate-button--full"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleOverlay();
+          }}
+          title={overlayOn ? t("photo.marks.hide") : t("photo.marks.show")}
+          type="button"
+        >
+          <IconLayers />
+        </button>
+      ) : null}
     </div>,
     document.body,
   );
@@ -172,9 +206,14 @@ function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
 // one above it; a column that runs out of room wraps back to the top.
 const LABEL_ROW_HEIGHT = 7; // percent of the image, ≈ one label plus a gap
 
-export function layoutLabels(
-  items: ImageAnnotationItem[],
-): { item: ImageAnnotationItem; labelX: number; labelY: number; toRight: boolean }[] {
+export interface PlacedLabel {
+  item: ImageAnnotationItem;
+  labelX: number;
+  labelY: number;
+  toRight: boolean;
+}
+
+export function layoutLabels(items: ImageAnnotationItem[]): PlacedLabel[] {
   const columns: Record<"left" | "right", number[]> = { left: [], right: [] };
   return [...items]
     .map((item, index) => ({ item, index }))
@@ -213,6 +252,48 @@ export function layoutLabels(
     }));
 }
 
+// The marks themselves — dot, leader line, name. One component, so a photo in
+// the chat and the same photo fullscreen cannot drift apart.
+function MarksOverlay({ placed }: { placed: PlacedLabel[] }) {
+  return (
+    <>
+      <svg
+        aria-hidden="true"
+        className="annotate-lines"
+        preserveAspectRatio="none"
+        viewBox="0 0 100 100"
+      >
+        {placed.map(({ item, labelX, labelY }, index) => (
+          <line
+            key={index}
+            vectorEffect="non-scaling-stroke"
+            x1={item.x}
+            x2={labelX}
+            y1={item.y}
+            y2={labelY}
+          />
+        ))}
+      </svg>
+      {placed.map(({ item, labelX, labelY, toRight }, index) => (
+        <span key={index}>
+          <span
+            className="annotate-dot"
+            style={{ left: `${item.x}%`, top: `${item.y}%` }}
+          />
+          <span
+            className={
+              toRight ? "annotate-label" : "annotate-label annotate-label--left"
+            }
+            style={{ left: `${labelX}%`, top: `${labelY}%` }}
+          >
+            {item.name}
+          </span>
+        </span>
+      ))}
+    </>
+  );
+}
+
 export function AnnotatedPhoto({
   annotations,
   imageId,
@@ -232,7 +313,10 @@ export function AnnotatedPhoto({
     <div className="annotated-photo">
       {zoomed ? (
         <PhotoLightbox
+          marks={items}
           onClose={() => setZoomed(false)}
+          onToggleOverlay={() => setOverlayOn((current) => !current)}
+          overlayOn={overlayOn}
           url={`/v1/vision/image/${imageId}`}
         />
       ) : null}
@@ -243,45 +327,7 @@ export function AnnotatedPhoto({
         onLoad={onLoad}
         src={`/v1/vision/image/${imageId}`}
       />
-      {items && overlayOn ? (
-        <>
-          <svg
-            aria-hidden="true"
-            className="annotate-lines"
-            preserveAspectRatio="none"
-            viewBox="0 0 100 100"
-          >
-            {placed.map(({ item, labelX, labelY }, index) => (
-              <line
-                key={index}
-                vectorEffect="non-scaling-stroke"
-                x1={item.x}
-                x2={labelX}
-                y1={item.y}
-                y2={labelY}
-              />
-            ))}
-          </svg>
-          {placed.map(({ item, labelX, labelY, toRight }, index) => (
-            <span key={index}>
-              <span
-                className="annotate-dot"
-                style={{ left: `${item.x}%`, top: `${item.y}%` }}
-              />
-              <span
-                className={
-                  toRight
-                    ? "annotate-label"
-                    : "annotate-label annotate-label--left"
-                }
-                style={{ left: `${labelX}%`, top: `${labelY}%` }}
-              >
-                {item.name}
-              </span>
-            </span>
-          ))}
-        </>
-      ) : null}
+      {items && overlayOn ? <MarksOverlay placed={placed} /> : null}
       {/* The button exists ONLY when there is a layer to show or hide (Oskar,
           2026-07-29): a plain photo — one you sent, one Vaenyx drew — carries
           no controls at all. It is a layers toggle, never a magnifier: tapping
