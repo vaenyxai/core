@@ -697,15 +697,33 @@ export function fetchTaskLive(id: string): Promise<{ thinking: string }> {
   );
 }
 
+// A task follow-up carries whatever a chat message carries — a photo, a PDF,
+// something spoken. Underneath it IS a chat message: the server hands both to
+// the same function (Oskar, 2026-07-30 — the task screen had only Send).
 export function streamTaskMessage(
   taskId: string,
   content: string,
   callbacks: StreamMessageCallbacks,
+  extras?: {
+    voiceAudioId?: string;
+    imageId?: string;
+    annotate?: boolean;
+    document?: { documentId: string; name: string; acknowledged: boolean };
+  },
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/tasks/${taskId}/messages/stream`,
     content,
     callbacks,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    extras?.voiceAudioId,
+    extras?.imageId,
+    undefined,
+    extras?.annotate,
+    extras?.document,
   );
 }
 

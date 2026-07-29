@@ -3396,6 +3396,26 @@ export async function registerGatewayRoutes(
           request.params.id,
           owner.id,
           request.body.content,
+          {
+            // Same set as the streaming route above: a task follow-up may carry
+            // whatever a chat message may carry.
+            ...(request.body.voiceAudioId
+              ? { voiceAudioId: request.body.voiceAudioId }
+              : {}),
+            ...(request.body.imageId ? { imageId: request.body.imageId } : {}),
+            ...(request.body.annotate ? { annotate: true } : {}),
+            ...(request.body.documentId
+              ? { documentId: request.body.documentId }
+              : {}),
+            ...(request.body.documentName
+              ? { documentName: request.body.documentName }
+              : {}),
+            ...(request.body.documentAcknowledged
+              ? { documentAcknowledged: true }
+              : {}),
+            dataDirectory: context.config.dataDirectory,
+            secretsDirectory: context.config.secretsDirectory,
+          },
         );
         const assistantMessage = response.messages.find(
           (message) => message.role === "assistant",
@@ -3461,7 +3481,31 @@ export async function registerGatewayRoutes(
             request.params.id,
             owner.id,
             request.body.content,
-            options,
+            {
+              ...options,
+              // A task follow-up is a chat message — createTaskMessage has
+              // always handed straight to createAskVaenyxMessage, so photos,
+              // PDFs and spoken input worked down here all along and this
+              // route simply dropped them (Oskar, 2026-07-30: the task screen
+              // had only a Send button). One conversation, one set of things
+              // you can put in it.
+              ...(request.body.voiceAudioId
+                ? { voiceAudioId: request.body.voiceAudioId }
+                : {}),
+              ...(request.body.imageId ? { imageId: request.body.imageId } : {}),
+              ...(request.body.annotate ? { annotate: true } : {}),
+              ...(request.body.documentId
+                ? { documentId: request.body.documentId }
+                : {}),
+              ...(request.body.documentName
+                ? { documentName: request.body.documentName }
+                : {}),
+              ...(request.body.documentAcknowledged
+                ? { documentAcknowledged: true }
+                : {}),
+              dataDirectory: context.config.dataDirectory,
+              secretsDirectory: context.config.secretsDirectory,
+            },
           ),
         (response) => {
           const assistantMessage = response.messages.find(

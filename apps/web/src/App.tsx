@@ -7081,10 +7081,32 @@ function AskVaenyxPanel({
     }
   }
 
-  async function sendTaskContent(content: string): Promise<void> {
-    const trimmed = content.trim();
-    if (!trimmed || !focusedTaskId) return;
+  async function sendTaskContent(
+    content: string,
+    voiceAudioId?: string,
+  ): Promise<void> {
+    if (!focusedTaskId) return;
     const taskId = focusedTaskId;
+    // The same pending attachments the chat composer fills, because it is the
+    // same composer: one photo tray, one document tray, one place they are
+    // cleared (Oskar, 2026-07-30).
+    let imageId = pendingImageId ?? undefined;
+    if (!imageId && pendingUploadRef.current) {
+      try {
+        imageId = await pendingUploadRef.current;
+      } catch {
+        // Upload failed: the toast already said so; send goes on without it.
+      }
+    }
+    const document = pendingDocument;
+    let trimmed = content.trim();
+    if (!trimmed) {
+      // A photo or a PDF on its own is a complete message here too.
+      if (!imageId && !document) return;
+      trimmed = document ? `(Document: ${document.name})` : "(Photo)";
+    }
+    clearPendingPhoto();
+    setPendingDocument(null);
 
     setSendingTaskMessage(true);
     setError(null);
@@ -7117,7 +7139,10 @@ function AskVaenyxPanel({
     ]);
 
     try {
-      const response = await streamTaskMessage(taskId, trimmed, {
+      const response = await streamTaskMessage(
+        taskId,
+        trimmed,
+        {
         signal: controller.signal,
         onOwner: (ownerMessage) =>
           setTaskMessages((current) =>
@@ -7138,7 +7163,21 @@ function AskVaenyxPanel({
                 : message,
             ),
           ),
-      });
+        },
+        {
+          ...(voiceAudioId ? { voiceAudioId } : {}),
+          ...(imageId ? { imageId } : {}),
+          ...(document
+            ? {
+                document: {
+                  documentId: document.documentId,
+                  name: document.name,
+                  acknowledged: document.acknowledged,
+                },
+              }
+            : {}),
+        },
+      );
       setTaskMessages((current) => {
         const responseIds = new Set(response.messages.map((m) => m.id));
         return [
@@ -7185,10 +7224,10 @@ function AskVaenyxPanel({
 
   async function sendFocusedTaskMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const content = taskPrompt.trim();
-    if (!content || !focusedTaskId) return;
-
-    await sendTaskContent(content);
+    if (!focusedTaskId) return;
+    // No content check: a photo or a PDF on its own is a whole message, and
+    // sendTaskContent works out what to call it.
+    await sendTaskContent(taskPrompt.trim());
     setTaskPrompt("");
   }
 
@@ -9019,6 +9058,42 @@ function AskVaenyxPanel({
             className="ask-vaenyx-composer"
             onSubmit={sendFocusedTaskMessage}
           >
+            {/* One photo tray and one document tray, shared with the chat
+                composer — the same state, so there is only ever one place a
+                pending attachment lives and one place it is cleared. */}
+            {pendingDocument ? (
+              <div className="composer-attachment">
+                <span className="composer-document-name">
+                  {pendingDocument.name}
+                </span>
+                <button
+                  aria-label="Remove document"
+                  className="composer-attachment-remove"
+                  onClick={() => setPendingDocument(null)}
+                  type="button"
+                >
+                  <IconX />
+                </button>
+              </div>
+            ) : null}
+            {pendingImageId || pendingPhotoPreview ? (
+              <div className="composer-attachment">
+                <img
+                  alt=""
+                  src={
+                    pendingPhotoPreview ?? `/v1/vision/image/${pendingImageId}`
+                  }
+                />
+                <button
+                  aria-label="Remove photo"
+                  className="composer-attachment-remove"
+                  onClick={clearPendingPhoto}
+                  type="button"
+                >
+                  <IconX />
+                </button>
+              </div>
+            ) : null}
             <div className="ask-vaenyx-composer-box">
               <textarea
                 maxLength={10_000}
@@ -9040,10 +9115,48 @@ function AskVaenyxPanel({
                   }
                 }}
                 placeholder="Ask about this task"
-                required
+                required={!pendingImageId && !pendingPhotoPreview}
                 rows={2}
                 value={taskPrompt}
               />
+              {/* The SAME controls as the chat composer, wired to the same
+                  pending-attachment state (Oskar, 2026-07-30: "有没有可能更新
+                  existing 的 chat"). Underneath, a task follow-up already WAS a
+                  chat message — the screen just never offered anything but
+                  Send. Every task gets this, old ones included, with nothing
+                  to migrate. */}
+              {visionReady ? (
+                <CameraButton
+                  disabled={sendingTaskMessage}
+                  lang={lang}
+                  onAttach={(id) => setPendingImageId(id)}
+                  onPreview={(url) => setPendingPhotoPreview(url || null)}
+                  onText={(text) =>
+                    setTaskPrompt((current) =>
+                      current ? `${current}\n${text}` : text,
+                    )
+                  }
+                  onUploadStart={(upload) => {
+                    pendingUploadRef.current = upload;
+                  }}
+                />
+              ) : null}
+              <DocumentButton
+                disabled={sendingTaskMessage}
+                onPicked={(picked) => {
+                  if (picked.needsCostGate) {
+                    setDocumentGate(picked);
+                    return;
+                  }
+                  setPendingDocument({ ...picked, acknowledged: false });
+                }}
+              />
+              {voiceReady ? (
+                <MicButton
+                  disabled={sendingTaskMessage}
+                  onText={(text, audioId) => void sendTaskContent(text, audioId)}
+                />
+              ) : null}
               {sendingTaskMessage ? (
                 <button
                   className="primary-button stop-button"
@@ -9055,7 +9168,7 @@ function AskVaenyxPanel({
               ) : (
                 <button
                   className="primary-button"
-                  disabled={!taskPrompt.trim()}
+                  disabled={!taskPrompt.trim() && !pendingImageId}
                   type="submit"
                 >
                   Send

@@ -122,6 +122,9 @@ Read this inside the app: **Settings → Manual**.
   on a pattern.
 - **See what ran** — the same screen: each run, its result, and how long it took.
 - **Cancel or retry** — buttons on the run itself.
+- **Talk to a task** — the box at the bottom of a task takes everything the chat
+  box takes: a photo, a PDF, something spoken. It is the same conversation
+  underneath, so every task already has this, however long ago you made it.
 - **Prerequisite** — the computer must be awake at that time. If it was not, the
   run is marked failed with the reason; nothing is silently retried on a
   different model.
@@ -241,5 +244,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.52** · last updated 2026-07-30.
+Manual for **v0.3.1-dev.53** · last updated 2026-07-30.
 Keep this file up to date whenever a feature changes.
