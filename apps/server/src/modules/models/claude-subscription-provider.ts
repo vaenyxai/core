@@ -361,14 +361,16 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           disallowedTools: MACHINE_TOOLS,
           cwd: jail,
           env: cleanChildEnvironment(auth.token),
-          // Enough turns for search -> read the results -> answer. Without this
-          // a search is started and then cut off mid-air.
-          maxTurns: 8,
+          // Enough turns for search -> read the results -> answer, and no more.
+          // Eight let a briefing chase a dozen rounds of verification and take
+          // five minutes (Oskar, 2026-07-30); a turn can hold several searches
+          // at once, so four is room to look things up without room to wander.
+          maxTurns: 4,
           // Never read the machine's Claude settings, CLAUDE.md or MCP config.
           mcpServers: {},
           settingSources: [],
           systemPrompt:
-            "You are the chat voice of Vaenyx, a private household assistant. You can search the web and read a page when the answer depends on current facts; say so plainly when you could not check something rather than answering from memory. You have no other tools and no access to this machine.",
+            "You are the chat voice of Vaenyx, a private household assistant. You can search the web and read a page when the answer depends on current facts; say so plainly when you could not check something rather than answering from memory. Search efficiently: batch what you need into as few rounds as you can, and do not re-check something you have already found — the Owner is waiting. You have no other tools and no access to this machine.",
           ...(options?.model?.trim() ? { model: options.model.trim() } : {}),
         },
       });
