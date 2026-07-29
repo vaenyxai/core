@@ -15,12 +15,13 @@
 // second layer, load no settings files, no CLAUDE.md, no MCP servers, one
 // turn only, and a jail working directory that contains nothing.
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
+import { claudeMachineLogin, getClaudeHomeDirectory } from "./claude-login.js";
 import { readProviderConnections } from "./connections.js";
 import type {
   ModelChatMessage,
@@ -34,9 +35,9 @@ import type {
 // 2026-07-29: re-implementing the handshake with another app's client id is
 // impersonation, and the official permission is scoped to "via the Agent
 // SDK"). Two sanctioned forms, in order:
-//   1. a long-lived token the Owner made with `claude setup-token`, pasted in
-//   2. an existing Claude Code sign-in on this machine (the SDK child reads
-//      the CLI's own credentials natively — nothing configured at all)
+//   1. the in-app sign-in — Vaenyx drives the official `claude auth login`
+//      through pipes and the credentials land in the Vaenyx claude-home
+//   2. a long-lived token the Owner made with `claude setup-token`, pasted in
 export function resolveClaudeSubscriptionAuth(secretsDirectory: string): {
   token: string | null;
   machineLogin: boolean;
@@ -44,10 +45,7 @@ export function resolveClaudeSubscriptionAuth(secretsDirectory: string): {
   const token =
     readProviderConnections(secretsDirectory)["claude-sub"]?.apiKey?.trim() ||
     null;
-  const machineLogin = existsSync(
-    join(homedir(), ".claude", ".credentials.json"),
-  );
-  return { token, machineLogin };
+  return { token, machineLogin: claudeMachineLogin() };
 }
 
 // Deny-by-name is the SECOND layer (allowedTools: [] is the first). Includes
@@ -80,9 +78,10 @@ function formatTranscript(messages: ModelChatMessage[]): string {
     .join("\n");
 }
 
-// The child env strips every metered API-key path; with a setup token it is
-// injected, with a machine login the SDK child finds the CLI's credentials by
-// itself.
+// The child env strips every metered API-key path. CLAUDE_CONFIG_DIR points
+// at the Vaenyx claude-home so the SDK child reads the in-app sign-in's
+// credentials natively; a pasted setup token (when present) rides the
+// dedicated env var and takes precedence.
 function cleanChildEnvironment(token: string | null): Record<string, string> {
   const environment: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -96,6 +95,7 @@ function cleanChildEnvironment(token: string | null): Record<string, string> {
     }
     environment[key] = value;
   }
+  environment.CLAUDE_CONFIG_DIR = getClaudeHomeDirectory();
   if (token) environment.CLAUDE_CODE_OAUTH_TOKEN = token;
   return environment;
 }
@@ -301,12 +301,11 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
       return { ok: true, detail: "Claude subscription (setup token)." };
     }
     if (auth.machineLogin) {
-      return { ok: true, detail: "Claude Code sign-in on this machine." };
+      return { ok: true, detail: "Claude subscription (signed in)." };
     }
     return {
       ok: false,
-      detail:
-        "Not connected. Run `claude setup-token` in a terminal and paste the token here.",
+      detail: "Not signed in — use Sign In With Claude on the connect card.",
     };
   }
 }

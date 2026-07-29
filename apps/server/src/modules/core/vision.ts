@@ -5,9 +5,9 @@
 // provider (auto-picked); the key never reaches the browser.
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { resolve } from "node:path";
 
+import { claudeMachineLogin } from "../models/claude-login.js";
 import { claudeSubscriptionVision } from "../models/claude-subscription-provider.js";
 import { readProviderConnections } from "../models/connections.js";
 import { writeConnections } from "../models/provider-settings.js";
@@ -151,10 +151,10 @@ function pickCandidate(
   return pinned;
 }
 
-// Machine-login presence — a tiny local check (same rule as the provider's
-// resolveClaudeSubscriptionAuth, without a signature change here).
+// Machine-login presence (in-app sign-in credentials in the Vaenyx
+// claude-home, or a personal Claude Code login) — same rule as the provider.
 function claudeSubAuthProbe(): boolean {
-  return existsSync(resolve(homedir(), ".claude", ".credentials.json"));
+  return claudeMachineLogin();
 }
 
 export function getVisionStatus(secretsDirectory: string): {

@@ -458,6 +458,25 @@ textarea::placeholder {
   flex-basis: 100%;
 }
 
+/* The Claude sign-in link, dressed as the big primary action it is. */
+.claude-signin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  text-decoration: none;
+}
+
+.claude-token-fallback {
+  display: grid;
+  gap: 8px;
+}
+
+.claude-token-fallback summary {
+  cursor: pointer;
+  font-size: var(--fs-label);
+}
+
 .model-connect-form {
   display: flex;
   flex-direction: column;
