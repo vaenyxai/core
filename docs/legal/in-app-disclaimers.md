@@ -993,6 +993,36 @@ statement and the only one that is true.
 `.paste`, `.look`, `.confirm` and `skill.export.action`. They are verbs and
 field labels; nothing turns on their wording.
 
+**M1 — `legal.gate.document.pageCost`** *(gated — blocks the read until answered)*
+
+A PDF is not read the way a photo is. **Every page is turned into a picture and
+read as an image as well as text**, so a drawing set costs in one question what
+hundreds of ordinary chats would. The money is the Owner's — it goes through
+their own model connection — which is exactly why they have to be told before
+it is spent, not after.
+
+**The page count is the whole point.** A warning that says "PDFs can be
+expensive" is the kind of sentence people click past. One that says *this file
+has 34 pages* is about the file in front of them, cannot be wrong, and makes the
+advice that follows actionable.
+
+- **EN:** "This file has {n} pages. Every page is read as a picture as well as text, so a document this size can cost more in a single question than hundreds of ordinary chats. That cost is yours — it goes through the model connection you set up.
+
+  If you only need part of it, split the file and send just those pages. It costs a fraction, and the answer is usually better, because the model isn't looking through pages you didn't ask about."
+- **ZH:** "这份文件有 {n} 页。**每一页都会被当成一张图来读**,不只是读文字 —— 所以这么厚的文件,问一次的花费可能超过几百次普通对话。这笔钱是你的:它走你自己配置的模型连接。
+
+  如果你只需要其中一部分,**把文件拆开,只发那几页**。花费只是零头,而且答案通常更准 —— 模型不用在你没问的页里翻。"
+- **Behaviour:** **Full-width and blocking, not a toast and not a line of small
+  print** — the Owner asked for it to be impossible to miss. Neither choice
+  pre-selected. Interpolate the real page count; never ship the sentence with a
+  placeholder or a guess. Shown when the document is at least **10 pages** — a
+  receipt or a two-page quote should not be interrupted, and a gate that fires
+  on everything is one people learn to dismiss without reading. The threshold is
+  a product setting, not a legal floor.
+
+  **Not Claude-specific.** Every vision model reads PDFs this way, so the gate
+  belongs in the document path, not in one provider.
+
 ## 5. Placement Summary Matrix
 
 | Key (root) | Surface | Behaviour |
