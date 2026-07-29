@@ -6085,6 +6085,43 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // The user manual (Oskar, 2026-07-30: he cannot remember everything Vaenyx
+  // now does). Same shape as the glossary and read from the same docs folder,
+  // so the manual ships with the app and is read inside it — the place he will
+  // actually look — rather than being a file somebody has to go and find.
+  app.get<{ Querystring: { lang?: string } }>(
+    "/v1/help/manual",
+    {
+      schema: {
+        querystring: Type.Object(
+          { lang: Type.Optional(Type.String()) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: Type.Object(
+            { markdown: Type.String() },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+
+      // English is the authoritative copy; the Chinese one is its translation.
+      const file =
+        request.query.lang === "zh" ? "user-manual.zh.md" : "user-manual.md";
+      const path = join(context.config.docsDirectory, file);
+      const fallback = join(context.config.docsDirectory, "user-manual.md");
+      const chosen = existsSync(path) ? path : fallback;
+      const markdown = existsSync(chosen) ? readFileSync(chosen, "utf8") : "";
+      return { markdown };
+    },
+  );
+
   // Serve an A-class legal document as operative text only. The Notes-for-Operator
   // section is stripped per the publication gate: we cut at the EARLIEST operator
   // marker (EN "Notes for Operator" / ZH "…备注" heading, or a "PUBLICATION GATE" /

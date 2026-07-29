@@ -21,6 +21,10 @@ are the `Vaenyx-*.cmd` files at the repo root.
   lint, typecheck, tests, build).
 - Regenerate `THIRD_PARTY_LICENSES.md` with `npm run licenses` when
   dependencies change; it ships with every release.
+- `docs/user-manual.md` (English, authoritative) and `docs/user-manual.zh.md`
+  are what the owner reads in Settings → Manual. **Any change to a feature the
+  manual describes updates the manual in the same commit**, including the
+  version line at its end — a manual that lags is worse than none.
 - Legal/consent UI strings are implemented verbatim from the in-app copy pack
   (`docs/legal/in-app-disclaimers.md`), in both languages, via `apps/web/src/i18n.tsx`.
   Never claim "nothing leaves your device" in UI copy — the model backend is

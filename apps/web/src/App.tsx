@@ -166,6 +166,7 @@ import {
   fetchRelay,
   updateRelaySettings,
   testRelayEngine,
+  fetchManual,
   type FreePicksState,
   withdrawFlywheelItem,
   type FlywheelState,
@@ -9297,7 +9298,11 @@ function ThemeSelect({
 // edit shows up on next open with no rebuild.
 // The full guide/glossary content, shared by the Help screen and the Settings →
 // Manual tab (which shows it inline — no extra click).
-function HelpContent() {
+// The Glossary ("what does this word mean") and the Manual ("what can this do
+// and where do I press") are two different documents with one reader. Both ship
+// in docs/ and are read in the app, because that is where the Owner actually
+// looks — not in a file somebody has to go and find.
+function HelpContent({ document = "glossary" }: { document?: "glossary" | "manual" }) {
   const { lang, t } = useI18n();
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -9308,7 +9313,10 @@ function HelpContent() {
     setError(null);
     void (async () => {
       try {
-        const result = await fetchGlossary(lang);
+        const result =
+          document === "manual"
+            ? await fetchManual(lang)
+            : await fetchGlossary(lang);
         if (active) setMarkdown(result.markdown);
       } catch {
         if (active) setError(t("help.error"));
@@ -9317,7 +9325,7 @@ function HelpContent() {
     return () => {
       active = false;
     };
-  }, [lang, t]);
+  }, [document, lang, t]);
 
   if (error) return <p className="form-error">{error}</p>;
   if (markdown === null) {
@@ -9678,17 +9686,30 @@ function EngineOptions({
   exclude?: string[];
   providers: ModelProviderInfo[];
 }) {
-  const usable = providers.filter(
-    (provider) =>
-      provider.connected &&
-      provider.capabilities.includes(capability) &&
-      !exclude.includes(provider.id),
+  // A connected model that cannot do THIS job stays in the list, greyed out
+  // (AI-CONNECT): the Owner should see that it is there and cannot do this
+  // here, instead of wondering where it went. Whether it can is read from the
+  // provider table — never from the free-model survey, because a model will
+  // cheerfully claim it can do anything and the button would light up and fail.
+  const connected = providers.filter(
+    (provider) => provider.connected && !exclude.includes(provider.id),
+  );
+  const capable = connected.filter((provider) =>
+    provider.capabilities.includes(capability),
+  );
+  const incapable = connected.filter(
+    (provider) => !provider.capabilities.includes(capability),
   );
   return (
     <>
-      {usable.map((provider) => (
+      {capable.map((provider) => (
         <option key={provider.id} value={provider.id}>
           {provider.name}
+        </option>
+      ))}
+      {incapable.map((provider) => (
+        <option disabled key={provider.id} value={provider.id}>
+          {provider.name} — cannot do this
         </option>
       ))}
     </>
@@ -11620,7 +11641,7 @@ function SettingsPanel({
       <section className="settings-card">
         <p className="eyebrow">{t("settings.manual.eyebrow")}</p>
         <h2>{t("settings.manual.title")}</h2>
-        <HelpContent />
+        <HelpContent document="manual" />
       </section>
       ) : null}
       {activeTab === "user" ? (

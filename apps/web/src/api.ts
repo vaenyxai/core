@@ -1328,6 +1328,14 @@ export function fetchGlossary(lang: string): Promise<{ markdown: string }> {
   );
 }
 
+// The user manual. English is the authoritative copy; the server falls back to
+// it if a translation is missing, so the page is never blank.
+export function fetchManual(lang: string): Promise<{ markdown: string }> {
+  return requestJson<{ markdown: string }>(
+    `/v1/help/manual?lang=${encodeURIComponent(lang)}`,
+  );
+}
+
 export function fetchLibraryMethods(): Promise<LibraryMethodSummary[]> {
   return requestJson<LibraryMethodSummary[]>("/v1/methods");
 }

@@ -66,7 +66,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.manual.eyebrow": "Help",
     "settings.manual.title": "Manual",
     "settings.manual.copy":
-      "A plain-language guide to every Vaenyx feature will live here, once the features settle.",
+      "Everything Vaenyx does: what it is, where to press, what happens.",
     "disclaimer.ai": "AI can make mistakes — double-check anything important.",
     "disclaimer.health":
       "This isn't medical advice. Follow your doctor for medication, dosage, and diagnosis — don't use this to set doses or replace a doctor.",
@@ -398,7 +398,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.help.open": "打开帮助与术语",
     "settings.manual.eyebrow": "帮助",
     "settings.manual.title": "使用手册",
-    "settings.manual.copy": "这里以后会放一份大白话的功能说明书,等功能稳定后再写。",
+    "settings.manual.copy": "Vaenyx 能做的每一件事:是什么、在哪点、点完会怎样。",
     "disclaimer.ai": "AI 可能出错,重要的事请自行核对。",
     "disclaimer.health":
       "这不是医疗建议;用药、剂量、诊断请遵医嘱。别用它定剂量或替代医生。",
