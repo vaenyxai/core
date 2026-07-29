@@ -306,8 +306,14 @@ export async function annotateImage(
     // itself instead of every Routine re-explaining the world.
     ...(focus ? [`ONLY mark ${focus}; skip everything else.`] : []),
     lang === "zh"
-      ? 'Return ONLY a JSON array, each entry {"name": string (short Chinese name, 2-6 characters), "box_2d": [ymin, xmin, ymax, xmax]} with coordinates normalized to 0-1000.'
-      : 'Return ONLY a JSON array, each entry {"name": string (short English name, 1-3 words), "box_2d": [ymin, xmin, ymax, xmax]} with coordinates normalized to 0-1000.',
+      ? 'Return ONLY a JSON array, each entry {"name": string (short Chinese name, 2-6 characters), "box_2d": [ymin, xmin, ymax, xmax], "point_2d": [y, x]}.'
+      : 'Return ONLY a JSON array, each entry {"name": string (short English name, 1-3 words), "box_2d": [ymin, xmin, ymax, xmax], "point_2d": [y, x]}.',
+    "All coordinates normalized to 0-1000.",
+    // The dot is what the Owner reads as "this thing here", so it must sit ON
+    // the object. A box centre lands on whatever happens to overlap the middle
+    // — a notebook's dot ended up on the hand writing in it (Oskar,
+    // 2026-07-29), so the model is asked for the point itself.
+    "point_2d must be a spot clearly ON the object's own surface — visible, not covered by anything else, and never merely the middle of its bounding box.",
     "No markdown fences, no commentary.",
   ].join(" ");
 
@@ -397,10 +403,26 @@ export async function annotateImage(
     const ymax = bounds[2] ?? NaN;
     const xmax = bounds[3] ?? NaN;
     if ([ymin, xmin, ymax, xmax].some(Number.isNaN)) continue;
+
+    // Prefer the model's own point (a spot on the object) over the box centre,
+    // which lands on whatever overlaps the middle. Anything outside the box is
+    // a bad point and falls back to the centre.
+    const point = Array.isArray(record.point_2d) ? record.point_2d : null;
+    const pointY = typeof point?.[0] === "number" ? point[0] : NaN;
+    const pointX = typeof point?.[1] === "number" ? point[1] : NaN;
+    const usePoint =
+      Number.isFinite(pointY) &&
+      Number.isFinite(pointX) &&
+      pointY >= ymin &&
+      pointY <= ymax &&
+      pointX >= xmin &&
+      pointX <= xmax;
+    const x = usePoint ? pointX : (xmin + xmax) / 2;
+    const y = usePoint ? pointY : (ymin + ymax) / 2;
     items.push({
       name: name.slice(0, 40),
-      x: Math.round(((xmin + xmax) / 2 / 1000) * 1000) / 10,
-      y: Math.round(((ymin + ymax) / 2 / 1000) * 1000) / 10,
+      x: Math.round(x / 10) / 10,
+      y: Math.round(y / 10) / 10,
     });
   }
   if (items.length === 0) throw new Error("VISION_ANNOTATE_EMPTY");

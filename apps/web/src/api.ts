@@ -481,6 +481,9 @@ export interface StreamMessageCallbacks {
   // are display-only and vanish when the reply lands.
   onStatus?: (code: string) => void;
   onThinking?: (text: string) => void;
+  // The analysed photo the reply will echo, sent before the words so the
+  // picture is there from the start.
+  onEchoImage?: (imageId: string) => void;
   signal?: AbortSignal;
 }
 
@@ -561,6 +564,8 @@ async function streamMessageRequest(
       callbacks.onStatus?.((data as { code: string }).code);
     } else if (event === "thinking") {
       callbacks.onThinking?.((data as { text: string }).text);
+    } else if (event === "photo") {
+      callbacks.onEchoImage?.((data as { imageId: string }).imageId);
     } else if (event === "done") {
       result = data as CreateAskVaenyxMessageResponse;
     } else if (event === "error") {
@@ -626,13 +631,16 @@ const classifyCache = new Map<string, ClassifyRoutineResponse>();
 export async function classifyMessage(
   conversationId: string,
   content: string,
+  // Stop must reach the judge too: without a signal here, pressing Stop did
+  // nothing until the model itself started (Oskar, 2026-07-29).
+  signal?: AbortSignal,
 ): Promise<ClassifyRoutineResponse> {
   const key = `${conversationId}\n${content}`;
   const cached = classifyCache.get(key);
   if (cached) return cached;
   const verdict = await requestJson<ClassifyRoutineResponse>(
     `/v1/ask-vaenyx/conversations/${conversationId}/classify`,
-    { method: "POST", body: JSON.stringify({ content }) },
+    { method: "POST", body: JSON.stringify({ content }), ...(signal ? { signal } : {}) },
   );
   classifyCache.set(key, verdict);
   if (classifyCache.size > 200) {

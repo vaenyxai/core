@@ -1274,6 +1274,53 @@ function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
 // 2026-07-28): a dot on each object, a thin line to its name. One button on
 // the photo runs the vision engine the first time, then toggles the overlay;
 // the marks are stored server-side so a reopened chat still has them.
+// Where each label sits so none covers another (Oskar, 2026-07-29: overlapping
+// labels are unreadable). The dot never moves — it marks the thing. The label
+// goes to the nearer side and is pushed down the column until it clears the
+// one above it; a column that runs out of room wraps back to the top.
+const LABEL_ROW_HEIGHT = 7; // percent of the image, ≈ one label plus a gap
+
+function layoutLabels(
+  items: ImageAnnotationItem[],
+): { item: ImageAnnotationItem; labelX: number; labelY: number; toRight: boolean }[] {
+  const columns: Record<"left" | "right", number[]> = { left: [], right: [] };
+  return [...items]
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => a.item.y - b.item.y)
+    .map(({ item, index }) => {
+      const toRight = item.x < 55;
+      const side = toRight ? "right" : "left";
+      const taken = columns[side];
+      let labelY = Math.min(96, Math.max(3, item.y - 5));
+      let guard = 0;
+      while (
+        taken.some((used) => Math.abs(used - labelY) < LABEL_ROW_HEIGHT) &&
+        guard < 30
+      ) {
+        labelY += LABEL_ROW_HEIGHT;
+        if (labelY > 96) labelY = 3 + (guard % 3);
+        guard += 1;
+      }
+      taken.push(labelY);
+      return {
+        item,
+        index,
+        labelX: toRight
+          ? Math.min(item.x + 12, 96)
+          : Math.max(item.x - 12, 4),
+        labelY,
+        toRight,
+      };
+    })
+    .sort((a, b) => a.index - b.index)
+    .map(({ item, labelX, labelY, toRight }) => ({
+      item,
+      labelX,
+      labelY,
+      toRight,
+    }));
+}
+
 function AnnotatedPhoto({
   annotations,
   imageId,
@@ -1287,6 +1334,7 @@ function AnnotatedPhoto({
   const [overlayOn, setOverlayOn] = useState(true);
   const [zoomed, setZoomed] = useState(false);
   const items = annotations && annotations.length > 0 ? annotations : null;
+  const placed = items ? layoutLabels(items) : [];
 
   return (
     <div className="annotated-photo">
@@ -1311,50 +1359,35 @@ function AnnotatedPhoto({
             preserveAspectRatio="none"
             viewBox="0 0 100 100"
           >
-            {items.map((item, index) => {
-              const toRight = item.x < 55;
-              const labelX = toRight
-                ? Math.min(item.x + 12, 96)
-                : Math.max(item.x - 12, 4);
-              return (
-                <line
-                  key={index}
-                  vectorEffect="non-scaling-stroke"
-                  x1={item.x}
-                  x2={labelX}
-                  y1={item.y}
-                  y2={Math.max(item.y - 5, 2)}
-                />
-              );
-            })}
+            {placed.map(({ item, labelX, labelY }, index) => (
+              <line
+                key={index}
+                vectorEffect="non-scaling-stroke"
+                x1={item.x}
+                x2={labelX}
+                y1={item.y}
+                y2={labelY}
+              />
+            ))}
           </svg>
-          {items.map((item, index) => {
-            const toRight = item.x < 55;
-            const labelX = toRight
-              ? Math.min(item.x + 12, 96)
-              : Math.max(item.x - 12, 4);
-            return (
-              <span key={index}>
-                <span
-                  className="annotate-dot"
-                  style={{ left: `${item.x}%`, top: `${item.y}%` }}
-                />
-                <span
-                  className={
-                    toRight
-                      ? "annotate-label"
-                      : "annotate-label annotate-label--left"
-                  }
-                  style={{
-                    left: `${labelX}%`,
-                    top: `${Math.max(item.y - 5, 2)}%`,
-                  }}
-                >
-                  {item.name}
-                </span>
+          {placed.map(({ item, labelX, labelY, toRight }, index) => (
+            <span key={index}>
+              <span
+                className="annotate-dot"
+                style={{ left: `${item.x}%`, top: `${item.y}%` }}
+              />
+              <span
+                className={
+                  toRight
+                    ? "annotate-label"
+                    : "annotate-label annotate-label--left"
+                }
+                style={{ left: `${labelX}%`, top: `${labelY}%` }}
+              >
+                {item.name}
               </span>
-            );
-          })}
+            </span>
+          ))}
         </>
       ) : null}
       {/* The button exists ONLY when there is a layer to show or hide (Oskar,
@@ -1663,26 +1696,6 @@ function IconSpinner() {
     >
       <path d="M12 3a9 9 0 1 0 9 9" />
     </svg>
-  );
-}
-
-function IconSpeakerOn() {
-  return (
-    <LineIcon>
-      <path d="M11 5 6 9H3v6h3l5 4z" />
-      <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-      <path d="M18.5 6a9 9 0 0 1 0 12" />
-    </LineIcon>
-  );
-}
-
-function IconSpeakerOff() {
-  return (
-    <LineIcon>
-      <path d="M11 5 6 9H3v6h3l5 4z" />
-      <line x1="16" x2="21" y1="9" y2="14" />
-      <line x1="21" x2="16" y1="9" y2="14" />
-    </LineIcon>
   );
 }
 
@@ -6125,7 +6138,10 @@ function AskVaenyxPanel({
     setNewChatModelName(null);
     setNewChatEffort(null);
   }
-  const [voiceReplies, setVoiceReplies] = useState(voiceRepliesEnabled);
+  // Kept as a READ-ONLY preference: an Owner who turned always-read-aloud on
+  // in an older build still gets it, but there is no toggle any more (the rule
+  // is spoken in → spoken out, plus a speak button on every message).
+  const [voiceReplies] = useState(voiceRepliesEnabled);
   const [voiceOutput, setVoiceOutput] = useState<VoiceOutputStatus | null>(
     null,
   );
@@ -6152,18 +6168,6 @@ function AskVaenyxPanel({
     messageId: string;
     prewarm: SpeechPrewarm | null;
   } | null>(null);
-  function toggleVoiceReplies() {
-    setVoiceReplies((current) => {
-      const next = !current;
-      try {
-        window.localStorage.setItem(VOICE_REPLIES_KEY, next ? "1" : "0");
-      } catch {
-        // Persisting is best-effort.
-      }
-      if (!next) stopReplySpeech();
-      return next;
-    });
-  }
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(conversations[0]?.id ?? null);
@@ -6958,6 +6962,10 @@ function AskVaenyxPanel({
     let clarifyCreateQuestion: string | undefined;
     let drawPrompt: string | undefined;
     let annotateRide = false;
+    // ONE controller for the whole turn — judge included. Stop aborts this, so
+    // it bites immediately instead of waiting for the model to start.
+    const turnController = new AbortController();
+    streamControllerRef.current = turnController;
     // The FIRST message of a brand-new chat is exactly where people state what
     // they want ("daily AI news at 7am"), so it must be classified too. The
     // classifier needs a conversation to read history from, so create it first
@@ -7028,12 +7036,23 @@ function AskVaenyxPanel({
         );
       let verdict: Awaited<ReturnType<typeof classifyMessage>> | null = null;
       try {
-        verdict = await classifyMessage(classifyConversationId, content);
+        verdict = await classifyMessage(
+          classifyConversationId,
+          content,
+          // Stop must bite HERE too: the judge runs before any streaming, and
+          // without this the button did nothing until the model started
+          // talking (Oskar, 2026-07-29).
+          turnController.signal,
+        );
       } catch {
         // Best-effort: leave verdict null and fall through to a plain reply.
       }
       setStreamStatus(null);
       removePending();
+      if (turnController.signal.aborted) {
+        setSending(false);
+        return;
+      }
       if (verdict?.decision === "use-routine" && verdict.routineId) {
         try {
           await attachRoutineToChat(classifyConversationId, verdict.routineId);
@@ -7146,8 +7165,7 @@ function AskVaenyxPanel({
     setSending(true);
     setError(null);
     let createdConversationId: string | null = null;
-    const controller = new AbortController();
-    streamControllerRef.current = controller;
+    const controller = turnController;
     const tempOwnerId = `pending-owner-${crypto.randomUUID()}`;
     const tempAssistantId = `pending-assistant-${crypto.randomUUID()}`;
 
@@ -7266,6 +7284,16 @@ function AskVaenyxPanel({
           onStatus: (code) => setStreamStatus(code),
           onThinking: (text) =>
             setStreamThinking((current) => (current + text).slice(-4000)),
+          // The reply's photo arrives before its words: hang it on the
+          // pending bubble straight away.
+          onEchoImage: (echoId) =>
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === tempAssistantId
+                  ? { ...message, imageId: echoId }
+                  : message,
+              ),
+            ),
         },
         suggestRoutineId,
         suggestTask,
@@ -7565,13 +7593,21 @@ function AskVaenyxPanel({
   // Stop the in-flight streaming reply. A dropped connection no longer stops
   // generation (a locked phone must still get its reply), so Stop tells the
   // server explicitly, then closes the local stream.
+  // Stop means stop NOW (Oskar, 2026-07-29): the local turn is aborted first
+  // — judge, stream, everything on this controller — and the screen returns to
+  // idle in the same tick. Telling the server is best-effort and never
+  // something the Owner waits on.
   function stopStreaming() {
+    streamControllerRef.current?.abort();
+    setStreamStatus(null);
+    setStreamThinking("");
+    setSending(false);
+    setSendingTaskMessage(false);
     const key =
       sendingTaskMessage && focusedTaskId
         ? `task:${focusedTaskId}`
         : activeConversationId;
     if (key) void stopTurn(key).catch(() => undefined);
-    streamControllerRef.current?.abort();
   }
 
   async function startWork(event: FormEvent<HTMLFormElement>) {
@@ -8955,19 +8991,10 @@ function AskVaenyxPanel({
             <span aria-hidden="true" className="composer-sep">
               ·
             </span>
-            <button
-              aria-label="Voice replies"
-              className="composer-voice-toggle"
-              onClick={toggleVoiceReplies}
-              title={
-                voiceReplies
-                  ? "Voice replies on — finished answers are read aloud"
-                  : "Voice replies off"
-              }
-              type="button"
-            >
-              {voiceReplies ? <IconSpeakerOn /> : <IconSpeakerOff />}
-            </button>
+            {/* (The always-read-aloud toggle used to live here. It was a
+                crossed-out speaker nobody could read, and it contradicts the
+                rule that replaced it: spoken in → spoken out, plus a speak
+                button on every message. Removed 2026-07-29.) */}
           </div>
           <p className="composer-disclaimer">
             {t("legal.disclaimer.aiGeneral.composer")}

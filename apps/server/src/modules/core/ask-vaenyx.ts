@@ -706,6 +706,11 @@ export interface CreateAskVaenyxMessageOptions {
   // thinking where the backend exposes it. Both vanish when the reply lands.
   onStatus?: (code: string) => void;
   onThinking?: (text: string) => void;
+  // The analysed photo, handed to the client the moment the turn knows it will
+  // echo it — long before the reply is written. Without this the picture only
+  // appeared when the whole answer landed, so it showed up last despite
+  // sitting first (Oskar, 2026-07-29).
+  onEchoImage?: (imageId: string) => void;
   // Where stored photos live (needed to build the data URL for the model).
   dataDirectory?: string;
   // Where the model keys live. Needed so a photo can still be READ when the
@@ -1054,6 +1059,9 @@ export async function createAskVaenyxMessage(
     if (options?.imageId && options.dataDirectory && options.secretsDirectory) {
       echoImageId = options.imageId;
       const photoId = options.imageId;
+      // Tell the client NOW: the picture appears with the first words, not
+      // after them.
+      options.onEchoImage?.(photoId);
       const found = readImage(options.dataDirectory, photoId);
       const secrets = options.secretsDirectory;
       if (found) {

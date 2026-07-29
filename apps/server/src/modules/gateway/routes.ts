@@ -835,6 +835,9 @@ export async function registerGatewayRoutes(
         // the reply lands.
         onStatus: (code) => send("status", { code }),
         onThinking: (text) => send("thinking", { text }),
+        // The analysed photo, echoed into the reply as soon as the turn knows
+        // about it — so it is there with the first words, not after the last.
+        onEchoImage: (imageId) => send("photo", { imageId }),
         signal: controller.signal,
       });
       audit(response);
