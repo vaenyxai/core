@@ -43,6 +43,10 @@
 
   color: var(--text);
   background: var(--bg);
+  /* Every theme is dark, so NATIVE widgets must be too: without this the
+     browser paints select dropdowns/scrollbars in light mode ("深色theme
+     所有东西都深色", Oskar 2026-07-29). */
+  color-scheme: dark;
   font-family:
     ui-sans-serif,
     system-ui,

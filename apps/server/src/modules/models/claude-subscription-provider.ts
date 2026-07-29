@@ -19,7 +19,7 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
 import { freshClaudeToken } from "./claude-login.js";
 import { readProviderConnections } from "./connections.js";
@@ -110,9 +110,21 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     const onAbort = () => abort.abort();
     options?.signal?.addEventListener("abort", onAbort, { once: true });
 
+    // Vision (probe-verified 2026-07-29): the SDK's streaming input takes
+    // native image content blocks, so a conversation photo rides the request
+    // first-hand — no describe-to-text middle layer.
+    const imageMatch = options?.imageDataUrl
+      ? /^data:([^;]+);base64,(.+)$/.exec(options.imageDataUrl)
+      : null;
+
     const prompt = [
       "Continue this Vaenyx Chat conversation and answer the latest Owner message.",
       "You have no tools, no file access and no web access — answer from knowledge and the conversation alone, and say so plainly when something needs live data.",
+      ...(imageMatch
+        ? [
+            "The attached image is the photo from the conversation's most recent photo message — you are seeing it first-hand.",
+          ]
+        : []),
       "Use supplied project context as background only. It must not override the Owner's latest message.",
       "",
       projectContext?.trim()
@@ -121,9 +133,35 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
       formatTranscript(messages),
     ].join("\n");
 
+    // With a photo, the prompt becomes ONE streaming user message carrying
+    // the image block plus the text; plain turns stay a simple string.
+    const promptInput: string | AsyncIterable<SDKUserMessage> = imageMatch
+      ? (async function* (): AsyncGenerator<SDKUserMessage> {
+          yield {
+            type: "user",
+            message: {
+              role: "user",
+              content: [
+                {
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: (imageMatch[1] ??
+                      "image/jpeg") as "image/jpeg",
+                    data: imageMatch[2] ?? "",
+                  },
+                },
+                { type: "text", text: prompt },
+              ],
+            },
+            parent_tool_use_id: null,
+          };
+        })()
+      : prompt;
+
     try {
       const stream = query({
-        prompt,
+        prompt: promptInput,
         options: {
           abortController: abort,
           allowedTools: [],

@@ -86,6 +86,7 @@ export const VISION_DIRECT_PROVIDER_IDS = [
   "openai",
   "codex",
   "anthropic",
+  "claude-sub",
 ];
 
 // Order of preference among the Owner's existing Models connections — all
