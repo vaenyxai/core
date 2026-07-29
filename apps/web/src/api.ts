@@ -435,6 +435,25 @@ export function connectModelProvider(
   );
 }
 
+// In-app Claude subscription sign-in: start returns the URL to open (any
+// device); after logging in, claude.com shows a code — submit it and the
+// server captures and stores the token itself.
+export function startClaudeLogin(): Promise<{ url: string }> {
+  return requestJson<{ url: string }>("/v1/models/claude-login/start", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function submitClaudeLoginCode(
+  code: string,
+): Promise<{ providers: ModelProviderInfo[] }> {
+  return requestJson<{ providers: ModelProviderInfo[] }>(
+    "/v1/models/claude-login/code",
+    { method: "POST", body: JSON.stringify({ code }) },
+  );
+}
+
 export function disconnectModelProvider(
   id: string,
 ): Promise<{ providers: ModelProviderInfo[] }> {

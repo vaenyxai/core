@@ -162,6 +162,8 @@ import {
   setImageEngineChoice,
   annotatePhoto,
   saveAnnotations,
+  startClaudeLogin,
+  submitClaudeLoginCode,
   describePhoto,
   uploadPhoto,
   type VisionStatus,
@@ -10113,6 +10115,42 @@ function ModelsPanel() {
   const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(
     null,
   );
+  // In-app Claude subscription sign-in: the URL to open, and the code the
+  // Owner pastes back from claude.com. The token never reaches the browser.
+  const [claudeLoginUrl, setClaudeLoginUrl] = useState<string | null>(null);
+  const [claudeLoginCode, setClaudeLoginCode] = useState("");
+
+  async function beginClaudeLogin() {
+    setBusy("claude-sub");
+    setError(null);
+    try {
+      const { url } = await startClaudeLogin();
+      setClaudeLoginUrl(url);
+    } catch {
+      // requestJson already raised the toast with the server's reason.
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function finishClaudeLogin() {
+    setBusy("claude-sub");
+    setError(null);
+    try {
+      const result = await submitClaudeLoginCode(claudeLoginCode.trim());
+      setProviders(result.providers);
+      setClaudeLoginUrl(null);
+      setClaudeLoginCode("");
+      setAddTargetId("");
+      setEditingId(null);
+    } catch {
+      // Toast already shown; keep the form open so they can restart.
+      setClaudeLoginUrl(null);
+      setClaudeLoginCode("");
+    } finally {
+      setBusy(null);
+    }
+  }
   // A sign-in-page model button parked a connect intent: open that provider's
   // add form once, then clear the intent so later visits open normally.
   const [connectTarget] = useState<string | null>(() =>
@@ -10239,6 +10277,81 @@ function ModelsPanel() {
   }
 
   function renderConnectForm(provider: ModelProviderInfo) {
+    // Claude subscription: a guided sign-in, not a paste-a-key form. One tap
+    // starts the official flow server-side; the Owner opens the link on any
+    // device, logs in, and pastes back the code claude.com shows. The token
+    // is captured and stored by the server — the Owner never sees it.
+    if (provider.id === "claude-sub") {
+      return (
+        <div className="model-connect-form">
+          <p className="library-note">
+            Uses your own Claude plan, subject to that plan's limits.
+          </p>
+          {claudeLoginUrl ? (
+            <>
+              <a
+                className="model-key-link"
+                href={claudeLoginUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                1. Open Claude Sign-In ↗
+              </a>
+              <p className="settings-card-copy text-faint">
+                2. Sign in, then copy the code the page shows and paste it
+                here:
+              </p>
+              <input
+                autoCapitalize="off"
+                autoComplete="off"
+                className="method-rename-input key-input"
+                onChange={(event) => setClaudeLoginCode(event.target.value)}
+                placeholder="Code from the sign-in page"
+                spellCheck={false}
+                type="text"
+                value={claudeLoginCode}
+              />
+            </>
+          ) : null}
+          <p className="context-disclaimer">
+            {t("legal.notice.modelConnect.cloud")}
+          </p>
+          <div className="model-card-actions">
+            {claudeLoginUrl ? (
+              <button
+                className="secondary-button"
+                disabled={busy === provider.id || !claudeLoginCode.trim()}
+                onClick={() => void finishClaudeLogin()}
+                type="button"
+              >
+                {busy === provider.id ? "Connecting…" : "3. Finish Sign-In"}
+              </button>
+            ) : (
+              <button
+                className="secondary-button"
+                disabled={busy === provider.id}
+                onClick={() => void beginClaudeLogin()}
+                type="button"
+              >
+                {busy === provider.id ? "Starting…" : "Sign In With Claude"}
+              </button>
+            )}
+            <button
+              className="text-button"
+              onClick={() => {
+                setClaudeLoginUrl(null);
+                setClaudeLoginCode("");
+                setEditingId(null);
+                setAddTargetId("");
+              }}
+              type="button"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
     const keyUrl = CONNECTABLE_MODELS.find(
       (model) => model.id === provider.id,
     )?.keyUrl;
@@ -14293,13 +14406,9 @@ const CONNECTABLE_MODELS: Array<{
 // almost always means the provider may use your data under its own terms —
 // the standard third-party notice still gates every connect.
 const MODEL_FREE_TIER_NOTES: Record<string, string> = {
-  // Wording rule (2026-07-29): NEVER a quota number for the Claude plan —
-  // the policy moved three times in four months, and a written number becomes
-  // a false statement on the next move. The npx form needs no install at all:
-  // every Vaenyx machine already has Node, and setup-token itself is a
-  // terminal-only flow (probed 2026-07-29 — it cannot be driven in-app).
-  "claude-sub":
-    "Uses your own Claude plan, subject to that plan's limits. On the computer where Vaenyx runs, open a terminal and run: npx -y @anthropic-ai/claude-code setup-token — sign in when the browser opens, then paste the token it prints below. Nothing needs installing first.",
+  // (claude-sub has no entry here on purpose: its connect card is the guided
+  // in-app sign-in, and its usage is the Owner's own plan, never a free tier.
+  // Wording rule 2026-07-29: no quota numbers for the Claude plan, anywhere.)
   gemini: "Free tier: ~1,500 requests/day via Google AI Studio, no card needed.",
   groq: "Free tier: ~1,000 requests/day, very fast responses. No card needed.",
   cerebras: "Free tier: ~1M tokens/day, fastest responses. No card needed.",

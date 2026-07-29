@@ -399,6 +399,11 @@ import {
   setDefaultModelProvider,
 } from "../models/provider-settings.js";
 import {
+  cancelClaudeLogin,
+  startClaudeLogin,
+  submitClaudeLoginCode,
+} from "../models/claude-login.js";
+import {
   createProjectMemory,
   deleteProjectMemory,
   listProjectMemories,
@@ -1312,6 +1317,93 @@ export async function registerGatewayRoutes(
         action: "model.provider.disconnect",
         decision: "allowed",
         reason: `Owner disconnected model provider "${request.params.id}".`,
+        resourceType: "system",
+      });
+      return { providers: listModelProviders(context.config.secretsDirectory) };
+    },
+  );
+
+  // In-app Claude subscription sign-in: the server drives the official
+  // setup-token flow under a pty. Start returns the sign-in URL for the UI;
+  // the Owner logs in on any device, claude.com shows a code, and the code
+  // endpoint feeds it back and saves the captured token as the connection.
+  app.post(
+    "/v1/models/claude-login/start",
+    {
+      schema: {
+        response: {
+          401: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        const { url } = await startClaudeLogin();
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "model.provider.connect",
+          decision: "allowed",
+          reason: "Owner started the Claude subscription sign-in.",
+          resourceType: "system",
+        });
+        return { url };
+      } catch {
+        cancelClaudeLogin();
+        return reply.code(502).send({
+          error: "The Claude sign-in could not be started. Try again.",
+        });
+      }
+    },
+  );
+
+  app.post<{ Body: { code: string } }>(
+    "/v1/models/claude-login/code",
+    {
+      schema: {
+        body: Type.Object(
+          { code: Type.String({ minLength: 1, maxLength: 400 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: ModelProvidersResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        await submitClaudeLoginCode(
+          { secretsDirectory: context.config.secretsDirectory },
+          request.body.code,
+        );
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        return reply.code(400).send({
+          error:
+            code === "CLAUDE_LOGIN_NOT_STARTED"
+              ? "The sign-in expired — press Sign In With Claude again."
+              : "That code was not accepted. Start the sign-in again and paste the fresh code.",
+        });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "model.provider.connect",
+        decision: "allowed",
+        reason: "Owner connected the Claude subscription channel.",
         resourceType: "system",
       });
       return { providers: listModelProviders(context.config.secretsDirectory) };
