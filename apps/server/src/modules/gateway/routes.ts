@@ -64,6 +64,7 @@ import {
   SaveAnnotationsRequestSchema,
   type SaveAnnotationsRequest,
   type ImageAnnotationItem,
+  DocumentUploadResponseSchema,
   type SubscribePushRequest,
   type UnsubscribePushRequest,
   type ConnectVoiceRequest,
@@ -275,6 +276,13 @@ import {
   saveImage,
   setVisionEngine,
 } from "../core/vision.js";
+import {
+  DOCUMENT_GATE_PAGES,
+  MAX_DOCUMENT_BYTES,
+  MAX_DOCUMENT_PAGES,
+  inspectDocument,
+  saveDocument,
+} from "../core/documents.js";
 import {
   createMode,
   deleteMode,
@@ -2905,6 +2913,15 @@ export async function registerGatewayRoutes(
                 ? { imagePrompt: request.body.imagePrompt }
                 : {}),
               ...(request.body.annotate ? { annotate: true } : {}),
+              ...(request.body.documentId
+                ? { documentId: request.body.documentId }
+                : {}),
+              ...(request.body.documentName
+                ? { documentName: request.body.documentName }
+                : {}),
+              ...(request.body.documentAcknowledged
+                ? { documentAcknowledged: true }
+                : {}),
               dataDirectory: context.config.dataDirectory,
               secretsDirectory: context.config.secretsDirectory,
             },
@@ -4231,6 +4248,7 @@ export async function registerGatewayRoutes(
       "image/jpeg",
       "image/png",
       "image/webp",
+      "application/pdf",
       "application/octet-stream",
     ],
     { parseAs: "buffer" },
@@ -5407,6 +5425,76 @@ export async function registerGatewayRoutes(
           error: "The photo could not be marked. Try again.",
         });
       }
+    },
+  );
+
+  // Document Reading: store a PDF and report the facts the M1 cost gate needs
+  // — above all its REAL page count. Every refusal says what is actually
+  // wrong (too big, too many pages, password-protected, unreadable), because
+  // "something went wrong" is not something an Owner can act on.
+  app.post(
+    "/v1/documents/upload",
+    {
+      bodyLimit: MAX_DOCUMENT_BYTES + 1024,
+      schema: {
+        response: {
+          200: DocumentUploadResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          413: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const file = request.body as Buffer | undefined;
+      if (!file || !Buffer.isBuffer(file) || file.length === 0) {
+        return reply.code(400).send({ error: "No document received." });
+      }
+      const rawName = request.headers["x-document-name"];
+      const name = (
+        typeof rawName === "string" && rawName.trim()
+          ? decodeURIComponent(rawName).trim()
+          : "document.pdf"
+      ).slice(0, 200);
+
+      let pages: number;
+      try {
+        pages = (await inspectDocument(file)).pages;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        if (code === "DOCUMENT_TOO_LARGE") {
+          return reply.code(413).send({
+            error: `That file is larger than ${Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024))} MB, which is the most a model will take in one request. Split it and send the part you need.`,
+          });
+        }
+        if (code === "DOCUMENT_TOO_MANY_PAGES") {
+          return reply.code(400).send({
+            error: `That document has more than ${MAX_DOCUMENT_PAGES} pages, which is more than a model will read in one request. Split it and send the pages you need.`,
+          });
+        }
+        if (code === "DOCUMENT_PASSWORD") {
+          return reply.code(400).send({
+            error:
+              "That PDF is password-protected, so it cannot be opened. Save an unlocked copy and send that.",
+          });
+        }
+        return reply.code(400).send({
+          error:
+            "That file could not be read as a PDF. If it opens in a PDF viewer, try re-saving it and sending the new copy.",
+        });
+      }
+
+      const documentId = saveDocument(context.config.dataDirectory, file);
+      return {
+        documentId,
+        name,
+        pages,
+        needsCostGate: pages >= DOCUMENT_GATE_PAGES,
+      };
     },
   );
 

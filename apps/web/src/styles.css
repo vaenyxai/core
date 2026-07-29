@@ -1181,6 +1181,80 @@ textarea::placeholder {
   min-height: 34px;
 }
 
+/* An attached document: a file chip in the composer and in the message. */
+.composer-document,
+.message-document {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  font-size: var(--fs-label);
+}
+
+.composer-document {
+  position: relative;
+  padding-right: 30px;
+}
+
+.composer-document-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.composer-document-remove {
+  position: static;
+  margin-left: 2px;
+}
+
+/* M1 — the document cost gate. Full-screen and blocking: the Owner asked for
+   it to be impossible to miss, and it is their money being spent. */
+.document-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.document-gate-card {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-raised);
+}
+
+.document-gate-card h2 {
+  margin: 4px 0 14px;
+  font-size: var(--fs-xl);
+  overflow-wrap: anywhere;
+}
+
+.document-gate-copy {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.document-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 /* A Routine's tool status, said out loud: needs setup (with the jump) or
    "Vaenyx does not have this tool yet" (with the suggestion channel). */
 .tool-notices {

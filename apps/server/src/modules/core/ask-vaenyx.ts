@@ -23,6 +23,13 @@ import {
   looksLikeImageRequest,
 } from "./image-gen.js";
 import {
+  DOCUMENT_GATE_PAGES,
+  DOCUMENT_NATIVE_PROVIDER_IDS,
+  extractDocumentText,
+  inspectDocument,
+  readDocument,
+} from "./documents.js";
+import {
   annotateImage,
   describeImage,
   imageDataUrl,
@@ -60,6 +67,9 @@ interface AskVaenyxMessageRow {
   image_id: string | null;
   image_prompt: string | null;
   image_annotations: string | null;
+  document_id: string | null;
+  document_name: string | null;
+  document_pages: number | null;
 }
 
 interface ConversationThreadContextRow {
@@ -259,6 +269,9 @@ function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
     imageId: row.image_id ?? null,
     imagePrompt: row.image_prompt ?? null,
     imageAnnotations: parseAnnotations(row.image_annotations),
+    documentId: row.document_id ?? null,
+    documentName: row.document_name ?? null,
+    documentPages: row.document_pages ?? null,
   };
 }
 
@@ -639,7 +652,8 @@ export function listAskVaenyxMessages(
     .prepare(
       `SELECT m.id, m.conversation_id, m.role, m.content, m.status,
               m.web_search_used, m.created_at, m.voice, m.audio_id, m.image_id,
-              m.image_prompt, a.items AS image_annotations
+              m.image_prompt, m.document_id, m.document_name, m.document_pages,
+              a.items AS image_annotations
        FROM ask_vaenyx_messages m
        LEFT JOIN image_annotations a ON a.image_id = m.image_id
        WHERE m.conversation_id = ?
@@ -680,6 +694,13 @@ export interface CreateAskVaenyxMessageOptions {
   // annotate verdict from the same judge: mark the conversation's latest photo
   // (dots + names) before replying.
   annotate?: boolean;
+  // A PDF fed with this message, and the Owner's answer to the M1 cost gate.
+  // The gate is enforced HERE as well as in the UI: a document at or above the
+  // threshold without an acknowledgement is refused, so a modified client
+  // cannot spend the Owner's model quota without telling them first.
+  documentId?: string;
+  documentName?: string;
+  documentAcknowledged?: boolean;
   // Live progress for the Owner (Oskar, 2026-07-27): what the turn is doing
   // while nothing is streaming yet ("image-generating"…), and the model's own
   // thinking where the backend exposes it. Both vanish when the reply lands.
@@ -741,11 +762,26 @@ export async function createAskVaenyxMessage(
   const ownerMessageId = randomUUID();
   const trimmedContent = content.trim();
 
+  // The M1 cost gate, enforced server-side: a document at or above the page
+  // threshold cannot be read until the Owner has answered the gate. The money
+  // is theirs, so the rule cannot live only in the screen they were shown.
+  let documentPages: number | null = null;
+  if (options?.documentId && options.dataDirectory) {
+    const file = readDocument(options.dataDirectory, options.documentId);
+    if (!file) throw new Error("DOCUMENT_NOT_FOUND");
+    const facts = await inspectDocument(file);
+    documentPages = facts.pages;
+    if (facts.pages >= DOCUMENT_GATE_PAGES && !options.documentAcknowledged) {
+      throw new Error("DOCUMENT_COST_NOT_ACKNOWLEDGED");
+    }
+  }
+
   database.sqlite
     .prepare(
       `INSERT INTO ask_vaenyx_messages (
-        id, conversation_id, role, content, status, web_search_used, created_at, voice, audio_id, image_id
-      ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?)`,
+        id, conversation_id, role, content, status, web_search_used, created_at,
+        voice, audio_id, image_id, document_id, document_name, document_pages
+      ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       ownerMessageId,
@@ -755,6 +791,9 @@ export async function createAskVaenyxMessage(
       options?.voiceAudioId ? 1 : 0,
       options?.voiceAudioId ?? null,
       options?.imageId ?? null,
+      options?.documentId ?? null,
+      options?.documentName ?? null,
+      documentPages,
     );
 
   if (
@@ -886,6 +925,29 @@ export async function createAskVaenyxMessage(
       provider = localProvider;
     }
 
+    // A document fed to this turn. A backend that reads PDFs natively gets the
+    // FILE (every page as picture and text — the path M1 warns about); any
+    // other backend gets locally extracted text, which is cheaper and loses
+    // the drawings, so the gate's sentence is never shown for it.
+    let documentBase64: string | undefined;
+    let documentText = "";
+    if (options?.documentId && options.dataDirectory) {
+      const file = readDocument(options.dataDirectory, options.documentId);
+      if (file) {
+        if (DOCUMENT_NATIVE_PROVIDER_IDS.includes(provider.id)) {
+          documentBase64 = file.toString("base64");
+        } else {
+          try {
+            documentText = await extractDocumentText(file);
+          } catch {
+            // Unreadable here means the upload check already passed but the
+            // text layer is unusable (a scan): the reply says so plainly.
+            documentText = "";
+          }
+        }
+      }
+    }
+
     // Long-conversation memory (Oskar, 2026-07-29): what has aged out of the
     // message window rides along as a rolling summary, so a long thread stops
     // forgetting its own beginning. Regenerated only when enough new messages
@@ -901,8 +963,14 @@ export async function createAskVaenyxMessage(
     // the long-term memory layer: it rides every chat, so something learned
     // once does not have to be repeated in each new conversation.
     const ownerProfile = formatVaenyxMeContext(database);
+    const documentContext = documentText
+      ? [
+          `The Owner attached a document${options?.documentName ? ` (${options.documentName})` : ""}. This backend cannot read PDFs directly, so its TEXT was extracted locally — drawings, tables and layout are not visible to you. Say so if the answer would depend on them.`,
+          documentText.slice(0, 120_000),
+        ].join("\n")
+      : null;
     projectContext =
-      [historySummary, ownerProfile, projectContext]
+      [historySummary, ownerProfile, projectContext, documentContext]
         .filter((part): part is string => Boolean(part && part.trim()))
         .join("\n\n") || undefined;
 
@@ -1135,6 +1203,10 @@ export async function createAskVaenyxMessage(
       ...(settingsRow?.model_name ? { model: settingsRow.model_name } : {}),
       ...(imageAttachment ? { imageDataUrl: imageAttachment } : {}),
       ...(imageAttachmentPath ? { imagePath: imageAttachmentPath } : {}),
+      ...(documentBase64 ? { documentBase64 } : {}),
+      ...(options?.documentName
+        ? { documentName: options.documentName }
+        : {}),
     });
     assistantContent = result.answer;
     assistantStatus = "completed";

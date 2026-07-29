@@ -1246,6 +1246,11 @@ export interface RunAskVaenyxOptions {
   // input item with a path, so the main model sees the picture first-hand —
   // no describe-to-text middle layer.
   imagePath?: string;
+  // A PDF the Owner fed to this turn, base64 with its media type. Only the
+  // backends that read documents natively use it (Claude); the rest ignore it
+  // and the caller falls back to extracted text.
+  documentBase64?: string;
+  documentName?: string;
 }
 
 export async function runAskVaenyxChat(

@@ -161,6 +161,7 @@ import {
   fetchImageEngine,
   setImageEngineChoice,
   saveAnnotations,
+  uploadDocument,
   startClaudeLogin,
   submitClaudeLoginCode,
   describePhoto,
@@ -966,6 +967,16 @@ function IconAlbum() {
       <rect height="14" rx="2" width="16" x="4" y="5" />
       <circle cx="9" cy="10" r="1.5" />
       <path d="m5 17 4.5-4.5 3 3L16 12l4 4" />
+    </LineIcon>
+  );
+}
+
+// A document (PDF) attachment: a page with a folded corner.
+function IconDocument() {
+  return (
+    <LineIcon>
+      <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" />
+      <path d="M14 3v4h4" />
     </LineIcon>
   );
 }
@@ -2049,6 +2060,61 @@ interface SpeechPrewarm {
   promise: Promise<{ audioId: string }>;
 }
 
+// Attach a PDF ("Document Reading", Oskar 2026-07-29). The upload happens on
+// pick so the REAL page count is known before anything is spent — that number
+// is what the M1 cost gate names. Every refusal (too big, too many pages,
+// password-protected, not a readable PDF) comes back from the server in words
+// the Owner can act on.
+function DocumentButton({
+  disabled,
+  onPicked,
+}: {
+  disabled?: boolean;
+  onPicked: (document: {
+    documentId: string;
+    name: string;
+    pages: number;
+    needsCostGate: boolean;
+  }) => void;
+}) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <>
+      <input
+        accept="application/pdf,.pdf"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          void uploadDocument(file)
+            .then(onPicked)
+            .catch(() => {
+              // uploadDocument already raised the toast with the reason.
+            })
+            .finally(() => setBusy(false));
+        }}
+        ref={inputRef}
+        type="file"
+      />
+      <button
+        aria-label={t("document.add")}
+        className={`mic-button${busy ? " mic-button--busy" : ""}`}
+        disabled={disabled || busy}
+        onClick={() => inputRef.current?.click()}
+        title={t("document.add")}
+        type="button"
+      >
+        {busy ? <IconSpinner /> : <IconDocument />}
+      </button>
+    </>
+  );
+}
+
 // Push-to-talk mic: tap to record, tap again to stop; the utterance goes to the
 // local server, which forwards it to the connected voice engine (Groq Whisper)
 // and hands back text. Rendered only when a voice connection exists.
@@ -3071,13 +3137,20 @@ function ToolsPanel() {
           </p>
           <span className="library-chip chip-published">Always On</span>
         </div>
+        <div className="engine-row">
+          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
+            Document Reading — send a PDF the way you send a photo. A long
+            document costs real money on your own model connection, so Vaenyx
+            shows you its page count and asks first.
+          </p>
+          <span className="library-chip chip-published">Always On</span>
+        </div>
       </section>
 
       <section className="engine-section">
         <h3 className="settings-subhead">Coming Soon</h3>
         {[
           "Calendar & Reminders — Routines that know your family's schedule.",
-          "Document Reading — feed a PDF or file the way you feed a photo.",
           "Web Page Reading — hand Vaenyx a link instead of pasting text.",
           "Weather — local conditions for planning Routines.",
           "Smart Home — read and act on devices you approve, one by one.",
@@ -6006,6 +6079,20 @@ function AskVaenyxPanel({
     setPendingPhotoPreview(null);
     pendingUploadRef.current = null;
   }
+  // A PDF waiting to ride the next message, and the M1 cost gate it may have
+  // to pass first. acknowledged is the Owner's answer — the server refuses a
+  // gated document without it, so the gate is not just a screen.
+  const [pendingDocument, setPendingDocument] = useState<{
+    documentId: string;
+    name: string;
+    pages: number;
+    acknowledged: boolean;
+  } | null>(null);
+  const [documentGate, setDocumentGate] = useState<{
+    documentId: string;
+    name: string;
+    pages: number;
+  } | null>(null);
   // New-chat model choice (dev.156): picked before the conversation exists,
   // applied the moment it is created so the very first turn uses it.
   const [newChatProviderId, setNewChatProviderId] = useState<string | null>(
@@ -6838,11 +6925,13 @@ function AskVaenyxPanel({
         // Upload failed: the toast already said so; send goes on without it.
       }
     }
+    const document = pendingDocument;
     if (!content.trim()) {
-      if (!imageId) return;
-      content = "(Photo)";
+      if (!imageId && !document) return;
+      content = document ? `(Document: ${document.name})` : "(Photo)";
     }
     clearPendingPhoto();
+    setPendingDocument(null);
     if (activeThread?.routineId && activeConversationId) {
       await runRoutineMessage(
         activeConversationId,
@@ -7186,6 +7275,13 @@ function AskVaenyxPanel({
         imageId,
         drawPrompt,
         annotateRide,
+        document
+          ? {
+              documentId: document.documentId,
+              name: document.name,
+              acknowledged: document.acknowledged,
+            }
+          : undefined,
       );
 
       // Voice replies: spoken in → spoken out ("我输入是语音,你的输出才是
@@ -7303,7 +7399,14 @@ function AskVaenyxPanel({
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = prompt.trim();
-    if (!content && !pendingImageId && !pendingPhotoPreview) return;
+    if (
+      !content &&
+      !pendingImageId &&
+      !pendingPhotoPreview &&
+      !pendingDocument
+    ) {
+      return;
+    }
 
     await sendChatContent(content);
   }
@@ -8098,6 +8201,51 @@ function AskVaenyxPanel({
           </Modal>
         ) : null}
 
+        {/* M1 — the document cost gate. Full-screen and blocking, never a
+            toast and never small print (private + Oskar: it has to be
+            impossible to miss). The page count is the file's REAL count, and
+            neither choice is preselected. */}
+        {documentGate ? (
+          <div className="document-gate" role="dialog" aria-modal="true">
+            <div className="document-gate-card">
+              <p className="eyebrow">{t("document.gate.title")}</p>
+              <h2>{documentGate.name}</h2>
+              {t("legal.gate.document.pageCost")
+                .replace("{n}", String(documentGate.pages))
+                .split("\n\n")
+                .map((paragraph, index) => (
+                  <p className="document-gate-copy" key={index}>
+                    {paragraph.replace(/\*\*/g, "")}
+                  </p>
+                ))}
+              <div className="document-gate-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setPendingDocument({
+                      documentId: documentGate.documentId,
+                      name: documentGate.name,
+                      pages: documentGate.pages,
+                      acknowledged: true,
+                    });
+                    setDocumentGate(null);
+                  }}
+                  type="button"
+                >
+                  {t("document.gate.read")}
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => setDocumentGate(null)}
+                  type="button"
+                >
+                  {t("document.gate.cancel")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {routineInputConfirm ? (
           <Modal
             onClose={() => setRoutineInputConfirm(null)}
@@ -8423,6 +8571,22 @@ function AskVaenyxPanel({
                 <div className="ask-vaenyx-message-head">
                   <strong>{message.role === "owner" ? "You" : agentName}</strong>
                 </div>
+                {message.documentId ? (
+                  <div className="message-document">
+                    <IconDocument />
+                    <span className="composer-document-name">
+                      {message.documentName ?? "document.pdf"}
+                    </span>
+                    {message.documentPages ? (
+                      <span className="text-faint">
+                        {t("document.pages").replace(
+                          "{n}",
+                          String(message.documentPages),
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 {message.imageId ? (
                   <AnnotatedPhoto
                     annotations={message.imageAnnotations ?? null}
@@ -8526,6 +8690,28 @@ function AskVaenyxPanel({
         ) : null}
 
         <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
+          {pendingDocument ? (
+            <div className="composer-document">
+              <IconDocument />
+              <span className="composer-document-name">
+                {pendingDocument.name}
+              </span>
+              <span className="text-faint">
+                {t("document.pages").replace(
+                  "{n}",
+                  String(pendingDocument.pages),
+                )}
+              </span>
+              <button
+                aria-label="Remove document"
+                className="composer-attachment-remove composer-document-remove"
+                onClick={() => setPendingDocument(null)}
+                type="button"
+              >
+                <IconX />
+              </button>
+            </div>
+          ) : null}
           {pendingPhotoPreview || pendingImageId ? (
             <div className="composer-attachment">
               <img
@@ -8597,6 +8783,18 @@ function AskVaenyxPanel({
                 }}
               />
             ) : null}
+            <DocumentButton
+              disabled={sending}
+              onPicked={(picked) => {
+                if (picked.needsCostGate) {
+                  // The gate stands BEFORE the file is attached: nothing can
+                  // be sent, and nothing spent, until it is answered.
+                  setDocumentGate(picked);
+                  return;
+                }
+                setPendingDocument({ ...picked, acknowledged: false });
+              }}
+            />
             {voiceReady ? (
               <MicButton
                 disabled={sending}

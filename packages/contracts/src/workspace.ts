@@ -307,6 +307,25 @@ export const AskVaenyxMessageSchema = Type.Object(
     imageAnnotations: Type.Optional(
       Type.Union([Type.Array(ImageAnnotationItemSchema), Type.Null()]),
     ),
+    // A document (PDF) fed with this message: shown as a file chip with its
+    // name and page count, the way a photo is shown as a photo.
+    documentId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    documentName: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    documentPages: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
+  },
+  { additionalProperties: false },
+);
+
+// What the app learns about an uploaded document before anything is spent —
+// the page count is what the M1 cost gate names.
+export const DocumentUploadResponseSchema = Type.Object(
+  {
+    documentId: Type.String(),
+    name: Type.String(),
+    pages: Type.Integer(),
+    // True when the page count is at or above the gate threshold, so the
+    // client must show the M1 gate and send its acknowledgement.
+    needsCostGate: Type.Boolean(),
   },
   { additionalProperties: false },
 );
@@ -355,6 +374,12 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     // annotate verdict: the classifier judged this message as asking for the
     // conversation's photo to be marked — the turn marks it before replying.
     annotate: Type.Optional(Type.Boolean()),
+    // A document fed with this message. documentAcknowledged is the Owner's
+    // answer to the M1 cost gate; the server refuses a gated document without
+    // it, so a modified client cannot spend their money silently.
+    documentId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    documentName: Type.Optional(Type.String({ maxLength: 200 })),
+    documentAcknowledged: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
@@ -2248,6 +2273,9 @@ export type ImageAnnotationItem = Static<typeof ImageAnnotationItemSchema>;
 export type AnnotateImageRequest = Static<typeof AnnotateImageRequestSchema>;
 export type AnnotateImageResponse = Static<typeof AnnotateImageResponseSchema>;
 export type SaveAnnotationsRequest = Static<typeof SaveAnnotationsRequestSchema>;
+export type DocumentUploadResponse = Static<
+  typeof DocumentUploadResponseSchema
+>;
 export type AuditEvent = Static<typeof AuditEventSchema>;
 export type AgentProfile = Static<typeof AgentProfileSchema>;
 export type AppAskRequest = Static<typeof AppAskRequestSchema>;

@@ -253,6 +253,16 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "photo.marks.make": "Mark Items",
     "photo.marks.hide": "Hide Marks",
     "photo.marks.show": "Show Marks",
+    "document.add": "Add a document",
+    "document.pages": "{n} pages",
+    "document.gate.title": "Before this is read",
+    "document.gate.read": "Read the whole file",
+    "document.gate.cancel": "Not now",
+    // Copy pack M1, verbatim. {n} is replaced with the file's REAL page count
+    // — never a placeholder, never a guess: naming the file in front of them
+    // is the whole point of the gate.
+    "legal.gate.document.pageCost":
+      "This file has {n} pages. Every page is read as a picture as well as text, so a document this size can cost more in a single question than hundreds of ordinary chats. That cost is yours — it goes through the model connection you set up.\n\nIf you only need part of it, split the file and send just those pages. It costs a fraction, and the answer is usually better, because the model isn't looking through pages you didn't ask about.",
     "marks.add": "+ Add Mark",
     "marks.addCancel": "Cancel Adding",
     "marks.addHint": "Tap the photo where the new mark goes.",
@@ -563,6 +573,13 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "photo.marks.make": "标注物品",
     "photo.marks.hide": "隐藏标注",
     "photo.marks.show": "显示标注",
+    "document.add": "添加文档",
+    "document.pages": "{n} 页",
+    "document.gate.title": "读取之前",
+    "document.gate.read": "读取整份文件",
+    "document.gate.cancel": "先不要",
+    "legal.gate.document.pageCost":
+      "这份文件有 {n} 页。**每一页都会被当成一张图来读**,不只是读文字 —— 所以这么厚的文件,问一次的花费可能超过几百次普通对话。这笔钱是你的:它走你自己配置的模型连接。\n\n如果你只需要其中一部分,**把文件拆开,只发那几页**。花费只是零头,而且答案通常更准 —— 模型不用在你没问的页里翻。",
     "marks.add": "+ 添加标注",
     "marks.addCancel": "取消添加",
     "marks.addHint": "在照片上点一下要标的位置。",

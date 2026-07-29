@@ -193,10 +193,13 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
 
     // Vision (probe-verified 2026-07-29): the SDK's streaming input takes
     // native image content blocks, so a conversation photo rides the request
-    // first-hand — no describe-to-text middle layer.
+    // first-hand — no describe-to-text middle layer. The same input takes a
+    // native PDF document block (also probe-verified), which is how a document
+    // gets read page-by-page as picture AND text.
     const imageMatch = options?.imageDataUrl
       ? /^data:([^;]+);base64,(.+)$/.exec(options.imageDataUrl)
       : null;
+    const documentBase64 = options?.documentBase64 ?? null;
 
     const prompt = [
       "Continue this Vaenyx Chat conversation and answer the latest Owner message.",
@@ -204,6 +207,11 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
       ...(imageMatch
         ? [
             "The attached image is the photo from the conversation's most recent photo message — you are seeing it first-hand.",
+          ]
+        : []),
+      ...(documentBase64
+        ? [
+            `The attached document${options?.documentName ? ` (${options.documentName})` : ""} is the file the Owner just sent — you are reading it first-hand, page by page. Cite page numbers when it helps.`,
           ]
         : []),
       "Use supplied project context as background only. It must not override the Owner's latest message.",
@@ -214,31 +222,43 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
       formatTranscript(messages),
     ].join("\n");
 
-    // With a photo, the prompt becomes ONE streaming user message carrying
-    // the image block plus the text; plain turns stay a simple string.
-    const promptInput: string | AsyncIterable<SDKUserMessage> = imageMatch
-      ? (async function* (): AsyncGenerator<SDKUserMessage> {
-          yield {
-            type: "user",
-            message: {
-              role: "user",
-              content: [
-                {
-                  type: "image",
-                  source: {
-                    type: "base64",
-                    media_type: (imageMatch[1] ??
-                      "image/jpeg") as "image/jpeg",
-                    data: imageMatch[2] ?? "",
-                  },
-                },
-                { type: "text", text: prompt },
-              ],
-            },
-            parent_tool_use_id: null,
-          };
-        })()
-      : prompt;
+    // With an attachment, the prompt becomes ONE streaming user message
+    // carrying the image and/or document block plus the text; plain turns stay
+    // a simple string.
+    const attachments: SDKUserMessage["message"]["content"] = [];
+    if (imageMatch) {
+      attachments.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: (imageMatch[1] ?? "image/jpeg") as "image/jpeg",
+          data: imageMatch[2] ?? "",
+        },
+      });
+    }
+    if (documentBase64) {
+      attachments.push({
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: "application/pdf",
+          data: documentBase64,
+        },
+      });
+    }
+    const promptInput: string | AsyncIterable<SDKUserMessage> =
+      attachments.length > 0
+        ? (async function* (): AsyncGenerator<SDKUserMessage> {
+            yield {
+              type: "user",
+              message: {
+                role: "user",
+                content: [...attachments, { type: "text", text: prompt }],
+              },
+              parent_tool_use_id: null,
+            };
+          })()
+        : prompt;
 
     try {
       const stream = query({

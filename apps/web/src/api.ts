@@ -496,6 +496,8 @@ async function streamMessageRequest(
   imageId?: string,
   imagePrompt?: string,
   annotate?: boolean,
+  // A PDF fed with this message, plus the Owner's answer to the M1 cost gate.
+  document?: { documentId: string; name: string; acknowledged: boolean },
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -514,6 +516,13 @@ async function streamMessageRequest(
       ...(imageId ? { imageId } : {}),
       ...(imagePrompt ? { imagePrompt } : {}),
       ...(annotate ? { annotate: true } : {}),
+      ...(document
+        ? {
+            documentId: document.documentId,
+            documentName: document.name,
+            ...(document.acknowledged ? { documentAcknowledged: true } : {}),
+          }
+        : {}),
     }),
     signal: callbacks.signal,
   });
@@ -590,6 +599,7 @@ export function streamAskVaenyxMessage(
   imageId?: string,
   imagePrompt?: string,
   annotate?: boolean,
+  document?: { documentId: string; name: string; acknowledged: boolean },
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -603,6 +613,7 @@ export function streamAskVaenyxMessage(
     imageId,
     imagePrompt,
     annotate,
+    document,
   );
 }
 
@@ -1130,6 +1141,43 @@ export function saveAnnotations(
     method: "PUT",
     body: JSON.stringify({ imageId, items }),
   });
+}
+
+// Document Reading: upload a PDF and learn its facts BEFORE anything is spent
+// — the page count is what the M1 cost gate names.
+export async function uploadDocument(file: File): Promise<{
+  documentId: string;
+  name: string;
+  pages: number;
+  needsCostGate: boolean;
+}> {
+  const response = await fetch("/v1/documents/upload", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "content-type": "application/pdf",
+      "x-document-name": encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    documentId?: string;
+    name?: string;
+    pages?: number;
+    needsCostGate?: boolean;
+    error?: string;
+  };
+  if (!response.ok || !body.documentId) {
+    const message = body.error ?? "That document could not be read.";
+    showErrorToast(message);
+    throw new Error(message);
+  }
+  return {
+    documentId: body.documentId,
+    name: body.name ?? file.name,
+    pages: body.pages ?? 0,
+    needsCostGate: body.needsCostGate ?? false,
+  };
 }
 
 export async function describePhoto(

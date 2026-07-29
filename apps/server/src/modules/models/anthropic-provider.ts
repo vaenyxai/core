@@ -54,27 +54,38 @@ export class AnthropicProvider implements ModelProvider {
       role: message.role === "owner" ? "user" : "assistant",
       content: message.content,
     }));
-    // Vision: Claude takes images as native content blocks, not OpenAI-style
-    // image_url. The photo rides on the LAST owner message as a block array.
+    // Vision and documents: Claude takes both as native content blocks, not
+    // OpenAI-style image_url. They ride on the LAST owner message as a block
+    // array — a PDF sent this way is read page by page, as picture AND text.
+    const attachmentBlocks: Record<string, unknown>[] = [];
     if (options?.imageDataUrl) {
       const match = /^data:([^;]+);base64,(.+)$/.exec(options.imageDataUrl);
       if (match) {
-        for (let index = apiMessages.length - 1; index >= 0; index -= 1) {
-          const entry = apiMessages[index];
-          if (entry && entry.role === "user") {
-            entry.content = [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: match[1],
-                  data: match[2],
-                },
-              },
-              { type: "text", text: String(entry.content ?? "") },
-            ];
-            break;
-          }
+        attachmentBlocks.push({
+          type: "image",
+          source: { type: "base64", media_type: match[1], data: match[2] },
+        });
+      }
+    }
+    if (options?.documentBase64) {
+      attachmentBlocks.push({
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: "application/pdf",
+          data: options.documentBase64,
+        },
+      });
+    }
+    if (attachmentBlocks.length > 0) {
+      for (let index = apiMessages.length - 1; index >= 0; index -= 1) {
+        const entry = apiMessages[index];
+        if (entry && entry.role === "user") {
+          entry.content = [
+            ...attachmentBlocks,
+            { type: "text", text: String(entry.content ?? "") },
+          ];
+          break;
         }
       }
     }
