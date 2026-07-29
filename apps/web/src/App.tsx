@@ -9951,36 +9951,47 @@ function SubscriptionDoorPanel() {
     <section className="settings-card">
       <p className="eyebrow">For your other apps</p>
       <h2>Subscription Door</h2>
-      <p className="settings-card-copy">
-        Lends your ChatGPT and Claude subscriptions to your own apps. They can
-        only reach it from inside your private network, so anyone else&apos;s
-        device simply cannot find it and falls back to a free model.
-      </p>
 
-      <label className="door-toggle">
+      <div className="door-switch">
+        <div>
+          <strong>{settings.enabled ? "Open" : "Closed"}</strong>
+          <p>
+            Lends your ChatGPT and Claude subscriptions to your own apps.
+            Reachable only from inside your private network.
+          </p>
+        </div>
         <input
           checked={settings.enabled}
+          className="door-toggle"
           onChange={(event) => void save({ enabled: event.target.checked })}
+          role="switch"
           type="checkbox"
         />
-        <span>{settings.enabled ? "Door is open" : "Door is closed"}</span>
-      </label>
+      </div>
 
-      <h3 className="settings-subhead">What is behind it</h3>
       {DOOR_ENGINES.map((engine) => {
         const state = health.engines.find((entry) => entry.id === engine.id);
         const result = results[engine.id];
         return (
           <div className="door-engine" key={engine.id}>
-            <div className="engine-row">
-              <div>
+            <div className="door-engine-head">
+              <div className="door-engine-name">
                 <strong>{engine.name}</strong>
-                <p className="text-faint">
+                <span
+                  className={state?.signedIn ? "door-state on" : "door-state"}
+                >
                   {state?.signedIn ? "Signed in" : "Not signed in"}
-                </p>
+                </span>
               </div>
+              {/* Three outcomes, never merged: it worked, it failed in the
+                  other side's own words, or we have not built that path. */}
+              {result ? (
+                <span className={`door-result ${result.status}`}>
+                  {result.status === "ok" ? "✓" : "✗"} {result.detail}
+                </span>
+              ) : null}
               <button
-                className="secondary-button"
+                className="door-test"
                 disabled={testing === engine.id}
                 onClick={() => void test(engine.id)}
                 type="button"
@@ -9988,57 +9999,33 @@ function SubscriptionDoorPanel() {
                 {testing === engine.id ? "Testing…" : "Test"}
               </button>
             </div>
-            {/* Three outcomes, never merged: it worked, it failed in the other
-                side's own words, or we have not built that path. */}
-            {result ? (
-              <p
-                className={
-                  result.status === "ok"
-                    ? "connection-test-result ok"
-                    : "connection-test-result failed"
-                }
-              >
-                {result.status === "ok" ? "✓ " : "✗ "}
-                {result.detail}
-              </p>
-            ) : null}
             <div className="door-capabilities">
-              {DOOR_CAPABILITIES.map((capability) => {
-                const offered = state?.capabilities.includes(
-                  capability.id as never,
-                );
-                return (
-                  <span
-                    className={offered ? "door-capability" : "door-capability off"}
-                    key={capability.id}
-                  >
-                    {offered ? "" : "— "}
-                    {capability.name}
-                    {offered ? "" : " (not offered)"}
-                  </span>
-                );
-              })}
+              {DOOR_CAPABILITIES.map((capability) => (
+                <span
+                  className={
+                    state?.capabilities.includes(capability.id as never)
+                      ? "door-capability"
+                      : "door-capability off"
+                  }
+                  key={capability.id}
+                >
+                  {capability.name}
+                </span>
+              ))}
             </div>
           </div>
         );
       })}
+      {/* Said once, in a line, instead of five times inside the chips. */}
+      <p className="door-legend">
+        Dimmed = not something these two subscriptions can do.
+      </p>
 
-      <h3 className="settings-subhead">Address to give an app</h3>
-      <div className="door-address">
-        <code>{loopback}</code>
-        <button
-          className="text-button"
-          onClick={() => void navigator.clipboard?.writeText(loopback)}
-          type="button"
-        >
-          Copy
-        </button>
-        <span className="text-faint">on this machine</span>
-      </div>
+      <h3 className="door-subhead">Address for your apps</h3>
       <div className="door-address">
         <code>{window.location.origin}</code>
         <button
-          className="text-button"
+          className="door-copy"
           onClick={() =>
             void navigator.clipboard?.writeText(window.location.origin)
           }
@@ -10046,47 +10033,62 @@ function SubscriptionDoorPanel() {
         >
           Copy
         </button>
-        <span className="text-faint">
-          the address this page was opened from
-        </span>
+        <span>use this one</span>
+      </div>
+      <div className="door-address">
+        <code>{loopback}</code>
+        <button
+          className="door-copy"
+          onClick={() => void navigator.clipboard?.writeText(loopback)}
+          type="button"
+        >
+          Copy
+        </button>
+        <span>on this machine only</span>
       </div>
 
-      <h3 className="settings-subhead">Who counts as you</h3>
-      <p className="settings-card-copy">
-        The subscriptions are yours personally. Only these signed-in addresses
-        get through; everyone else is refused and their app uses a free model.
-      </p>
-      <DoorList
-        items={settings.ownerEmails}
-        onChange={(ownerEmails) => void save({ ownerEmails })}
-        placeholder="name@company.com"
-        draft={emailDraft}
-        setDraft={setEmailDraft}
-      />
+      <h3 className="door-subhead">Who and where</h3>
+      <div className="door-field">
+        <span className="door-field-label">
+          Your addresses
+          <em>only these get in — everyone else falls back to a free model</em>
+        </span>
+        <DoorList
+          items={settings.ownerEmails}
+          onChange={(ownerEmails) => void save({ ownerEmails })}
+          placeholder="name@company.com"
+          draft={emailDraft}
+          setDraft={setEmailDraft}
+        />
+      </div>
+      <div className="door-field">
+        <span className="door-field-label">
+          Pages allowed to call in
+          <em>your own apps</em>
+        </span>
+        <DoorList
+          items={settings.allowedOrigins}
+          onChange={(allowedOrigins) => void save({ allowedOrigins })}
+          placeholder="https://your-app.pages.dev"
+          draft={originDraft}
+          setDraft={setOriginDraft}
+        />
+      </div>
+      <div className="door-field">
+        <span className="door-field-label">
+          Files may come from
+          <em>apps send a link, never the file; it is used and deleted</em>
+        </span>
+        <DoorList
+          items={settings.fileHosts}
+          onChange={(fileHosts) => void save({ fileHosts })}
+          placeholder="yourcompany.sharepoint.com"
+          draft={hostDraft}
+          setDraft={setHostDraft}
+        />
+      </div>
 
-      <h3 className="settings-subhead">Web pages allowed to call in</h3>
-      <DoorList
-        items={settings.allowedOrigins}
-        onChange={(allowedOrigins) => void save({ allowedOrigins })}
-        placeholder="https://your-app.pages.dev"
-        draft={originDraft}
-        setDraft={setOriginDraft}
-      />
-
-      <h3 className="settings-subhead">Where files may be fetched from</h3>
-      <p className="settings-card-copy">
-        Apps send a short-lived download link, never the file. Vaenyx will only
-        follow a link to one of these hosts, uses the file, and deletes it.
-      </p>
-      <DoorList
-        items={settings.fileHosts}
-        onChange={(fileHosts) => void save({ fileHosts })}
-        placeholder="yourcompany.sharepoint.com"
-        draft={hostDraft}
-        setDraft={setHostDraft}
-      />
-
-      <h3 className="settings-subhead">Limits</h3>
+      <h3 className="door-subhead">Limits</h3>
       <div className="door-limits">
         <label>
           Files per call
@@ -10140,15 +10142,20 @@ function SubscriptionDoorPanel() {
         </label>
       </div>
 
-      <h3 className="settings-subhead">Recent calls</h3>
+      <h3 className="door-subhead">Recent calls</h3>
       {calls.length === 0 ? (
-        <p className="text-faint">Nothing yet.</p>
+        <p className="door-legend">Nothing yet.</p>
       ) : (
         <ul className="door-calls">
           {calls.map((call, index) => (
             <li key={index}>
-              <span>{new Date(call.createdAt).toLocaleString()}</span>
-              <span>{call.task}</span>
+              <span className="door-call-when">
+                {new Date(call.createdAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+              <span className="door-call-task">{call.task}</span>
               <span>{call.engine}</span>
               <span>{(call.ms / 1000).toFixed(1)}s</span>
               <span className={call.ok ? "ok" : "failed"}>
@@ -10158,7 +10165,7 @@ function SubscriptionDoorPanel() {
           ))}
         </ul>
       )}
-      <p className="text-faint">
+      <p className="door-legend">
         What happened, never what was in it: no prompt, no file, no answer is
         written down.
       </p>

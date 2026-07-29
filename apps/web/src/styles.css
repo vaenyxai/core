@@ -1,9 +1,9 @@
-:root {
-  /* Global type size (Oskar, dev.150): every rem token scales off this — 18px
+﻿:root {
+  /* Global type size (Oskar, dev.150): every rem token scales off this â€” 18px
      base lifts the whole UI ~12% over the browser default. */
   font-size: 112.5%;
   /* Default theme = Mono Smoke (calm warm grey). Other themes override via
-     [data-theme="…"] below; the Settings → Appearance picker sets it. */
+     [data-theme="â€¦"] below; the Settings â†’ Appearance picker sets it. */
   --bg: #1a1917;
   --bg-sidebar: #141311;
   --bg-raised: #211f1c;
@@ -15,16 +15,16 @@
   --accent-soft: rgba(201, 195, 184, 0.12);
   --on-accent: #1a1917;
 
-  /* Type scale (R1 foundation) — rem off a 16px base so OS text-size is honored */
-  --fs-eyebrow: 0.625rem;   /* 10px — UPPERCASE section labels */
-  --fs-label: 0.6875rem;    /* 11px — floor for real text: labels, meta, timestamps */
-  --fs-sm: 0.75rem;         /* 12px — secondary / dim body, chips */
-  --fs-base: 0.8125rem;     /* 13px — default body + chat answer */
-  --fs-md: 0.875rem;        /* 14px — sidebar item, menu item, button, card h3 */
-  --fs-lg: 1rem;            /* 16px — subheading / open-chat title */
-  --fs-xl: 1.25rem;         /* 20px — section heading */
-  --fs-2xl: 1.625rem;       /* 26px — page title */
-  /* Spacing (4px base) + radius — R1 foundation, rolled out over later rounds */
+  /* Type scale (R1 foundation) â€” rem off a 16px base so OS text-size is honored */
+  --fs-eyebrow: 0.625rem;   /* 10px â€” UPPERCASE section labels */
+  --fs-label: 0.6875rem;    /* 11px â€” floor for real text: labels, meta, timestamps */
+  --fs-sm: 0.75rem;         /* 12px â€” secondary / dim body, chips */
+  --fs-base: 0.8125rem;     /* 13px â€” default body + chat answer */
+  --fs-md: 0.875rem;        /* 14px â€” sidebar item, menu item, button, card h3 */
+  --fs-lg: 1rem;            /* 16px â€” subheading / open-chat title */
+  --fs-xl: 1.25rem;         /* 20px â€” section heading */
+  --fs-2xl: 1.625rem;       /* 26px â€” page title */
+  /* Spacing (4px base) + radius â€” R1 foundation, rolled out over later rounds */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -34,7 +34,7 @@
   --r-md: 10px;
   --r-lg: 12px;
   --tap-min: 44px;
-  /* Faint text tier — auto-adapts per theme */
+  /* Faint text tier â€” auto-adapts per theme */
   --text-faint: color-mix(in srgb, var(--text-muted) 74%, var(--bg));
   /* Semantic status hues (fixed across themes, like the status lights) */
   --ok: #6aa67f;
@@ -44,8 +44,8 @@
   color: var(--text);
   background: var(--bg);
   /* Every theme is dark, so NATIVE widgets must be too: without this the
-     browser paints select dropdowns/scrollbars in light mode ("深色theme
-     所有东西都深色", Oskar 2026-07-29). */
+     browser paints select dropdowns/scrollbars in light mode ("æ·±è‰²theme
+     æ‰€æœ‰ä¸œè¥¿éƒ½æ·±è‰²", Oskar 2026-07-29). */
   color-scheme: dark;
   font-family:
     ui-sans-serif,
@@ -405,7 +405,7 @@ textarea::placeholder {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-/* Settings → Models: ONE backend per row, name on the left, every action
+/* Settings â†’ Models: ONE backend per row, name on the left, every action
    button aligned to the right edge (Oskar, 2026-07-29). The connect form,
    when open, drops to a full-width second line inside the row. */
 .model-cards {
@@ -794,7 +794,7 @@ textarea::placeholder {
 .thread-folder > summary::before,
 .project-thread-folder > summary::before,
 .thread-groups summary::before {
-  content: "▸";
+  content: "â–¸";
   flex: 0 0 auto;
   width: 16px;
   color: #b7b4aa;
@@ -804,7 +804,7 @@ textarea::placeholder {
 .thread-folder[open] > summary::before,
 .project-thread-folder[open] > summary::before,
 .thread-groups details[open] summary::before {
-  content: "▾";
+  content: "â–¾";
 }
 
 .thread-folder[open] > summary,
@@ -903,8 +903,8 @@ textarea::placeholder {
   }
 }
 
-/* Status chips (spec §2a): one chat can carry several states at once
-   (Routine + Scheduled + Building), so they render as a row of small pills —
+/* Status chips (spec Â§2a): one chat can carry several states at once
+   (Routine + Scheduled + Building), so they render as a row of small pills â€”
    sidebar tiny, chat/task header slightly larger. Hues are fixed across themes,
    matching the status lights and Library chips. */
 .thread-chips {
@@ -922,7 +922,7 @@ textarea::placeholder {
   margin-top: 6px;
 }
 
-/* Line icons (dev.134): stroke-only SVG, currentColor — the app's icon rule. */
+/* Line icons (dev.134): stroke-only SVG, currentColor â€” the app's icon rule. */
 .line-icon {
   display: block;
   width: 18px;
@@ -945,7 +945,7 @@ textarea::placeholder {
 }
 
 /* WeChat-style voice bubble: the transcript with its replay control tucked at
-   the passage's bottom-right ("按钮放在整段话的右下角", Oskar 2026-07-28). */
+   the passage's bottom-right ("æŒ‰é’®æ”¾åœ¨æ•´æ®µè¯çš„å³ä¸‹è§’", Oskar 2026-07-28). */
 .voice-bubble {
   display: flex;
   align-items: flex-end;
@@ -1043,11 +1043,11 @@ textarea::placeholder {
    names, one small toggle button in the photo's corner. Everything positions
    in percent so the overlay scales with the responsive image. */
 /* The frame the marks are measured against MUST be the photo itself. The size
-   limit therefore lives here, on the frame, and the photo fills it — never the
+   limit therefore lives here, on the frame, and the photo fills it â€” never the
    other way round (Oskar, 2026-07-29: right on the phone, dots pushed off to
    the right on the desktop, correct again fullscreen). A limit written on the
    photo as min(340px, 100%) cannot be resolved while the browser measures this
-   wrapper — no width is settled yet for the 100% to mean anything — so the
+   wrapper â€” no width is settled yet for the 100% to mean anything â€” so the
    wrapper fell back to the camera's own 3024px and was cut down to the column:
    713px of coordinate space over a 340px photo. On a phone the column is
    340px-ish, which is why the same bug looked fine there. */
@@ -1087,7 +1087,7 @@ textarea::placeholder {
   pointer-events: none;
 }
 
-/* The leader line ENDS on the label's own edge — no floating gap, no line
+/* The leader line ENDS on the label's own edge â€” no floating gap, no line
    running under the words (Oskar, 2026-07-29). So the label's anchor point IS
    its near edge, and nothing is nudged away from it. Sizes here are the ones
    layoutLabels measures with: 13px text in a pill 24px tall and 18px wider than
@@ -1125,25 +1125,152 @@ textarea::placeholder {
   height: 14px;
 }
 
-/* The Subscription Door card: a switch, what is behind it, the address to hand
-   an app, who counts as the Owner, the limits, and a thin log. */
-.door-toggle {
+/* THE SUBSCRIPTION DOOR CARD. A status panel, not a poster: one switch, two
+   engines, an address, who gets in, the limits, a thin log. Everything sits on
+   the small end of the type scale so the whole door fits on one phone screen â€”
+   the first cut used heading-sized names and body-sized captions and read as a
+   pile of unrelated announcements (Oskar, 2026-07-30). Note the explicit sizes
+   on every input: the global rule is `input { height: 46px; width: 100% }`,
+   which turns a checkbox into a large grey square. */
+.door-switch {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 10px 0 4px;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+}
+
+.door-switch strong {
+  font-size: var(--fs-md);
+}
+
+.door-switch p {
+  margin: 2px 0 0;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+
+/* A real switch, built from the checkbox itself. */
+.door-toggle {
+  flex: none;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: rgba(240, 238, 229, 0.08);
+  appearance: none;
+  cursor: pointer;
+  transition: background 120ms linear;
+}
+
+.door-toggle::after {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #8d8a83;
+  transition: transform 120ms ease, background 120ms linear;
+}
+
+.door-toggle:checked {
+  background: rgba(117, 176, 148, 0.32);
+}
+
+.door-toggle:checked::after {
+  background: #75b094;
+  transform: translateX(18px);
 }
 
 .door-engine {
-  padding: 10px 0;
-  border-bottom: 0.5px solid var(--border);
+  padding: var(--space-3) 0;
+  border-top: 0.5px solid var(--border);
+}
+
+.door-engine-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.door-engine-name {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.door-engine-name strong {
+  font-size: var(--fs-md);
+}
+
+.door-state {
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+
+.door-state.on {
+  color: #75b094;
+}
+
+.door-test {
+  position: relative;
+  flex: none;
+  height: 30px;
+  padding: 0 14px;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-label);
+}
+
+/* Small on the page, still a thumb-sized target (tap >= 44px). The pill stays
+   compact; only the area that answers a tap grows. */
+.door-test::before,
+.door-copy::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, var(--tap-min));
+  height: var(--tap-min);
+  transform: translate(-50%, -50%);
+}
+
+.door-test:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.door-result {
+  flex: 1 0 100%;
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+
+.door-result.ok {
+  color: #75b094;
+}
+
+.door-result.failed {
+  color: #df938a;
 }
 
 .door-capabilities {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
 }
 
 .door-capability {
@@ -1153,98 +1280,162 @@ textarea::placeholder {
   font-size: var(--fs-label);
 }
 
-/* Not offered is shown, not hidden: the Owner should see that it is there and
-   that it cannot do this, rather than wonder where it went. */
+/* Shown, never hidden: the Owner should see that it is there and cannot do
+   this, rather than wonder where it went. */
 .door-capability.off {
+  border-color: transparent;
   color: var(--text-faint);
-  opacity: 0.6;
+  opacity: 0.5;
+}
+
+.door-legend {
+  margin: var(--space-2) 0 0;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+
+.door-subhead {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .door-address {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 6px 0;
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
+  font-size: var(--fs-label);
 }
 
 .door-address code {
-  padding: 2px 8px;
-  border-radius: 6px;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
   background: rgba(240, 238, 229, 0.08);
   font-size: var(--fs-label);
+}
+
+.door-address span {
+  color: var(--text-faint);
+}
+
+.door-copy {
+  position: relative;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(240, 238, 229, 0.08);
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-label);
+}
+
+.door-field {
+  margin: var(--space-3) 0;
+}
+
+.door-field-label {
+  display: block;
+  font-size: var(--fs-label);
+}
+
+.door-field-label em {
+  display: block;
+  color: var(--text-faint);
+  font-style: normal;
+  font-size: var(--fs-label);
+  line-height: 1.45;
 }
 
 .door-list {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 8px 0;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
 }
 
+/* Roomier than the type needs: the remove button inside has to be tappable,
+   and neighbouring chips must not steal each other's taps — which is why this
+   one grows the chip instead of growing an invisible target. */
 .door-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
+  gap: var(--space-1);
+  padding: 3px 3px 3px 12px;
   border: 0.5px solid var(--border);
   border-radius: 999px;
   font-size: var(--fs-label);
 }
 
 .door-chip button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
   border: 0;
+  border-radius: 50%;
   background: transparent;
-  color: inherit;
+  color: var(--text-faint);
   cursor: pointer;
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   line-height: 1;
 }
 
 .door-list form {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 .door-list input {
-  min-width: 200px;
-  min-height: 32px;
+  width: auto;
+  min-width: 190px;
+  height: 28px;
   padding: 0 10px;
   border: 0.5px solid var(--border);
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   color: inherit;
   font-family: inherit;
+  font-size: var(--fs-label);
 }
 
 .door-limits {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-  margin: 8px 0;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-2);
 }
 
 .door-limits label {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
+  color: var(--text-faint);
   font-size: var(--fs-label);
 }
 
 .door-limits input {
-  min-height: 32px;
+  width: 100%;
+  height: 30px;
   padding: 0 10px;
   border: 0.5px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: transparent;
-  color: inherit;
+  color: var(--text);
   font-family: inherit;
+  font-size: var(--fs-label);
 }
 
 .door-calls {
   display: grid;
-  gap: 4px;
-  margin: 8px 0;
+  gap: var(--space-1);
+  margin: 0;
   padding: 0;
   list-style: none;
   font-size: var(--fs-label);
@@ -1252,9 +1443,18 @@ textarea::placeholder {
 
 .door-calls li {
   display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--space-2);
   color: var(--text-faint);
+}
+
+.door-call-when {
+  font-variant-numeric: tabular-nums;
+}
+
+.door-call-task {
+  color: var(--text);
 }
 
 .door-calls .ok {
@@ -1285,7 +1485,7 @@ textarea::placeholder {
   cursor: zoom-in;
 }
 
-/* Fullscreen photo viewer: pinch/wheel zoom, drag pan, × or backdrop closes. */
+/* Fullscreen photo viewer: pinch/wheel zoom, drag pan, Ã— or backdrop closes. */
 .photo-lightbox {
   position: fixed;
   inset: 0;
@@ -1297,8 +1497,8 @@ textarea::placeholder {
   touch-action: none;
 }
 
-/* The photo and its marks are ONE stage (Oskar, 2026-07-29: "所有标签也要一起
-   全屏幕…可以 zoom in 去看标签"): the zoom transform is on the stage, so dots,
+/* The photo and its marks are ONE stage (Oskar, 2026-07-29: "æ‰€æœ‰æ ‡ç­¾ä¹Ÿè¦ä¸€èµ·
+   å…¨å±å¹•â€¦å¯ä»¥ zoom in åŽ»çœ‹æ ‡ç­¾"): the zoom transform is on the stage, so dots,
    leader lines and labels grow with the picture instead of floating over it. */
 .photo-lightbox-stage {
   position: relative;
@@ -1318,7 +1518,7 @@ textarea::placeholder {
 
 /* The confirm card's editable marked photo: labels are buttons; the row under
    the photo edits the selected mark's name or adds a new one. Secondary text
-   fields go compact — the picture is the interface (visual first). */
+   fields go compact â€” the picture is the interface (visual first). */
 .annotate-editor {
   display: grid;
   gap: 8px;
@@ -1392,7 +1592,7 @@ textarea::placeholder {
   margin-left: 2px;
 }
 
-/* M1 — the document cost gate. Full-screen and blocking: the Owner asked for
+/* M1 â€” the document cost gate. Full-screen and blocking: the Owner asked for
    it to be impossible to miss, and it is their money being spent. */
 .document-gate {
   position: fixed;
@@ -1568,8 +1768,8 @@ textarea::placeholder {
   margin-left: 0;
 }
 
-/* Recording (ChatGPT-style): cancel × | live volume bars | send ✓.
-   While recording, the group takes over the whole composer row — the textarea
+/* Recording (ChatGPT-style): cancel Ã— | live volume bars | send âœ“.
+   While recording, the group takes over the whole composer row â€” the textarea
    and Send button step aside so the two controls can be big. */
 .mic-record-group {
   display: flex;
@@ -1657,7 +1857,7 @@ textarea::placeholder {
   margin: 0 auto;
 }
 
-/* Settings → Appearance → Chat Text: the two pickers side by side. */
+/* Settings â†’ Appearance â†’ Chat Text: the two pickers side by side. */
 .chat-font-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1679,10 +1879,10 @@ textarea::placeholder {
   margin-top: 0;
 }
 
-/* Sidebar rows are dense — chips there go one notch smaller than the base. */
+/* Sidebar rows are dense â€” chips there go one notch smaller than the base. */
 .thread-chips .thread-chip {
   padding: 1px 5px;
-  font-size: 0.5625rem; /* 9px — below --fs-eyebrow on purpose; it's a badge */
+  font-size: 0.5625rem; /* 9px â€” below --fs-eyebrow on purpose; it's a badge */
   font-weight: 600;
   letter-spacing: 0.05em;
 }
@@ -1705,7 +1905,7 @@ textarea::placeholder {
   font-size: var(--fs-label);
 }
 
-/* The header Routine chip shows the Routine's real name — keep its casing and
+/* The header Routine chip shows the Routine's real name â€” keep its casing and
    clamp runaway lengths. */
 .chat-chips .thread-chip--routine {
   max-width: 220px;
@@ -2016,7 +2216,7 @@ textarea::placeholder {
 }
 
 /* Two-level nav, level 1: a recessed segmented control (one bordered track,
-   the active item a raised segment) — visually distinct from the sub-nav. */
+   the active item a raised segment) â€” visually distinct from the sub-nav. */
 .admin-tabs {
   display: inline-flex;
   flex-wrap: wrap;
@@ -2187,8 +2387,8 @@ textarea {
 select {
   min-height: 44px;
   padding: 0 12px;
-  /* A select's min-content width is its longest option ("Gemini TTS —
-     Recommended…"), and grid/flex tracks inherit that as a minimum — on a
+  /* A select's min-content width is its longest option ("Gemini TTS â€”
+     Recommendedâ€¦"), and grid/flex tracks inherit that as a minimum â€” on a
      phone that stretched the whole Settings page past the viewport. Let
      selects shrink; the browser ellipsises the closed label. */
   min-width: 0;
@@ -2206,12 +2406,12 @@ select {
 }
 
 /* The generous scroll clearance under normal pages would push the new-chat
-   box back up — drop it on the one view that bottom-anchors. */
+   box back up â€” drop it on the one view that bottom-anchors. */
 .workspace-content:has(.simple-compose-shell) {
   padding-bottom: 12px;
 }
 
-/* Focused chat/task views end at the composer — without this, overscrolling
+/* Focused chat/task views end at the composer â€” without this, overscrolling
    shows a dead band below it (the default 80px page clearance). */
 .workspace-content:has(.focused-workspace) {
   padding-bottom: 10px;
@@ -2385,7 +2585,7 @@ select {
 .ask-vaenyx-chat {
   position: relative; /* anchors the chat-area splash */
   display: grid;
-  /* The composer sits at the bottom of the screen, ALWAYS — every width, every
+  /* The composer sits at the bottom of the screen, ALWAYS â€” every width, every
      amount of content (Oskar, 2026-07-26; re-broken on phones and re-fixed
      2026-07-28: a mobile override used to drop this, so short chats floated
      mid-screen). dvh because phone browsers lie about vh while the URL bar
@@ -2393,7 +2593,7 @@ select {
      row absorbs the spare height, which is what pins the composer. */
   min-height: calc(100vh - 74px);
   min-height: calc(100dvh - 74px);
-  /* header · messages · composer. */
+  /* header Â· messages Â· composer. */
   grid-template-rows: auto 1fr auto;
   align-content: stretch;
   overflow: visible;
@@ -2420,8 +2620,8 @@ select {
   display: flex;
   min-width: 0;
   align-items: center;
-  /* Chips flow to a second row instead of clipping off-screen — the phone
-     header showed "Dinner …" with the VISION chip cut in half (Oskar,
+  /* Chips flow to a second row instead of clipping off-screen â€” the phone
+     header showed "Dinner â€¦" with the VISION chip cut in half (Oskar,
      2026-07-28). */
   flex-wrap: wrap;
   gap: 8px;
@@ -2431,8 +2631,8 @@ select {
   flex: 0 0 auto;
 }
 
-/* The header ⋮ sits at the row's right edge, so the popover hangs LEFT from
-   it — anchored right, clamped to the viewport. (It was left-anchored, which
+/* The header â‹® sits at the row's right edge, so the popover hangs LEFT from
+   it â€” anchored right, clamped to the viewport. (It was left-anchored, which
    pushed half the menu off a phone screen.) */
 .focused-title-line .thread-action-popover {
   right: 0;
@@ -2507,7 +2707,7 @@ select {
 }
 
 /* History opens as a floating panel: each run is expandable to its full result,
-   which can be long — expanding in-flow would balloon the sticky header over
+   which can be long â€” expanding in-flow would balloon the sticky header over
    the content below. */
 .task-runs > ul {
   position: absolute;
@@ -2599,7 +2799,7 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  /* Kept deliberately shallow — every pixel here is stolen from the messages
+  /* Kept deliberately shallow â€” every pixel here is stolen from the messages
      below (Oskar, dev.122). */
   min-height: 44px;
   /* Right floor leaves room for the fixed Hard Refresh button in the corner. */
@@ -2638,8 +2838,8 @@ select {
      The sticky composer carries its own fade gradient precisely so content may
      scroll underneath it mid-read; reserving composer-height here as well
      produced a scrollable wall of nothing under every conversation. Landing
-     the LAST message clear of the composer is the anchor's job — see
-     .chat-end-anchor's scroll-margin — not this padding's. */
+     the LAST message clear of the composer is the anchor's job â€” see
+     .chat-end-anchor's scroll-margin â€” not this padding's. */
   padding: 44px max(18px, calc((100% - 820px) / 2)) 24px;
 }
 
@@ -2661,7 +2861,7 @@ select {
   padding: 0;
   border: 0;
   border-radius: 0;
-  /* Owner-tunable chat text (Settings → Appearance → Chat Text). Unset = the
+  /* Owner-tunable chat text (Settings â†’ Appearance â†’ Chat Text). Unset = the
      design defaults; the name/time header keeps its own fixed sizes below. */
   font-family: var(--chat-font-family, inherit);
   background: transparent;
@@ -2744,7 +2944,7 @@ select {
   max-width: 100%;
   min-width: 0;
   color: #dedbd1;
-  /* One base size for the whole reply — the Owner's Chat Text setting —
+  /* One base size for the whole reply â€” the Owner's Chat Text setting â€”
      and every inner element scales off it in em, so headings can never end
      up smaller than the body (Oskar, dev.161). */
   font-size: var(--chat-font-size, var(--fs-base));
@@ -2775,7 +2975,7 @@ select {
   font-size: inherit;
 }
 
-/* Beats the legacy 11px `.ask-vaenyx-message strong` meta rule — bold text
+/* Beats the legacy 11px `.ask-vaenyx-message strong` meta rule â€” bold text
    INSIDE a reply keeps the body size (the news "headings" written as
    **bold** paragraphs were being squashed). */
 .markdown-body strong {
@@ -2784,7 +2984,7 @@ select {
 }
 
 /* A paragraph that is entirely bold is a heading in spirit (models write
-   news-section titles that way) — give it heading size. */
+   news-section titles that way) â€” give it heading size. */
 .markdown-body p > strong:only-child {
   font-size: 1.12em;
 }
@@ -3049,7 +3249,7 @@ select {
 }
 
 /* Build marker so any device can confirm at a glance it is on the latest
-   version — fixed bottom-right, non-interactive so it never blocks the
+   version â€” fixed bottom-right, non-interactive so it never blocks the
    composer Send button underneath it. */
 .version-badge {
   position: fixed;
@@ -3173,7 +3373,7 @@ select {
   min-width: 160px;
 }
 
-/* Stays where the copy pack puts it (composer footer, persistent — that
+/* Stays where the copy pack puts it (composer footer, persistent â€” that
    placement is not ours to move), but carries as little visual weight as a
    line can and still be read: smaller, dimmer, tight to the composer. Oskar
    asked for the row back, 2026-07-29; option A, the wording untouched. */
@@ -3619,7 +3819,7 @@ select {
   gap: 12px;
 }
 
-/* Settings language toggle (中 / English segmented buttons). */
+/* Settings language toggle (ä¸­ / English segmented buttons). */
 .lang-toggle {
   display: inline-flex;
   gap: 6px;
@@ -4205,7 +4405,7 @@ select {
   font-weight: 650;
 }
 
-/* Library — the Method shelf (list + read-only detail). */
+/* Library â€” the Method shelf (list + read-only detail). */
 .library-layout {
   display: grid;
   gap: 16px;
@@ -4741,7 +4941,7 @@ select {
   align-content: start;
 }
 
-/* Two-level nav, level 2: borderless underlined text tabs on a hairline rail —
+/* Two-level nav, level 2: borderless underlined text tabs on a hairline rail â€”
    reads as items-on-a-line, not boxes, so it can't be confused with level 1. */
 .library-subtabs {
   display: flex;
@@ -4948,7 +5148,7 @@ select {
   background: var(--accent-soft);
 }
 
-/* Persistent "you are in a mode" marker with its exit gate (spec §6), in
+/* Persistent "you are in a mode" marker with its exit gate (spec Â§6), in
    the sidebar header beside the name. */
 .mode-badge {
   display: flex;
@@ -5343,7 +5543,7 @@ select {
   background: var(--accent-soft);
 }
 
-/* Modal dialog (× / Esc to close, never outside-click) */
+/* Modal dialog (Ã— / Esc to close, never outside-click) */
 .modal-overlay {
   position: fixed;
   z-index: 80;
@@ -5415,7 +5615,7 @@ select {
   background: var(--accent-soft);
 }
 
-/* Dual instruction windows (spec §7), inside a project card */
+/* Dual instruction windows (spec Â§7), inside a project card */
 .project-instructions {
   margin-top: 14px;
   padding-top: 12px;
@@ -5902,7 +6102,7 @@ select {
     background: rgba(31, 30, 29, 0.985);
     box-shadow: 28px 0 80px rgba(0, 0, 0, 0.52);
     /* translate3d + will-change keep the drawer on its own GPU layer so the
-       layer isn't torn down when the slide-out finishes — that teardown is what
+       layer isn't torn down when the slide-out finishes â€” that teardown is what
        caused the close flash on mobile. */
     transform: translate3d(-105%, 0, 0);
     transition: transform 200ms ease;
@@ -6033,7 +6233,7 @@ select {
   }
 
   /* The composer stays pinned on phones too. A `min-height: auto` override
-     here used to undo the pinning, which is exactly the "对话框不在最下面"
+     here used to undo the pinning, which is exactly the "å¯¹è¯æ¡†ä¸åœ¨æœ€ä¸‹é¢"
      Oskar kept hitting on mobile (2026-07-28). The phone chrome above the
      panel is shorter than the desktop's, hence the smaller offset. */
   .focused-workspace,
@@ -6365,7 +6565,7 @@ select {
   font-weight: 600;
 }
 
-/* Library v2 — Routine in Chat: capability bar, picker, result cards. */
+/* Library v2 â€” Routine in Chat: capability bar, picker, result cards. */
 .capability-bar {
   display: flex;
   gap: 6px;
@@ -6410,7 +6610,7 @@ select {
 .routine-result ul {
   margin: 4px 0;
   padding-left: 20px;
-  /* Visible dots ("前面要有一个 dot 才是 dot point", Oskar 2026-07-28) — some
+  /* Visible dots ("å‰é¢è¦æœ‰ä¸€ä¸ª dot æ‰æ˜¯ dot point", Oskar 2026-07-28) â€” some
      reset had swallowed the markers. */
   list-style: disc;
 }
@@ -6484,7 +6684,7 @@ select {
 /* Scheduled tasks: time / weekday / month-day inputs in the task toolbar. */
 .schedule-time-input,
 .schedule-monthday-input {
-  /* Beat the global input { width: 100%; height: 46px } — these live inline in
+  /* Beat the global input { width: 100%; height: 46px } â€” these live inline in
      the task toolbar and must stay content-sized so the row keeps to one line. */
   width: auto;
   height: auto;
@@ -6612,7 +6812,7 @@ html, body { overscroll-behavior-y: none; }
    splash -> conversation, with no half-built frame between. */
 .chat-splash { position: absolute; inset: 0; z-index: 40; min-height: 0; background: var(--bg); }
 /* The Engines card: intro left, refresh right; four sections with a visible
-   rule between them (Oskar, 2026-07-27 - "看得很复杂" redesign). */
+   rule between them (Oskar, 2026-07-27 - "çœ‹å¾—å¾ˆå¤æ‚" redesign). */
 .engine-intro-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
 .engine-intro-row .settings-card-copy { margin: 0; }
 .engine-intro-row .secondary-button { flex: none; }
