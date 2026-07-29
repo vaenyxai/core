@@ -66,6 +66,10 @@ Read this inside the app: **Settings → Manual**.
   something new in it.
 - **What it remembers** — the last thirty messages in full, plus a rolling
   summary of everything before that, plus your approved *Vaenyx Me* facts.
+- **Looking things up** — it can search the web and read a page when the answer
+  depends on current facts, and it tells you when it could not check something
+  rather than answering from memory. It still cannot read anything on your
+  computer.
 
 ## 4. Projects
 
@@ -237,5 +241,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.48** · last updated 2026-07-30.
+Manual for **v0.3.1-dev.51** · last updated 2026-07-30.
 Keep this file up to date whenever a feature changes.

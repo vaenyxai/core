@@ -69,6 +69,15 @@ const DENIED_TOOLS = [
   "ExitPlanMode",
 ];
 
+// The line between "can look something up" and "can touch this machine". Chat
+// and scheduled tasks get the first two; nothing gets the rest. Reading a photo
+// and the subscription door lent to other apps keep the whole toolbox off —
+// they have no business searching anything.
+const WEB_TOOLS = ["WebSearch", "WebFetch"] as const;
+const MACHINE_TOOLS = DENIED_TOOLS.filter(
+  (tool) => !WEB_TOOLS.includes(tool as (typeof WEB_TOOLS)[number]),
+);
+
 function formatTranscript(messages: ModelChatMessage[]): string {
   return messages
     .map(
@@ -340,22 +349,44 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
         prompt: promptInput,
         options: {
           abortController: abort,
-          allowedTools: [],
-          disallowedTools: DENIED_TOOLS,
+          // Looking something up is allowed; touching this machine is not
+          // (Oskar, 2026-07-30). His 7am briefing ran three days in a row
+          // saying it could not check anything, and it was right: the whole
+          // toolbox was off, search included, and one turn is not enough for a
+          // search to come back and be read anyway. Search and fetch are the
+          // only two tools that never touch the disk, the shell or the
+          // machine's own Claude configuration — everything else stays denied
+          // by name, the jail is still empty, no settings or MCP are loaded.
+          allowedTools: [...WEB_TOOLS],
+          disallowedTools: MACHINE_TOOLS,
           cwd: jail,
           env: cleanChildEnvironment(auth.token),
-          maxTurns: 1,
+          // Enough turns for search -> read the results -> answer. Without this
+          // a search is started and then cut off mid-air.
+          maxTurns: 8,
           // Never read the machine's Claude settings, CLAUDE.md or MCP config.
           mcpServers: {},
           settingSources: [],
           systemPrompt:
-            "You are the chat voice of Vaenyx, a private household assistant. You have no tools.",
+            "You are the chat voice of Vaenyx, a private household assistant. You can search the web and read a page when the answer depends on current facts; say so plainly when you could not check something rather than answering from memory. You have no other tools and no access to this machine.",
           ...(options?.model?.trim() ? { model: options.model.trim() } : {}),
         },
       });
 
       let answer = "";
+      let searched = false;
       for await (const message of stream) {
+        // Whether it actually looked something up, for the chip the Owner sees.
+        if (message.type === "assistant") {
+          for (const block of message.message.content) {
+            if (
+              block.type === "tool_use" &&
+              WEB_TOOLS.includes(block.name as (typeof WEB_TOOLS)[number])
+            ) {
+              searched = true;
+            }
+          }
+        }
         if (message.type === "result") {
           if (message.subtype === "success") {
             answer = message.result;
@@ -371,7 +402,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
         throw new Error(`MODEL_PROVIDER_ERROR:${this.id}:empty`);
       }
       if (options?.onDelta) options.onDelta(trimmed);
-      return { answer: trimmed, webSearchUsed: false };
+      return { answer: trimmed, webSearchUsed: searched };
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("MODEL_PROVIDER_ERROR:")) {
         throw error;
