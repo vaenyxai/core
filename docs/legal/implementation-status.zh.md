@@ -1,8 +1,8 @@
 # Vaenyx — 当前实现与数据处理明细表
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
-> 明细表版本 **2026-07-29.2** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-29**
-> 客户端 **0.2.1-dev.44** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
+> 明细表版本 **2026-07-29.3** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-29**
+> 客户端 **0.2.1-dev.35** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
 > 法律文件集 **v3.1** · 最低法律文件集 **v3.0** · 最低文案版本 **2.9**
 
 ## 本明细表的地位
@@ -54,6 +54,7 @@
 | `feature.community.discord` | **active** | 是 | 官方服务器内的 Discord 资料、帖子与管理记录 |
 | `feature.skill-interop` | **active** | 否 | 无 |
 | `feature.pictures.generation` | **available-off** | 是 | 无 |
+| `feature.model-provider.claude-subscription` | **available-off** | 是 | 无 |
 
 **`feature.community-sharing.preference-ui`** — 仅记录一项本机偏好。不构成对任何上传的同意。参见 gate.community-sharing.initial。
 
@@ -107,6 +108,10 @@
 **`feature.pictures.generation`** — Owner 在聊天里要一张图;主模型把该请求改写成一句英文 prompt,发送给 Owner 用自己的 key 连接的图片服务商。生成的图片写入本地 userdata,并纳入本地备份。运营方不在此路径中,不接收任何内容。有两项事实必须披露,因为两者都无法凭直觉猜到:这句 prompt 是由能够看到已保存上下文的主模型写的,因此它可能写进 Owner 并没有打出来的内容;以及该图片服务商可能与聊天服务商并非同一家公司。
 必需的门槛: `legal.notice.modelConnect.pictures`
 实现证据: The draw option does not exist until an image engine is connected. What the model says about the picture is constrained by construction: generation happens before the model speaks and the result — success, the provider's own failure text, or nothing generated this turn — is injected into its context, so it cannot claim to have drawn something it did not. The F5 promise is kept rather than trimmed: the prompt actually sent is stored and displayed beneath each generated image (dev.32).
+
+**`feature.model-provider.claude-subscription`** — API key 通道之外的第二条 Claude 通道:用户用自己的 Claude 方案登录,而不是粘贴 key。Anthropic 公开给出的许可以 Agent SDK 为范围,因此本通道被建成落在该范围之内,而不是与之并行。Vaenyx 自身不发起任何 OAuth 请求 —— 它启动 Agent SDK 包内自带的官方 claude 程序,把登录 URL 转给界面、把贴回的码转给该进程的 stdin,由官方程序完成交换并写入自己的凭据。Vaenyx 代码中没有 client id、没有 token 端点、没有交换代码。凭据写入 userdata 下 Vaenyx 专属的 CLAUDE_CONFIG_DIR,绝不与本机可能存在的个人 ~/.claude 混用。
+必需的门槛: `legal.notice.modelConnect.cloud`
+实现证据: An earlier build reimplemented the sign-in: Vaenyx spoke OAuth directly using the official CLI's client id. That reached public main and was removed in full at dev.34, together with the tokens it had produced, before any release contained it. What replaced it is the pattern already used for Codex - drive the official tool, do not reimplement it. Isolation is verified by test rather than by reading the configuration: under the shipped lockdown a secret file is planted and the model is asked to read it, and the run produces zero tool_use, the answer NO_FILE_ACCESS, and no leak. Vision verified on a real photograph through the SDK's native image block. Quota is deliberately described without a number - the basis moved three times in four months, so a figure in the interface would become a false statement on the next move.
 
 ## 投诉与合规记录
 

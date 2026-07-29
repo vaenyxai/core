@@ -1,8 +1,8 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-29.2** · effective from **2026-07-26** · verified **2026-07-29**
-> Client **0.2.1-dev.44** · Server **vaenyx-core-cloud (migrations 0001-0007)**
+> Schedule version **2026-07-29.3** · effective from **2026-07-26** · verified **2026-07-29**
+> Client **0.2.1-dev.35** · Server **vaenyx-core-cloud (migrations 0001-0007)**
 > Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **2.9**
 
 ## Status of this Schedule
@@ -54,6 +54,7 @@ This Schedule cannot expand any collection, use, disclosure, licence or authorit
 | `feature.community.discord` | **active** | yes | Discord profile, posts and moderation records for the official server |
 | `feature.skill-interop` | **active** | no | none |
 | `feature.pictures.generation` | **available-off** | yes | none |
+| `feature.model-provider.claude-subscription` | **available-off** | yes | none |
 
 **`feature.community-sharing.preference-ui`** — Records a local preference only. Not consent to any upload. See gate.community-sharing.initial.
 
@@ -107,6 +108,10 @@ Evidence: Verified on a temporary instance rather than by reading the code: prev
 **`feature.pictures.generation`** — Owner asks for a picture in chat; the main model rewrites the request as one English prompt and sends it to an image provider the Owner connected with their own key. The generated image is written to local userdata and included in local backups. The Operator is not in this path and receives nothing. Two facts are disclosed because neither is guessable: the prompt is written by the main model, which can see saved context, so it may word things the Owner never typed; and the image provider may be a different company from the chat provider.
 Required gates: `legal.notice.modelConnect.pictures`
 Evidence: The draw option does not exist until an image engine is connected. What the model says about the picture is constrained by construction: generation happens before the model speaks and the result — success, the provider's own failure text, or nothing generated this turn — is injected into its context, so it cannot claim to have drawn something it did not. The F5 promise is kept rather than trimmed: the prompt actually sent is stored and displayed beneath each generated image (dev.32).
+
+**`feature.model-provider.claude-subscription`** — A second Claude channel beside the API-key one: the user signs in with their own Claude plan instead of pasting a key. Anthropic publishes this permission and scopes it to the Agent SDK, so the channel is built to sit inside that scope rather than beside it. Vaenyx makes no OAuth request of its own - it spawns the official claude binary that ships inside the Agent SDK package, relays the sign-in URL to the screen and the pasted code back to that process's stdin, and the official program performs the exchange and writes its own credentials. There is no client id, no token endpoint and no exchange code anywhere in Vaenyx. Credentials land in a Vaenyx-owned CLAUDE_CONFIG_DIR under userdata, never mixed with a personal ~/.claude on the same machine.
+Required gates: `legal.notice.modelConnect.cloud`
+Evidence: An earlier build reimplemented the sign-in: Vaenyx spoke OAuth directly using the official CLI's client id. That reached public main and was removed in full at dev.34, together with the tokens it had produced, before any release contained it. What replaced it is the pattern already used for Codex - drive the official tool, do not reimplement it. Isolation is verified by test rather than by reading the configuration: under the shipped lockdown a secret file is planted and the model is asked to read it, and the run produces zero tool_use, the answer NO_FILE_ACCESS, and no leak. Vision verified on a real photograph through the SDK's native image block. Quota is deliberately described without a number - the basis moved three times in four months, so a figure in the interface would become a false statement on the next move.
 
 ## Complaint and compliance records
 
