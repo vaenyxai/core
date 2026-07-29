@@ -204,7 +204,29 @@ function PhotoLightbox({
 // labels are unreadable). The dot never moves — it marks the thing. The label
 // goes to the nearer side and is pushed down the column until it clears the
 // one above it; a column that runs out of room wraps back to the top.
-const LABEL_ROW_HEIGHT = 7; // percent of the image, ≈ one label plus a gap
+const LABEL_ROW_HEIGHT = 9; // percent of the image, ≈ one label plus a gap
+
+// A label is a pill of TEXT, so how much room it needs depends on the word
+// inside it — two labels on opposite sides of the photo used to be compared by
+// height alone and landed on top of each other (Oskar, 2026-07-29). Widths are
+// in percent of a 340px-wide photo, the chat size; fullscreen is larger, where
+// the same label takes a smaller share, so this estimate is the roomy one on
+// purpose: a label that thinks it is too wide only spreads the marks out.
+const LABEL_PADDING_WIDTH = 4.5;
+const LABEL_WIDE_CHARACTER_WIDTH = 3.4; // a Chinese character at 11px
+const LABEL_NARROW_CHARACTER_WIDTH = 1.9; // a latin letter
+const WIDE_CHARACTER_RANGE =
+  /[ᄀ-ᇿ⺀-꓏ꥠ-꥿가-퟿豈-﫿︐-﹯＀-｠￠-￦]/;
+
+function labelWidth(name: string): number {
+  let width = LABEL_PADDING_WIDTH;
+  for (const character of name) {
+    width += WIDE_CHARACTER_RANGE.test(character)
+      ? LABEL_WIDE_CHARACTER_WIDTH
+      : LABEL_NARROW_CHARACTER_WIDTH;
+  }
+  return Math.min(width, 92);
+}
 
 export interface PlacedLabel {
   item: ImageAnnotationItem;
@@ -214,42 +236,53 @@ export interface PlacedLabel {
 }
 
 export function layoutLabels(items: ImageAnnotationItem[]): PlacedLabel[] {
-  const columns: Record<"left" | "right", number[]> = { left: [], right: [] };
+  // Every label already placed, as a box: a new one may not share space with
+  // ANY of them, whichever side of the photo it went to.
+  const taken: { top: number; left: number; right: number }[] = [];
+  const isFree = (top: number, left: number, right: number): boolean =>
+    !taken.some(
+      (used) =>
+        Math.abs(used.top - top) < LABEL_ROW_HEIGHT &&
+        used.right > left &&
+        used.left < right,
+    );
+
   return [...items]
     .map((item, index) => ({ item, index }))
     .sort((a, b) => a.item.y - b.item.y)
     .map(({ item, index }) => {
-      const toRight = item.x < 55;
-      const side = toRight ? "right" : "left";
-      const taken = columns[side];
-      let labelY = Math.min(96, Math.max(3, item.y - 5));
-      let guard = 0;
-      while (
-        taken.some((used) => Math.abs(used - labelY) < LABEL_ROW_HEIGHT) &&
-        guard < 30
-      ) {
-        labelY += LABEL_ROW_HEIGHT;
-        if (labelY > 96) labelY = 3 + (guard % 3);
-        guard += 1;
+      const width = labelWidth(item.name);
+      // The near side first; if the label cannot find room there it crosses to
+      // the other side rather than sitting on top of a neighbour.
+      const sides = item.x < 55 ? [true, false] : [false, true];
+      let chosen: PlacedLabel | null = null;
+      let fallback: PlacedLabel | null = null;
+      for (const toRight of sides) {
+        // Clamped so the whole pill stays ON the photo, not just its anchor.
+        const labelX = toRight
+          ? Math.min(Math.max(item.x + 12, 2), 99 - width)
+          : Math.max(Math.min(item.x - 12, 98), width + 1);
+        const left = toRight ? labelX : labelX - width;
+        const right = toRight ? labelX + width : labelX;
+        let labelY = Math.min(94, Math.max(4, item.y - 5));
+        fallback ??= { item, labelX, labelY, toRight };
+        for (let step = 0; step < 13; step += 1) {
+          if (isFree(labelY, left, right)) {
+            chosen = { item, labelX, labelY, toRight };
+            taken.push({ top: labelY, left, right });
+            break;
+          }
+          labelY += LABEL_ROW_HEIGHT;
+          if (labelY > 94) labelY = 4 + step; // wrap back to the top
+        }
+        if (chosen) break;
       }
-      taken.push(labelY);
-      return {
-        item,
-        index,
-        labelX: toRight
-          ? Math.min(item.x + 12, 96)
-          : Math.max(item.x - 12, 4),
-        labelY,
-        toRight,
-      };
+      // A photo marked wall-to-wall can run out of room; placing the label at
+      // its natural spot beats dropping the mark.
+      return { placed: chosen ?? (fallback as PlacedLabel), index };
     })
     .sort((a, b) => a.index - b.index)
-    .map(({ item, labelX, labelY, toRight }) => ({
-      item,
-      labelX,
-      labelY,
-      toRight,
-    }));
+    .map(({ placed }) => placed);
 }
 
 // The marks themselves — dot, leader line, name. One component, so a photo in
