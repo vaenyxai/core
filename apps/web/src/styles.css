@@ -2994,11 +2994,16 @@ select {
   min-width: 160px;
 }
 
+/* Stays where the copy pack puts it (composer footer, persistent — that
+   placement is not ours to move), but carries as little visual weight as a
+   line can and still be read: smaller, dimmer, tight to the composer. Oskar
+   asked for the row back, 2026-07-29; option A, the wording untouched. */
 .composer-disclaimer {
   margin: 0;
   padding: 0 2px;
-  color: var(--text-faint);
-  font-size: var(--fs-label);
+  color: color-mix(in srgb, var(--text-faint) 72%, var(--bg));
+  font-size: 0.5625rem;
+  line-height: 1.35;
   text-align: center;
 }
 
@@ -3030,7 +3035,9 @@ select {
   position: sticky;
   bottom: 0;
   display: grid;
-  gap: 10px;
+  /* Tighter rows: the persistent disclaimer must cost as little height as
+     possible while staying exactly where the copy pack places it. */
+  gap: 6px;
   padding: 22px max(18px, calc((100% - 820px) / 2)) 24px;
   background: linear-gradient(
     180deg,
