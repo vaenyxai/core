@@ -1442,6 +1442,7 @@ function AnnotatedPhotoEditor({
   }
 
   const current = selected !== null ? marks[selected] : undefined;
+  const placed = layoutLabels(marks);
 
   return (
     <div className="annotate-editor">
@@ -1456,34 +1457,26 @@ function AnnotatedPhotoEditor({
           className="message-photo"
           src={`/v1/vision/image/${imageId}`}
         />
+        {/* The SAME label layout as a chat photo (layoutLabels): marks are one
+            thing with one look, whether you are reading them or editing them. */}
         <svg
           aria-hidden="true"
           className="annotate-lines"
           preserveAspectRatio="none"
           viewBox="0 0 100 100"
         >
-          {marks.map((item, index) => {
-            const toRight = item.x < 55;
-            const labelX = toRight
-              ? Math.min(item.x + 12, 96)
-              : Math.max(item.x - 12, 4);
-            return (
-              <line
-                key={index}
-                vectorEffect="non-scaling-stroke"
-                x1={item.x}
-                x2={labelX}
-                y1={item.y}
-                y2={Math.max(item.y - 5, 2)}
-              />
-            );
-          })}
+          {placed.map(({ item, labelX, labelY }, index) => (
+            <line
+              key={index}
+              vectorEffect="non-scaling-stroke"
+              x1={item.x}
+              x2={labelX}
+              y1={item.y}
+              y2={labelY}
+            />
+          ))}
         </svg>
-        {marks.map((item, index) => {
-          const toRight = item.x < 55;
-          const labelX = toRight
-            ? Math.min(item.x + 12, 96)
-            : Math.max(item.x - 12, 4);
+        {placed.map(({ item, labelX, labelY, toRight }, index) => {
           return (
             <span key={index}>
               <span
@@ -1502,10 +1495,7 @@ function AnnotatedPhotoEditor({
                   setSelected(index);
                   setAdding(false);
                 }}
-                style={{
-                  left: `${labelX}%`,
-                  top: `${Math.max(item.y - 5, 2)}%`,
-                }}
+                style={{ left: `${labelX}%`, top: `${labelY}%` }}
                 type="button"
               >
                 {item.name || "…"}
