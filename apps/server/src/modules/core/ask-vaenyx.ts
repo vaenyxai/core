@@ -1325,33 +1325,14 @@ export async function createAskVaenyxMessage(
     conversation: toConversation(
       getConversationRow(database, conversationId, ownerId),
     ),
-    messages: [
-      {
-        id: ownerMessageId,
-        conversationId,
-        role: "owner",
-        content: trimmedContent,
-        status: "completed",
-        webSearchUsed: false,
-        createdAt: now,
-        voice: Boolean(options?.voiceAudioId),
-        audioId: options?.voiceAudioId ?? null,
-        imageId: options?.imageId ?? null,
-      },
-      {
-        id: assistantMessageId,
-        conversationId,
-        role: "assistant",
-        content: assistantContent,
-        status: assistantStatus,
-        webSearchUsed,
-        createdAt: completedAt,
-        voice: Boolean(
-          options?.voiceAudioId && assistantStatus === "completed",
-        ),
-        audioId: null,
-        imageId: generatedImageId,
-      },
-    ],
+    // Read the two messages BACK from the database rather than describing them
+    // here: the row is the truth, and hand-built copies kept losing what the
+    // turn had just attached — the echoed photo and its marks vanished the
+    // moment the reply landed, because this object did not mention them
+    // (Oskar, 2026-07-29).
+    messages: listAskVaenyxMessages(database, conversationId, ownerId).filter(
+      (message) =>
+        message.id === ownerMessageId || message.id === assistantMessageId,
+    ),
   };
 }

@@ -85,7 +85,7 @@ import type {
 
 export type { Mode, DeviceMode, UpdateStatus } from "@vaenyx/contracts";
 
-import { showErrorToast } from "./toast.js";
+import { showErrorToast, showSavedToast } from "./toast.js";
 
 interface ErrorResponse {
   error?: string;
@@ -119,7 +119,42 @@ async function requestJson<T>(
     throw new Error(message);
   }
 
+  // Settings save themselves the moment they change, which is silent by
+  // nature: a successful settings write says so out loud (Oskar, 2026-07-29).
+  // Only settings-shaped writes — chat sends and runs have their own visible
+  // result and do not need a "saved" popping over them.
+  const method = (options.method ?? "GET").toUpperCase();
+  if (method !== "GET" && SAVED_TOAST_PATHS.some((rule) => rule.test(path))) {
+    showSavedToast(savedToastMessage());
+  }
+
   return (await response.json()) as T;
+}
+
+// Which writes count as "a setting the Owner just changed".
+const SAVED_TOAST_PATHS = [
+  /^\/v1\/settings/,
+  /^\/v1\/models\/providers/,
+  /^\/v1\/models\/default/,
+  /^\/v1\/models\/claude-login\/code/,
+  /^\/v1\/voice\/(engine|connect|output|local)/,
+  /^\/v1\/vision\/(engine|connect)/,
+  /^\/v1\/images\/engine/,
+  /^\/v1\/agent-profiles\//,
+  /^\/v1\/projects\/[^/]+\/instructions/,
+  /^\/v1\/push\/prefs/,
+  /^\/v1\/backup\/config/,
+  /^\/v1\/modes(\/|$)/,
+];
+
+// The app is bilingual and this bus has no i18n context, so the message comes
+// from the same language switch the UI uses.
+function savedToastMessage(): string {
+  try {
+    return localStorage.getItem("vaenyx.lang") === "zh" ? "已保存" : "Saved";
+  } catch {
+    return "Saved";
+  }
 }
 
 export function fetchSystemStatus(): Promise<SystemStatus> {

@@ -4691,6 +4691,14 @@ select {
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
 }
 
+/* "Saved": settings write themselves as they change, so the confirmation is
+   the only sign it happened. Green, brief, out of the way. */
+.toast-item--success {
+  border-color: rgba(106, 166, 127, 0.5);
+  background: rgba(30, 48, 38, 0.96);
+  color: #cfe7d8;
+}
+
 /* Full-screen Enter-PIN gate shown when the app opens into a gated mode. */
 .mode-gate-backdrop {
   position: fixed;
@@ -6446,9 +6454,8 @@ html, body { overscroll-behavior-y: none; }
 .thinking-block { margin-top: auto; }
 /* The unread breathing dot (Oskar, 2026-07-28): new activity in a thread this
    device has not opened since. Dies the moment the thread is opened. */
-/* Deliberately tiny (Oskar, 2026-07-28): at 8px with a scale pulse it read as
-   a second status light. 5px + opacity-only breathing keeps it a marker, not
-   a peer of the colored dot at the row's front. */
-.unread-dot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: #e5484d; animation: unread-breathe 2s ease-in-out infinite; }
-@keyframes unread-breathe { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+/* Unread = the row's own status light breathing (Oskar, 2026-07-29). One dot,
+   two facts: its colour is the thread's state, its pulse means unread. */
+.status-light--unread { animation: unread-breathe 2s ease-in-out infinite; }
+@keyframes unread-breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .unread-dot { animation: none; } }
