@@ -2648,12 +2648,41 @@ select {
   margin-left: auto;
 }
 
+/* This header sits above every task and has to fit a low-resolution phone in
+   about three rows (Oskar, 2026-07-30 — it was taking six and crowding out the
+   answer). Everything in it is meta, so everything in it is label-sized, and
+   the gaps are tight enough that the chips, the schedule and its buttons share
+   one row. */
 .task-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 5px;
+  gap: var(--space-1) 6px;
+  margin-top: 4px;
+  font-size: var(--fs-label);
+}
+
+.task-toolbar .task-select,
+.task-toolbar .task-toolbar-action,
+.task-toolbar .task-runs,
+.task-toolbar .task-next,
+.task-toolbar .schedule-monthday {
+  font-size: var(--fs-label);
+}
+
+.task-toolbar .task-select,
+.task-toolbar .task-toolbar-action {
+  min-height: 26px;
+  height: 26px;
+  padding: 0 9px;
+}
+
+/* The state chips are meta too, and on a narrow phone they were big enough to
+   push themselves onto a row of their own. Scoped to this header only — the
+   same chips elsewhere keep their size. */
+.focused-task-panel .chat-chips--inline,
+.focused-task-panel .chat-chips--inline * {
+  font-size: var(--fs-label);
 }
 
 .task-select {

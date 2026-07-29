@@ -328,6 +328,25 @@ function formatDuration(durationMs: number): string {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
+// A when, as short as it can be and still be unambiguous — for headers that
+// have to fit a narrow phone. Today and tomorrow are the two the Owner reads
+// most, so they say so instead of spelling out a date he already knows.
+function shortWhen(value: string): string {
+  const when = new Date(value);
+  const time = new Intl.DateTimeFormat(uiLocale(), {
+    timeStyle: "short",
+  }).format(when);
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const days = Math.floor(
+    (when.getTime() - midnight.getTime()) / 86_400_000,
+  );
+  if (days === 0) return time;
+  if (days === 1) return `tomorrow ${time}`;
+  if (days === -1) return `yesterday ${time}`;
+  return `${new Intl.DateTimeFormat(uiLocale(), { day: "numeric", month: "short" }).format(when)} ${time}`;
+}
+
 // Rotating "what Vaenyx is doing" copy shown while waiting for the reply. The
 // model can take several seconds before the first token, so a lively, changing
 // indicator reassures the Owner that work is happening. The backend does not
@@ -8879,14 +8898,21 @@ function AskVaenyxPanel({
                       </ul>
                     </details>
                   ) : null}
-                  {focusedTask.completedAt ? (
+                  {/* One line, not two, and no year in it: this header has to
+                      fit a low-resolution phone in three rows (Oskar,
+                      2026-07-30 — it was taking six). */}
+                  {focusedTask.completedAt || focusedTask.nextRunAt ? (
                     <span className="task-next">
-                      Last run {formatTime(focusedTask.completedAt)}
-                    </span>
-                  ) : null}
-                  {focusedTask.scheduleEnabled && focusedTask.nextRunAt ? (
-                    <span className="task-next">
-                      Next {formatTime(focusedTask.nextRunAt)}
+                      {[
+                        focusedTask.completedAt
+                          ? `Last ${shortWhen(focusedTask.completedAt)}`
+                          : null,
+                        focusedTask.scheduleEnabled && focusedTask.nextRunAt
+                          ? `Next ${shortWhen(focusedTask.nextRunAt)}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   ) : null}
                 </div>

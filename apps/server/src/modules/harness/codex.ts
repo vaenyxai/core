@@ -287,7 +287,18 @@ export async function runForgeReadOnly(
 
   const child = spawn(
     executable.command,
-    [...executable.args, "app-server", "--stdio"],
+    [
+      ...executable.args,
+      "app-server",
+      "--stdio",
+      // Tasks can look things up (Oskar, 2026-07-30). His 7am briefing task
+      // reported that it had no way to search, and it was right: Chat has
+      // carried this flag from the start and this path never did, so every
+      // scheduled run was working from memory alone. The search tool runs at
+      // the provider's end; the local sandbox stays read-only with no network.
+      "--config",
+      'web_search="live"',
+    ],
     {
       cwd: vaenyxRepositoryRoot,
       env: createForgeEnvironment(),
