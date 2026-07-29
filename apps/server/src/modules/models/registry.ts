@@ -123,7 +123,7 @@ export function initModelRegistry(config: {
   // the connected list as "needs attention" (Oskar, 2026-07-29).
   const claudeSub = connections["claude-sub"];
   if (claudeSub?.apiKey) {
-    next.register(new ClaudeSubscriptionProvider(claudeSub.apiKey));
+    next.register(new ClaudeSubscriptionProvider(config.secretsDirectory));
   }
   // Every key-based OpenAI-compatible backend registers the same way — one
   // table, not one hand-rolled block per provider. Groq / Cerebras / OpenRouter

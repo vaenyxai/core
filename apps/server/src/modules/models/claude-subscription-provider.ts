@@ -21,6 +21,8 @@ import { join } from "node:path";
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
+import { freshClaudeToken } from "./claude-login.js";
+import { readProviderConnections } from "./connections.js";
 import type {
   ModelChatMessage,
   ModelChatOptions,
@@ -62,17 +64,17 @@ function formatTranscript(messages: ModelChatMessage[]): string {
 export class ClaudeSubscriptionProvider implements ModelProvider {
   readonly id = "claude-sub";
   readonly name = "Claude (Subscription)";
-  readonly #setupToken: string | null;
+  readonly #secretsDirectory: string;
 
-  constructor(setupToken: string | null) {
-    this.#setupToken = setupToken?.trim() || null;
+  constructor(secretsDirectory: string) {
+    this.#secretsDirectory = secretsDirectory;
   }
 
   // Subscription auth ONLY: the child gets an environment with every
   // Anthropic API-key path stripped, so it can never silently bill a metered
-  // key. Auth comes from the pasted `claude setup-token` value, or from a
-  // Claude Code sign-in already on this machine.
-  #childEnvironment(): Record<string, string> {
+  // key. Auth is the OAuth access token from the in-app sign-in, refreshed
+  // through its refresh token when close to expiry.
+  #childEnvironment(accessToken: string): Record<string, string> {
     const environment: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
       if (value === undefined) continue;
@@ -85,9 +87,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
       }
       environment[key] = value;
     }
-    if (this.#setupToken) {
-      environment.CLAUDE_CODE_OAUTH_TOKEN = this.#setupToken;
-    }
+    environment.CLAUDE_CODE_OAUTH_TOKEN = accessToken;
     return environment;
   }
 
@@ -96,6 +96,11 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     projectContext?: string,
     options?: ModelChatOptions,
   ): Promise<ModelChatResult> {
+    const accessToken = await freshClaudeToken(this.#secretsDirectory);
+    if (!accessToken) {
+      throw new Error(`MODEL_PROVIDER_ERROR:${this.id}:not-connected`);
+    }
+
     // An empty, throwaway working directory: even if a tool call somehow got
     // through, there is nothing here to find.
     const jail = join(tmpdir(), "vaenyx-claude-jail", randomUUID());
@@ -124,7 +129,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           allowedTools: [],
           disallowedTools: DENIED_TOOLS,
           cwd: jail,
-          env: this.#childEnvironment(),
+          env: this.#childEnvironment(accessToken),
           maxTurns: 1,
           // Never read the machine's Claude settings, CLAUDE.md or MCP config.
           mcpServers: {},
@@ -168,20 +173,16 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
   }
 
   // Mirrors CodexProvider.healthCheck's structure: present → signed in →
-  // subscription kind. The SDK ships with the app, so "present" is a given.
-  // Sign-in is the pasted setup token ONLY: the interactive `claude /login`
-  // stores credentials in the TERMINAL user's profile, which a server running
-  // as a service (Vaenyx's normal life) cannot see — so that path is not
-  // offered, and Anthropic's setup-token is the supported non-interactive
-  // form of the same subscription login.
+  // subscription kind. The SDK ships with the app, so "present" is a given;
+  // signed-in means the in-app sign-in stored its OAuth tokens.
   healthCheck(): ModelProviderStatus {
-    if (this.#setupToken) {
-      return { ok: true, detail: "Claude subscription (setup token)." };
+    const entry = readProviderConnections(this.#secretsDirectory)["claude-sub"];
+    if (entry?.apiKey) {
+      return { ok: true, detail: "Claude subscription (signed in)." };
     }
     return {
       ok: false,
-      detail:
-        "Not connected. Run `claude setup-token` in a terminal and paste the token here.",
+      detail: "Not signed in — use Sign In With Claude on the connect card.",
     };
   }
 }

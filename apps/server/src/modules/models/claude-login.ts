@@ -1,196 +1,164 @@
 // In-app Claude subscription sign-in ("帮用户搞定,点一下弹出网页", Oskar
-// 2026-07-29). Users cannot be asked to install a CLI and read a terminal —
-// so the server drives the OFFICIAL `setup-token` flow itself, under a
-// pseudo-terminal, using the claude executable that already ships inside the
-// Agent SDK's platform package (zero download, version-matched, no protocol
-// re-implementation):
+// 2026-07-29): a standard OAuth authorization-code + PKCE exchange against
+// the SAME endpoints, client id, redirect and scope the official CLI's
+// `setup-token` uses (endpoints read out of the bundled claude binary,
+// 2026-07-29). Driving the CLI's terminal UI under a pty was tried first and
+// proved unreliable — the TUI swallowed programmatic input — so the server
+// speaks the protocol directly:
 //
-//   start  → spawn `claude setup-token` in a pty, capture the sign-in URL
-//   (the Owner opens it on ANY device; claude.com shows a code after login)
-//   code   → write the pasted code into the pty, capture the long-lived
-//   token from the output, save it as the claude-sub connection
+//   start → generate verifier/state, return the authorize URL (the Owner
+//   opens it on ANY device; claude.com shows a code after sign-in)
+//   code  → exchange code+verifier at the token endpoint, store the tokens
 //
-// One login session at a time; a new start replaces the old. The child env
-// strips every Anthropic API-key path — this flow can only ever produce a
-// subscription login.
-import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+// The stored access token feeds the Agent SDK via CLAUDE_CODE_OAUTH_TOKEN;
+// the refresh token lets the channel renew itself without a new sign-in.
+// Tokens live only in the local secrets file and never reach the browser.
+import { createHash, randomBytes } from "node:crypto";
 
-import { spawn, type IPty } from "node-pty";
+import {
+  readProviderConnections,
+  writeProviderConnections,
+} from "./connections.js";
 
-import { connectModelProvider } from "./provider-settings.js";
+// Claude Code's PUBLIC OAuth client id (it is in every sign-in URL the CLI
+// prints); nothing secret about it.
+const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+const AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize";
+const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
+const REDIRECT_URI = "https://platform.claude.com/oauth/code/callback";
+const SCOPE = "user:inference";
 
-const require = createRequire(import.meta.url);
-
-// The Agent SDK ships the full claude executable in a per-platform package.
-function bundledClaudeExecutable(): string | null {
-  const binary = process.platform === "win32" ? "claude.exe" : "claude";
-  const candidates = [
-    `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`,
-    `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}-musl`,
-  ];
-  for (const packageName of candidates) {
-    try {
-      const path = join(
-        dirname(require.resolve(`${packageName}/package.json`)),
-        binary,
-      );
-      if (existsSync(path)) return path;
-    } catch {
-      // Platform package absent — try the next candidate.
-    }
-  }
-  return null;
+function base64url(buffer: Buffer): string {
+  return buffer
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
-function cleanEnvironment(): Record<string, string> {
-  const environment: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-    if (
-      key === "ANTHROPIC_API_KEY" ||
-      key === "ANTHROPIC_AUTH_TOKEN" ||
-      key === "ANTHROPIC_BASE_URL"
-    ) {
-      continue;
-    }
-    environment[key] = value;
-  }
-  // Never try to open a browser on the server box — the URL goes to the UI.
-  environment.BROWSER = "none";
-  return environment;
-}
-
-// Strip ANSI/OSC terminal decoration so the URL and token can be matched.
-// Built from char codes rather than literals, so no control characters live
-// in the source (and no-control-regex stays honest).
-const ESC = String.fromCharCode(27);
-const BEL = String.fromCharCode(7);
-const OSC_RE = new RegExp(`${ESC}\\][^]*?(?:${BEL}|${ESC}\\\\)`, "g");
-const CSI_RE = new RegExp(`${ESC}\\[[0-9;?]*[A-Za-z]`, "g");
-const MODE_RE = new RegExp(`${ESC}[=>]`, "g");
-
-function stripTerminalCodes(raw: string): string {
-  return raw.replace(OSC_RE, "").replace(CSI_RE, "").replace(MODE_RE, "");
-}
-
-interface LoginSession {
-  child: IPty;
-  buffer: string;
-  done: boolean;
-}
-
-let session: LoginSession | null = null;
-
-function endSession(): void {
-  if (session && !session.done) {
-    session.done = true;
-    try {
-      session.child.kill();
-    } catch {
-      // Already gone.
-    }
-  }
-  session = null;
-}
+let pending: { verifier: string; state: string } | null = null;
 
 export function cancelClaudeLogin(): void {
-  endSession();
+  pending = null;
 }
 
-// Spawn the flow and wait for the sign-in URL (the pty is 500 columns wide so
-// the URL never line-wraps). Times out rather than hanging the request.
-export function startClaudeLogin(): Promise<{ url: string }> {
-  endSession();
-  const executable = bundledClaudeExecutable();
-  if (!executable) {
-    return Promise.reject(new Error("CLAUDE_LOGIN_NO_EXECUTABLE"));
-  }
-  const child = spawn(executable, ["setup-token"], {
-    name: "xterm-color",
-    cols: 500,
-    rows: 50,
-    env: cleanEnvironment(),
-  });
-  const next: LoginSession = { child, buffer: "", done: false };
-  session = next;
-
-  return new Promise<{ url: string }>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      if (session === next) endSession();
-      reject(new Error("CLAUDE_LOGIN_URL_TIMEOUT"));
-    }, 30_000);
-
-    child.onData((data) => {
-      next.buffer += data;
-      const cleaned = stripTerminalCodes(next.buffer).replace(/[\r\n]/g, "");
-      const match = cleaned.match(
-        /https:\/\/claude\.com\/[^\s\\"'>\]]*oauth[^\s\\"'>\]]+/,
-      );
-      if (match) {
-        clearTimeout(timeout);
-        resolve({ url: match[0] });
-      }
-    });
-    child.onExit(() => {
-      clearTimeout(timeout);
-      if (session === next) session = null;
-      reject(new Error("CLAUDE_LOGIN_EXITED"));
-    });
-  });
+export function startClaudeLogin(): { url: string } {
+  const verifier = base64url(randomBytes(48));
+  const state = base64url(randomBytes(24));
+  pending = { verifier, state };
+  const url = `${AUTHORIZE_URL}?${new URLSearchParams({
+    code: "true",
+    client_id: CLIENT_ID,
+    response_type: "code",
+    redirect_uri: REDIRECT_URI,
+    scope: SCOPE,
+    code_challenge: base64url(
+      createHash("sha256").update(verifier).digest(),
+    ),
+    code_challenge_method: "S256",
+    state,
+  }).toString()}`;
+  return { url };
 }
 
-// Feed the code the Owner pasted, wait for the long-lived token, save it as
-// the claude-sub connection. The token itself never leaves this function
-// except into the secrets file.
-export function submitClaudeLoginCode(
+interface TokenResponse {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+}
+
+// The callback page shows the code as `code#state`; accept either the full
+// string or just the code half.
+export async function submitClaudeLoginCode(
   config: { secretsDirectory: string },
-  code: string,
+  raw: string,
 ): Promise<void> {
-  const active = session;
-  if (!active || active.done) {
-    return Promise.reject(new Error("CLAUDE_LOGIN_NOT_STARTED"));
-  }
-  const markStart = active.buffer.length;
-  active.child.write(`${code.trim()}\r`);
+  const active = pending;
+  if (!active) throw new Error("CLAUDE_LOGIN_NOT_STARTED");
+  const trimmed = raw.trim();
+  const [codePart, statePart] = trimmed.split("#");
+  if (!codePart) throw new Error("CLAUDE_LOGIN_EMPTY_CODE");
 
-  return new Promise<void>((resolve, reject) => {
-    const finish = (error?: Error) => {
-      clearTimeout(timeout);
-      clearInterval(poll);
-      endSession();
-      if (error) reject(error);
-      else resolve();
-    };
-    const timeout = setTimeout(() => {
-      finish(new Error("CLAUDE_LOGIN_CODE_TIMEOUT"));
-    }, 60_000);
-    // Poll the buffer: onData already appends, so a simple interval keeps this
-    // handler-independent of the earlier subscription.
-    const poll = setInterval(() => {
-      const fresh = stripTerminalCodes(active.buffer.slice(markStart));
-      const token = fresh.replace(/[\r\n\s]/g, "").match(
-        /sk-ant-[A-Za-z0-9_-]{40,}/,
-      );
-      if (token) {
-        try {
-          connectModelProvider({ secretsDirectory: config.secretsDirectory }, "claude-sub", {
-            apiKey: token[0],
-          });
-          finish();
-        } catch (error) {
-          finish(
-            error instanceof Error
-              ? error
-              : new Error("CLAUDE_LOGIN_SAVE_FAILED"),
-          );
-        }
-        return;
-      }
-      if (/invalid|error|expired|denied/i.test(fresh)) {
-        finish(new Error("CLAUDE_LOGIN_CODE_REJECTED"));
-      }
-    }, 300);
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      code: codePart,
+      state: statePart ?? active.state,
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: active.verifier,
+    }),
   });
+  if (!response.ok) {
+    throw new Error(`CLAUDE_LOGIN_EXCHANGE_${response.status}`);
+  }
+  const data = (await response.json()) as TokenResponse;
+  if (!data.access_token) throw new Error("CLAUDE_LOGIN_NO_TOKEN");
+  pending = null;
+
+  const connections = readProviderConnections(config.secretsDirectory);
+  connections["claude-sub"] = {
+    ...connections["claude-sub"],
+    apiKey: data.access_token,
+    ...(data.refresh_token ? { refreshToken: data.refresh_token } : {}),
+    ...(data.expires_in
+      ? {
+          expiresAt: new Date(
+            Date.now() + data.expires_in * 1000,
+          ).toISOString(),
+        }
+      : {}),
+  };
+  writeProviderConnections(config.secretsDirectory, connections);
+}
+
+// A valid access token for the subscription channel, refreshing through the
+// refresh token when the stored one is (nearly) expired. Returns null when
+// the channel is not connected.
+export async function freshClaudeToken(
+  secretsDirectory: string,
+): Promise<string | null> {
+  const connections = readProviderConnections(secretsDirectory);
+  const entry = connections["claude-sub"];
+  if (!entry?.apiKey) return null;
+
+  const expiresAt = entry.expiresAt ? Date.parse(entry.expiresAt) : null;
+  const nearExpiry =
+    expiresAt !== null && expiresAt - Date.now() < 5 * 60_000;
+  if (!nearExpiry || !entry.refreshToken) return entry.apiKey;
+
+  try {
+    const response = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "refresh_token",
+        refresh_token: entry.refreshToken,
+        client_id: CLIENT_ID,
+      }),
+    });
+    if (!response.ok) return entry.apiKey;
+    const data = (await response.json()) as TokenResponse;
+    if (!data.access_token) return entry.apiKey;
+    connections["claude-sub"] = {
+      ...entry,
+      apiKey: data.access_token,
+      ...(data.refresh_token ? { refreshToken: data.refresh_token } : {}),
+      ...(data.expires_in
+        ? {
+            expiresAt: new Date(
+              Date.now() + data.expires_in * 1000,
+            ).toISOString(),
+          }
+        : {}),
+    };
+    writeProviderConnections(secretsDirectory, connections);
+    return data.access_token;
+  } catch {
+    // Network hiccup: try the stored token; a real expiry surfaces as a
+    // clear provider error on the call itself.
+    return entry.apiKey;
+  }
 }

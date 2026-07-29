@@ -367,7 +367,7 @@ import {
 } from "../core/image-gen.js";
 import { classifyRoutineIntent } from "../core/routine-intent.js";
 import { getFreePicks, refreshFreePicks } from "../core/free-picks.js";
-import { getDefaultProvider } from "../models/registry.js";
+import { getDefaultProvider, initModelRegistry } from "../models/registry.js";
 import { fetchCatalogue, installRoutine, installMethod } from "../core/catalogue.js";
 import {
   recordLegalAcknowledgement,
@@ -1343,7 +1343,7 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       try {
-        const { url } = await startClaudeLogin();
+        const { url } = startClaudeLogin();
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
@@ -1388,6 +1388,10 @@ export async function registerGatewayRoutes(
           { secretsDirectory: context.config.secretsDirectory },
           request.body.code,
         );
+        // The stored tokens take effect immediately.
+        initModelRegistry({
+          secretsDirectory: context.config.secretsDirectory,
+        });
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
         return reply.code(400).send({

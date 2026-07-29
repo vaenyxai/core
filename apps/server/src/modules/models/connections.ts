@@ -3,13 +3,17 @@
 // credentials. Shape: { "openai": { "apiKey": "...", "model": "gpt-4o" },
 // "local": { "baseUrl": "http://127.0.0.1:11434/v1", "model": "..." }, ... }.
 // A later slice adds a Settings UI to edit this; for now it is a secrets file.
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 export interface ProviderConnection {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  // Claude subscription entry only: the OAuth refresh token and the access
+  // token's expiry, so the channel can renew itself without a new sign-in.
+  refreshToken?: string;
+  expiresAt?: string;
   // Voice output entry only: which TTS engine + which prebuilt voice.
   engine?: string;
   voice?: string;
@@ -41,6 +45,19 @@ export function readProviderConnections(
     // Absent / unreadable -> no extra providers configured (Codex-only).
     return {};
   }
+}
+
+// Import-cycle-free writer (claude-login and the subscription provider write
+// through here; provider-settings keeps its own equivalent for the same file).
+export function writeProviderConnections(
+  secretsDirectory: string,
+  connections: Record<string, ProviderConnection>,
+): void {
+  mkdirSync(secretsDirectory, { recursive: true });
+  writeFileSync(
+    resolve(secretsDirectory, "model-providers.json"),
+    `${JSON.stringify(connections, null, 2)}\n`,
+  );
 }
 
 // The Owner's chosen default provider (which backend a chat uses), in its own

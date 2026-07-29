@@ -10123,10 +10123,15 @@ function ModelsPanel() {
   async function beginClaudeLogin() {
     setBusy("claude-sub");
     setError(null);
+    // Open the tab NOW, inside the click gesture, so popup blockers allow it;
+    // point it at the sign-in URL the moment the server hands it over.
+    const popup = window.open("", "_blank");
     try {
       const { url } = await startClaudeLogin();
       setClaudeLoginUrl(url);
+      if (popup) popup.location.href = url;
     } catch {
+      popup?.close();
       // requestJson already raised the toast with the server's reason.
     } finally {
       setBusy(null);
@@ -10290,20 +10295,21 @@ function ModelsPanel() {
           {claudeLoginUrl ? (
             <>
               <a
-                className="model-key-link"
+                className="primary-button claude-signin-button"
                 href={claudeLoginUrl}
                 rel="noreferrer"
                 target="_blank"
               >
-                1. Open Claude Sign-In ↗
+                Open Claude Sign-In ↗
               </a>
               <p className="settings-card-copy text-faint">
-                2. Sign in, then copy the code the page shows and paste it
-                here:
+                The sign-in page opened in a new tab (button above reopens
+                it). Sign in, copy the code the page shows, paste it here:
               </p>
               <input
                 autoCapitalize="off"
                 autoComplete="off"
+                autoFocus
                 className="method-rename-input key-input"
                 onChange={(event) => setClaudeLoginCode(event.target.value)}
                 placeholder="Code from the sign-in page"
@@ -10324,7 +10330,7 @@ function ModelsPanel() {
                 onClick={() => void finishClaudeLogin()}
                 type="button"
               >
-                {busy === provider.id ? "Connecting…" : "3. Finish Sign-In"}
+                {busy === provider.id ? "Connecting…" : "Finish Sign-In"}
               </button>
             ) : (
               <button

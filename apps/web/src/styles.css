@@ -1081,6 +1081,15 @@ textarea::placeholder {
   height: 14px;
 }
 
+/* The Claude sign-in link, dressed as the big primary action it is. */
+.claude-signin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  text-decoration: none;
+}
+
 .annotated-photo .message-photo {
   cursor: zoom-in;
 }
