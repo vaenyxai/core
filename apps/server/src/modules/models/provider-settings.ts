@@ -158,7 +158,7 @@ export function listModelProviders(
 // changeable by hand any time. No hidden "auto" resolution.
 const STT_CAPABLE_PROVIDERS = ["groq", "openai"];
 const TTS_CAPABLE_PROVIDERS = ["gemini"];
-const VISION_CAPABLE_PROVIDERS = ["gemini", "zhipu", "openai"];
+const VISION_CAPABLE_PROVIDERS = ["gemini", "zhipu", "openai", "claude-sub"];
 const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
 
 /** What each backend can be used FOR, so the engine pickers can offer the

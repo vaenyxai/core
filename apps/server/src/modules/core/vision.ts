@@ -5,8 +5,10 @@
 // provider (auto-picked); the key never reaches the browser.
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 
+import { claudeSubscriptionVision } from "../models/claude-subscription-provider.js";
 import { readProviderConnections } from "../models/connections.js";
 import { writeConnections } from "../models/provider-settings.js";
 
@@ -90,7 +92,9 @@ export const VISION_DIRECT_PROVIDER_IDS = [
 ];
 
 // Order of preference among the Owner's existing Models connections — all
-// free-tier friendly, no separate vision setup needed.
+// free-tier friendly, no separate vision setup needed. "claude-sub" has no
+// baseUrl/model: it reads photos through the locked-down Agent SDK path
+// (claudeSubscriptionVision) instead of an OpenAI-style endpoint.
 const VISION_CANDIDATES = [
   {
     id: "gemini",
@@ -112,13 +116,23 @@ const VISION_CANDIDATES = [
     baseUrl: "https://api.openai.com/v1",
     model: "gpt-4o",
   },
+  {
+    id: "claude-sub",
+    baseUrl: "",
+    model: "",
+  },
 ] as const;
 
 // The vision slot is a plain pointer at a connected provider (Oskar's
 // unified model, dev.162): empty = camera off, auto-filled once when a
 // capable model connects (fillEngineDefaults), repointable here. Keys live
 // only in the Models connections.
-export type VisionEngineChoice = "none" | "gemini" | "zhipu" | "openai";
+export type VisionEngineChoice =
+  | "none"
+  | "gemini"
+  | "zhipu"
+  | "openai"
+  | "claude-sub";
 
 function pickCandidate(
   connections: ReturnType<typeof readProviderConnections>,
@@ -126,8 +140,21 @@ function pickCandidate(
   const chosen = connections.vision?.provider;
   if (!chosen) return null;
   const pinned = VISION_CANDIDATES.find((entry) => entry.id === chosen);
-  if (!pinned || !connections[pinned.id]?.apiKey) return null;
+  if (!pinned) return null;
+  // claude-sub authenticates via setup token OR a machine sign-in; the
+  // key-based candidates need their stored key.
+  if (pinned.id === "claude-sub") {
+    const auth = claudeSubAuthProbe();
+    return connections["claude-sub"]?.apiKey || auth ? pinned : null;
+  }
+  if (!connections[pinned.id]?.apiKey) return null;
   return pinned;
+}
+
+// Machine-login presence — a tiny local check (same rule as the provider's
+// resolveClaudeSubscriptionAuth, without a signature change here).
+function claudeSubAuthProbe(): boolean {
+  return existsSync(resolve(homedir(), ".claude", ".credentials.json"));
 }
 
 export function getVisionStatus(secretsDirectory: string): {
@@ -153,7 +180,10 @@ export function setVisionEngine(
     }
     return getVisionStatus(secretsDirectory);
   }
-  if (!connections[choice]?.apiKey) {
+  if (
+    !connections[choice]?.apiKey &&
+    !(choice === "claude-sub" && claudeSubAuthProbe())
+  ) {
     throw new Error("VISION_NO_KEY");
   }
   connections.vision = { provider: choice };
@@ -182,6 +212,17 @@ export async function describeImage(
     lang === "zh"
       ? "把这张照片的内容写成清单:一行一项,格式如「牛肉 ×1」。食材/冰箱/购物照片就逐项列出能辨认的食物和数量;文档或票据就一行一条列关键信息;其它内容一行一个要点。禁止 markdown、星号、标题、分区、段落——只要干净的行。只输出清单本身,不要客套话。"
       : "Write this photo's contents as a list: one item per line, like 'beef steak x1'. For food/fridge/grocery photos list every identifiable item with a rough quantity; for documents or receipts one key fact per line; otherwise one short point per line. NO markdown, NO asterisks, NO headings, NO sections, NO paragraphs — clean lines only. Output the list itself, no preamble.";
+
+  if (candidate.id === "claude-sub") {
+    return (
+      await claudeSubscriptionVision(
+        secretsDirectory,
+        prompt,
+        image.toString("base64"),
+        mimeType,
+      )
+    ).trim();
+  }
 
   const response = await fetch(
     `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,
@@ -270,50 +311,61 @@ export async function annotateImage(
     "No markdown fences, no commentary.",
   ].join(" ");
 
-  const response = await fetch(
-    `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: candidate.model,
-        temperature: 0,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
-          },
-        ],
-      }),
-    },
-  );
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as {
-        error?: { message?: unknown } | string;
-      };
-      const raw =
-        typeof body.error === "string" ? body.error : body.error?.message;
-      if (typeof raw === "string") detail = raw.slice(0, 300);
-    } catch {
-      // Non-JSON body: the status code is all there is.
-    }
-    throw new Error(
-      `VISION_ANNOTATE_FAILED:${response.status}${detail ? `:${detail}` : ""}`,
+  let text: string;
+  if (candidate.id === "claude-sub") {
+    text = await claudeSubscriptionVision(
+      secretsDirectory,
+      prompt,
+      image.toString("base64"),
+      mimeType,
     );
+  } else {
+    const response = await fetch(
+      `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: candidate.model,
+          temperature: 0,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: prompt },
+                { type: "image_url", image_url: { url: dataUrl } },
+              ],
+            },
+          ],
+        }),
+      },
+    );
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const body = (await response.json()) as {
+          error?: { message?: unknown } | string;
+        };
+        const raw =
+          typeof body.error === "string" ? body.error : body.error?.message;
+        if (typeof raw === "string") detail = raw.slice(0, 300);
+      } catch {
+        // Non-JSON body: the status code is all there is.
+      }
+      throw new Error(
+        `VISION_ANNOTATE_FAILED:${response.status}${detail ? `:${detail}` : ""}`,
+      );
+    }
+    const parsed = (await response.json()) as {
+      choices?: { message?: { content?: unknown } }[];
+    };
+    const content = parsed.choices?.[0]?.message?.content;
+    if (typeof content !== "string") throw new Error("VISION_ANNOTATE_EMPTY");
+    text = content;
   }
-  const parsed = (await response.json()) as {
-    choices?: { message?: { content?: unknown } }[];
-  };
-  const text = parsed.choices?.[0]?.message?.content;
-  if (typeof text !== "string") throw new Error("VISION_ANNOTATE_EMPTY");
   const cleaned = text
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/```\s*$/, "")

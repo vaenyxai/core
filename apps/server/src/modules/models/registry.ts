@@ -4,7 +4,10 @@
 // a specific backend. Today only the Codex provider is registered; multi-model
 // registers OpenAI / Claude / Gemini / local alongside it.
 import { AnthropicProvider } from "./anthropic-provider.js";
-import { ClaudeSubscriptionProvider } from "./claude-subscription-provider.js";
+import {
+  ClaudeSubscriptionProvider,
+  resolveClaudeSubscriptionAuth,
+} from "./claude-subscription-provider.js";
 import { CodexProvider } from "./codex-provider.js";
 import {
   readDefaultProviderId,
@@ -121,8 +124,11 @@ export function initModelRegistry(config: {
   // has connected it (pasted `claude setup-token` value), so it flows through
   // the same Add a Model path as every other backend instead of squatting in
   // the connected list as "needs attention" (Oskar, 2026-07-29).
-  const claudeSub = connections["claude-sub"];
-  if (claudeSub?.apiKey) {
+  // Registered when EITHER sanctioned auth form exists: a pasted setup token,
+  // or a Claude Code login already on this machine (the SDK child reads the
+  // CLI's own credentials natively).
+  const claudeSubAuth = resolveClaudeSubscriptionAuth(config.secretsDirectory);
+  if (claudeSubAuth.token || claudeSubAuth.machineLogin) {
     next.register(new ClaudeSubscriptionProvider(config.secretsDirectory));
   }
   // Every key-based OpenAI-compatible backend registers the same way — one

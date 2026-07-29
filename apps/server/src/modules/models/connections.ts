@@ -10,10 +10,6 @@ export interface ProviderConnection {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
-  // Claude subscription entry only: the OAuth refresh token and the access
-  // token's expiry, so the channel can renew itself without a new sign-in.
-  refreshToken?: string;
-  expiresAt?: string;
   // Voice output entry only: which TTS engine + which prebuilt voice.
   engine?: string;
   voice?: string;

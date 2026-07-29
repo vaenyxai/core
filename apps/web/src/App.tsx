@@ -162,8 +162,6 @@ import {
   setImageEngineChoice,
   annotatePhoto,
   saveAnnotations,
-  startClaudeLogin,
-  submitClaudeLoginCode,
   describePhoto,
   uploadPhoto,
   type VisionStatus,
@@ -2483,7 +2481,7 @@ function VoicePanel() {
   }
 
   async function applyVisionEngine(
-    next: "none" | "gemini" | "zhipu" | "openai",
+    next: "none" | "gemini" | "zhipu" | "openai" | "claude-sub",
   ) {
     setBusy(true);
     setVisionError(null);
@@ -2912,7 +2910,12 @@ function VoicePanel() {
           disabled={busy}
           onChange={(event) =>
             void applyVisionEngine(
-              event.target.value as "none" | "gemini" | "zhipu" | "openai",
+              event.target.value as
+                | "none"
+                | "gemini"
+                | "zhipu"
+                | "openai"
+                | "claude-sub",
             )
           }
           value={vision?.provider ?? "none"}
@@ -10115,47 +10118,6 @@ function ModelsPanel() {
   const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(
     null,
   );
-  // In-app Claude subscription sign-in: the URL to open, and the code the
-  // Owner pastes back from claude.com. The token never reaches the browser.
-  const [claudeLoginUrl, setClaudeLoginUrl] = useState<string | null>(null);
-  const [claudeLoginCode, setClaudeLoginCode] = useState("");
-
-  async function beginClaudeLogin() {
-    setBusy("claude-sub");
-    setError(null);
-    // Open the tab NOW, inside the click gesture, so popup blockers allow it;
-    // point it at the sign-in URL the moment the server hands it over.
-    const popup = window.open("", "_blank");
-    try {
-      const { url } = await startClaudeLogin();
-      setClaudeLoginUrl(url);
-      if (popup) popup.location.href = url;
-    } catch {
-      popup?.close();
-      // requestJson already raised the toast with the server's reason.
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function finishClaudeLogin() {
-    setBusy("claude-sub");
-    setError(null);
-    try {
-      const result = await submitClaudeLoginCode(claudeLoginCode.trim());
-      setProviders(result.providers);
-      setClaudeLoginUrl(null);
-      setClaudeLoginCode("");
-      setAddTargetId("");
-      setEditingId(null);
-    } catch {
-      // Toast already shown; keep the form open so they can restart.
-      setClaudeLoginUrl(null);
-      setClaudeLoginCode("");
-    } finally {
-      setBusy(null);
-    }
-  }
   // A sign-in-page model button parked a connect intent: open that provider's
   // add form once, then clear the intent so later visits open normally.
   const [connectTarget] = useState<string | null>(() =>
@@ -10282,82 +10244,6 @@ function ModelsPanel() {
   }
 
   function renderConnectForm(provider: ModelProviderInfo) {
-    // Claude subscription: a guided sign-in, not a paste-a-key form. One tap
-    // starts the official flow server-side; the Owner opens the link on any
-    // device, logs in, and pastes back the code claude.com shows. The token
-    // is captured and stored by the server — the Owner never sees it.
-    if (provider.id === "claude-sub") {
-      return (
-        <div className="model-connect-form">
-          <p className="library-note">
-            Uses your own Claude plan, subject to that plan's limits.
-          </p>
-          {claudeLoginUrl ? (
-            <>
-              <a
-                className="primary-button claude-signin-button"
-                href={claudeLoginUrl}
-                rel="noreferrer"
-                target="_blank"
-              >
-                Open Claude Sign-In ↗
-              </a>
-              <p className="settings-card-copy text-faint">
-                The sign-in page opened in a new tab (button above reopens
-                it). Sign in, copy the code the page shows, paste it here:
-              </p>
-              <input
-                autoCapitalize="off"
-                autoComplete="off"
-                autoFocus
-                className="method-rename-input key-input"
-                onChange={(event) => setClaudeLoginCode(event.target.value)}
-                placeholder="Code from the sign-in page"
-                spellCheck={false}
-                type="text"
-                value={claudeLoginCode}
-              />
-            </>
-          ) : null}
-          <p className="context-disclaimer">
-            {t("legal.notice.modelConnect.cloud")}
-          </p>
-          <div className="model-card-actions">
-            {claudeLoginUrl ? (
-              <button
-                className="secondary-button"
-                disabled={busy === provider.id || !claudeLoginCode.trim()}
-                onClick={() => void finishClaudeLogin()}
-                type="button"
-              >
-                {busy === provider.id ? "Connecting…" : "Finish Sign-In"}
-              </button>
-            ) : (
-              <button
-                className="secondary-button"
-                disabled={busy === provider.id}
-                onClick={() => void beginClaudeLogin()}
-                type="button"
-              >
-                {busy === provider.id ? "Starting…" : "Sign In With Claude"}
-              </button>
-            )}
-            <button
-              className="text-button"
-              onClick={() => {
-                setClaudeLoginUrl(null);
-                setClaudeLoginCode("");
-                setEditingId(null);
-                setAddTargetId("");
-              }}
-              type="button"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      );
-    }
     const keyUrl = CONNECTABLE_MODELS.find(
       (model) => model.id === provider.id,
     )?.keyUrl;
@@ -14412,9 +14298,12 @@ const CONNECTABLE_MODELS: Array<{
 // almost always means the provider may use your data under its own terms —
 // the standard third-party notice still gates every connect.
 const MODEL_FREE_TIER_NOTES: Record<string, string> = {
-  // (claude-sub has no entry here on purpose: its connect card is the guided
-  // in-app sign-in, and its usage is the Owner's own plan, never a free tier.
-  // Wording rule 2026-07-29: no quota numbers for the Claude plan, anywhere.)
+  // The Owner runs the OFFICIAL tool themselves — Vaenyx never re-implements
+  // another app's sign-in (private's red line, 2026-07-29). npx needs no
+  // install: every Vaenyx machine already has Node. Wording rule: no quota
+  // numbers for the Claude plan, anywhere — and never "free tier".
+  "claude-sub":
+    "Uses your own Claude plan, subject to that plan's limits. On the computer where Vaenyx runs, open a terminal and run: npx -y @anthropic-ai/claude-code setup-token — sign in when the browser opens, then paste the token it prints below. Already signed in to Claude Code on that machine? It connects by itself, nothing to paste.",
   gemini: "Free tier: ~1,500 requests/day via Google AI Studio, no card needed.",
   groq: "Free tier: ~1,000 requests/day, very fast responses. No card needed.",
   cerebras: "Free tier: ~1M tokens/day, fastest responses. No card needed.",

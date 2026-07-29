@@ -405,19 +405,21 @@ textarea::placeholder {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-/* Settings → Models, compact layout (dev.127): connected backends are small
-   cards; everything else hides behind one Add a Model dropdown. */
+/* Settings → Models: ONE backend per row, name on the left, every action
+   button aligned to the right edge (Oskar, 2026-07-29). The connect form,
+   when open, drops to a full-width second line inside the row. */
 .model-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
   margin-top: 10px;
 }
 
 .model-card {
-  display: grid;
-  align-content: start;
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
   padding: 12px 14px;
   border: 0.5px solid var(--border);
   border-radius: var(--r-md);
@@ -429,6 +431,7 @@ textarea::placeholder {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .model-card-head strong {
@@ -448,7 +451,11 @@ textarea::placeholder {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 2px;
+  margin-left: auto;
+}
+
+.model-card .model-connect-form {
+  flex-basis: 100%;
 }
 
 .model-connect-form {
@@ -1085,14 +1092,6 @@ textarea::placeholder {
   height: 14px;
 }
 
-/* The Claude sign-in link, dressed as the big primary action it is. */
-.claude-signin-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: fit-content;
-  text-decoration: none;
-}
 
 .annotated-photo .message-photo {
   cursor: zoom-in;

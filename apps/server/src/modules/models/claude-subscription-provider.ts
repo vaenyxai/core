@@ -15,13 +15,12 @@
 // second layer, load no settings files, no CLAUDE.md, no MCP servers, one
 // turn only, and a jail working directory that contains nothing.
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
-import { freshClaudeToken } from "./claude-login.js";
 import { readProviderConnections } from "./connections.js";
 import type {
   ModelChatMessage,
@@ -30,6 +29,26 @@ import type {
   ModelProvider,
   ModelProviderStatus,
 } from "./provider.js";
+
+// Auth = the OFFICIAL tool's output, never our own OAuth (private's red line,
+// 2026-07-29: re-implementing the handshake with another app's client id is
+// impersonation, and the official permission is scoped to "via the Agent
+// SDK"). Two sanctioned forms, in order:
+//   1. a long-lived token the Owner made with `claude setup-token`, pasted in
+//   2. an existing Claude Code sign-in on this machine (the SDK child reads
+//      the CLI's own credentials natively — nothing configured at all)
+export function resolveClaudeSubscriptionAuth(secretsDirectory: string): {
+  token: string | null;
+  machineLogin: boolean;
+} {
+  const token =
+    readProviderConnections(secretsDirectory)["claude-sub"]?.apiKey?.trim() ||
+    null;
+  const machineLogin = existsSync(
+    join(homedir(), ".claude", ".credentials.json"),
+  );
+  return { token, machineLogin };
+}
 
 // Deny-by-name is the SECOND layer (allowedTools: [] is the first). Includes
 // every built-in the SDK documents plus the agentic extras.
@@ -61,6 +80,89 @@ function formatTranscript(messages: ModelChatMessage[]): string {
     .join("\n");
 }
 
+// The child env strips every metered API-key path; with a setup token it is
+// injected, with a machine login the SDK child finds the CLI's credentials by
+// itself.
+function cleanChildEnvironment(token: string | null): Record<string, string> {
+  const environment: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue;
+    if (
+      key === "ANTHROPIC_API_KEY" ||
+      key === "ANTHROPIC_AUTH_TOKEN" ||
+      key === "ANTHROPIC_BASE_URL"
+    ) {
+      continue;
+    }
+    environment[key] = value;
+  }
+  if (token) environment.CLAUDE_CODE_OAUTH_TOKEN = token;
+  return environment;
+}
+
+// One-shot vision call for the Picture Input ENGINE (describe / annotate):
+// the same hard lockdown as chat, an image block plus the tool's prompt in a
+// single streaming user message, plain text back. Lets the Owner's Claude
+// subscription power the vision engine slot (Oskar, 2026-07-29).
+export async function claudeSubscriptionVision(
+  secretsDirectory: string,
+  promptText: string,
+  imageBase64: string,
+  mediaType: string,
+): Promise<string> {
+  const auth = resolveClaudeSubscriptionAuth(secretsDirectory);
+  if (!auth.token && !auth.machineLogin) {
+    throw new Error("VISION_NOT_CONNECTED");
+  }
+
+  const jail = join(tmpdir(), "vaenyx-claude-jail", randomUUID());
+  mkdirSync(jail, { recursive: true });
+
+  const input = (async function* (): AsyncGenerator<SDKUserMessage> {
+    yield {
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: mediaType as "image/jpeg",
+              data: imageBase64,
+            },
+          },
+          { type: "text", text: promptText },
+        ],
+      },
+      parent_tool_use_id: null,
+    };
+  })();
+
+  const stream = query({
+    prompt: input,
+    options: {
+      allowedTools: [],
+      disallowedTools: DENIED_TOOLS,
+      cwd: jail,
+      env: cleanChildEnvironment(auth.token),
+      maxTurns: 1,
+      mcpServers: {},
+      settingSources: [],
+      systemPrompt: "You are an image-reading tool. You have no tools.",
+    },
+  });
+  let answer = "";
+  for await (const message of stream) {
+    if (message.type === "result") {
+      if (message.subtype === "success") answer = message.result;
+      else throw new Error(`VISION_DESCRIBE_FAILED:claude-sub:${message.subtype}`);
+    }
+  }
+  if (!answer.trim()) throw new Error("VISION_DESCRIBE_FAILED:claude-sub:empty");
+  return answer.trim();
+}
+
 export class ClaudeSubscriptionProvider implements ModelProvider {
   readonly id = "claude-sub";
   readonly name = "Claude (Subscription)";
@@ -70,34 +172,13 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     this.#secretsDirectory = secretsDirectory;
   }
 
-  // Subscription auth ONLY: the child gets an environment with every
-  // Anthropic API-key path stripped, so it can never silently bill a metered
-  // key. Auth is the OAuth access token from the in-app sign-in, refreshed
-  // through its refresh token when close to expiry.
-  #childEnvironment(accessToken: string): Record<string, string> {
-    const environment: Record<string, string> = {};
-    for (const [key, value] of Object.entries(process.env)) {
-      if (value === undefined) continue;
-      if (
-        key === "ANTHROPIC_API_KEY" ||
-        key === "ANTHROPIC_AUTH_TOKEN" ||
-        key === "ANTHROPIC_BASE_URL"
-      ) {
-        continue;
-      }
-      environment[key] = value;
-    }
-    environment.CLAUDE_CODE_OAUTH_TOKEN = accessToken;
-    return environment;
-  }
-
   async sendChat(
     messages: ModelChatMessage[],
     projectContext?: string,
     options?: ModelChatOptions,
   ): Promise<ModelChatResult> {
-    const accessToken = await freshClaudeToken(this.#secretsDirectory);
-    if (!accessToken) {
+    const auth = resolveClaudeSubscriptionAuth(this.#secretsDirectory);
+    if (!auth.token && !auth.machineLogin) {
       throw new Error(`MODEL_PROVIDER_ERROR:${this.id}:not-connected`);
     }
 
@@ -167,7 +248,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           allowedTools: [],
           disallowedTools: DENIED_TOOLS,
           cwd: jail,
-          env: this.#childEnvironment(accessToken),
+          env: cleanChildEnvironment(auth.token),
           maxTurns: 1,
           // Never read the machine's Claude settings, CLAUDE.md or MCP config.
           mcpServers: {},
@@ -212,15 +293,20 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
 
   // Mirrors CodexProvider.healthCheck's structure: present → signed in →
   // subscription kind. The SDK ships with the app, so "present" is a given;
-  // signed-in means the in-app sign-in stored its OAuth tokens.
+  // signed-in means a pasted setup token, or a Claude Code login already on
+  // this machine (visible to the server's user account).
   healthCheck(): ModelProviderStatus {
-    const entry = readProviderConnections(this.#secretsDirectory)["claude-sub"];
-    if (entry?.apiKey) {
-      return { ok: true, detail: "Claude subscription (signed in)." };
+    const auth = resolveClaudeSubscriptionAuth(this.#secretsDirectory);
+    if (auth.token) {
+      return { ok: true, detail: "Claude subscription (setup token)." };
+    }
+    if (auth.machineLogin) {
+      return { ok: true, detail: "Claude Code sign-in on this machine." };
     }
     return {
       ok: false,
-      detail: "Not signed in — use Sign In With Claude on the connect card.",
+      detail:
+        "Not connected. Run `claude setup-token` in a terminal and paste the token here.",
     };
   }
 }

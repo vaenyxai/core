@@ -1171,6 +1171,9 @@ export const ConnectVisionRequestSchema = Type.Object(
       Type.Literal("gemini"),
       Type.Literal("zhipu"),
       Type.Literal("openai"),
+      // The Owner's Claude subscription can power the vision engine too
+      // (reads photos through the locked-down Agent SDK path).
+      Type.Literal("claude-sub"),
     ]),
   },
   { additionalProperties: false },
