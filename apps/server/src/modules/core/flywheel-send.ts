@@ -76,7 +76,24 @@ interface AckRow {
 // the activation text changed materially at 2.9 (it now says corrections go
 // out on their own after the wait), so an older yes was a yes to different
 // words. Mirrors K3_CONSENT_FLOOR in the web app.
-const K3_CONSENT_FLOOR = 2.9;
+const K3_CONSENT_FLOOR = "2.9";
+
+// Copy versions are DOTTED, not decimal: parseFloat("3.10") is 3.1, which is
+// less than 3.9 — a floor compared that way silently stops holding the moment
+// a pack reaches its tenth revision (private, 2026-07-29; the pack skipped
+// 2.10 to dodge exactly this). Compare segment by segment, and fail closed on
+// anything unparseable.
+export function copyVersionAtLeast(version: string, floor: string): boolean {
+  const left = version.trim().split(".");
+  const right = floor.trim().split(".");
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = Number.parseInt(left[index] ?? "0", 10);
+    const b = Number.parseInt(right[index] ?? "0", 10);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
 
 export function readSharingChoice(acks: AckRow[]): {
   mode: "automatic" | "review-each" | "off";
@@ -90,7 +107,7 @@ export function readSharingChoice(acks: AckRow[]): {
   );
   const activated =
     activation?.choice === "accept" &&
-    Number.parseFloat(activation.copyVersion) >= K3_CONSENT_FLOOR;
+    copyVersionAtLeast(activation.copyVersion, K3_CONSENT_FLOOR);
   const choice = row?.choice ?? null;
   const setting =
     choice === "accept" || choice === "automatic"

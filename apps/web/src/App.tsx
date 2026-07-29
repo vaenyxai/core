@@ -9641,7 +9641,10 @@ function SharingPanel() {
   const consentCurrent =
     state.activated &&
     activateVersion !== null &&
-    Number.parseFloat(activateVersion) >= Number.parseFloat(K3_CONSENT_FLOOR);
+    // Dotted compare, never parseFloat: "3.10" as a float is 3.1, i.e. BELOW
+    // 3.9 — a floor checked that way quietly stops holding at the tenth
+    // revision of a pack (private, 2026-07-29).
+    legalVersionAtLeast(activateVersion, K3_CONSENT_FLOOR);
   const on = consentCurrent && mode !== "off" && mode !== null;
   const statusLine = on
     ? `${zh ? "分享:开启" : "Sharing: On"} — ${
@@ -14289,7 +14292,10 @@ function CreateRoutinePanel({
 // the floor moves with it (K3_CONSENT_FLOOR below, and the publish service's
 // MIN_ACCEPTED_COPY_VERSION): anyone who consented under 2.8 is asked again.
 // Cheap now, precisely because almost nobody has answered yet.
-const LEGAL_COPY_VERSION = "2.9";
+// 2.9 → 3.0, skipping 2.10 on purpose (private, 2026-07-29): a version
+// compared as a decimal would read "2.10" as 2.1 and place it BELOW 2.9. The
+// comparisons are dotted-numeric now, but the pack keeps the safe numbering.
+const LEGAL_COPY_VERSION = "3.0";
 
 // The K3 activation floor: a recorded activation below this is treated as not
 // given — re-opening sharing walks through K3 again instead of silently

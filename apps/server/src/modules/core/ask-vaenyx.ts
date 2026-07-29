@@ -10,6 +10,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import type { ModelProvider } from "../models/provider.js";
 import { getModelRegistry, resolveProvider } from "../models/registry.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
@@ -105,6 +106,123 @@ export function conversationHasPhoto(
     )
     .get(conversationId);
   return row !== undefined;
+}
+
+// How many recent messages ride into the model verbatim. Everything older is
+// compacted (see compactConversationHistory) rather than dropped.
+const MAX_HISTORY_MESSAGES = 30;
+// Rewriting the summary costs a model call, so it only happens once this many
+// further messages have aged out of the window.
+const SUMMARY_REFRESH_EVERY = 10;
+// The Owner's approved profile, capped so a long profile cannot crowd out the
+// conversation itself.
+const MAX_OWNER_PROFILE_ITEMS = 12;
+
+// The long-conversation memory (Oskar, 2026-07-29). A chat used to forget its
+// own beginning: only the last 30 messages reached the model and the rest were
+// simply dropped. Now everything that ages out is folded into a rolling
+// summary — recursively, so the summary of the first 100 messages becomes part
+// of the summary of the first 200 — and that summary rides every later turn.
+// Best-effort by design: a failed compaction returns the previous summary (or
+// none) and the reply proceeds; memory is never a reason to lose an answer.
+async function compactConversationHistory(
+  database: DatabaseHandle,
+  conversationId: string,
+  usableHistory: AskVaenyxMessage[],
+  provider: ModelProvider,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const olderCount = Math.max(0, usableHistory.length - MAX_HISTORY_MESSAGES);
+  const row = database.sqlite
+    .prepare(
+      `SELECT history_summary, history_summary_count
+       FROM ask_vaenyx_conversations WHERE id = ?`,
+    )
+    .get(conversationId) as
+    | { history_summary: string | null; history_summary_count: number }
+    | undefined;
+  const storedSummary = row?.history_summary?.trim() || null;
+  const storedCount = row?.history_summary_count ?? 0;
+
+  const formatSummary = (summary: string): string =>
+    `Earlier in this conversation (a summary of the ${storedCount > 0 ? "older" : "earlier"} messages, which are no longer shown in full):\n${summary}`;
+
+  if (olderCount === 0) return null;
+  if (storedSummary && olderCount - storedCount < SUMMARY_REFRESH_EVERY) {
+    return formatSummary(storedSummary);
+  }
+
+  // Only the messages that have aged out since the last summary need reading;
+  // the previous summary carries everything before them.
+  const fresh = usableHistory.slice(storedCount, olderCount);
+  if (fresh.length === 0) {
+    return storedSummary ? formatSummary(storedSummary) : null;
+  }
+  const transcript = fresh
+    .map(
+      (message) =>
+        `${message.role === "owner" ? "Owner" : "Vaenyx"}: ${message.content.slice(0, 2000)}`,
+    )
+    .join("\n");
+
+  try {
+    const result = await provider.sendChat(
+      [
+        {
+          role: "owner",
+          content: [
+            "Update the running summary of a conversation so nothing important is lost when the older messages stop being shown in full.",
+            "Keep it SHORT and factual: bullet lines, one fact per line — decisions made, things the Owner stated about themselves or their situation, open threads, and anything they asked you to remember.",
+            "Drop small talk and anything already superseded. Write in the language the conversation is in. No preamble, no headings — lines only.",
+            "",
+            storedSummary
+              ? `Summary so far:\n${storedSummary}\n`
+              : "There is no summary yet.\n",
+            "New messages to fold in:",
+            transcript,
+          ].join("\n"),
+        },
+      ],
+      undefined,
+      { ...(signal ? { signal } : {}) },
+    );
+    const summary = result.answer.trim().slice(0, 4000);
+    if (!summary) return storedSummary ? formatSummary(storedSummary) : null;
+    database.sqlite
+      .prepare(
+        `UPDATE ask_vaenyx_conversations
+         SET history_summary = ?, history_summary_count = ?
+         WHERE id = ?`,
+      )
+      .run(summary, olderCount, conversationId);
+    return formatSummary(summary);
+  } catch {
+    // A failed compaction must never cost the Owner their answer.
+    return storedSummary ? formatSummary(storedSummary) : null;
+  }
+}
+
+// The long-term memory layer: the Owner's OWN approved Vaenyx Me profile.
+// Only approved items — a candidate Vaenyx guessed at but the Owner never
+// confirmed has no business steering replies (the Evolution rule: Vaenyx
+// proposes, the Owner decides).
+function formatVaenyxMeContext(database: DatabaseHandle): string | null {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT title, summary FROM vaenyx_me_items
+       WHERE status = 'approved'
+       ORDER BY sort_order, title
+       LIMIT ?`,
+    )
+    .all(MAX_OWNER_PROFILE_ITEMS) as { title: string; summary: string }[];
+  if (rows.length === 0) return null;
+  const lines = rows
+    .map((item) => `- ${item.title}: ${item.summary.trim().slice(0, 300)}`)
+    .join("\n");
+  return [
+    "What you know about the Owner (their own profile, which they approved — treat it as background, never contradict what they say in this conversation):",
+    lines,
+  ].join("\n");
 }
 
 const DEFAULT_CHAT_TITLE = "New Vaenyx Chat";
@@ -669,20 +787,19 @@ export async function createAskVaenyxMessage(
     imageId: options?.imageId ?? null,
   });
 
-  const MAX_HISTORY_MESSAGES = 30;
-  const history = listAskVaenyxMessages(database, conversationId, ownerId)
+  const usableHistory = listAskVaenyxMessages(database, conversationId, ownerId)
     // Never replay canned failure strings back into the model context, or one
     // transient error permanently poisons the thread (improvement plan B4).
     .filter(
       (message) =>
         !(message.role === "assistant" && message.status === "failed"),
-    )
+    );
+  const history = usableHistory
     .slice(-MAX_HISTORY_MESSAGES)
     .map((message) => ({
       content: message.content,
       role: message.role,
     }));
-
   let assistantContent: string;
   let assistantStatus: "completed" | "failed";
   let webSearchUsed = false;
@@ -768,6 +885,27 @@ export async function createAskVaenyxMessage(
       }
       provider = localProvider;
     }
+
+    // Long-conversation memory (Oskar, 2026-07-29): what has aged out of the
+    // message window rides along as a rolling summary, so a long thread stops
+    // forgetting its own beginning. Regenerated only when enough new messages
+    // have aged out — never on every turn.
+    const historySummary = await compactConversationHistory(
+      database,
+      conversationId,
+      usableHistory,
+      provider,
+      options?.signal,
+    );
+    // What Vaenyx knows about the Owner (their APPROVED Vaenyx Me profile) is
+    // the long-term memory layer: it rides every chat, so something learned
+    // once does not have to be repeated in each new conversation.
+    const ownerProfile = formatVaenyxMeContext(database);
+    projectContext =
+      [historySummary, ownerProfile, projectContext]
+        .filter((part): part is string => Boolean(part && part.trim()))
+        .join("\n\n") || undefined;
+
     // Phase B: a vision-direct backend sees the photo first-hand. The most
     // recent photo in the last few messages rides along too, so follow-up
     // questions about it ("what's the jar on the left?") keep working.
