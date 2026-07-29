@@ -14295,9 +14295,11 @@ const CONNECTABLE_MODELS: Array<{
 const MODEL_FREE_TIER_NOTES: Record<string, string> = {
   // Wording rule (2026-07-29): NEVER a quota number for the Claude plan —
   // the policy moved three times in four months, and a written number becomes
-  // a false statement on the next move.
+  // a false statement on the next move. The npx form needs no install at all:
+  // every Vaenyx machine already has Node, and setup-token itself is a
+  // terminal-only flow (probed 2026-07-29 — it cannot be driven in-app).
   "claude-sub":
-    "Uses your own Claude plan, subject to that plan's limits. In a terminal run: claude setup-token — then paste the token below.",
+    "Uses your own Claude plan, subject to that plan's limits. On the computer where Vaenyx runs, open a terminal and run: npx -y @anthropic-ai/claude-code setup-token — sign in when the browser opens, then paste the token it prints below. Nothing needs installing first.",
   gemini: "Free tier: ~1,500 requests/day via Google AI Studio, no card needed.",
   groq: "Free tier: ~1,000 requests/day, very fast responses. No card needed.",
   cerebras: "Free tier: ~1M tokens/day, fastest responses. No card needed.",
