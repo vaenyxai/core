@@ -1042,14 +1042,23 @@ textarea::placeholder {
 /* Marked photo (Oskar, 2026-07-28): dots on the objects, thin lines to the
    names, one small toggle button in the photo's corner. Everything positions
    in percent so the overlay scales with the responsive image. */
+/* The frame the marks are measured against MUST be the photo itself. The size
+   limit therefore lives here, on the frame, and the photo fills it — never the
+   other way round (Oskar, 2026-07-29: right on the phone, dots pushed off to
+   the right on the desktop, correct again fullscreen). A limit written on the
+   photo as min(340px, 100%) cannot be resolved while the browser measures this
+   wrapper — no width is settled yet for the 100% to mean anything — so the
+   wrapper fell back to the camera's own 3024px and was cut down to the column:
+   713px of coordinate space over a 340px photo. On a phone the column is
+   340px-ish, which is why the same bug looked fine there. */
 .annotated-photo {
   position: relative;
   width: fit-content;
-  max-width: 100%;
+  max-width: min(340px, 100%);
 }
 
 .annotated-photo .message-photo {
-  max-width: min(340px, 100%);
+  max-width: 100%;
 }
 
 .annotate-lines {
