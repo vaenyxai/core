@@ -1136,19 +1136,6 @@ textarea::placeholder {
   transition: transform 60ms linear;
 }
 
-.photo-lightbox-close {
-  position: absolute;
-  top: max(10px, env(safe-area-inset-top));
-  right: 14px;
-  width: 40px;
-  height: 40px;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-  font-size: 22px;
-  cursor: pointer;
-}
 
 /* The confirm card's editable marked photo: labels are buttons; the row under
    the photo edits the selected mark's name or adds a new one. Secondary text
@@ -2456,8 +2443,9 @@ select {
   gap: 12px;
 }
 
+/* The speaker's name reads as a name, not a footnote (Oskar, 2026-07-29). */
 .ask-vaenyx-message strong {
-  font-size: 11px;
+  font-size: var(--fs-md);
   font-weight: 700;
 }
 
@@ -2742,6 +2730,14 @@ select {
 .message-footer span {
   color: var(--accent, #c9a96a);
   font-weight: 700;
+}
+
+/* An Owner bubble carries only its time, and no divider (the bubble's own
+   edge already separates it). */
+.message-footer--owner {
+  justify-content: flex-end;
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 @keyframes thinking-bounce {

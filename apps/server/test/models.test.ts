@@ -186,8 +186,20 @@ describe("initModelRegistry", () => {
   it("is Codex-only when nothing is configured", () => {
     const dir = mkdtempSync(resolve(tmpdir(), "vaenyx-models-"));
     temporaryDirectories.push(dir);
-    const registry = initModelRegistry({ secretsDirectory: dir });
-    expect(registry.list().map((provider) => provider.id)).toEqual(["codex"]);
+    // An empty Claude home too: the subscription channel must register only
+    // for a connection the Owner actually made, never because the machine
+    // happens to have a Claude sign-in lying around.
+    const claudeHome = mkdtempSync(resolve(tmpdir(), "vaenyx-claude-home-"));
+    temporaryDirectories.push(claudeHome);
+    const previousHome = process.env.VAENYX_CLAUDE_HOME;
+    process.env.VAENYX_CLAUDE_HOME = claudeHome;
+    try {
+      const registry = initModelRegistry({ secretsDirectory: dir });
+      expect(registry.list().map((provider) => provider.id)).toEqual(["codex"]);
+    } finally {
+      if (previousHome === undefined) delete process.env.VAENYX_CLAUDE_HOME;
+      else process.env.VAENYX_CLAUDE_HOME = previousHome;
+    }
   });
 });
 

@@ -160,7 +160,6 @@ import {
   type FlywheelState,
   fetchImageEngine,
   setImageEngineChoice,
-  annotatePhoto,
   saveAnnotations,
   startClaudeLogin,
   submitClaudeLoginCode,
@@ -971,12 +970,12 @@ function IconAlbum() {
   );
 }
 
-// Mark items on a photo: a map-pin dot with a callout line.
-function IconMarker() {
+// Show / hide the marks drawn over a photo: two stacked sheets.
+function IconLayers() {
   return (
     <LineIcon>
-      <circle cx="9" cy="9" r="3.5" />
-      <path d="m12 12 7 7" />
+      <path d="m12 4 8 4.5-8 4.5-8-4.5z" />
+      <path d="m4 14 8 4.5 8-4.5" />
     </LineIcon>
   );
 }
@@ -1206,10 +1205,13 @@ function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
     if (pointers.current.size < 2) pinchStart.current = null;
   }
 
+  // A tap anywhere closes — including on the photo, once it is back at 1×
+  // (Oskar, 2026-07-29: "点击任何地方把它关闭"). While zoomed in, a single tap
+  // on the image is swallowed so panning never dismisses the viewer; a double
+  // tap toggles the zoom as before.
   function onTap(event: React.MouseEvent) {
     const now = Date.now();
     if (now - lastTap.current < 320) {
-      // Double tap: toggle zoom.
       setTransform((current) =>
         current.scale > 1
           ? { scale: 1, x: 0, y: 0 }
@@ -1220,7 +1222,7 @@ function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
       return;
     }
     lastTap.current = now;
-    event.stopPropagation();
+    if (transform.scale > 1) event.stopPropagation();
   }
 
   return createPortal(
@@ -1252,14 +1254,6 @@ function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
           transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
         }}
       />
-      <button
-        aria-label="Close"
-        className="photo-lightbox-close"
-        onClick={onClose}
-        type="button"
-      >
-        ×
-      </button>
     </div>,
     document.body,
   );
@@ -1272,35 +1266,16 @@ function PhotoLightbox({ onClose, url }: { onClose: () => void; url: string }) {
 function AnnotatedPhoto({
   annotations,
   imageId,
-  lang,
-  onAnnotated,
   onLoad,
 }: {
   annotations: ImageAnnotationItem[] | null;
   imageId: string;
-  lang: string;
-  onAnnotated: (items: ImageAnnotationItem[]) => void;
   onLoad?: () => void;
 }) {
   const { t } = useI18n();
-  const [busy, setBusy] = useState(false);
   const [overlayOn, setOverlayOn] = useState(true);
   const [zoomed, setZoomed] = useState(false);
   const items = annotations && annotations.length > 0 ? annotations : null;
-
-  async function mark() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const { items: fresh } = await annotatePhoto(imageId, lang);
-      onAnnotated(fresh);
-      setOverlayOn(true);
-    } catch {
-      // requestJson already raised the toast with the server's reason.
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="annotated-photo">
@@ -1371,31 +1346,21 @@ function AnnotatedPhoto({
           })}
         </>
       ) : null}
-      <button
-        aria-label={
-          items
-            ? overlayOn
-              ? t("photo.marks.hide")
-              : t("photo.marks.show")
-            : t("photo.marks.make")
-        }
-        className="voice-bubble-play annotate-button"
-        disabled={busy}
-        onClick={() => {
-          if (items) setOverlayOn((current) => !current);
-          else void mark();
-        }}
-        title={
-          items
-            ? overlayOn
-              ? t("photo.marks.hide")
-              : t("photo.marks.show")
-            : t("photo.marks.make")
-        }
-        type="button"
-      >
-        {busy ? <IconSpinner /> : <IconMarker />}
-      </button>
+      {/* The button exists ONLY when there is a layer to show or hide (Oskar,
+          2026-07-29): a plain photo — one you sent, one Vaenyx drew — carries
+          no controls at all. It is a layers toggle, never a magnifier: tapping
+          the photo itself is what zooms. */}
+      {items ? (
+        <button
+          aria-label={overlayOn ? t("photo.marks.hide") : t("photo.marks.show")}
+          className="voice-bubble-play annotate-button"
+          onClick={() => setOverlayOn((current) => !current)}
+          title={overlayOn ? t("photo.marks.hide") : t("photo.marks.show")}
+          type="button"
+        >
+          <IconLayers />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -8389,16 +8354,6 @@ function AskVaenyxPanel({
                         <AnnotatedPhoto
                           annotations={node.entry.imageAnnotations ?? null}
                           imageId={node.entry.imageId}
-                          lang={lang}
-                          onAnnotated={(items) =>
-                            setRoutineJournal((current) =>
-                              current.map((candidate) =>
-                                candidate.id === node.entry.id
-                                  ? { ...candidate, imageAnnotations: items }
-                                  : candidate,
-                              ),
-                            )
-                          }
                           onLoad={reanchorAfterImageLoad}
                         />
                       ) : null}
@@ -8462,24 +8417,16 @@ function AskVaenyxPanel({
                 className={`ask-vaenyx-message ${message.role} ${message.status}`}
                 key={message.id}
               >
+                {/* Name only: the time lives at the bottom of the message,
+                    where the ✓ is (Oskar, 2026-07-29 — two timestamps on one
+                    message is one too many). */}
                 <div className="ask-vaenyx-message-head">
                   <strong>{message.role === "owner" ? "You" : agentName}</strong>
-                  <small>{formatTime(message.createdAt)}</small>
                 </div>
                 {message.imageId ? (
                   <AnnotatedPhoto
                     annotations={message.imageAnnotations ?? null}
                     imageId={message.imageId}
-                    lang={lang}
-                    onAnnotated={(items) =>
-                      setMessages((current) =>
-                        current.map((candidate) =>
-                          candidate.id === message.id
-                            ? { ...candidate, imageAnnotations: items }
-                            : candidate,
-                        ),
-                      )
-                    }
                     onLoad={reanchorAfterImageLoad}
                   />
                 ) : null}
@@ -8519,6 +8466,11 @@ function AskVaenyxPanel({
                   >
                     Retry
                   </button>
+                ) : null}
+                {message.role === "owner" ? (
+                  <div className="message-footer message-footer--owner">
+                    {formatTime(message.createdAt)}
+                  </div>
                 ) : null}
                 {message.role !== "owner" &&
                 message.content &&
@@ -9134,7 +9086,6 @@ function AskVaenyxPanel({
                     <strong>
                       {message.role === "owner" ? "You" : agentName}
                     </strong>
-                    <small>{formatTime(message.createdAt)}</small>
                   </div>
                   {message.role === "owner" ? (
                     <p>{message.content}</p>
@@ -9155,6 +9106,11 @@ function AskVaenyxPanel({
                     >
                       Retry
                     </button>
+                  ) : null}
+                  {message.role === "owner" ? (
+                    <div className="message-footer message-footer--owner">
+                      {formatTime(message.createdAt)}
+                    </div>
                   ) : null}
                   {message.role !== "owner" &&
                   message.content &&

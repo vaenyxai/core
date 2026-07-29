@@ -692,6 +692,10 @@ export async function createAskVaenyxMessage(
   // and shown beside the picture — F5's closing sentence promises it, and the
   // main model can word things the Owner never typed.
   let sentImagePrompt: string | null = null;
+  // The analysed photo, echoed back with the answer (marked) — see the
+  // parallel marking below.
+  let echoImageId: string | null = null;
+  let echoMarks: Promise<unknown> | null = null;
 
   const baseContext = getConversationProjectContext(database, conversationId);
   let projectContext = baseContext;
@@ -836,6 +840,39 @@ export async function createAskVaenyxMessage(
       ? [projectContext, photoContext].filter(Boolean).join("\n\n")
       : projectContext;
 
+    // A photo sent for analysis comes BACK with the answer, marked ("你的回复
+    // 里面再把那个图片再来一次,然后叠加上识别图片内容的工具", Oskar
+    // 2026-07-29): the reply carries the same picture with dots and names, and
+    // the written summary sits under it. The marking runs in parallel with the
+    // model call, so it costs no extra wall time.
+    if (options?.imageId && options.dataDirectory && options.secretsDirectory) {
+      echoImageId = options.imageId;
+      const photoId = options.imageId;
+      const found = readImage(options.dataDirectory, photoId);
+      const secrets = options.secretsDirectory;
+      if (found) {
+        echoMarks = annotateImage(
+          secrets,
+          found.image,
+          found.mimeType,
+          /[一-鿿]/.test(content) ? "zh" : "en",
+        )
+          .then((items) => {
+            database.sqlite
+              .prepare(
+                `INSERT INTO image_annotations (image_id, items, created_at)
+                 VALUES (?, ?, ?)
+                 ON CONFLICT(image_id) DO UPDATE SET items = excluded.items,
+                   created_at = excluded.created_at`,
+              )
+              .run(photoId, JSON.stringify(items), new Date().toISOString());
+          })
+          .catch(() => {
+            // Best-effort: the reply still echoes the photo, just unmarked.
+          });
+      }
+    }
+
     // Marking a photo — the judge understood the Owner wants the things in an
     // existing photo pointed out ON the picture ("标出来", any wording). Runs
     // BEFORE the model speaks, same truth-note pattern as generation: the
@@ -978,6 +1015,16 @@ export async function createAskVaenyxMessage(
   // reply that never happened.
   if (assistantStatus === "failed") {
     generatedImageId = null;
+    echoImageId = null;
+  }
+  // Let the parallel marking land before the reply is written, so the echoed
+  // photo appears already marked instead of popping its dots in a moment
+  // later. Best-effort — a slow engine never blocks the answer for long.
+  if (echoMarks) {
+    await Promise.race([
+      echoMarks,
+      new Promise((resolveRace) => setTimeout(resolveRace, 8000)),
+    ]);
   }
 
   const assistantMessageId = randomUUID();
@@ -998,7 +1045,9 @@ export async function createAskVaenyxMessage(
       webSearchUsed ? 1 : 0,
       completedAt,
       options?.voiceAudioId && assistantStatus === "completed" ? 1 : 0,
-      generatedImageId,
+      // A generated picture wins; otherwise the analysed photo comes back
+      // with the answer (marked), which is what the Owner is looking at.
+      generatedImageId ?? echoImageId,
       generatedImageId ? sentImagePrompt : null,
     );
 

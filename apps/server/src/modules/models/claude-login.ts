@@ -16,7 +16,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { loadConfig } from "../../config.js";
@@ -25,10 +24,9 @@ const require = createRequire(import.meta.url);
 
 // Vaenyx's own Claude config home: login state rides with userdata (survives
 // service-account runs and machine moves), never mixed with any personal
-// ~/.claude the machine might have.
-let claudeHomeDirectory: string | null = null;
+// ~/.claude the machine might have. Not cached — VAENYX_CLAUDE_HOME must be
+// honourable per call so tests stay hermetic.
 export function getClaudeHomeDirectory(): string {
-  if (claudeHomeDirectory) return claudeHomeDirectory;
   const home = process.env.VAENYX_CLAUDE_HOME
     ? resolve(process.env.VAENYX_CLAUDE_HOME)
     : resolve(loadConfig().dataDirectory, "..", "claude-home");
@@ -37,18 +35,15 @@ export function getClaudeHomeDirectory(): string {
   } catch {
     // Best-effort: the CLI reports clearly when the home is unusable.
   }
-  claudeHomeDirectory = home;
   return home;
 }
 
-// Signed in? True when the official CLI's credentials exist in the Vaenyx
-// home — or, as a courtesy, in the server user's own ~/.claude (a machine
-// where the Owner already uses Claude Code under the same account).
+// Signed in? ONLY when the official CLI's credentials sit in the VAENYX home,
+// written by the in-app sign-in. A personal ~/.claude on the same machine
+// deliberately does NOT count: the Owner never asked Vaenyx to use it, and
+// silently borrowing someone's terminal login is not a connection they made.
 export function claudeMachineLogin(): boolean {
-  return (
-    existsSync(join(getClaudeHomeDirectory(), ".credentials.json")) ||
-    existsSync(join(homedir(), ".claude", ".credentials.json"))
-  );
+  return existsSync(join(getClaudeHomeDirectory(), ".credentials.json"));
 }
 
 // The full claude executable ships in the Agent SDK's per-platform package —
