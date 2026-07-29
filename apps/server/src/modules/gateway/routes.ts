@@ -204,6 +204,7 @@ import {
   type UpdateVaenyxThreadTitleRequest,
   RelayHealthSchema,
   RelayPanelSchema,
+  RelayTokenResponseSchema,
   RelayRunRequestSchema,
   RelayRunResponseSchema,
   RelaySettingsSchema,
@@ -516,9 +517,12 @@ import { listAuditEvents, recordAudit } from "../guard/audit.js";
 import {
   forgetRelayEngineStatus,
   listRelayCalls,
+  newRelayToken,
   readRelayConfig,
   recordRelayCall,
   relayHealth,
+  relayTokenAccepted,
+  revokeRelayToken,
   runRelay,
   testRelayEngine,
   writeRelayConfig,
@@ -4098,6 +4102,17 @@ export async function registerGatewayRoutes(
     reply.header("access-control-max-age", "600");
   }
 
+  // Who may knock: the door's own key, or any existing App Token. The door key
+  // is the one an app is given — one key, because a key says WHICH APP is
+  // knocking and the subscription to use is named in each request. Regenerating
+  // it in Settings is how an app is cut off.
+  function knocking(request: FastifyRequest): boolean {
+    return (
+      relayTokenAccepted(context.database, request.headers.authorization) ||
+      Boolean(authenticateAppProfile(context.database, request))
+    );
+  }
+
   for (const path of ["/v1/ai/run", "/v1/ai/health"]) {
     app.options(path, async (request, reply) => {
       allowRelayOrigin(request, reply);
@@ -4117,7 +4132,7 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
-      if (!authenticateAppProfile(context.database, request)) {
+      if (!knocking(request)) {
         return reply.code(401).send({ error: "A valid App Token is required." });
       }
       return relayHealth(context.database);
@@ -4141,8 +4156,7 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
-      const profile = authenticateAppProfile(context.database, request);
-      if (!profile) {
+      if (!knocking(request)) {
         recordAudit(context.database, {
           actorType: "system",
           actorName: "Vaenyx Guard",
@@ -4237,7 +4251,12 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      const settings = writeRelayConfig(context.database, request.body);
+      // The key is not a setting the browser may write: it is minted and
+      // revoked through its own route, which is the only place it exists.
+      const { tokenHint, tokenCreatedAt, ...writable } = request.body;
+      void tokenHint;
+      void tokenCreatedAt;
+      const settings = writeRelayConfig(context.database, writable);
       recordAudit(context.database, {
         actorType: "owner",
         actorName: owner.name,
@@ -4247,6 +4266,51 @@ export async function registerGatewayRoutes(
         resourceType: "relay_settings",
       });
       return settings;
+    },
+  );
+
+  // Mint or revoke the door's key. Minting REPLACES: the previous key stops
+  // working the instant this returns, which is how an app is cut off without
+  // closing the door on the others. The plain text is returned exactly once and
+  // stored nowhere — only its hash and its last four characters are kept.
+  app.post<{ Body: { action: "new" | "revoke" } }>(
+    "/v1/relay/token",
+    {
+      schema: {
+        body: Type.Object(
+          {
+            action: Type.Union([
+              Type.Literal("new"),
+              Type.Literal("revoke"),
+            ]),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: RelayTokenResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const minted =
+        request.body.action === "new" ? newRelayToken(context.database) : null;
+      if (!minted) revokeRelayToken(context.database);
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorName: owner.name,
+        action: "relay.token",
+        decision: "allowed",
+        reason: minted
+          ? "A new door key was issued; the previous one stopped working."
+          : "The door key was revoked.",
+        resourceType: "relay_settings",
+      });
+      return { token: minted, settings: readRelayConfig(context.database) };
     },
   );
 

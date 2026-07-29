@@ -1337,6 +1337,16 @@ textarea::placeholder {
   font-size: var(--fs-label);
 }
 
+/* The one moment the key is readable, marked so it is not scrolled past. */
+.door-key-new code {
+  background: rgba(117, 176, 148, 0.18);
+  word-break: break-all;
+}
+
+.door-key-new span {
+  color: #75b094;
+}
+
 .door-field {
   margin: var(--space-3) 0;
 }

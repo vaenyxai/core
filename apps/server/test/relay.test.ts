@@ -14,7 +14,10 @@ import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import {
   DEFAULT_RELAY_CONFIG,
   listRelayCalls,
+  newRelayToken,
   readRelayConfig,
+  relayTokenAccepted,
+  revokeRelayToken,
   recordRelayCall,
   relayHealth,
   runRelay,
@@ -165,6 +168,31 @@ describe("the subscription door", () => {
         ],
       }),
     ).rejects.toThrow("RELAY_TOO_MANY_FILES");
+  });
+
+  it("has no key until one is made, and never stores the key itself", () => {
+    const database = createTestDatabase();
+    expect(relayTokenAccepted(database, "Bearer vaenyx_door_anything")).toBe(
+      false,
+    );
+    const key = newRelayToken(database);
+    expect(key.startsWith("vaenyx_door_")).toBe(true);
+    expect(relayTokenAccepted(database, `Bearer ${key}`)).toBe(true);
+    // What is kept is a hash and the last four characters — not the key.
+    const stored = JSON.stringify(readRelayConfig(database));
+    expect(stored).not.toContain(key);
+    expect(readRelayConfig(database).tokenHint).toBe(key.slice(-4));
+  });
+
+  it("cuts the old key off the moment a new one is made", () => {
+    const database = createTestDatabase();
+    const first = newRelayToken(database);
+    const second = newRelayToken(database);
+    expect(first).not.toBe(second);
+    expect(relayTokenAccepted(database, `Bearer ${first}`)).toBe(false);
+    expect(relayTokenAccepted(database, `Bearer ${second}`)).toBe(true);
+    revokeRelayToken(database);
+    expect(relayTokenAccepted(database, `Bearer ${second}`)).toBe(false);
   });
 
   it("logs what happened and never what was in it", () => {

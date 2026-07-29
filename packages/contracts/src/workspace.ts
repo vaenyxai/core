@@ -2517,6 +2517,10 @@ export const RelayHealthSchema = Type.Object(
 export const RelaySettingsSchema = Type.Object(
   {
     enabled: Type.Boolean(),
+    // The door's key, described but never repeated: its last four characters
+    // and when it was made. The key itself is stored hashed and shown once.
+    tokenHint: Type.Union([Type.String(), Type.Null()]),
+    tokenCreatedAt: Type.Union([Type.String(), Type.Null()]),
     ownerEmails: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 20 }),
     allowedOrigins: Type.Array(Type.String({ maxLength: 300 }), {
       maxItems: 20,
@@ -2532,6 +2536,15 @@ export const RelaySettingsSchema = Type.Object(
 
 export const UpdateRelaySettingsRequestSchema = Type.Partial(
   RelaySettingsSchema,
+);
+
+// The one time the key is ever sent to the browser: right after it is made.
+export const RelayTokenResponseSchema = Type.Object(
+  {
+    token: Type.Union([Type.String(), Type.Null()]),
+    settings: RelaySettingsSchema,
+  },
+  { additionalProperties: false },
 );
 
 export const RelayCallSchema = Type.Object(
@@ -2582,5 +2595,6 @@ export type UpdateRelaySettingsRequest = Static<
   typeof UpdateRelaySettingsRequestSchema
 >;
 export type RelayCall = Static<typeof RelayCallSchema>;
+export type RelayTokenResponse = Static<typeof RelayTokenResponseSchema>;
 export type RelayPanel = Static<typeof RelayPanelSchema>;
 export type RelayTestResult = Static<typeof RelayTestResultSchema>;

@@ -166,6 +166,7 @@ import {
   fetchRelay,
   updateRelaySettings,
   testRelayEngine,
+  setRelayToken,
   fetchManual,
   type FreePicksState,
   withdrawFlywheelItem,
@@ -10072,6 +10073,27 @@ function SubscriptionDoorPanel() {
   const [hostDraft, setHostDraft] = useState("");
   const [testing, setTesting] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, RelayTestResult>>({});
+  // The freshly minted key, held only in this screen's memory until the page
+  // moves on. There is nowhere else it exists.
+  const [minted, setMinted] = useState<string | null>(null);
+  const [keyBusy, setKeyBusy] = useState(false);
+
+  async function changeKey(action: "new" | "revoke") {
+    setKeyBusy(true);
+    try {
+      const result = await setRelayToken(action);
+      setMinted(result.token);
+      setPanel((current) =>
+        current ? { ...current, settings: result.settings } : current,
+      );
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error ? error.message : "Could not change the key.",
+      );
+    } finally {
+      setKeyBusy(false);
+    }
+  }
 
   useEffect(() => {
     void fetchRelay()
@@ -10205,6 +10227,61 @@ function SubscriptionDoorPanel() {
           Copy
         </button>
         <span>on this machine only</span>
+      </div>
+
+      <h3 className="door-subhead">Key for your apps</h3>
+      <p className="door-legend">
+        One key, whichever subscription an app asks for — it says which app is
+        knocking, not which model to use. Making a new one stops the old one
+        working immediately.
+      </p>
+      {minted ? (
+        // The one moment it is readable. Nothing stores it, so this is the only
+        // chance to copy it — said plainly rather than discovered later.
+        <div className="door-address door-key-new">
+          <code>{minted}</code>
+          <button
+            className="door-copy"
+            onClick={() => void navigator.clipboard?.writeText(minted)}
+            type="button"
+          >
+            Copy
+          </button>
+          <span>copy it now — it is never shown again</span>
+        </div>
+      ) : null}
+      <div className="door-address">
+        {settings.tokenHint ? (
+          <>
+            <code>…{settings.tokenHint}</code>
+            <span>
+              made{" "}
+              {settings.tokenCreatedAt
+                ? new Date(settings.tokenCreatedAt).toLocaleDateString()
+                : "earlier"}
+            </span>
+          </>
+        ) : (
+          <span>No key yet — an app cannot get in until you make one.</span>
+        )}
+        <button
+          className="door-copy"
+          disabled={keyBusy}
+          onClick={() => void changeKey("new")}
+          type="button"
+        >
+          {settings.tokenHint ? "Replace" : "Make a key"}
+        </button>
+        {settings.tokenHint ? (
+          <button
+            className="door-copy"
+            disabled={keyBusy}
+            onClick={() => void changeKey("revoke")}
+            type="button"
+          >
+            Revoke
+          </button>
+        ) : null}
       </div>
 
       <h3 className="door-subhead">Who and where</h3>

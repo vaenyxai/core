@@ -19,7 +19,12 @@
 //   * Files arrive as short-lived links and are fetched here, used, and deleted.
 //     Nothing a customer sent is left on this machine, and the log keeps only
 //     what happened, never what was in it.
-import { randomUUID } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -52,6 +57,14 @@ const ENGINE_CAPABILITIES: Record<RelayEngine, RelayCapability[]> = {
 
 export interface RelayConfig {
   enabled: boolean;
+  // The door's own key. ONE key, not one per subscription: a key says which app
+  // is knocking, and which subscription to use is named in each request. Stored
+  // as a hash — the plain text is shown once, when it is made, and never again.
+  // `tokenHint` is the last four characters, enough to recognise which key is
+  // in an app's settings without being enough to use it.
+  tokenHash: string | null;
+  tokenHint: string | null;
+  tokenCreatedAt: string | null;
   // Who counts as Oskar. A list, never one address: he has several work
   // mailboxes and all of them are him. Empty = nobody, which is the safe start.
   ownerEmails: string[];
@@ -69,6 +82,9 @@ export interface RelayConfig {
 
 export const DEFAULT_RELAY_CONFIG: RelayConfig = {
   enabled: false,
+  tokenHash: null,
+  tokenHint: null,
+  tokenCreatedAt: null,
   ownerEmails: [],
   allowedOrigins: [],
   fileHosts: [],
@@ -134,6 +150,49 @@ export function writeRelayConfig(
     )
     .run(CONFIG_KEY, JSON.stringify(next));
   return next;
+}
+
+const DOOR_TOKEN_PREFIX = "vaenyx_door_";
+
+function hashDoorToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+// Make a new key and forget the old one in the same breath. Regenerating is how
+// an app is cut off: the previous key stops working the instant this returns.
+// The plain text is returned ONCE — nothing stores it, here or anywhere.
+export function newRelayToken(database: DatabaseHandle): string {
+  const token = `${DOOR_TOKEN_PREFIX}${randomBytes(24).toString("hex")}`;
+  writeRelayConfig(database, {
+    tokenHash: hashDoorToken(token),
+    tokenHint: token.slice(-4),
+    tokenCreatedAt: new Date().toISOString(),
+  });
+  return token;
+}
+
+export function revokeRelayToken(database: DatabaseHandle): void {
+  writeRelayConfig(database, {
+    tokenHash: null,
+    tokenHint: null,
+    tokenCreatedAt: null,
+  });
+}
+
+// Does this Authorization header carry the door's key? A missing key means the
+// door is shut to apps whatever the switch says — there is nothing to guess.
+export function relayTokenAccepted(
+  database: DatabaseHandle,
+  authorization: string | undefined,
+): boolean {
+  const config = readRelayConfig(database);
+  if (!config.tokenHash) return false;
+  if (!authorization?.startsWith("Bearer ")) return false;
+  const token = authorization.slice("Bearer ".length).trim();
+  if (!token.startsWith(DOOR_TOKEN_PREFIX)) return false;
+  const offered = Buffer.from(hashDoorToken(token));
+  const stored = Buffer.from(config.tokenHash);
+  return offered.length === stored.length && timingSafeEqual(offered, stored);
 }
 
 // Asking the Codex CLI whether it is signed in costs two child processes, which
