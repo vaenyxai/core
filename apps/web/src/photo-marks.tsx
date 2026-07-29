@@ -9,7 +9,7 @@
 //   AnnotatedPhotoEditor— the same marks, editable (Routine confirm cards)
 // Nothing here is chat-specific. Tools listed in Settings -> Tools are real
 // units in the code, not a label on a settings page.
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type { ImageAnnotationItem } from "@vaenyx/contracts";
@@ -55,12 +55,14 @@ function IconLayers() {
 // read in the chat is read by zooming into it. The layers button rides along
 // and stays its own size — it is a control, not part of the picture.
 function PhotoLightbox({
+  frame,
   marks,
   onClose,
   onToggleOverlay,
   overlayOn,
   url,
 }: {
+  frame: { width: number; height: number };
   marks: ImageAnnotationItem[] | null;
   onClose: () => void;
   onToggleOverlay: () => void;
@@ -68,6 +70,10 @@ function PhotoLightbox({
   url: string;
 }) {
   const { t } = useI18n();
+  const placed = useMemo(
+    () => (marks ? layoutLabels(marks, frame) : []),
+    [marks, frame],
+  );
   const [transform, setTransform] = useState({ scale: 1, x: 0, y: 0 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
@@ -175,7 +181,7 @@ function PhotoLightbox({
         }}
       >
         <img alt="" draggable={false} src={url} />
-        {marks && overlayOn ? <MarksOverlay placed={layoutLabels(marks)} /> : null}
+        {marks && overlayOn ? <MarksOverlay placed={placed} /> : null}
       </div>
       {marks ? (
         <button
@@ -200,89 +206,419 @@ function PhotoLightbox({
 // 2026-07-28): a dot on each object, a thin line to its name. One button on
 // the photo runs the vision engine the first time, then toggles the overlay;
 // the marks are stored server-side so a reopened chat still has them.
-// Where each label sits so none covers another (Oskar, 2026-07-29: overlapping
-// labels are unreadable). The dot never moves — it marks the thing. The label
-// goes to the nearer side and is pushed down the column until it clears the
-// one above it; a column that runs out of room wraps back to the top.
-const LABEL_ROW_HEIGHT = 9; // percent of the image, ≈ one label plus a gap
+//
+// WHERE THE NAMES GO. Oskar's rule, 2026-07-29, is absolute: no dot, no leader
+// line and no label may touch ANY other dot, line or label. An earlier version
+// compared labels only to labels, and a name landed on a neighbour's dot and
+// line — which reads as one mark when it is two.
+//
+// So the layout is real geometry, worked in PIXELS of the photo as drawn: a
+// percentage of the width and a percentage of the height are different
+// distances on a portrait photo, and "do these touch" is a question about
+// distance. Each mark is three things that must all stay clear — the dot (which
+// never moves, it IS the thing), the label box, and the line between them. The
+// line runs from the dot to the box's own edge, meeting it exactly.
+const DEFAULT_FRAME = { width: 340, height: 453 }; // a phone photo in the chat
+const LABEL_FONT_SIZE = 13;
+const LABEL_HEIGHT = 24; // the pill: text plus its padding and border
+const LABEL_SIDE_PADDING = 18; // both sides together
+const DOT_RADIUS = 7; // the 10px dot plus its white ring
+const CLEARANCE = 5; // px of empty space demanded between any two things
+const LINE_GAPS = [18, 26, 36, 48, 62, 80, 100]; // name-to-dot distances tried
+const DROP_STEP = 15; // how finely a name slides up or down looking for room
+const DROP_STEPS = 24; // how far up or down it will go, in those steps
+const REPLACEMENT_SWEEPS = 4; // how many times each name may reconsider
 
-// A label is a pill of TEXT, so how much room it needs depends on the word
-// inside it — two labels on opposite sides of the photo used to be compared by
-// height alone and landed on top of each other (Oskar, 2026-07-29). Widths are
-// in percent of a 340px-wide photo, the chat size; fullscreen is larger, where
-// the same label takes a smaller share, so this estimate is the roomy one on
-// purpose: a label that thinks it is too wide only spreads the marks out.
-const LABEL_PADDING_WIDTH = 4.5;
-const LABEL_WIDE_CHARACTER_WIDTH = 3.4; // a Chinese character at 11px
-const LABEL_NARROW_CHARACTER_WIDTH = 1.9; // a latin letter
+interface Point {
+  x: number;
+  y: number;
+}
+interface Box {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+interface Segment {
+  a: Point;
+  b: Point;
+}
+
+function grow(box: Box, by: number): Box {
+  return { x0: box.x0 - by, y0: box.y0 - by, x1: box.x1 + by, y1: box.y1 + by };
+}
+
+function boxesOverlap(a: Box, b: Box): boolean {
+  return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+}
+
+function pointInBox(point: Point, box: Box): boolean {
+  return (
+    point.x > box.x0 && point.x < box.x1 && point.y > box.y0 && point.y < box.y1
+  );
+}
+
+function turns(a: Point, b: Point, c: Point): number {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+function segmentsCross(first: Segment, second: Segment): boolean {
+  const d1 = turns(first.a, first.b, second.a);
+  const d2 = turns(first.a, first.b, second.b);
+  const d3 = turns(second.a, second.b, first.a);
+  const d4 = turns(second.a, second.b, first.b);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+}
+
+function segmentTouchesBox(segment: Segment, box: Box): boolean {
+  if (pointInBox(segment.a, box) || pointInBox(segment.b, box)) return true;
+  const corners: Point[] = [
+    { x: box.x0, y: box.y0 },
+    { x: box.x1, y: box.y0 },
+    { x: box.x1, y: box.y1 },
+    { x: box.x0, y: box.y1 },
+  ];
+  for (let side = 0; side < 4; side += 1) {
+    const edge = { a: corners[side]!, b: corners[(side + 1) % 4]! };
+    if (segmentsCross(segment, edge)) return true;
+  }
+  return false;
+}
+
+function distanceToSegment(point: Point, segment: Segment): number {
+  const dx = segment.b.x - segment.a.x;
+  const dy = segment.b.y - segment.a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const along =
+    lengthSquared === 0
+      ? 0
+      : Math.min(
+          1,
+          Math.max(
+            0,
+            ((point.x - segment.a.x) * dx + (point.y - segment.a.y) * dy) /
+              lengthSquared,
+          ),
+        );
+  return Math.hypot(
+    point.x - (segment.a.x + along * dx),
+    point.y - (segment.a.y + along * dy),
+  );
+}
 const WIDE_CHARACTER_RANGE =
   /[ᄀ-ᇿ⺀-꓏ꥠ-꥿가-퟿豈-﫿︐-﹯＀-｠￠-￦]/;
 
-function labelWidth(name: string): number {
-  let width = LABEL_PADDING_WIDTH;
+// Chinese characters take a full em, latin letters a little over half.
+function labelPixelWidth(name: string): number {
+  let width = LABEL_SIDE_PADDING;
   for (const character of name) {
     width += WIDE_CHARACTER_RANGE.test(character)
-      ? LABEL_WIDE_CHARACTER_WIDTH
-      : LABEL_NARROW_CHARACTER_WIDTH;
+      ? LABEL_FONT_SIZE
+      : LABEL_FONT_SIZE * 0.56;
   }
-  return Math.min(width, 92);
+  return width;
 }
 
 export interface PlacedLabel {
   item: ImageAnnotationItem;
-  labelX: number;
-  labelY: number;
+  labelX: number; // percent — the box edge the leader line meets
+  labelY: number; // percent — the middle of the box
   toRight: boolean;
 }
 
-export function layoutLabels(items: ImageAnnotationItem[]): PlacedLabel[] {
-  // Every label already placed, as a box: a new one may not share space with
-  // ANY of them, whichever side of the photo it went to.
-  const taken: { top: number; left: number; right: number }[] = [];
-  const isFree = (top: number, left: number, right: number): boolean =>
-    !taken.some(
-      (used) =>
-        Math.abs(used.top - top) < LABEL_ROW_HEIGHT &&
-        used.right > left &&
-        used.left < right,
-    );
+export function layoutLabels(
+  items: ImageAnnotationItem[],
+  frame: { width: number; height: number } = DEFAULT_FRAME,
+): PlacedLabel[] {
+  const { width, height } = frame;
+  const dots: Point[] = items.map((item) => ({
+    x: (item.x / 100) * width,
+    y: (item.y / 100) * height,
+  }));
+  // One slot per mark, filled in as it is placed and emptied again when a mark
+  // is given another go.
+  const boxes: (Box | null)[] = items.map(() => null);
+  const lines: (Segment | null)[] = items.map(() => null);
+  const rightward: boolean[] = items.map(() => true);
 
-  return [...items]
+  // Every spot a name could go: either side of its dot, a range of distances,
+  // and sliding up or down the photo.
+  const spots: { toRight: boolean; gap: number; drop: number }[] = [];
+  for (const toRight of [true, false]) {
+    for (const gap of LINE_GAPS) {
+      for (let step = -DROP_STEPS; step <= DROP_STEPS; step += 1) {
+        spots.push({ toRight, gap, drop: step * DROP_STEP });
+      }
+    }
+  }
+
+  // What each kind of contact costs. Rather than a run of passes that give up
+  // one rule at a time, every spot is priced and the cheapest wins: a photo
+  // with room lands on zero — nothing touching anything — and a photo marked
+  // wall to wall still gets its best possible arrangement instead of a shrug.
+  // The order of these numbers IS the priority: two names on top of each other
+  // is the worst thing that can happen, two lines crossing the least bad.
+  const COST_NAME_ON_NAME = 1000;
+  const COST_NAME_ON_DOT = 900;
+  const COST_LINE_THROUGH_NAME = 500;
+  const COST_LINE_ON_DOT = 200;
+  const COST_LINES_CROSS = 60;
+  const COST_STRAY = 0.02; // per pixel away from the dot: the tie-breaker
+
+  // Put one name in its cheapest spot, given wherever the others currently are.
+  // Returns what the spot cost in CONTACT alone, so the sweep below can tell a
+  // tidy photo (zero) from one that is still fighting for room.
+  function place(index: number): number {
+    const item = items[index]!;
+    const dot = dots[index]!;
+    const labelWidth = Math.min(labelPixelWidth(item.name), width - 8);
+    // The near side is where a name belongs; crossing over its own dot to the
+    // far side is a cost, paid when the near side is full.
+    const nearSide = item.x < 55;
+    let chosen: { box: Box; line: Segment; toRight: boolean } | null = null;
+    let cheapest = Number.POSITIVE_INFINITY;
+    let contact = 0;
+
+    for (const { toRight, gap, drop } of spots) {
+      const middle = Math.min(
+        height - LABEL_HEIGHT / 2 - 2,
+        Math.max(LABEL_HEIGHT / 2 + 2, dot.y + drop),
+      );
+      const edge = toRight ? dot.x + gap : dot.x - gap;
+      const box: Box = {
+        x0: toRight ? edge : edge - labelWidth,
+        y0: middle - LABEL_HEIGHT / 2,
+        x1: toRight ? edge + labelWidth : edge,
+        y1: middle + LABEL_HEIGHT / 2,
+      };
+      // The whole pill stays on the photo, not just its anchor point.
+      if (box.x0 < 2 || box.x1 > width - 2) continue;
+      const line: Segment = { a: dot, b: { x: edge, y: middle } };
+      const room = grow(box, CLEARANCE);
+
+      let touching = 0;
+      for (let other = 0; other < dots.length; other += 1) {
+        if (other === index) continue;
+        const neighbour = dots[other]!;
+        if (pointInBox(neighbour, grow(box, CLEARANCE + DOT_RADIUS))) {
+          touching += COST_NAME_ON_DOT;
+        } else if (
+          distanceToSegment(neighbour, line) < DOT_RADIUS + CLEARANCE
+        ) {
+          touching += COST_LINE_ON_DOT;
+        }
+        const otherBox = boxes[other];
+        if (otherBox) {
+          if (boxesOverlap(room, otherBox)) touching += COST_NAME_ON_NAME;
+          if (segmentTouchesBox(line, grow(otherBox, CLEARANCE))) {
+            touching += COST_LINE_THROUGH_NAME;
+          }
+        }
+        const otherLine = lines[other];
+        if (otherLine) {
+          if (segmentTouchesBox(otherLine, room)) {
+            touching += COST_LINE_THROUGH_NAME;
+          }
+          if (segmentsCross(line, otherLine)) touching += COST_LINES_CROSS;
+        }
+      }
+
+      const cost =
+        touching +
+        (Math.abs(middle - dot.y) + gap) * COST_STRAY +
+        (toRight === nearSide ? 0 : 4);
+      if (cost < cheapest) {
+        cheapest = cost;
+        contact = touching;
+        chosen = { box, line, toRight };
+      }
+    }
+
+    // Only reachable when the name is wider than the photo it belongs to.
+    if (!chosen) {
+      const edge = nearSide ? dot.x + LINE_GAPS[0]! : dot.x - LINE_GAPS[0]!;
+      chosen = {
+        box: {
+          x0: nearSide ? edge : edge - labelWidth,
+          y0: dot.y - LABEL_HEIGHT / 2,
+          x1: nearSide ? edge + labelWidth : edge,
+          y1: dot.y + LABEL_HEIGHT / 2,
+        },
+        line: { a: dot, b: { x: edge, y: dot.y } },
+        toRight: nearSide,
+      };
+    }
+    boxes[index] = chosen.box;
+    lines[index] = chosen.line;
+    rightward[index] = chosen.toRight;
+    return contact;
+  }
+
+  // What the whole arrangement costs in contact, measured on the finished
+  // picture rather than on the order it was built in.
+  function contactTotal(): number {
+    let total = 0;
+    for (let a = 0; a < items.length; a += 1) {
+      const box = boxes[a];
+      const line = lines[a];
+      if (!box || !line) continue;
+      for (let b = 0; b < items.length; b += 1) {
+        if (a === b) continue;
+        const neighbour = dots[b]!;
+        if (pointInBox(neighbour, grow(box, DOT_RADIUS))) {
+          total += COST_NAME_ON_DOT;
+        } else if (distanceToSegment(neighbour, line) < DOT_RADIUS) {
+          total += COST_LINE_ON_DOT;
+        }
+        const otherBox = boxes[b];
+        const otherLine = lines[b];
+        if (!otherBox || !otherLine || b < a) continue;
+        if (boxesOverlap(box, otherBox)) total += COST_NAME_ON_NAME;
+        if (
+          segmentTouchesBox(line, otherBox) ||
+          segmentTouchesBox(otherLine, box)
+        ) {
+          total += COST_LINE_THROUGH_NAME;
+        }
+        if (segmentsCross(line, otherLine)) total += COST_LINES_CROSS;
+      }
+    }
+    return total;
+  }
+
+  // The first name placed chose against an empty photo and the last against a
+  // full one, so everyone gets more goes once their neighbours exist — and each
+  // sweep works in a different order, because who picks first decides who ends
+  // up with nowhere to stand. The best arrangement seen is the one kept.
+  const byHeight = items
     .map((item, index) => ({ item, index }))
     .sort((a, b) => a.item.y - b.item.y)
-    .map(({ item, index }) => {
-      const width = labelWidth(item.name);
-      // The near side first; if the label cannot find room there it crosses to
-      // the other side rather than sitting on top of a neighbour.
-      const sides = item.x < 55 ? [true, false] : [false, true];
-      let chosen: PlacedLabel | null = null;
-      let fallback: PlacedLabel | null = null;
-      for (const toRight of sides) {
-        // Clamped so the whole pill stays ON the photo, not just its anchor.
-        const labelX = toRight
-          ? Math.min(Math.max(item.x + 12, 2), 99 - width)
-          : Math.max(Math.min(item.x - 12, 98), width + 1);
-        const left = toRight ? labelX : labelX - width;
-        const right = toRight ? labelX + width : labelX;
-        let labelY = Math.min(94, Math.max(4, item.y - 5));
-        fallback ??= { item, labelX, labelY, toRight };
-        for (let step = 0; step < 13; step += 1) {
-          if (isFree(labelY, left, right)) {
-            chosen = { item, labelX, labelY, toRight };
-            taken.push({ top: labelY, left, right });
-            break;
-          }
-          labelY += LABEL_ROW_HEIGHT;
-          if (labelY > 94) labelY = 4 + step; // wrap back to the top
-        }
-        if (chosen) break;
+    .map(({ index }) => index);
+  const byLength = items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => b.item.name.length - a.item.name.length)
+    .map(({ index }) => index);
+  const orders = [byHeight, byLength, [...byHeight].reverse(), byLength];
+
+  let best = { boxes: [...boxes], lines: [...lines], rightward: [...rightward] };
+  let bestTotal = Number.POSITIVE_INFINITY;
+  const remember = () => {
+    const total = contactTotal();
+    if (total < bestTotal) {
+      bestTotal = total;
+      best = { boxes: [...boxes], lines: [...lines], rightward: [...rightward] };
+    }
+    return total;
+  };
+
+  for (const index of byHeight) place(index);
+  remember();
+  for (let sweep = 0; sweep < REPLACEMENT_SWEEPS && bestTotal > 0; sweep += 1) {
+    for (const index of orders[sweep % orders.length]!) {
+      boxes[index] = null;
+      lines[index] = null;
+      place(index);
+    }
+    remember();
+  }
+  boxes.splice(0, boxes.length, ...best.boxes);
+  lines.splice(0, lines.length, ...best.lines);
+  rightward.splice(0, rightward.length, ...best.rightward);
+
+  return items.map((item, index) => ({
+    item,
+    labelX: (lines[index]!.b.x / width) * 100,
+    labelY: (lines[index]!.b.y / height) * 100,
+    toRight: rightward[index]!,
+  }));
+}
+
+// Every pair of marks that ends up actually touching, as "name / name". The
+// layout aims for an empty list and the tests hold it to that; measuring the
+// result rather than trusting the placement keeps the rule checkable in one
+// place. Thresholds here are the bare touch — the layout demands CLEARANCE on
+// top, so a healthy photo has room to spare.
+export function markCollisions(
+  items: ImageAnnotationItem[],
+  frame: { width: number; height: number } = DEFAULT_FRAME,
+): string[] {
+  const parts = layoutLabels(items, frame).map((mark) => {
+    const labelWidth = Math.min(
+      labelPixelWidth(mark.item.name),
+      frame.width - 8,
+    );
+    const edgeX = (mark.labelX / 100) * frame.width;
+    const middleY = (mark.labelY / 100) * frame.height;
+    const dot: Point = {
+      x: (mark.item.x / 100) * frame.width,
+      y: (mark.item.y / 100) * frame.height,
+    };
+    return {
+      name: mark.item.name,
+      dot,
+      box: {
+        x0: mark.toRight ? edgeX : edgeX - labelWidth,
+        y0: middleY - LABEL_HEIGHT / 2,
+        x1: mark.toRight ? edgeX + labelWidth : edgeX,
+        y1: middleY + LABEL_HEIGHT / 2,
+      },
+      line: { a: dot, b: { x: edgeX, y: middleY } },
+    };
+  });
+
+  const touching: string[] = [];
+  for (let a = 0; a < parts.length; a += 1) {
+    for (let b = a + 1; b < parts.length; b += 1) {
+      const first = parts[a]!;
+      const second = parts[b]!;
+      const reason = boxesOverlap(first.box, second.box)
+        ? "name on name"
+        : pointInBox(second.dot, grow(first.box, DOT_RADIUS)) ||
+            pointInBox(first.dot, grow(second.box, DOT_RADIUS))
+          ? "name on dot"
+          : segmentTouchesBox(first.line, second.box) ||
+              segmentTouchesBox(second.line, first.box)
+            ? "line through name"
+            : distanceToSegment(second.dot, first.line) < DOT_RADIUS ||
+                distanceToSegment(first.dot, second.line) < DOT_RADIUS
+              ? "line on dot"
+              : segmentsCross(first.line, second.line)
+                ? "lines cross"
+                : null;
+      if (reason) {
+        touching.push(`${first.name} / ${second.name}: ${reason}`);
       }
-      // A photo marked wall-to-wall can run out of room; placing the label at
-      // its natural spot beats dropping the mark.
-      return { placed: chosen ?? (fallback as PlacedLabel), index };
-    })
-    .sort((a, b) => a.index - b.index)
-    .map(({ placed }) => placed);
+    }
+  }
+  return touching;
+}
+
+// The photo as it is actually drawn, which is what the layout measures against.
+// The chat size is the tight one, so it is the size used everywhere: fullscreen
+// shows the same arrangement with more room around it, never less.
+function usePhotoFrame() {
+  const ref = useRef<HTMLImageElement | null>(null);
+  const [frame, setFrame] = useState(DEFAULT_FRAME);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const measure = () => {
+      const box = element.getBoundingClientRect();
+      if (box.width < 1 || box.height < 1) return;
+      setFrame((current) =>
+        Math.abs(current.width - box.width) < 1 &&
+        Math.abs(current.height - box.height) < 1
+          ? current
+          : { width: box.width, height: box.height },
+      );
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return { frame, ref };
 }
 
 // The marks themselves — dot, leader line, name. One component, so a photo in
@@ -339,13 +675,20 @@ export function AnnotatedPhoto({
   const { t } = useI18n();
   const [overlayOn, setOverlayOn] = useState(true);
   const [zoomed, setZoomed] = useState(false);
+  const { frame, ref } = usePhotoFrame();
   const items = annotations && annotations.length > 0 ? annotations : null;
-  const placed = items ? layoutLabels(items) : [];
+  // Working out where a dozen names can stand without touching is real work;
+  // it is done when the marks or the photo's size change, not on every render.
+  const placed = useMemo(
+    () => (items ? layoutLabels(items, frame) : []),
+    [items, frame],
+  );
 
   return (
     <div className="annotated-photo">
       {zoomed ? (
         <PhotoLightbox
+          frame={frame}
           marks={items}
           onClose={() => setZoomed(false)}
           onToggleOverlay={() => setOverlayOn((current) => !current)}
@@ -358,6 +701,7 @@ export function AnnotatedPhoto({
         className="message-photo"
         onClick={() => setZoomed(true)}
         onLoad={onLoad}
+        ref={ref}
         src={`/v1/vision/image/${imageId}`}
       />
       {items && overlayOn ? <MarksOverlay placed={placed} /> : null}
@@ -396,6 +740,7 @@ export function AnnotatedPhotoEditor({
   const { t } = useI18n();
   const [selected, setSelected] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
+  const { frame, ref } = usePhotoFrame();
 
   function addAt(event: React.MouseEvent<HTMLDivElement>) {
     if (!adding) return;
@@ -413,7 +758,7 @@ export function AnnotatedPhotoEditor({
   }
 
   const current = selected !== null ? marks[selected] : undefined;
-  const placed = layoutLabels(marks);
+  const placed = useMemo(() => layoutLabels(marks, frame), [marks, frame]);
 
   return (
     <div className="annotate-editor">
@@ -426,6 +771,7 @@ export function AnnotatedPhotoEditor({
         <img
           alt=""
           className="message-photo"
+          ref={ref}
           src={`/v1/vision/image/${imageId}`}
         />
         {/* The SAME label layout as a chat photo (layoutLabels): marks are one

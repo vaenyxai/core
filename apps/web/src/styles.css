@@ -1087,21 +1087,26 @@ textarea::placeholder {
   pointer-events: none;
 }
 
+/* The leader line ENDS on the label's own edge — no floating gap, no line
+   running under the words (Oskar, 2026-07-29). So the label's anchor point IS
+   its near edge, and nothing is nudged away from it. Sizes here are the ones
+   layoutLabels measures with: 13px text in a pill 24px tall and 18px wider than
+   its words. Change one and change the other. */
 .annotate-label {
   position: absolute;
-  transform: translate(4px, -50%);
-  padding: 1px 6px;
+  transform: translate(0, -50%);
+  padding: 2px 8px;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.72);
   color: #fff;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.5;
   white-space: nowrap;
   pointer-events: none;
 }
 
 .annotate-label--left {
-  transform: translate(-100%, -50%) translateX(-4px);
+  transform: translate(-100%, -50%);
 }
 
 .annotate-button {

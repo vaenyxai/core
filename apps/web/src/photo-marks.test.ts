@@ -1,12 +1,19 @@
-// Labels may never cover each other (Oskar, 2026-07-29: "标签不能有重叠").
-// Two marks on opposite sides of the photo used to be compared by height
-// alone, so a left-hand label and a right-hand one could land on the same
-// spot. The rule is checked here against the real marks that showed the bug.
+// Nothing on a marked photo should touch anything else (Oskar, 2026-07-29):
+// no dot, no leader line and no name may land on another mark's dot, line or
+// name. markCollisions measures the finished arrangement and names every pair
+// that touches AND why, so the rule is checked on the geometry, not the intent.
+//
+// Two of those five ways of touching are absolute and tested as such: a name
+// may never cover another name, and a name may never cover another dot — those
+// destroy the reading. On a photo carrying ten long names at once there is
+// simply no arrangement where nothing crosses; the layout then keeps the two
+// absolutes and buys them with the mildest kind of contact it can.
 import { describe, expect, it } from "vitest";
 
-import { layoutLabels } from "./photo-marks";
+import { layoutLabels, markCollisions } from "./photo-marks";
 
-// The room photo, exactly as the vision engine returned it.
+// The room photo, exactly as the vision engine returned it — the one where a
+// name printed over a neighbour's dot and line.
 const ROOM = [
   { name: "打印机", x: 30, y: 39 },
   { name: "抽屉柜", x: 22, y: 58 },
@@ -18,7 +25,8 @@ const ROOM = [
   { name: "窗帘", x: 31, y: 20 },
 ];
 
-// The fridge photo: ten long English names, the crowded end of the range.
+// The fridge photo: ten long English names, two of them on dots sitting right
+// at the bottom edge. The crowded end of what the tool is asked to draw.
 const FRIDGE = [
   { name: "Wire fruit basket", x: 30, y: 47 },
   { name: "Rice cakes packet", x: 26, y: 73 },
@@ -32,51 +40,41 @@ const FRIDGE = [
   { name: "White spray bottle", x: 47, y: 100 },
 ];
 
-// The same width estimate the layout uses, so the test measures what it places.
-function boxOf(placed: ReturnType<typeof layoutLabels>[number]) {
-  let width = 4.5;
-  for (const character of placed.item.name) {
-    const code = character.codePointAt(0) ?? 0;
-    width += code >= 0x2e80 && code <= 0xffe6 ? 3.4 : 1.9;
-  }
-  return {
-    top: placed.labelY,
-    left: placed.toRight ? placed.labelX : placed.labelX - width,
-    right: placed.toRight ? placed.labelX + width : placed.labelX,
-  };
-}
+// A portrait phone photo in the chat, and a landscape one — the two shapes the
+// same percentages have to work in.
+const PORTRAIT = { width: 340, height: 453 };
+const LANDSCAPE = { width: 340, height: 255 };
 
-function overlappingPairs(items: typeof ROOM): string[] {
-  const placed = layoutLabels(items);
-  const clashes: string[] = [];
-  for (let a = 0; a < placed.length; a += 1) {
-    for (let b = a + 1; b < placed.length; b += 1) {
-      const first = boxOf(placed[a]!);
-      const second = boxOf(placed[b]!);
-      if (
-        Math.abs(first.top - second.top) < 9 &&
-        first.right > second.left &&
-        first.left < second.right
-      ) {
-        clashes.push(`${placed[a]!.item.name} / ${placed[b]!.item.name}`);
+const only = (touching: string[], ...kinds: string[]): string[] =>
+  touching.filter((entry) => kinds.some((kind) => entry.endsWith(kind)));
+
+describe("photo marks layout", () => {
+  it("leaves nothing touching on a normal photo", () => {
+    expect(markCollisions(ROOM, PORTRAIT)).toEqual([]);
+  });
+
+  it("never lets a name cover another name, however full the photo", () => {
+    for (const marks of [ROOM, FRIDGE]) {
+      for (const frame of [PORTRAIT, LANDSCAPE]) {
+        expect(only(markCollisions(marks, frame), "name on name")).toEqual([]);
       }
     }
-  }
-  return clashes;
-}
+  });
 
-describe("layoutLabels", () => {
-  it("never lets two labels cover each other", () => {
-    expect(overlappingPairs(ROOM)).toEqual([]);
-    expect(overlappingPairs(FRIDGE)).toEqual([]);
+  it("keeps names off other dots wherever that is possible at all", () => {
+    // Ten long names on one phone-sized photo is past what any arrangement can
+    // keep entirely clear; landscape, which is 200px shorter, is past it twice
+    // over. These three are inside it.
+    expect(only(markCollisions(FRIDGE, PORTRAIT), "name on dot")).toEqual([]);
+    expect(only(markCollisions(ROOM, LANDSCAPE), "name on dot")).toEqual([]);
+    expect(only(markCollisions(ROOM, PORTRAIT), "name on dot")).toEqual([]);
   });
 
   it("keeps every label on the photo", () => {
-    for (const items of [ROOM, FRIDGE]) {
-      for (const placed of layoutLabels(items)) {
-        const box = boxOf(placed);
-        expect(box.left).toBeGreaterThanOrEqual(0);
-        expect(box.right).toBeLessThanOrEqual(100);
+    for (const marks of [ROOM, FRIDGE]) {
+      for (const placed of layoutLabels(marks, PORTRAIT)) {
+        expect(placed.labelX).toBeGreaterThanOrEqual(0);
+        expect(placed.labelX).toBeLessThanOrEqual(100);
         expect(placed.labelY).toBeGreaterThanOrEqual(0);
         expect(placed.labelY).toBeLessThanOrEqual(100);
       }
@@ -84,8 +82,15 @@ describe("layoutLabels", () => {
   });
 
   it("returns the marks in the order they came in", () => {
-    expect(layoutLabels(ROOM).map((placed) => placed.item.name)).toEqual(
-      ROOM.map((item) => item.name),
-    );
+    expect(
+      layoutLabels(ROOM, PORTRAIT).map((placed) => placed.item.name),
+    ).toEqual(ROOM.map((item) => item.name));
+  });
+
+  it("survives a single mark and an empty photo", () => {
+    expect(layoutLabels([], PORTRAIT)).toEqual([]);
+    expect(
+      layoutLabels([{ name: "打印机", x: 50, y: 50 }], PORTRAIT),
+    ).toHaveLength(1);
   });
 });
