@@ -202,8 +202,22 @@ import {
   type UpdateVaenyxThreadProjectRequest,
   type UpdateVaenyxThreadStatusRequest,
   type UpdateVaenyxThreadTitleRequest,
+  RelayHealthSchema,
+  RelayPanelSchema,
+  RelayRunRequestSchema,
+  RelayRunResponseSchema,
+  RelaySettingsSchema,
+  RelayTestResultSchema,
+  UpdateRelaySettingsRequestSchema,
+  type RelayEngine,
+  type RelayRunRequest,
+  type UpdateRelaySettingsRequest,
 } from "@vaenyx/contracts";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type {
+  FastifyInstance,
+  FastifyReply,
+  FastifyRequest,
+} from "fastify";
 
 import type { AppConfig } from "../../config.js";
 import type { DatabaseHandle } from "../../db/database.js";
@@ -499,6 +513,16 @@ import {
   recordLoginSuccess,
 } from "../guard/rate-limit.js";
 import { listAuditEvents, recordAudit } from "../guard/audit.js";
+import {
+  forgetRelayEngineStatus,
+  listRelayCalls,
+  readRelayConfig,
+  recordRelayCall,
+  relayHealth,
+  runRelay,
+  testRelayEngine,
+  writeRelayConfig,
+} from "../core/relay.js";
 
 interface GatewayContext {
   config: AppConfig;
@@ -4000,6 +4024,228 @@ export async function registerGatewayRoutes(
         }
 
         throw error;
+      }
+    },
+  );
+
+  // THE SUBSCRIPTION DOOR (Oskar, 2026-07-29). Two routes for his own apps —
+  // "are you there" and "do this on one of my subscriptions" — plus three for
+  // the Owner's own settings page. Both outward routes go through the SAME App
+  // Token the rest of the bridge uses: no new unauthenticated path exists.
+  //
+  // Cross-origin is opened here and ONLY here, and only for origins the Owner
+  // typed in himself. It has to be opened at all because a Cloudflare Worker
+  // can never reach this machine — Vaenyx lives inside a private network, so
+  // the call comes from the page in the Owner's own browser, which is on that
+  // network. That is also what makes "cannot reach it" a real gate: someone
+  // else's phone does not find this door at all.
+  function allowRelayOrigin(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ): void {
+    const origin = request.headers.origin;
+    if (!origin) return;
+    const allowed = readRelayConfig(context.database).allowedOrigins;
+    if (!allowed.includes(origin.replace(/\/+$/, ""))) return;
+    reply.header("access-control-allow-origin", origin);
+    reply.header("vary", "origin");
+    reply.header("access-control-allow-headers", "authorization,content-type");
+    reply.header("access-control-allow-methods", "GET,POST,OPTIONS");
+    reply.header("access-control-max-age", "600");
+  }
+
+  for (const path of ["/v1/ai/run", "/v1/ai/health"]) {
+    app.options(path, async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      return reply.code(204).send();
+    });
+  }
+
+  // Deliberately cheap: the answer about the CLIs is cached and refreshed in
+  // the background, because a caller decides in three seconds whether this
+  // machine is worth waiting for.
+  app.get(
+    "/v1/ai/health",
+    {
+      schema: {
+        response: { 200: RelayHealthSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      if (!authenticateAppProfile(context.database, request)) {
+        return reply.code(401).send({ error: "A valid App Token is required." });
+      }
+      return relayHealth(context.database);
+    },
+  );
+
+  app.post<{ Body: RelayRunRequest }>(
+    "/v1/ai/run",
+    {
+      schema: {
+        body: RelayRunRequestSchema,
+        response: {
+          200: RelayRunResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      const profile = authenticateAppProfile(context.database, request);
+      if (!profile) {
+        recordAudit(context.database, {
+          actorType: "system",
+          actorName: "Vaenyx Guard",
+          action: "relay.run",
+          decision: "denied",
+          reason: "Invalid or disabled App Token.",
+          resourceType: "relay_request",
+        });
+        return reply.code(401).send({ error: "A valid App Token is required." });
+      }
+
+      const started = Date.now();
+      try {
+        const result = await runRelay(
+          context.database,
+          context.config.secretsDirectory,
+          {
+            task: request.body.task,
+            prompt: request.body.prompt,
+            engine: request.body.engine,
+            capability: request.body.capability,
+            caller: request.body.caller,
+            files: request.body.files ?? [],
+          },
+        );
+        recordRelayCall(context.database, {
+          task: request.body.task,
+          engine: request.body.engine,
+          capability: request.body.capability,
+          ms: result.ms,
+          ok: true,
+          failure: null,
+        });
+        return result;
+      } catch (error) {
+        // Every failure carries its own name so the calling app can tell "fall
+        // back to your free model" from "tell the user something is wrong".
+        const code = error instanceof Error ? error.message : "RELAY_FAILED";
+        recordRelayCall(context.database, {
+          task: request.body.task,
+          engine: request.body.engine,
+          capability: request.body.capability,
+          ms: Date.now() - started,
+          ok: false,
+          failure: code,
+        });
+        const status =
+          code === "RELAY_NOT_OWNER"
+            ? 403
+            : code === "RELAY_OFF" || code.startsWith("RELAY_NOT_SIGNED_IN")
+              ? 503
+              : code.startsWith("RELAY_CAPABILITY_UNSUPPORTED") ||
+                  code.startsWith("RELAY_HOST_NOT_ALLOWED") ||
+                  code.startsWith("RELAY_TOO_MANY_FILES") ||
+                  code.includes("TOO_LARGE") ||
+                  code === "RELAY_NO_FILE"
+                ? 400
+                : 502;
+        return reply.code(status).send({ error: code });
+      }
+    },
+  );
+
+  app.get(
+    "/v1/relay",
+    {
+      schema: { response: { 200: RelayPanelSchema, 401: ErrorResponseSchema } },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return {
+        settings: readRelayConfig(context.database),
+        health: relayHealth(context.database),
+        calls: listRelayCalls(context.database),
+      };
+    },
+  );
+
+  app.put<{ Body: UpdateRelaySettingsRequest }>(
+    "/v1/relay/settings",
+    {
+      schema: {
+        body: UpdateRelaySettingsRequestSchema,
+        response: { 200: RelaySettingsSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const settings = writeRelayConfig(context.database, request.body);
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorName: owner.name,
+        action: "relay.settings.update",
+        decision: "allowed",
+        reason: settings.enabled ? "Door open." : "Door closed.",
+        resourceType: "relay_settings",
+      });
+      return settings;
+    },
+  );
+
+  // The Test button sends a REAL request down the engine the Owner is looking
+  // at. It never reads a config file, never trusts a vendor page, and never
+  // asks the model whether it works.
+  app.post<{ Body: { engine: RelayEngine } }>(
+    "/v1/relay/test",
+    {
+      schema: {
+        body: Type.Object(
+          {
+            engine: Type.Union([
+              Type.Literal("openai-cli"),
+              Type.Literal("claude-cli"),
+            ]),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: RelayTestResultSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      forgetRelayEngineStatus();
+      try {
+        const answer = await testRelayEngine(
+          context.config.secretsDirectory,
+          request.body.engine,
+        );
+        return { status: "ok" as const, detail: answer.slice(0, 200) };
+      } catch (error) {
+        return {
+          status: "failed" as const,
+          detail: (error instanceof Error ? error.message : "Unknown failure")
+            .slice(0, 300),
+        };
       }
     },
   );

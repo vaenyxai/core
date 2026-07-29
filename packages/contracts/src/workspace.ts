@@ -2430,3 +2430,157 @@ export type ModelProviderInfo = Static<typeof ModelProviderInfoSchema>;
 export type ConnectModelProviderRequest = Static<
   typeof ConnectModelProviderRequestSchema
 >;
+
+// THE SUBSCRIPTION DOOR (Oskar, 2026-07-29). Two logins lent to his own apps:
+// they name the one they want, and Vaenyx either does the work on it or says
+// plainly why it could not. Two capabilities are on offer; the other three are
+// reported unsupported rather than left for an app to discover the hard way.
+export const RelayEngineSchema = Type.Union([
+  Type.Literal("openai-cli"),
+  Type.Literal("claude-cli"),
+]);
+
+export const RelayCapabilitySchema = Type.Union([
+  Type.Literal("text"),
+  Type.Literal("voice-in"),
+  Type.Literal("voice-out"),
+  Type.Literal("image-in"),
+  Type.Literal("image-out"),
+]);
+
+export const RelayRunRequestSchema = Type.Object(
+  {
+    // What kind of job this is. Shows up in the door's log so the Owner can see
+    // what his apps have been asking for, without any of the content.
+    task: Type.String({ minLength: 1, maxLength: 60 }),
+    prompt: Type.String({ minLength: 1, maxLength: 200_000 }),
+    engine: RelayEngineSchema,
+    capability: RelayCapabilitySchema,
+    // The signed-in user of the calling app. Checked against the Owner list —
+    // the personal subscriptions are his alone to use.
+    caller: Type.String({ minLength: 3, maxLength: 200 }),
+    // Short-lived download links, never the file itself: the file is usually
+    // already in the cloud, and a phone uploading it again is the slow way
+    // round. Vaenyx fetches, uses, and deletes.
+    files: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            name: Type.String({ minLength: 1, maxLength: 200 }),
+            url: Type.String({ minLength: 8, maxLength: 4000 }),
+          },
+          { additionalProperties: false },
+        ),
+        { maxItems: 20 },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayRunResponseSchema = Type.Object(
+  {
+    text: Type.String(),
+    engine: RelayEngineSchema,
+    model: Type.String(),
+    ms: Type.Integer(),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayHealthSchema = Type.Object(
+  {
+    on: Type.Boolean(),
+    engines: Type.Array(
+      Type.Object(
+        {
+          id: RelayEngineSchema,
+          signedIn: Type.Boolean(),
+          capabilities: Type.Array(RelayCapabilitySchema),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    limits: Type.Object(
+      {
+        maxFiles: Type.Integer(),
+        maxFileBytes: Type.Integer(),
+        maxTotalBytes: Type.Integer(),
+        timeoutSeconds: Type.Integer(),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const RelaySettingsSchema = Type.Object(
+  {
+    enabled: Type.Boolean(),
+    ownerEmails: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 20 }),
+    allowedOrigins: Type.Array(Type.String({ maxLength: 300 }), {
+      maxItems: 20,
+    }),
+    fileHosts: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 20 }),
+    maxFiles: Type.Integer({ minimum: 0, maximum: 20 }),
+    maxFileBytes: Type.Integer({ minimum: 0 }),
+    maxTotalBytes: Type.Integer({ minimum: 0 }),
+    timeoutSeconds: Type.Integer({ minimum: 10, maximum: 600 }),
+  },
+  { additionalProperties: false },
+);
+
+export const UpdateRelaySettingsRequestSchema = Type.Partial(
+  RelaySettingsSchema,
+);
+
+export const RelayCallSchema = Type.Object(
+  {
+    task: Type.String(),
+    engine: Type.String(),
+    capability: Type.String(),
+    ms: Type.Integer(),
+    ok: Type.Boolean(),
+    failure: Type.Union([Type.String(), Type.Null()]),
+    createdAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayPanelSchema = Type.Object(
+  {
+    settings: RelaySettingsSchema,
+    health: RelayHealthSchema,
+    calls: Type.Array(RelayCallSchema),
+  },
+  { additionalProperties: false },
+);
+
+// A Test result keeps the three outcomes apart on purpose: it worked, it failed
+// (with the other side's own words), or this path is not built yet. A green
+// tick that means "probably" and a red cross for something we never wrote are
+// both lies.
+export const RelayTestResultSchema = Type.Object(
+  {
+    status: Type.Union([
+      Type.Literal("ok"),
+      Type.Literal("failed"),
+      Type.Literal("not-implemented"),
+    ]),
+    detail: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export type RelayEngine = Static<typeof RelayEngineSchema>;
+export type RelayCapability = Static<typeof RelayCapabilitySchema>;
+export type RelayRunRequest = Static<typeof RelayRunRequestSchema>;
+export type RelayRunResponse = Static<typeof RelayRunResponseSchema>;
+export type RelayHealth = Static<typeof RelayHealthSchema>;
+export type RelaySettings = Static<typeof RelaySettingsSchema>;
+export type UpdateRelaySettingsRequest = Static<
+  typeof UpdateRelaySettingsRequestSchema
+>;
+export type RelayCall = Static<typeof RelayCallSchema>;
+export type RelayPanel = Static<typeof RelayPanelSchema>;
+export type RelayTestResult = Static<typeof RelayTestResultSchema>;

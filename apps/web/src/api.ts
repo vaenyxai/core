@@ -2,6 +2,9 @@ import type {
   AppProfile,
   AskVaenyxConversation,
   AskVaenyxMessage,
+  RelayPanel,
+  RelaySettings,
+  RelayTestResult,
   ReasoningEffort,
   ClassifyRoutineResponse,
   ApproveVaenyxMeCandidateRequest,
@@ -145,6 +148,7 @@ const SAVED_TOAST_PATHS = [
   /^\/v1\/push\/prefs/,
   /^\/v1\/backup\/config/,
   /^\/v1\/modes(\/|$)/,
+  /^\/v1\/relay\/settings/,
 ];
 
 // The app is bilingual and this bus has no i18n context, so the message comes
@@ -1462,6 +1466,32 @@ export interface FreePicksState {
 
 export function fetchFreePicks(): Promise<FreePicksState> {
   return requestJson<FreePicksState>("/v1/free-picks");
+}
+
+// THE SUBSCRIPTION DOOR. The Owner's own view of it: what it is set to, whether
+// each subscription is signed in, and what it has been asked to do lately.
+export function fetchRelay(): Promise<RelayPanel> {
+  return requestJson<RelayPanel>("/v1/relay");
+}
+
+export function updateRelaySettings(
+  changes: Partial<RelaySettings>,
+): Promise<RelaySettings> {
+  return requestJson<RelaySettings>("/v1/relay/settings", {
+    method: "PUT",
+    body: JSON.stringify(changes),
+  });
+}
+
+// A real call down the engine being looked at — not a config read, not a
+// vendor page, not the model's own opinion of itself.
+export function testRelayEngine(
+  engine: "openai-cli" | "claude-cli",
+): Promise<RelayTestResult> {
+  return requestJson<RelayTestResult>("/v1/relay/test", {
+    method: "POST",
+    body: JSON.stringify({ engine }),
+  });
 }
 
 export function refreshFreePicks(): Promise<FreePicksState> {

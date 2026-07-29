@@ -58,6 +58,9 @@ import type {
   VaenyxMeCandidate,
   VaenyxThread,
   Workspace,
+  RelayPanel as RelayPanelData,
+  RelaySettings,
+  RelayTestResult,
 } from "@vaenyx/contracts";
 
 import {
@@ -160,6 +163,9 @@ import {
   fetchFlywheel,
   fetchFreePicks,
   refreshFreePicks,
+  fetchRelay,
+  updateRelaySettings,
+  testRelayEngine,
   type FreePicksState,
   withdrawFlywheelItem,
   type FlywheelState,
@@ -9882,6 +9888,335 @@ function localBackendNoticeKey(
   }
 }
 
+// THE SUBSCRIPTION DOOR, as the Owner sees it (Oskar, 2026-07-29: "不能是看不见
+// 的后台功能"). Everything the door does is on this one card: whether it is open,
+// which subscription is signed in, the address to give an app, who counts as
+// him, the limits, and what it has been asked to do lately — without ever
+// showing what was in any of it.
+const DOOR_ENGINES = [
+  { id: "openai-cli" as const, name: "ChatGPT subscription (Codex CLI)" },
+  { id: "claude-cli" as const, name: "Claude subscription" },
+];
+const DOOR_CAPABILITIES = [
+  { id: "text", name: "Text" },
+  { id: "voice-in", name: "Voice in" },
+  { id: "voice-out", name: "Voice out" },
+  { id: "image-in", name: "Picture in (photo or PDF)" },
+  { id: "image-out", name: "Picture out" },
+];
+
+function SubscriptionDoorPanel() {
+  const [panel, setPanel] = useState<RelayPanelData | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [originDraft, setOriginDraft] = useState("");
+  const [hostDraft, setHostDraft] = useState("");
+  const [testing, setTesting] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, RelayTestResult>>({});
+
+  useEffect(() => {
+    void fetchRelay()
+      .then(setPanel)
+      .catch(() => setPanel(null));
+  }, []);
+
+  async function save(changes: Partial<RelaySettings>) {
+    const settings = await updateRelaySettings(changes);
+    setPanel((current) => (current ? { ...current, settings } : current));
+  }
+
+  async function test(engine: "openai-cli" | "claude-cli") {
+    setTesting(engine);
+    try {
+      const result = await testRelayEngine(engine);
+      setResults((current) => ({ ...current, [engine]: result }));
+    } catch (error) {
+      setResults((current) => ({
+        ...current,
+        [engine]: {
+          status: "failed",
+          detail: error instanceof Error ? error.message : "Test failed.",
+        },
+      }));
+    } finally {
+      // Always back to normal: a button stuck on "Testing…" is a lie too.
+      setTesting(null);
+    }
+  }
+
+  if (!panel) return null;
+  const { settings, health, calls } = panel;
+  const loopback = `http://127.0.0.1:${window.location.port || "3000"}`;
+
+  return (
+    <section className="settings-card">
+      <p className="eyebrow">For your other apps</p>
+      <h2>Subscription Door</h2>
+      <p className="settings-card-copy">
+        Lends your ChatGPT and Claude subscriptions to your own apps. They can
+        only reach it from inside your private network, so anyone else&apos;s
+        device simply cannot find it and falls back to a free model.
+      </p>
+
+      <label className="door-toggle">
+        <input
+          checked={settings.enabled}
+          onChange={(event) => void save({ enabled: event.target.checked })}
+          type="checkbox"
+        />
+        <span>{settings.enabled ? "Door is open" : "Door is closed"}</span>
+      </label>
+
+      <h3 className="settings-subhead">What is behind it</h3>
+      {DOOR_ENGINES.map((engine) => {
+        const state = health.engines.find((entry) => entry.id === engine.id);
+        const result = results[engine.id];
+        return (
+          <div className="door-engine" key={engine.id}>
+            <div className="engine-row">
+              <div>
+                <strong>{engine.name}</strong>
+                <p className="text-faint">
+                  {state?.signedIn ? "Signed in" : "Not signed in"}
+                </p>
+              </div>
+              <button
+                className="secondary-button"
+                disabled={testing === engine.id}
+                onClick={() => void test(engine.id)}
+                type="button"
+              >
+                {testing === engine.id ? "Testing…" : "Test"}
+              </button>
+            </div>
+            {/* Three outcomes, never merged: it worked, it failed in the other
+                side's own words, or we have not built that path. */}
+            {result ? (
+              <p
+                className={
+                  result.status === "ok"
+                    ? "connection-test-result ok"
+                    : "connection-test-result failed"
+                }
+              >
+                {result.status === "ok" ? "✓ " : "✗ "}
+                {result.detail}
+              </p>
+            ) : null}
+            <div className="door-capabilities">
+              {DOOR_CAPABILITIES.map((capability) => {
+                const offered = state?.capabilities.includes(
+                  capability.id as never,
+                );
+                return (
+                  <span
+                    className={offered ? "door-capability" : "door-capability off"}
+                    key={capability.id}
+                  >
+                    {offered ? "" : "— "}
+                    {capability.name}
+                    {offered ? "" : " (not offered)"}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      <h3 className="settings-subhead">Address to give an app</h3>
+      <div className="door-address">
+        <code>{loopback}</code>
+        <button
+          className="text-button"
+          onClick={() => void navigator.clipboard?.writeText(loopback)}
+          type="button"
+        >
+          Copy
+        </button>
+        <span className="text-faint">on this machine</span>
+      </div>
+      <div className="door-address">
+        <code>{window.location.origin}</code>
+        <button
+          className="text-button"
+          onClick={() =>
+            void navigator.clipboard?.writeText(window.location.origin)
+          }
+          type="button"
+        >
+          Copy
+        </button>
+        <span className="text-faint">
+          the address this page was opened from
+        </span>
+      </div>
+
+      <h3 className="settings-subhead">Who counts as you</h3>
+      <p className="settings-card-copy">
+        The subscriptions are yours personally. Only these signed-in addresses
+        get through; everyone else is refused and their app uses a free model.
+      </p>
+      <DoorList
+        items={settings.ownerEmails}
+        onChange={(ownerEmails) => void save({ ownerEmails })}
+        placeholder="name@company.com"
+        draft={emailDraft}
+        setDraft={setEmailDraft}
+      />
+
+      <h3 className="settings-subhead">Web pages allowed to call in</h3>
+      <DoorList
+        items={settings.allowedOrigins}
+        onChange={(allowedOrigins) => void save({ allowedOrigins })}
+        placeholder="https://your-app.pages.dev"
+        draft={originDraft}
+        setDraft={setOriginDraft}
+      />
+
+      <h3 className="settings-subhead">Where files may be fetched from</h3>
+      <p className="settings-card-copy">
+        Apps send a short-lived download link, never the file. Vaenyx will only
+        follow a link to one of these hosts, uses the file, and deletes it.
+      </p>
+      <DoorList
+        items={settings.fileHosts}
+        onChange={(fileHosts) => void save({ fileHosts })}
+        placeholder="yourcompany.sharepoint.com"
+        draft={hostDraft}
+        setDraft={setHostDraft}
+      />
+
+      <h3 className="settings-subhead">Limits</h3>
+      <div className="door-limits">
+        <label>
+          Files per call
+          <input
+            min={0}
+            max={20}
+            onChange={(event) =>
+              void save({ maxFiles: Number(event.target.value) })
+            }
+            type="number"
+            value={settings.maxFiles}
+          />
+        </label>
+        <label>
+          Largest file (MB)
+          <input
+            min={0}
+            onChange={(event) =>
+              void save({
+                maxFileBytes: Number(event.target.value) * 1024 * 1024,
+              })
+            }
+            type="number"
+            value={Math.round(settings.maxFileBytes / 1024 / 1024)}
+          />
+        </label>
+        <label>
+          All files together (MB)
+          <input
+            min={0}
+            onChange={(event) =>
+              void save({
+                maxTotalBytes: Number(event.target.value) * 1024 * 1024,
+              })
+            }
+            type="number"
+            value={Math.round(settings.maxTotalBytes / 1024 / 1024)}
+          />
+        </label>
+        <label>
+          Timeout (seconds)
+          <input
+            min={10}
+            max={600}
+            onChange={(event) =>
+              void save({ timeoutSeconds: Number(event.target.value) })
+            }
+            type="number"
+            value={settings.timeoutSeconds}
+          />
+        </label>
+      </div>
+
+      <h3 className="settings-subhead">Recent calls</h3>
+      {calls.length === 0 ? (
+        <p className="text-faint">Nothing yet.</p>
+      ) : (
+        <ul className="door-calls">
+          {calls.map((call, index) => (
+            <li key={index}>
+              <span>{new Date(call.createdAt).toLocaleString()}</span>
+              <span>{call.task}</span>
+              <span>{call.engine}</span>
+              <span>{(call.ms / 1000).toFixed(1)}s</span>
+              <span className={call.ok ? "ok" : "failed"}>
+                {call.ok ? "✓" : `✗ ${call.failure ?? ""}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-faint">
+        What happened, never what was in it: no prompt, no file, no answer is
+        written down.
+      </p>
+    </section>
+  );
+}
+
+// One editable list of short strings — addresses, origins, hosts. Adding or
+// removing saves straight away, like the rest of Settings.
+function DoorList({
+  draft,
+  items,
+  onChange,
+  placeholder,
+  setDraft,
+}: {
+  draft: string;
+  items: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+  setDraft: (value: string) => void;
+}) {
+  return (
+    <div className="door-list">
+      {items.map((item) => (
+        <span className="door-chip" key={item}>
+          {item}
+          <button
+            aria-label={`Remove ${item}`}
+            onClick={() => onChange(items.filter((entry) => entry !== item))}
+            type="button"
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const value = draft.trim();
+          if (!value) return;
+          onChange([...items, value]);
+          setDraft("");
+        }}
+      >
+        <input
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={placeholder}
+          value={draft}
+        />
+        <button className="text-button" type="submit">
+          Add
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function ModelsPanel() {
   const { t } = useI18n();
   const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
@@ -11730,6 +12065,7 @@ function SettingsPanel({
       ) : null}
       {activeTab === "ai" ? <ModelsPanel /> : null}
       {activeTab === "ai" ? <VoicePanel /> : null}
+      {activeTab === "ai" ? <SubscriptionDoorPanel /> : null}
       {activeTab === "tools" ? <ToolsPanel /> : null}
       {activeTab === "notifications" ? <NotificationsPanel /> : null}
       {activeTab === "backup" ? <BackupPanel /> : null}

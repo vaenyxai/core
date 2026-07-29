@@ -582,13 +582,19 @@ class CodexChatSession {
     return this.#closed;
   }
 
-  async run(request: string): Promise<string> {
+  async run(
+    request: string,
+    options?: { instructions?: string; imagePath?: string },
+  ): Promise<string> {
     await this.#initialized;
 
+    // ephemeral: every run gets its own thread, so nothing carries over from
+    // the last one. That is what makes this safe to lend to an outside app.
     const threadMessage = await this.#rpc("thread/start", {
       approvalPolicy: "never",
       cwd: vaenyxRepositoryRoot,
       developerInstructions:
+        options?.instructions ??
         "You are a minimal Vaenyx ChatGPT Subscription Auth smoke test. Do not inspect files, modify files, call tools, use network tools, or request elevated permissions. Answer only the Owner's short prompt plainly.",
       ephemeral: true,
       sandbox: "read-only",
@@ -601,7 +607,7 @@ class CodexChatSession {
       );
     }
 
-    return await this.#startTurn(thread.id, request);
+    return await this.#startTurn(thread.id, request, options?.imagePath);
   }
 
   #close(error: Error): void {
@@ -756,7 +762,11 @@ class CodexChatSession {
     stdin.write(`${JSON.stringify(message)}\n`);
   }
 
-  #startTurn(threadId: string, request: string): Promise<string> {
+  #startTurn(
+    threadId: string,
+    request: string,
+    imagePath?: string,
+  ): Promise<string> {
     if (this.#turn) throw new Error("CODEX_CHAT_SESSION_BUSY");
 
     return new Promise<string>((resolve, reject) => {
@@ -767,7 +777,7 @@ class CodexChatSession {
         safetyViolation: undefined,
         timeout: setTimeout(() => {
           this.#close(new Error("CODEX_TASK_TIMED_OUT"));
-        }, 120_000),
+        }, 180_000),
       };
 
       const id = this.#nextId;
@@ -778,7 +788,10 @@ class CodexChatSession {
         params: {
           approvalPolicy: "never",
           cwd: vaenyxRepositoryRoot,
-          input: [{ type: "text", text: request }],
+          input: [
+            ...(imagePath ? [{ type: "localImage", path: imagePath }] : []),
+            { type: "text", text: request },
+          ],
           sandboxPolicy: { type: "readOnly", networkAccess: false },
           threadId,
         },
@@ -809,6 +822,45 @@ export async function runCodexChatTest(request: string): Promise<string> {
     }
 
     return await chatSession.run(request);
+  } finally {
+    releaseQueue();
+  }
+}
+
+// One-shot call for the SUBSCRIPTION DOOR (/v1/ai/run). Its own session, kept
+// apart from the smoke test and from the Owner's chat, and every run opens a
+// fresh ephemeral thread — an outside app's request never joins a conversation.
+let relaySession: CodexChatSession | undefined;
+let relaySessionQueue: Promise<void> = Promise.resolve();
+
+export async function runCodexRelay(
+  request: string,
+  imagePath?: string,
+): Promise<string> {
+  const status = getCodexStatus();
+  if (!status.installed || !status.loggedIn) {
+    throw new Error("RELAY_NOT_SIGNED_IN:openai-cli");
+  }
+  if (status.authMethod !== "chatgpt") {
+    throw new Error("RELAY_NOT_SIGNED_IN:openai-cli");
+  }
+
+  let releaseQueue: () => void = () => undefined;
+  const previous = relaySessionQueue;
+  relaySessionQueue = new Promise<void>((resolveQueue) => {
+    releaseQueue = resolveQueue;
+  });
+  await previous;
+
+  try {
+    if (!relaySession || relaySession.closed) {
+      relaySession = new CodexChatSession();
+    }
+    return await relaySession.run(request, {
+      instructions:
+        "You answer one request from a calling application and stop. Do not inspect or modify files, call tools, use the network, or request elevated permissions.",
+      imagePath,
+    });
   } finally {
     releaseQueue();
   }

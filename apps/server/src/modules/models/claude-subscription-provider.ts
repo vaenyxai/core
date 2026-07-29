@@ -163,6 +163,81 @@ export async function claudeSubscriptionVision(
   return answer.trim();
 }
 
+// One-shot call for the SUBSCRIPTION DOOR (/v1/ai/run). Same lockdown as every
+// other use of this channel, and deliberately stateless: an outside app's
+// request never joins a conversation, least of all the Owner's own chat.
+// Attachments arrive as a downloaded file, already size-checked by the caller.
+export async function claudeSubscriptionRelay(
+  secretsDirectory: string,
+  promptText: string,
+  attachment?: { base64: string; mediaType: string },
+): Promise<string> {
+  const auth = resolveClaudeSubscriptionAuth(secretsDirectory);
+  if (!auth.token && !auth.machineLogin) {
+    throw new Error("RELAY_NOT_SIGNED_IN:claude-cli");
+  }
+
+  const jail = join(tmpdir(), "vaenyx-claude-jail", randomUUID());
+  mkdirSync(jail, { recursive: true });
+
+  // A PDF goes as a document block (Claude reads the pages itself); anything
+  // else goes as an image. Callers that only have images send images.
+  const block = !attachment
+    ? null
+    : attachment.mediaType === "application/pdf"
+      ? {
+          type: "document" as const,
+          source: {
+            type: "base64" as const,
+            media_type: "application/pdf" as const,
+            data: attachment.base64,
+          },
+        }
+      : {
+          type: "image" as const,
+          source: {
+            type: "base64" as const,
+            media_type: attachment.mediaType as "image/jpeg",
+            data: attachment.base64,
+          },
+        };
+
+  const input = (async function* (): AsyncGenerator<SDKUserMessage> {
+    yield {
+      type: "user",
+      message: {
+        role: "user",
+        content: [...(block ? [block] : []), { type: "text", text: promptText }],
+      },
+      parent_tool_use_id: null,
+    };
+  })();
+
+  const stream = query({
+    prompt: input,
+    options: {
+      allowedTools: [],
+      disallowedTools: DENIED_TOOLS,
+      cwd: jail,
+      env: cleanChildEnvironment(auth.token),
+      maxTurns: 1,
+      mcpServers: {},
+      settingSources: [],
+      systemPrompt:
+        "You answer one request and stop. You have no tools and no memory of anything else.",
+    },
+  });
+  let answer = "";
+  for await (const message of stream) {
+    if (message.type === "result") {
+      if (message.subtype === "success") answer = message.result;
+      else throw new Error(`RELAY_ENGINE_FAILED:claude-cli:${message.subtype}`);
+    }
+  }
+  if (!answer.trim()) throw new Error("RELAY_ENGINE_FAILED:claude-cli:empty");
+  return answer.trim();
+}
+
 export class ClaudeSubscriptionProvider implements ModelProvider {
   readonly id = "claude-sub";
   readonly name = "Claude (Subscription)";
