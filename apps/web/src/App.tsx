@@ -6223,13 +6223,31 @@ function AskVaenyxPanel({
     if (view !== "chat") return;
     lastAnchorAtRef.current = Date.now();
     chatEndRef.current?.scrollIntoView({ block: "end" });
-  }, [loadingMessages, messages.length, sending, view]);
+  }, [
+    loadingMessages,
+    messages.length,
+    sending,
+    streamStatus,
+    streamThinking,
+    view,
+  ]);
 
+  // streamStatus/streamThinking are in here on purpose: the working line ("Joining
+  // the dots…") appears AFTER the send flips, so anchoring only on the send left
+  // it jammed against the composer and the Owner had to scroll to see it (Oskar,
+  // 2026-07-30). Every change of what is showing re-anchors.
   useEffect(() => {
     if (view !== "task") return;
     lastAnchorAtRef.current = Date.now();
     taskEndRef.current?.scrollIntoView({ block: "end" });
-  }, [loadingTaskMessages, sendingTaskMessage, taskMessages.length, view]);
+  }, [
+    loadingTaskMessages,
+    sendingTaskMessage,
+    streamStatus,
+    streamThinking,
+    taskMessages.length,
+    view,
+  ]);
 
   // Routine chat: a message feeds the Routine. The fed-in note lands in the
   // Journal, the generated result in the Gallery; we refresh both from the server.
