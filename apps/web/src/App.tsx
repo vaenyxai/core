@@ -562,7 +562,7 @@ type ThreadChip = {
 function threadStatusChips(thread: VaenyxThread, tasks: Task[]): ThreadChip[] {
   const chips: ThreadChip[] = [];
   if (thread.routineId) {
-    chips.push({ key: "routine", label: "Routine", tone: "routine" });
+    chips.push({ key: "routine", label: "RTN", tone: "routine" });
   }
   const task = thread.taskId
     ? tasks.find((candidate) => candidate.id === thread.taskId)
@@ -8750,7 +8750,10 @@ function AskVaenyxPanel({
     if (focusedTask.scheduleEnabled && focusedTask.scheduleCadence) {
       taskChips.push({
         key: "scheduled",
-        label: "Scheduled",
+        // Short forms (Oskar, 2026-07-30): a chip is a marker, not a sentence,
+        // and the full words pushed the phone header onto extra rows. The hover
+        // title still spells the schedule out in full.
+        label: "SCHED",
         tone: "scheduled",
         title: describeSchedule(focusedTask),
       });

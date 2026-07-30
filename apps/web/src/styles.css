@@ -2705,6 +2705,26 @@ select {
   font-size: var(--fs-label);
 }
 
+/* History is a way in, not a headline: a small pill on the same row as the
+   rest, so the whole header stays at two rows (Oskar, 2026-07-30). */
+.task-toolbar .task-runs > summary {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 9px;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  white-space: nowrap;
+  list-style: none;
+}
+
+.task-toolbar .task-runs > summary::-webkit-details-marker {
+  display: none;
+}
+
 .task-select {
   width: auto;
   min-height: 28px;
