@@ -1692,17 +1692,19 @@ interface SpeechPrewarm {
 // is what the M1 cost gate names. Every refusal (too big, too many pages,
 // password-protected, not a readable PDF) comes back from the server in words
 // the Owner can act on.
+interface PickedDocument {
+  documentId: string;
+  name: string;
+  pages: number;
+  needsCostGate: boolean;
+}
+
 function DocumentButton({
   disabled,
   onPicked,
 }: {
   disabled?: boolean;
-  onPicked: (document: {
-    documentId: string;
-    name: string;
-    pages: number;
-    needsCostGate: boolean;
-  }) => void;
+  onPicked: (document: PickedDocument) => void;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -1745,6 +1747,80 @@ function DocumentButton({
 // Push-to-talk mic: tap to record, tap again to stop; the utterance goes to the
 // local server, which forwards it to the connected voice engine (Groq Whisper)
 // and hands back text. Rendered only when a voice connection exists.
+// THE COMPOSER'S TOOLS — camera, picture, document, microphone — as ONE unit
+// used by every composer there is: a new chat, an open chat, a task (Oskar,
+// 2026-07-30). They were written out three times, and every time something new
+// arrived one of the three missed it: the task screen had nothing but Send for
+// months, and a new chat had no document button until today. A button added
+// here appears everywhere by construction.
+//
+// On a phone they fold behind one control, because four buttons plus Send
+// leave no room to type ("send 左边的 4 个按钮合成一个折叠按钮"). On a wide
+// screen there is room, so they simply show.
+function ComposerTools({
+  canAttachPhoto = true,
+  disabled,
+  lang,
+  onDocument,
+  onPhoto,
+  onPhotoPreview,
+  onSpoken,
+  onTranscribed,
+  onUploadStart,
+  showCamera,
+  showMic,
+}: {
+  canAttachPhoto?: boolean;
+  disabled: boolean;
+  lang: string;
+  onDocument: (picked: PickedDocument) => void;
+  onPhoto: (imageId: string) => void;
+  onPhotoPreview: (url: string) => void;
+  onSpoken: (text: string, audioId?: string) => void;
+  onTranscribed: (text: string) => void;
+  onUploadStart: (upload: Promise<string>) => void;
+  showCamera: boolean;
+  showMic: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="composer-tools" data-open={open ? "true" : "false"}>
+      <button
+        aria-expanded={open}
+        aria-label={open ? "Fewer options" : "More options"}
+        className="composer-tools-toggle"
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <LineIcon>
+          {open ? (
+            <path d="M6 6l12 12M18 6L6 18" />
+          ) : (
+            <path d="M12 5v14M5 12h14" />
+          )}
+        </LineIcon>
+      </button>
+      <span className="composer-tools-row">
+        {showCamera ? (
+          <CameraButton
+            disabled={disabled}
+            lang={lang}
+            onAttach={canAttachPhoto ? onPhoto : undefined}
+            onPreview={canAttachPhoto ? onPhotoPreview : undefined}
+            onText={onTranscribed}
+            onUploadStart={canAttachPhoto ? onUploadStart : undefined}
+          />
+        ) : null}
+        <DocumentButton disabled={disabled} onPicked={onDocument} />
+        {showMic ? (
+          <MicButton disabled={disabled} onText={onSpoken} />
+        ) : null}
+      </span>
+    </span>
+  );
+}
+
 function MicButton({
   disabled,
   onText,
@@ -7512,53 +7588,31 @@ function AskVaenyxPanel({
               rows={2}
               value={startWorkPrompt}
             />
-            {visionReady ? (
-              <CameraButton
-                disabled={sending}
-                lang={lang}
-                onAttach={
-                  defaultCanAttach ? (id) => setPendingImageId(id) : undefined
-                }
-                onPreview={
-                  defaultCanAttach
-                    ? (url) => setPendingPhotoPreview(url || null)
-                    : undefined
-                }
-                onText={(text) =>
-                  setStartWorkPrompt((current) =>
-                    current ? `${current}\n${text}` : text,
-                  )
-                }
-                onUploadStart={
-                  defaultCanAttach
-                    ? (upload) => {
-                        pendingUploadRef.current = upload;
-                      }
-                    : undefined
-                }
-              />
-            ) : null}
-            {/* Missing here until now (Oskar, 2026-07-30: "为什么新对话没有文件
-                那个按钮"). A new chat is a third composer, and the document
-                button was only ever added to the other two — the same drift
-                that left the task screen with nothing but Send. The send path
-                already carried documents; only the button was absent. */}
-            <DocumentButton
+            <ComposerTools
+              canAttachPhoto={defaultCanAttach}
               disabled={sending}
-              onPicked={(picked) => {
+              lang={lang}
+              onDocument={(picked) => {
                 if (picked.needsCostGate) {
                   setDocumentGate(picked);
                   return;
                 }
                 setPendingDocument({ ...picked, acknowledged: false });
               }}
+              onPhoto={(id) => setPendingImageId(id)}
+              onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+              onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
+              onTranscribed={(text) =>
+                setStartWorkPrompt((current) =>
+                  current ? `${current}\n${text}` : text,
+                )
+              }
+              onUploadStart={(upload) => {
+                pendingUploadRef.current = upload;
+              }}
+              showCamera={visionReady}
+              showMic={voiceReady}
             />
-            {voiceReady ? (
-              <MicButton
-                disabled={sending}
-                onText={(text, audioId) => void sendChatContent(text, audioId)}
-              />
-            ) : null}
             <button
               className="primary-button"
               disabled={
@@ -8493,28 +8547,13 @@ function AskVaenyxPanel({
               rows={2}
               value={prompt}
             />
-            {visionReady ? (
-              // Always attach, whatever the chat model can see. The photo
-              // belongs in the conversation; how it gets read is the server's
-              // problem, not a reason to throw the picture away.
-              <CameraButton
-                disabled={sending}
-                lang={lang}
-                onAttach={(id) => setPendingImageId(id)}
-                onPreview={(url) => setPendingPhotoPreview(url || null)}
-                onText={(text) =>
-                  setPrompt((current) =>
-                    current ? `${current}\n${text}` : text,
-                  )
-                }
-                onUploadStart={(upload) => {
-                  pendingUploadRef.current = upload;
-                }}
-              />
-            ) : null}
-            <DocumentButton
+            {/* Always attach, whatever the chat model can see. The photo
+                belongs in the conversation; how it gets read is the server's
+                problem, not a reason to throw the picture away. */}
+            <ComposerTools
               disabled={sending}
-              onPicked={(picked) => {
+              lang={lang}
+              onDocument={(picked) => {
                 if (picked.needsCostGate) {
                   // The gate stands BEFORE the file is attached: nothing can
                   // be sent, and nothing spent, until it is answered.
@@ -8523,13 +8562,18 @@ function AskVaenyxPanel({
                 }
                 setPendingDocument({ ...picked, acknowledged: false });
               }}
+              onPhoto={(id) => setPendingImageId(id)}
+              onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+              onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
+              onTranscribed={(text) =>
+                setPrompt((current) => (current ? `${current}\n${text}` : text))
+              }
+              onUploadStart={(upload) => {
+                pendingUploadRef.current = upload;
+              }}
+              showCamera={visionReady}
+              showMic={voiceReady}
             />
-            {voiceReady ? (
-              <MicButton
-                disabled={sending}
-                onText={(text, audioId) => void sendChatContent(text, audioId)}
-              />
-            ) : null}
             {sending ? (
               <button
                 className="primary-button stop-button"
@@ -9162,38 +9206,30 @@ function AskVaenyxPanel({
                   chat message — the screen just never offered anything but
                   Send. Every task gets this, old ones included, with nothing
                   to migrate. */}
-              {visionReady ? (
-                <CameraButton
-                  disabled={sendingTaskMessage}
-                  lang={lang}
-                  onAttach={(id) => setPendingImageId(id)}
-                  onPreview={(url) => setPendingPhotoPreview(url || null)}
-                  onText={(text) =>
-                    setTaskPrompt((current) =>
-                      current ? `${current}\n${text}` : text,
-                    )
-                  }
-                  onUploadStart={(upload) => {
-                    pendingUploadRef.current = upload;
-                  }}
-                />
-              ) : null}
-              <DocumentButton
+              <ComposerTools
                 disabled={sendingTaskMessage}
-                onPicked={(picked) => {
+                lang={lang}
+                onDocument={(picked) => {
                   if (picked.needsCostGate) {
                     setDocumentGate(picked);
                     return;
                   }
                   setPendingDocument({ ...picked, acknowledged: false });
                 }}
+                onPhoto={(id) => setPendingImageId(id)}
+                onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+                onSpoken={(text, audioId) => void sendTaskContent(text, audioId)}
+                onTranscribed={(text) =>
+                  setTaskPrompt((current) =>
+                    current ? `${current}\n${text}` : text,
+                  )
+                }
+                onUploadStart={(upload) => {
+                  pendingUploadRef.current = upload;
+                }}
+                showCamera={visionReady}
+                showMic={voiceReady}
               />
-              {voiceReady ? (
-                <MicButton
-                  disabled={sendingTaskMessage}
-                  onText={(text, audioId) => void sendTaskContent(text, audioId)}
-                />
-              ) : null}
               {sendingTaskMessage ? (
                 <button
                   className="primary-button stop-button"
