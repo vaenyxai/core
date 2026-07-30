@@ -7538,6 +7538,21 @@ function AskVaenyxPanel({
                 }
               />
             ) : null}
+            {/* Missing here until now (Oskar, 2026-07-30: "为什么新对话没有文件
+                那个按钮"). A new chat is a third composer, and the document
+                button was only ever added to the other two — the same drift
+                that left the task screen with nothing but Send. The send path
+                already carried documents; only the button was absent. */}
+            <DocumentButton
+              disabled={sending}
+              onPicked={(picked) => {
+                if (picked.needsCostGate) {
+                  setDocumentGate(picked);
+                  return;
+                }
+                setPendingDocument({ ...picked, acknowledged: false });
+              }}
+            />
             {voiceReady ? (
               <MicButton
                 disabled={sending}
