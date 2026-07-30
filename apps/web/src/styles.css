@@ -647,9 +647,14 @@ textarea::placeholder {
   padding: 2px 0 4px 18px;
 }
 
+/* Reads like the conversation rows under it (Oskar, 2026-07-30: the type was
+   small and flung apart). One line: the name, then when it runs, right after
+   it — not pushed to the far edge. */
 .sidebar-scheduled-item {
-  display: grid;
-  gap: 1px;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   padding: 5px 9px;
@@ -666,7 +671,10 @@ textarea::placeholder {
 }
 
 .sidebar-scheduled-name {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
+  color: var(--text);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
@@ -674,9 +682,11 @@ textarea::placeholder {
 }
 
 .sidebar-scheduled-item small {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
-  color: #87847b;
-  font-size: 11px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -6271,6 +6281,32 @@ select {
     scroll-margin-bottom: 230px;
   }
 
+  /* The header is two rows on a phone, not four (Oskar, 2026-07-30). The chips
+     stay ON the title's row and the title gives way instead: a name that has
+     run out of room says so with an ellipsis, which is far easier to read past
+     than a header that has pushed the conversation off the screen. */
+  .focused-title-line {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .focused-title-line h2 {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .focused-title-line .chat-chips--inline {
+    flex: 0 0 auto;
+  }
+
+  .focused-title-line .chat-chips--inline,
+  .focused-title-line .chat-chips--inline * {
+    font-size: var(--fs-label);
+  }
+
   /* The composer stays pinned on phones too. A `min-height: auto` override
      here used to undo the pinning, which is exactly the "对话框不在最下面"
      Oskar kept hitting on mobile (2026-07-28). The phone chrome above the
@@ -6874,6 +6910,29 @@ html, body { overscroll-behavior-y: none; }
    device has not opened since. Dies the moment the thread is opened. */
 /* Unread = the row's own status light breathing (Oskar, 2026-07-29). One dot,
    two facts: its colour is the thread's state, its pulse means unread. */
-.status-light--unread { animation: unread-breathe 2s ease-in-out infinite; }
-@keyframes unread-breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .unread-dot { animation: none; } }
+/* Unread breathes in BOTH brightness and size (Oskar, 2026-07-30): a dot that
+   only dims reads as a rendering artefact at this size; one that also swells
+   reads as alive. */
+.status-light--unread {
+  animation: unread-breathe 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@keyframes unread-breathe {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-light--unread {
+    animation: none;
+    opacity: 1;
+  }
+}
