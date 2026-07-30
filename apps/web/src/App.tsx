@@ -7696,88 +7696,46 @@ function AskVaenyxPanel({
             <h2>Where should we begin?</h2>
           </div>
 
-          {pendingPhotoPreview || pendingImageId ? (
-            <div className="composer-attachment">
-              <img
-                alt=""
-                src={
-                  pendingPhotoPreview ?? `/v1/vision/image/${pendingImageId}`
-                }
-              />
-              <button
-                aria-label="Remove photo"
-                className="composer-attachment-remove"
-                onClick={clearPendingPhoto}
-                type="button"
-              >
-                <IconX />
-              </button>
-            </div>
-          ) : null}
+          <Composer
+            attachDisabled={!defaultCanAttach}
+            boxClassName="simple-compose-box"
+            busy={sending}
+            documentTray={pendingDocument}
+            lang={lang}
+            onDocument={(picked) => {
+              if (picked.needsCostGate) {
+                setDocumentGate(picked);
+                return;
+              }
+              setPendingDocument({ ...picked, acknowledged: false });
+            }}
+            onPhoto={(id) => setPendingImageId(id)}
+            onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+            onRemoveDocument={() => setPendingDocument(null)}
+            onRemovePhoto={clearPendingPhoto}
+            onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
+            onStop={stopStreaming}
+            onSubmit={startWork}
+            onTranscribed={(text) =>
+              setStartWorkPrompt((current) =>
+                current ? `${current}\n${text}` : text,
+              )
+            }
+            onUploadStart={(upload) => {
+              pendingUploadRef.current = upload;
+            }}
+            onValueChange={setStartWorkPrompt}
+            photoTray={
+              pendingPhotoPreview ??
+              (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
+            }
+            placeholder="Ask anything"
+            showCamera={visionReady}
+            showMic={voiceReady}
+            submitLabel={sending ? "Sending" : "Send"}
+            value={startWorkPrompt}
+          />
 
-          <div className="simple-compose-box">
-            <textarea
-              // Never on touch devices: auto-focus pops the keyboard over the
-              // whole screen the moment the app opens (Oskar, dev.148).
-              autoFocus={!window.matchMedia("(pointer: coarse)").matches}
-              maxLength={10_000}
-              onChange={(event) => setStartWorkPrompt(event.target.value)}
-              // Enter sends, Shift+Enter makes a new line — same convention as
-              // the chat composer; IME composition Enter never sends.
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !event.shiftKey &&
-                  !event.nativeEvent.isComposing
-                ) {
-                  event.preventDefault();
-                  if (!sending && startWorkPrompt.trim()) {
-                    void startWork(
-                      event as unknown as FormEvent<HTMLFormElement>,
-                    );
-                  }
-                }
-              }}
-              placeholder="Ask anything"
-              required
-              rows={2}
-              value={startWorkPrompt}
-            />
-            <ComposerTools
-              canAttachPhoto={defaultCanAttach}
-              disabled={sending}
-              lang={lang}
-              onDocument={(picked) => {
-                if (picked.needsCostGate) {
-                  setDocumentGate(picked);
-                  return;
-                }
-                setPendingDocument({ ...picked, acknowledged: false });
-              }}
-              onPhoto={(id) => setPendingImageId(id)}
-              onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
-              onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
-              onTranscribed={(text) =>
-                setStartWorkPrompt((current) =>
-                  current ? `${current}\n${text}` : text,
-                )
-              }
-              onUploadStart={(upload) => {
-                pendingUploadRef.current = upload;
-              }}
-              showCamera={visionReady}
-              showMic={voiceReady}
-            />
-            <button
-              className="primary-button"
-              disabled={
-                sending || (!startWorkPrompt.trim() && !pendingImageId)
-              }
-              type="submit"
-            >
-              {sending ? "Sending" : "Send"}
-            </button>
-          </div>
 
           {!hasUsableModel ? (
             <div className="composer-status">
