@@ -361,11 +361,12 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           disallowedTools: MACHINE_TOOLS,
           cwd: jail,
           env: cleanChildEnvironment(auth.token),
-          // Enough turns for search -> read the results -> answer, and no more.
-          // Eight let a briefing chase a dozen rounds of verification and take
-          // five minutes (Oskar, 2026-07-30); a turn can hold several searches
-          // at once, so four is room to look things up without room to wander.
-          maxTurns: 4,
+          // Four was too tight and the briefing died on the cap (Oskar,
+          // 2026-07-30, error_max_turns three runs in a row). Ten is room for a
+          // real morning round-up; the cap is now a backstop rather than a
+          // guillotine, because running into it no longer throws away the work
+          // (see error_max_turns below).
+          maxTurns: 10,
           // Never read the machine's Claude settings, CLAUDE.md or MCP config.
           mcpServers: {},
           settingSources: [],
@@ -377,21 +378,36 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
 
       let answer = "";
       let searched = false;
+      // Everything it has said so far. Kept because running out of turns must
+      // not throw away a finished briefing (Oskar, 2026-07-30): the run that
+      // hit the cap had already written the whole thing and the Owner got
+      // "could not complete" three times instead.
+      let written = "";
       for await (const message of stream) {
-        // Whether it actually looked something up, for the chip the Owner sees.
         if (message.type === "assistant") {
           for (const block of message.message.content) {
+            // Whether it really looked something up, for the chip the Owner sees.
             if (
               block.type === "tool_use" &&
               WEB_TOOLS.includes(block.name as (typeof WEB_TOOLS)[number])
             ) {
               searched = true;
             }
+            if (block.type === "text" && block.text.trim()) {
+              written = block.text;
+            }
           }
         }
         if (message.type === "result") {
           if (message.subtype === "success") {
             answer = message.result;
+          } else if (
+            message.subtype === "error_max_turns" &&
+            written.trim().length > 40
+          ) {
+            // It ran out of room to keep checking, but it had already answered.
+            // Hand that over and say so, rather than losing the morning's work.
+            answer = `${written}\n\n_(Vaenyx stopped it here — it had used up its allowance for looking things up. Everything above stands; there may be more it did not get to.)_`;
           } else {
             throw new Error(
               `MODEL_PROVIDER_ERROR:${this.id}:turn:${message.subtype}`,
