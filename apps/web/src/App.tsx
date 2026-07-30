@@ -1821,6 +1821,161 @@ function ComposerTools({
   );
 }
 
+// THE COMPOSER. One of them, for every place a message is written: a new chat,
+// an open chat, a task (Oskar, 2026-07-30 — "必须统一三种情况成为同一种东西").
+// Three hand-written copies is what left the task screen with nothing but Send
+// for months and a new chat with no document button until this morning; a
+// fourth report was guaranteed while three copies existed.
+//
+// What genuinely differs between the three is passed in — which box the text
+// lives in, what Submit is called, what happens on send, and whatever belongs
+// under the box (model pickers, disclaimers) as children. Everything else —
+// the attachment trays, the tools, Enter-to-send, Stop, the rule that a photo
+// or a PDF alone is a whole message — exists once.
+function Composer({
+  attachDisabled = false,
+  boxClassName = "ask-vaenyx-composer-box",
+  busy,
+  children,
+  documentTray,
+  lang,
+  onDocument,
+  onPhoto,
+  onPhotoPreview,
+  onRemoveDocument,
+  onRemovePhoto,
+  onSpoken,
+  onStop,
+  onSubmit,
+  onTranscribed,
+  onUploadStart,
+  photoTray,
+  placeholder,
+  showCamera,
+  showMic,
+  submitLabel,
+  value,
+  onValueChange,
+}: {
+  attachDisabled?: boolean;
+  /** The new-chat panel has a taller box of its own; everything else matches. */
+  boxClassName?: string;
+  busy: boolean;
+  children?: React.ReactNode;
+  documentTray: { name: string } | null;
+  lang: string;
+  onDocument: (picked: PickedDocument) => void;
+  onPhoto: (imageId: string) => void;
+  onPhotoPreview: (url: string) => void;
+  onRemoveDocument: () => void;
+  onRemovePhoto: () => void;
+  onSpoken: (text: string, audioId?: string) => void;
+  onStop: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onTranscribed: (text: string) => void;
+  onUploadStart: (upload: Promise<string>) => void;
+  photoTray: string | null;
+  placeholder: string;
+  showCamera: boolean;
+  showMic: boolean;
+  submitLabel: string;
+  value: string;
+  onValueChange: (next: string) => void;
+}) {
+  // A photo or a PDF on its own is a complete message, everywhere.
+  const hasAttachment = Boolean(photoTray || documentTray);
+
+  // The <form> stays with the caller: the new-chat panel is already a form of
+  // its own with a heading above the box, and a form inside a form is invalid.
+  return (
+    <>
+      {documentTray ? (
+        <div className="composer-attachment">
+          <span className="composer-document-name">{documentTray.name}</span>
+          <button
+            aria-label="Remove document"
+            className="composer-attachment-remove"
+            onClick={onRemoveDocument}
+            type="button"
+          >
+            <IconX />
+          </button>
+        </div>
+      ) : null}
+      {photoTray ? (
+        <div className="composer-attachment">
+          <img alt="" src={photoTray} />
+          <button
+            aria-label="Remove photo"
+            className="composer-attachment-remove"
+            onClick={onRemovePhoto}
+            type="button"
+          >
+            <IconX />
+          </button>
+        </div>
+      ) : null}
+      <div className={boxClassName}>
+        <textarea
+          maxLength={10_000}
+          onChange={(event) => onValueChange(event.target.value)}
+          // Enter sends, Shift+Enter makes a new line — the convention every
+          // chat app uses. IME composition (Chinese/Japanese input) must be
+          // ignored: mid-composition Enter picks a candidate word and would
+          // otherwise fire off a half-typed message.
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              if (!busy && (value.trim() || hasAttachment)) {
+                onSubmit(event as unknown as FormEvent<HTMLFormElement>);
+              }
+            }
+          }}
+          placeholder={placeholder}
+          required={!hasAttachment}
+          rows={2}
+          value={value}
+        />
+        <ComposerTools
+          canAttachPhoto={!attachDisabled}
+          disabled={busy}
+          lang={lang}
+          onDocument={onDocument}
+          onPhoto={onPhoto}
+          onPhotoPreview={onPhotoPreview}
+          onSpoken={onSpoken}
+          onTranscribed={onTranscribed}
+          onUploadStart={onUploadStart}
+          showCamera={showCamera}
+          showMic={showMic}
+        />
+        {busy ? (
+          <button
+            className="primary-button stop-button"
+            onClick={onStop}
+            type="button"
+          >
+            Stop
+          </button>
+        ) : (
+          <button
+            className="primary-button"
+            disabled={!value.trim() && !hasAttachment}
+            type="submit"
+          >
+            {submitLabel}
+          </button>
+        )}
+      </div>
+      {children}
+    </>
+  );
+}
+
 function MicButton({
   disabled,
   onText,
@@ -8473,125 +8628,43 @@ function AskVaenyxPanel({
         ) : null}
 
         <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
-          {pendingDocument ? (
-            <div className="composer-document">
-              <IconDocument />
-              <span className="composer-document-name">
-                {pendingDocument.name}
-              </span>
-              <span className="text-faint">
-                {t("document.pages").replace(
-                  "{n}",
-                  String(pendingDocument.pages),
-                )}
-              </span>
-              <button
-                aria-label="Remove document"
-                className="composer-attachment-remove composer-document-remove"
-                onClick={() => setPendingDocument(null)}
-                type="button"
-              >
-                <IconX />
-              </button>
-            </div>
-          ) : null}
-          {pendingPhotoPreview || pendingImageId ? (
-            <div className="composer-attachment">
-              <img
-                alt=""
-                src={
-                  pendingPhotoPreview ?? `/v1/vision/image/${pendingImageId}`
-                }
-              />
-              <button
-                aria-label="Remove photo"
-                className="composer-attachment-remove"
-                onClick={clearPendingPhoto}
-                type="button"
-              >
-                <IconX />
-              </button>
-            </div>
-          ) : null}
-          <div className="ask-vaenyx-composer-box">
-            <textarea
-              maxLength={10_000}
-              onChange={(event) => setPrompt(event.target.value)}
-              // Enter sends, Shift+Enter makes a new line — the convention every
-              // chat app uses. IME composition (Chinese/Japanese input) must be
-              // ignored: mid-composition Enter picks a candidate word and would
-              // otherwise fire off a half-typed message.
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !event.shiftKey &&
-                  !event.nativeEvent.isComposing
-                ) {
-                  event.preventDefault();
-                  if (
-                    !sending &&
-                    (prompt.trim() || pendingImageId || pendingPhotoPreview)
-                  ) {
-                    void sendMessage(
-                      event as unknown as FormEvent<HTMLFormElement>,
-                    );
-                  }
-                }
-              }}
-              placeholder={isRoutine ? "Type or paste a note…" : "Ask anything"}
-              // A photo alone is a complete message ("拍照直接发", Oskar
-              // 2026-07-28) — `required` used to block Run with the browser's
-              // own "please fill in this field" tooltip when only a photo was
-              // attached.
-              required={!pendingImageId && !pendingPhotoPreview}
-              rows={2}
-              value={prompt}
-            />
-            {/* Always attach, whatever the chat model can see. The photo
-                belongs in the conversation; how it gets read is the server's
-                problem, not a reason to throw the picture away. */}
-            <ComposerTools
-              disabled={sending}
-              lang={lang}
-              onDocument={(picked) => {
-                if (picked.needsCostGate) {
-                  // The gate stands BEFORE the file is attached: nothing can
-                  // be sent, and nothing spent, until it is answered.
-                  setDocumentGate(picked);
-                  return;
-                }
-                setPendingDocument({ ...picked, acknowledged: false });
-              }}
-              onPhoto={(id) => setPendingImageId(id)}
-              onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
-              onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
-              onTranscribed={(text) =>
-                setPrompt((current) => (current ? `${current}\n${text}` : text))
-              }
-              onUploadStart={(upload) => {
-                pendingUploadRef.current = upload;
-              }}
-              showCamera={visionReady}
-              showMic={voiceReady}
-            />
-            {sending ? (
-              <button
-                className="primary-button stop-button"
-                onClick={stopStreaming}
-                type="button"
-              >
-                Stop
-              </button>
-            ) : (
-              <button
-                className="primary-button"
-                disabled={!prompt.trim() && !pendingImageId}
-                type="submit"
-              >
-                {isRoutine ? "Run" : "Send"}
-              </button>
-            )}
-          </div>
+        <Composer
+          busy={sending}
+          documentTray={pendingDocument}
+          lang={lang}
+          onDocument={(picked) => {
+            if (picked.needsCostGate) {
+              // The gate stands BEFORE the file is attached: nothing can be
+              // sent, and nothing spent, until it is answered.
+              setDocumentGate(picked);
+              return;
+            }
+            setPendingDocument({ ...picked, acknowledged: false });
+          }}
+          onPhoto={(id) => setPendingImageId(id)}
+          onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+          onRemoveDocument={() => setPendingDocument(null)}
+          onRemovePhoto={clearPendingPhoto}
+          onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
+          onStop={stopStreaming}
+          onSubmit={sendMessage}
+          onTranscribed={(text) =>
+            setPrompt((current) => (current ? `${current}\n${text}` : text))
+          }
+          onUploadStart={(upload) => {
+            pendingUploadRef.current = upload;
+          }}
+          onValueChange={setPrompt}
+          photoTray={
+            pendingPhotoPreview ??
+            (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
+          }
+          placeholder={isRoutine ? "Type or paste a note…" : "Ask anything"}
+          showCamera={visionReady}
+          showMic={voiceReady}
+          submitLabel={isRoutine ? "Run" : "Send"}
+          value={prompt}
+        >
           <div className="composer-status">
             {chatProviders.length > 1 ? (
               <select
@@ -8737,6 +8810,7 @@ function AskVaenyxPanel({
             {t("legal.disclaimer.aiGeneral.composer")}
           </p>
           {error ? <p className="form-error">{error}</p> : null}
+        </Composer>
         </form>
 
       </section>
@@ -9139,115 +9213,41 @@ function AskVaenyxPanel({
             className="ask-vaenyx-composer"
             onSubmit={sendFocusedTaskMessage}
           >
-            {/* One photo tray and one document tray, shared with the chat
-                composer — the same state, so there is only ever one place a
-                pending attachment lives and one place it is cleared. */}
-            {pendingDocument ? (
-              <div className="composer-attachment">
-                <span className="composer-document-name">
-                  {pendingDocument.name}
-                </span>
-                <button
-                  aria-label="Remove document"
-                  className="composer-attachment-remove"
-                  onClick={() => setPendingDocument(null)}
-                  type="button"
-                >
-                  <IconX />
-                </button>
-              </div>
-            ) : null}
-            {pendingImageId || pendingPhotoPreview ? (
-              <div className="composer-attachment">
-                <img
-                  alt=""
-                  src={
-                    pendingPhotoPreview ?? `/v1/vision/image/${pendingImageId}`
-                  }
-                />
-                <button
-                  aria-label="Remove photo"
-                  className="composer-attachment-remove"
-                  onClick={clearPendingPhoto}
-                  type="button"
-                >
-                  <IconX />
-                </button>
-              </div>
-            ) : null}
-            <div className="ask-vaenyx-composer-box">
-              <textarea
-                maxLength={10_000}
-                onChange={(event) => setTaskPrompt(event.target.value)}
-                // Enter sends, Shift+Enter makes a new line — same convention
-                // as the chat composer; IME composition Enter never sends.
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" &&
-                    !event.shiftKey &&
-                    !event.nativeEvent.isComposing
-                  ) {
-                    event.preventDefault();
-                    if (!sendingTaskMessage && taskPrompt.trim()) {
-                      void sendFocusedTaskMessage(
-                        event as unknown as FormEvent<HTMLFormElement>,
-                      );
-                    }
-                  }
-                }}
-                placeholder="Ask about this task"
-                required={!pendingImageId && !pendingPhotoPreview}
-                rows={2}
-                value={taskPrompt}
-              />
-              {/* The SAME controls as the chat composer, wired to the same
-                  pending-attachment state (Oskar, 2026-07-30: "有没有可能更新
-                  existing 的 chat"). Underneath, a task follow-up already WAS a
-                  chat message — the screen just never offered anything but
-                  Send. Every task gets this, old ones included, with nothing
-                  to migrate. */}
-              <ComposerTools
-                disabled={sendingTaskMessage}
-                lang={lang}
-                onDocument={(picked) => {
-                  if (picked.needsCostGate) {
-                    setDocumentGate(picked);
-                    return;
-                  }
-                  setPendingDocument({ ...picked, acknowledged: false });
-                }}
-                onPhoto={(id) => setPendingImageId(id)}
-                onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
-                onSpoken={(text, audioId) => void sendTaskContent(text, audioId)}
-                onTranscribed={(text) =>
-                  setTaskPrompt((current) =>
-                    current ? `${current}\n${text}` : text,
-                  )
-                }
-                onUploadStart={(upload) => {
-                  pendingUploadRef.current = upload;
-                }}
-                showCamera={visionReady}
-                showMic={voiceReady}
-              />
-              {sendingTaskMessage ? (
-                <button
-                  className="primary-button stop-button"
-                  onClick={stopStreaming}
-                  type="button"
-                >
-                  Stop
-                </button>
-              ) : (
-                <button
-                  className="primary-button"
-                  disabled={!taskPrompt.trim() && !pendingImageId}
-                  type="submit"
-                >
-                  Send
-                </button>
-              )}
-            </div>
+          <Composer
+            busy={sendingTaskMessage}
+            documentTray={pendingDocument}
+            lang={lang}
+            onDocument={(picked) => {
+              if (picked.needsCostGate) {
+                setDocumentGate(picked);
+                return;
+              }
+              setPendingDocument({ ...picked, acknowledged: false });
+            }}
+            onPhoto={(id) => setPendingImageId(id)}
+            onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+            onRemoveDocument={() => setPendingDocument(null)}
+            onRemovePhoto={clearPendingPhoto}
+            onSpoken={(text, audioId) => void sendTaskContent(text, audioId)}
+            onStop={stopStreaming}
+            onSubmit={sendFocusedTaskMessage}
+            onTranscribed={(text) =>
+              setTaskPrompt((current) => (current ? `${current}\n${text}` : text))
+            }
+            onUploadStart={(upload) => {
+              pendingUploadRef.current = upload;
+            }}
+            onValueChange={setTaskPrompt}
+            photoTray={
+              pendingPhotoPreview ??
+              (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
+            }
+            placeholder="Ask about this task"
+            showCamera={visionReady}
+            showMic={voiceReady}
+            submitLabel="Send"
+            value={taskPrompt}
+          />
           </form>
         </section>
       </div>
