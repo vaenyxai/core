@@ -515,12 +515,17 @@ import {
 } from "../guard/rate-limit.js";
 import { listAuditEvents, recordAudit } from "../guard/audit.js";
 import {
+  CAPABILITIES,
+  CAPABILITY_IMPLEMENTED,
   capabilitiesFromManifest,
   decideCapabilities,
   decideTokenCapabilities,
+  isCapability,
   missingCapabilities,
+  readGlobalCapabilities,
   readProfileCapabilities,
   recordCapabilityWanted,
+  writeGlobalCapabilities,
 } from "../core/capabilities.js";
 import {
   forgetRelayEngineStatus,
@@ -4225,6 +4230,84 @@ export async function registerGatewayRoutes(
                 : 502;
         return reply.code(status).send({ error: code });
       }
+    },
+  );
+
+  // The capability switches. They existed in code from the day the three layers
+  // landed and the Owner had no way to touch them, so every instance sat on the
+  // defaults — a ceiling nobody could lower.
+  //
+  // 🔴 Owner only. Somebody inside a restricted mode must not be able to widen
+  // their own mode, or the mode is decoration. Every change is audited: who,
+  // when, which capability, on or off.
+  app.get(
+    "/v1/capabilities",
+    {
+      schema: {
+        response: {
+          200: Type.Object(
+            {
+              global: Type.Record(Type.String(), Type.Boolean()),
+              vocabulary: Type.Array(Type.String()),
+              implemented: Type.Record(Type.String(), Type.Boolean()),
+            },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return {
+        global: readGlobalCapabilities(context.database),
+        vocabulary: [...CAPABILITIES],
+        implemented: CAPABILITY_IMPLEMENTED,
+      };
+    },
+  );
+
+  app.put<{ Body: Record<string, boolean> }>(
+    "/v1/capabilities",
+    {
+      schema: {
+        body: Type.Record(Type.String(), Type.Boolean()),
+        response: {
+          200: Type.Record(Type.String(), Type.Boolean()),
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const unknown = Object.keys(request.body).filter(
+        (name) => !isCapability(name),
+      );
+      if (unknown.length > 0) {
+        return reply
+          .code(400)
+          .send({ error: `Not a capability: ${unknown.join(", ")}` });
+      }
+      const next = writeGlobalCapabilities(context.database, request.body);
+      for (const [name, on] of Object.entries(request.body)) {
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorName: owner.name,
+          action: "capability.switch",
+          decision: on ? "allowed" : "denied",
+          reason: `${name} switched ${on ? "on" : "off"} globally.`,
+          resourceType: "capability",
+          resourceId: name,
+        });
+      }
+      return next;
     },
   );
 

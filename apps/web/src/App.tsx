@@ -7907,17 +7907,35 @@ function AskVaenyxPanel({
     // declares what it plugs into; the app answers with one of three truths —
     // ready, needs setting up (jump to Tools), or "Vaenyx does not have this
     // tool yet" with the suggestion channel. Never a silent failure.
+    // The seven words, and only these (Oskar, 2026-07-31: 所有地方用词统一).
+    // The server migrates the old names before they ever reach here, so this
+    // map never needs to know what a capability used to be called.
     const knownToolStatus: Record<string, { label: string; ready: boolean }> = {
-      vision: {
-        label: lang === "zh" ? "看图" : "Vision",
-        ready: visionReady,
+      hearing: {
+        label: lang === "zh" ? "听" : "Hearing",
+        ready: voiceReady,
       },
       // Speaking always works — the device voice is the floor.
-      "voice-out": { label: lang === "zh" ? "说话" : "Speak", ready: true },
-      draw: {
-        label: lang === "zh" ? "画图" : "Draw",
+      speaking: { label: lang === "zh" ? "念" : "Speaking", ready: true },
+      vision: {
+        label: lang === "zh" ? "看" : "Vision",
+        ready: visionReady,
+      },
+      drawing: {
+        label: lang === "zh" ? "画" : "Drawing",
         ready: imageEngineReady,
       },
+      reading: {
+        label: lang === "zh" ? "读文档" : "Reading",
+        ready: visionReady,
+      },
+      // The one word with a chip and no kernel behind it yet: never "ready",
+      // so a Routine declaring it says so instead of failing halfway.
+      fetching: {
+        label: lang === "zh" ? "取文件" : "Fetching",
+        ready: false,
+      },
+      web: { label: lang === "zh" ? "上网" : "Web", ready: true },
     };
     const toolNotices: { kind: "unknown" | "setup"; name: string }[] = [];
     for (const capability of activeRoutine?.capabilities ?? []) {
@@ -10088,12 +10106,15 @@ const DOOR_ENGINES = [
   { id: "openai-cli" as const, name: "ChatGPT subscription (Codex CLI)" },
   { id: "claude-cli" as const, name: "Claude subscription" },
 ];
+// The same seven words a Method declares — one vocabulary, so "needs vision" on
+// a Method and "vision" here are visibly the same thing.
 const DOOR_CAPABILITIES = [
   { id: "text", name: "Text" },
-  { id: "voice-in", name: "Voice in" },
-  { id: "voice-out", name: "Voice out" },
-  { id: "image-in", name: "Picture in (photo or PDF)" },
-  { id: "image-out", name: "Picture out" },
+  { id: "hearing", name: "Hearing" },
+  { id: "speaking", name: "Speaking" },
+  { id: "vision", name: "Vision" },
+  { id: "reading", name: "Reading (PDF)" },
+  { id: "drawing", name: "Drawing" },
 ];
 
 function SubscriptionDoorPanel() {

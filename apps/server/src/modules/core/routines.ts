@@ -34,6 +34,7 @@ import type {
 
 import { getDefaultProvider } from "../models/registry.js";
 
+import { currentCapabilityName } from "./capabilities.js";
 import { createMethod, listMethodSummaries, loadMethod } from "./methods.js";
 
 // The single required file; manifest/examples are optional (mirrors Methods).
@@ -182,14 +183,22 @@ function readRoutineMeta(
 // this tool yet — suggest it" notice instead of silently vanishing (Oskar's
 // tools plan, 2026-07-28). Like view/tags, capabilities are NOT hashed:
 // declaring one never breaks a version lock.
+// ONE vocabulary everywhere (Oskar, 2026-07-31). This used to accept any string
+// at all, so after the words were renamed a Routine and a Method could describe
+// the same ability with two different words — the exact thing "所有地方用词统一"
+// forbids. An old word migrates through the same rename table the manifest uses;
+// a word nobody has ever used is dropped here rather than refused, because this
+// list only draws chips. (The manifest, which ENFORCES, refuses instead — the
+// asymmetry is deliberate and explained in capabilities.ts.)
 function readCapabilities(source: unknown): string[] {
   if (!Array.isArray(source)) return [];
   const capabilities: string[] = [];
   for (const entry of source.slice(0, 10)) {
-    if (typeof entry !== "string") continue;
-    const trimmed = entry.trim().slice(0, 40);
-    if (trimmed && !capabilities.includes(trimmed)) {
-      capabilities.push(trimmed);
+    const current = currentCapabilityName(
+      typeof entry === "string" ? entry.trim() : entry,
+    );
+    if (current && !capabilities.includes(current)) {
+      capabilities.push(current);
     }
   }
   return capabilities;
