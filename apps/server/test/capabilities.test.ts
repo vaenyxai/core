@@ -13,7 +13,11 @@ import {
   CAPABILITIES,
   CAPABILITY_DEFAULT_ON,
   decideCapabilities,
+  listCapabilityWaiting,
+  missingCapabilities,
+  noticeArrivedCapabilities,
   readMethodManifest,
+  recordCapabilityWanted,
   refusedCapabilityMessage,
   undeclaredCapabilityMessage,
   writeGlobalCapabilities,
@@ -156,6 +160,24 @@ describe("capabilities", () => {
     const widened = decideCapabilities(database, ["web"], modeId);
     expect(widened.allowed).toEqual([]);
     expect(widened.refused).toEqual([{ capability: "web", reason: "global" }]);
+  });
+
+  it("records only what does not EXIST, and notices when it arrives", () => {
+    const database = createTestDatabase();
+    // `files` has a word and a chip and no implementation; `web` has all three.
+    expect(missingCapabilities(["web", "files", "vision"])).toEqual(["files"]);
+
+    recordCapabilityWanted(database, ["files", "web"]);
+    recordCapabilityWanted(database, ["files"]);
+    const waiting = listCapabilityWaiting(database);
+    // `web` exists — wanting it is not waiting for anything to be built, and
+    // counting it would poison the priority signal.
+    expect(waiting.map((row) => row.capability)).toEqual(["files"]);
+    expect(waiting[0]?.timesWanted).toBe(2);
+    expect(waiting[0]?.arrived).toBe(false);
+
+    // Nothing has arrived while the kernel still lacks it.
+    expect(noticeArrivedCapabilities(database)).toEqual([]);
   });
 
   it("gives the two refusals two different sentences, and never says unsupported", () => {

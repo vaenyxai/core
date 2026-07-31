@@ -126,6 +126,88 @@ export function capabilitiesFromManifest(parsed: unknown): MethodManifest {
   return { capabilities: migrated, minimumVersion: null };
 }
 
+// What this Vaenyx can actually DO, as opposed to what it has a word for. A
+// capability needs two independent things to be true — the kernel has it, and
+// the connected model can do it — and this is the first of the two. `files` has
+// a word and a chip and no implementation behind it yet, which is exactly the
+// case the waiting list exists for.
+export const CAPABILITY_IMPLEMENTED: Record<Capability, boolean> = {
+  vision: true,
+  documents: true,
+  "voice-in": true,
+  "voice-out": true,
+  draw: true,
+  web: true,
+  files: false,
+};
+
+export function missingCapabilities(declared: Capability[]): Capability[] {
+  return declared.filter((capability) => !CAPABILITY_IMPLEMENTED[capability]);
+}
+
+// A Method wanting something this Vaenyx does not have yet: it can be built and
+// kept, but not published. Publishing an unrunnable Method is not a
+// contribution, it is a request — and a community shelf half greyed out is a
+// fatal first impression for a household app. The attempt to publish IS the
+// vote; no separate button, because buttons get organised and gamed.
+export function recordCapabilityWanted(
+  database: DatabaseHandle,
+  capabilities: Capability[],
+): void {
+  for (const capability of capabilities) {
+    // Only what does not EXIST. A capability the Owner merely switched off must
+    // never land here: that person is not waiting for anything to be built.
+    if (CAPABILITY_IMPLEMENTED[capability]) continue;
+    database.sqlite
+      .prepare(
+        `INSERT INTO capability_waiting (capability) VALUES (?)
+         ON CONFLICT(capability) DO UPDATE SET times_wanted = times_wanted + 1`,
+      )
+      .run(capability);
+  }
+}
+
+export interface CapabilityWaitingRow {
+  capability: Capability;
+  timesWanted: number;
+  arrived: boolean;
+}
+
+export function listCapabilityWaiting(
+  database: DatabaseHandle,
+): CapabilityWaitingRow[] {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT capability, times_wanted AS timesWanted, arrived_at AS arrivedAt
+       FROM capability_waiting ORDER BY times_wanted DESC, capability`,
+    )
+    .all() as { capability: string; timesWanted: number; arrivedAt: string | null }[];
+  return rows
+    .filter((row) => isCapability(row.capability))
+    .map((row) => ({
+      capability: row.capability as Capability,
+      timesWanted: row.timesWanted,
+      arrived: row.arrivedAt !== null,
+    }));
+}
+
+// The return trip, and it needs no server identity: this machine remembers what
+// it was waiting for and, once an update brings the capability, notices by
+// itself and has something to tell the author.
+export function noticeArrivedCapabilities(database: DatabaseHandle): Capability[] {
+  const arrived: Capability[] = [];
+  for (const row of listCapabilityWaiting(database)) {
+    if (row.arrived || !CAPABILITY_IMPLEMENTED[row.capability]) continue;
+    database.sqlite
+      .prepare(
+        "UPDATE capability_waiting SET arrived_at = CURRENT_TIMESTAMP WHERE capability = ?",
+      )
+      .run(row.capability);
+    arrived.push(row.capability);
+  }
+  return arrived;
+}
+
 // ── The three layers ─────────────────────────────────────────────────────────
 //
 //   global switch (one per capability)     ← the ceiling

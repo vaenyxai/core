@@ -517,6 +517,8 @@ import { listAuditEvents, recordAudit } from "../guard/audit.js";
 import {
   capabilitiesFromManifest,
   decideCapabilities,
+  missingCapabilities,
+  recordCapabilityWanted,
 } from "../core/capabilities.js";
 import {
   forgetRelayEngineStatus,
@@ -8641,6 +8643,20 @@ export async function registerGatewayRoutes(
         );
         if (!method) {
           return reply.code(404).send({ error: "That method was not found." });
+        }
+        // Built, kept — but not published. A Method that cannot run here cannot
+        // run on anyone else's Vaenyx either, and a community shelf half greyed
+        // out is a fatal first impression. The ATTEMPT is the vote: it is
+        // recorded (capability name only, nothing about this Method) so the
+        // operator knows what to build next.
+        const wanted = missingCapabilities(
+          capabilitiesFromManifest(method.manifest).capabilities,
+        );
+        if (wanted.length > 0) {
+          recordCapabilityWanted(context.database, wanted);
+          return reply.code(403).send({
+            error: `This Method needs something Vaenyx cannot do yet (${wanted.join(", ")}), so it cannot be shared. It is saved here, and your request has been counted.`,
+          });
         }
         const consentError = await ensureOverseasConsentOnService(
           owner.id,
