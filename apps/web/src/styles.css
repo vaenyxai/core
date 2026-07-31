@@ -1142,6 +1142,41 @@ textarea::placeholder {
    pile of unrelated announcements (Oskar, 2026-07-30). Note the explicit sizes
    on every input: the global rule is `input { height: 46px; width: 100% }`,
    which turns a checkbox into a large grey square. */
+/* Capability chips: the drawing IS the label. Same shape whether the capability
+   is there or not — dimmed means "off or not built", and a different shape
+   would read as a different thing. The word rides along in title/aria, because
+   a picture must never be the only carrier of meaning. */
+.capability-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.capability-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+}
+
+.capability-chip .line-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.capability-chip.off {
+  border-color: transparent;
+  opacity: 0.4;
+}
+
+.capability-chip-name {
+  white-space: nowrap;
+}
+
 /* The composer's tools. On a wide screen there is room, so they simply sit in
    the row and the toggle is not rendered at all — display:contents keeps the
    grouping wrapper out of the layout entirely. */

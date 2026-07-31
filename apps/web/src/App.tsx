@@ -243,6 +243,7 @@ import {
   type ToastTone,
 } from "./toast.js";
 import { useI18n, type Lang } from "./i18n.js";
+import { CapabilityChips } from "./capability-chips.js";
 import { CAPABILITIES } from "./capabilities.js";
 import {
   getCodexAuthCopy,
@@ -8023,6 +8024,18 @@ function AskVaenyxPanel({
           ) : null}
         </header>
 
+        {/* What this Routine needs, drawn. A dimmed chip is the same shape, not
+            a different one: it says "you have this off / Vaenyx has not got it
+            yet", never "something is broken". */}
+        {activeRoutine?.capabilities?.length ? (
+          <CapabilityChips
+            items={activeRoutine.capabilities}
+            lang={lang}
+            unavailable={activeRoutine.capabilities.filter(
+              (capability) => !knownToolStatus[capability]?.ready,
+            )}
+          />
+        ) : null}
         {toolNotices.length > 0 ? (
           <div className="tool-notices">
             {toolNotices.map((notice) =>
