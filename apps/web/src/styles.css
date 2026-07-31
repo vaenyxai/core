@@ -1304,9 +1304,25 @@ textarea::placeholder {
   transform: translateX(18px);
 }
 
+/* Compact (Oskar, 2026-07-31: the door card was "too messy"). Everything on
+   this card is meta — a state, an address, a limit — so nothing on it needs
+   body size, and the rows sit close enough to be read as one table rather than
+   a run of separate announcements. */
 .door-engine {
-  padding: var(--space-3) 0;
+  padding: var(--space-2) 0;
   border-top: 0.5px solid var(--border);
+}
+
+.settings-card .door-subhead:first-of-type {
+  margin-top: var(--space-3);
+}
+
+.door-field {
+  margin: var(--space-2) 0;
+}
+
+.door-limits label {
+  gap: 2px;
 }
 
 .door-engine-head {
