@@ -12,11 +12,29 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CAPABILITIES,
   CAPABILITY_DEFAULT_ON,
+  decideCapabilities,
   readMethodManifest,
+  refusedCapabilityMessage,
   undeclaredCapabilityMessage,
+  writeGlobalCapabilities,
 } from "../src/modules/core/capabilities.js";
+import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 
 const directories: string[] = [];
+const databases: DatabaseHandle[] = [];
+
+function createTestDatabase(): DatabaseHandle {
+  const dataDirectory = mkdtempSync(resolve(tmpdir(), "vaenyx-capdb-test-"));
+  directories.push(dataDirectory);
+  const database = createDatabase({
+    dataDirectory,
+    databasePath: join(dataDirectory, "vaenyx.db"),
+    backupsDirectory: join(dataDirectory, "backups"),
+    migrationsDirectory: resolve("migrations"),
+  } as Parameters<typeof createDatabase>[0]);
+  databases.push(database);
+  return database;
+}
 
 function methodFolder(manifest: unknown | null): string {
   const directory = mkdtempSync(resolve(tmpdir(), "vaenyx-cap-test-"));
@@ -32,6 +50,13 @@ function methodFolder(manifest: unknown | null): string {
 }
 
 afterEach(() => {
+  for (const database of databases.splice(0)) {
+    try {
+      database.close();
+    } catch {
+      // Already closed.
+    }
+  }
   for (const directory of directories.splice(0)) {
     rmSync(directory, { force: true, recursive: true });
   }
@@ -101,6 +126,47 @@ describe("capabilities", () => {
     expect(() => readMethodManifest(methodFolder("{ not json"))).toThrow(
       "MANIFEST_UNREADABLE",
     );
+  });
+
+  it("lets a lower layer narrow, never widen", () => {
+    const database = createTestDatabase();
+    // Default: web is off globally. A Method declaring it is refused, and the
+    // reason says which layer refused it.
+    const shut = decideCapabilities(database, ["web", "vision"], null);
+    expect(shut.allowed).toEqual(["vision"]);
+    expect(shut.refused).toEqual([{ capability: "web", reason: "global" }]);
+
+    writeGlobalCapabilities(database, { web: true });
+    expect(decideCapabilities(database, ["web"], null).allowed).toEqual(["web"]);
+
+    // A mode may take it away again...
+    const modeId = "m1";
+    database.sqlite
+      .prepare("INSERT INTO modes (id, name, capabilities) VALUES (?, ?, ?)")
+      .run(modeId, "Guest", JSON.stringify(["vision"]));
+    const inMode = decideCapabilities(database, ["web", "vision"], modeId);
+    expect(inMode.allowed).toEqual(["vision"]);
+    expect(inMode.refused).toEqual([{ capability: "web", reason: "mode" }]);
+
+    // ...but never give back what the ceiling denies.
+    writeGlobalCapabilities(database, { web: false });
+    database.sqlite
+      .prepare("UPDATE modes SET capabilities = ? WHERE id = ?")
+      .run(JSON.stringify(["web", "vision"]), modeId);
+    const widened = decideCapabilities(database, ["web"], modeId);
+    expect(widened.allowed).toEqual([]);
+    expect(widened.refused).toEqual([{ capability: "web", reason: "global" }]);
+  });
+
+  it("gives the two refusals two different sentences, and never says unsupported", () => {
+    const off = refusedCapabilityMessage("files", "global");
+    const mode = refusedCapabilityMessage("files", "mode");
+    expect(off).toContain("switched off");
+    expect(off).toContain("Settings");
+    expect(mode).toContain("mode you are in");
+    expect(off).not.toContain("unsupported");
+    expect(mode).not.toContain("unsupported");
+    expect(off).not.toBe(mode);
   });
 
   it("names the capability when one was reached for but never declared", () => {

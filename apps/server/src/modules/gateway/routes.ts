@@ -515,6 +515,10 @@ import {
 } from "../guard/rate-limit.js";
 import { listAuditEvents, recordAudit } from "../guard/audit.js";
 import {
+  capabilitiesFromManifest,
+  decideCapabilities,
+} from "../core/capabilities.js";
+import {
   forgetRelayEngineStatus,
   listRelayCalls,
   newRelayToken,
@@ -7779,11 +7783,19 @@ export async function registerGatewayRoutes(
           context.config.libraryDirectory,
           request.params.id,
         );
+        // Three layers, narrowing: the global switches, then the mode the
+        // Owner is in, then what the Method declared.
+        const ownerAllowed = decideCapabilities(
+          context.database,
+          capabilitiesFromManifest(method.manifest).capabilities,
+          owner.modeId ?? null,
+        );
         const result = await executeMethod(
           method,
           examples,
           request.body.input,
           controller.signal,
+          ownerAllowed.allowed,
         );
         recordAudit(context.database, {
           actorType: "owner",
@@ -7949,11 +7961,19 @@ export async function registerGatewayRoutes(
           context.config.libraryDirectory,
           methodId,
         );
+        // A Token call has no conversation and no mode, so the mode layer
+        // does not apply: global ∩ what this Method declared, nothing else.
+        const tokenAllowed = decideCapabilities(
+          context.database,
+          capabilitiesFromManifest(method.manifest).capabilities,
+          null,
+        );
         const result = await executeMethod(
           method,
           examples,
           request.body.input,
           controller.signal,
+          tokenAllowed.allowed,
         );
         recordAudit(context.database, {
           actorType: "app",

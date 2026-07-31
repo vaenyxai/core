@@ -15,6 +15,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { DatabaseHandle } from "../../db/database.js";
+
 export const CAPABILITIES = [
   "vision",
   "documents",
@@ -122,6 +124,129 @@ export function capabilitiesFromManifest(parsed: unknown): MethodManifest {
   if (permissions.network === true) migrated.push("web");
   if (permissions.readFiles === true) migrated.push("files");
   return { capabilities: migrated, minimumVersion: null };
+}
+
+// ── The three layers ─────────────────────────────────────────────────────────
+//
+//   global switch (one per capability)     ← the ceiling
+//     ∩ mode switch (Owner sets per mode)  ← may only be stricter
+//       ∩ what the Method declared          ← may only be stricter
+//
+// 🔴 A lower layer may only ever NARROW. A capability switched off globally is
+// out of reach of every mode, every Method and every Token, whatever they say
+// about themselves. The moment a lower layer can push the ceiling up, the
+// ceiling is not a ceiling and the entire guarantee goes with it.
+const GLOBAL_KEY = "capabilities.global";
+
+export function readGlobalCapabilities(
+  database: DatabaseHandle,
+): Record<Capability, boolean> {
+  const row = database.sqlite
+    .prepare("SELECT value FROM instance_settings WHERE key = ?")
+    .get(GLOBAL_KEY) as { value?: string } | undefined;
+  const stored: Record<string, unknown> = row?.value
+    ? (JSON.parse(row.value) as Record<string, unknown>)
+    : {};
+  const out = {} as Record<Capability, boolean>;
+  for (const capability of CAPABILITIES) {
+    out[capability] =
+      typeof stored[capability] === "boolean"
+        ? (stored[capability] as boolean)
+        : CAPABILITY_DEFAULT_ON[capability];
+  }
+  return out;
+}
+
+export function writeGlobalCapabilities(
+  database: DatabaseHandle,
+  changes: Partial<Record<Capability, boolean>>,
+): Record<Capability, boolean> {
+  const next = { ...readGlobalCapabilities(database) };
+  for (const capability of CAPABILITIES) {
+    const value = changes[capability];
+    if (typeof value === "boolean") next[capability] = value;
+  }
+  database.sqlite
+    .prepare(
+      `INSERT INTO instance_settings (key, value, updated_at)
+       VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                                      updated_at = CURRENT_TIMESTAMP`,
+    )
+    .run(GLOBAL_KEY, JSON.stringify(next));
+  return next;
+}
+
+// A mode's own list. NULL/absent means "this mode adds no restriction", which is
+// deliberately different from an empty list ("this mode allows nothing").
+export function readModeCapabilities(
+  database: DatabaseHandle,
+  modeId: string | null,
+): Capability[] | null {
+  if (!modeId) return null;
+  const row = database.sqlite
+    .prepare("SELECT capabilities FROM modes WHERE id = ?")
+    .get(modeId) as { capabilities?: string | null } | undefined;
+  if (!row?.capabilities) return null;
+  try {
+    const parsed = JSON.parse(row.capabilities) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter(isCapability);
+  } catch {
+    return null;
+  }
+}
+
+export interface CapabilityDecision {
+  allowed: Capability[];
+  /** Why each declared capability was refused — the Owner needs the reason. */
+  refused: { capability: Capability; reason: "global" | "mode" }[];
+}
+
+// Intersect the three layers. Everything the Method declared is checked against
+// the ceiling and then the mode; whatever survives is what the run may reach for.
+export function decideCapabilities(
+  database: DatabaseHandle,
+  declared: Capability[],
+  modeId: string | null,
+): CapabilityDecision {
+  const global = readGlobalCapabilities(database);
+  const mode = readModeCapabilities(database, modeId);
+  const allowed: Capability[] = [];
+  const refused: CapabilityDecision["refused"] = [];
+  for (const capability of declared) {
+    if (!global[capability]) {
+      refused.push({ capability, reason: "global" });
+      continue;
+    }
+    if (mode && !mode.includes(capability)) {
+      refused.push({ capability, reason: "mode" });
+      continue;
+    }
+    allowed.push(capability);
+  }
+  return { allowed, refused };
+}
+
+// Never "unsupported" — that reads as broken and sends the Owner looking for a
+// fault that is not there. The two real reasons need two different sentences,
+// because they have two different fixes.
+export function refusedCapabilityMessage(
+  capability: Capability,
+  reason: "global" | "mode",
+): string {
+  const plain: Record<Capability, string> = {
+    vision: "look at pictures",
+    documents: "read multi-page documents",
+    "voice-in": "listen",
+    "voice-out": "speak",
+    draw: "make pictures",
+    web: "use the web",
+    files: "read files",
+  };
+  return reason === "global"
+    ? `This needs to ${plain[capability]}, and you have that switched off. Turn it on in Settings to use it.`
+    : `This needs to ${plain[capability]}, and the mode you are in does not allow it.`;
 }
 
 // The message the Owner sees when a Method reaches for something it never
