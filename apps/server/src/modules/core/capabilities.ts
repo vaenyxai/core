@@ -77,15 +77,25 @@ export interface MethodManifest {
 export function readMethodManifest(directory: string): MethodManifest {
   const path = join(directory, "manifest.json");
   if (!existsSync(path)) return { capabilities: [], minimumVersion: null };
-
-  let raw: Record<string, unknown>;
   try {
-    raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-  } catch {
+    return capabilitiesFromManifest(
+      JSON.parse(readFileSync(path, "utf8")) as unknown,
+    );
+  } catch (error) {
+    if (error instanceof UnknownCapabilityError) throw error;
     // A manifest that cannot be read is not an empty manifest. Refuse rather
     // than run with no restrictions at all.
-    throw new Error("MANIFEST_UNREADABLE");
+    throw new Error("MANIFEST_UNREADABLE", { cause: error });
   }
+}
+
+// The same rules against an already-parsed manifest — LoadedMethod carries one,
+// so a run never has to touch the disk again to know what it may reach for.
+export function capabilitiesFromManifest(parsed: unknown): MethodManifest {
+  const raw =
+    parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {};
 
   const declared = Array.isArray(raw.capabilities) ? raw.capabilities : null;
   if (declared) {

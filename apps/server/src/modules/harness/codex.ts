@@ -877,6 +877,48 @@ export async function runCodexRelay(
   }
 }
 
+// A Method run that never declared `web`. Its own session, spawned WITHOUT the
+// web_search config the chat session carries, so the tool is not merely
+// discouraged — it is not there (capabilities design: enforcement, not a label).
+// Every run opens a fresh ephemeral thread, so one Method run cannot see
+// another's, nor the Owner's chat.
+let methodSession: CodexChatSession | undefined;
+let methodSessionQueue: Promise<void> = Promise.resolve();
+
+export async function runCodexMethodOffline(
+  request: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const status = getCodexStatus();
+  if (!status.installed) throw new Error("CODEX_NOT_INSTALLED");
+  if (!status.loggedIn) throw new Error("CODEX_NOT_LOGGED_IN");
+  if (status.authMethod !== "chatgpt") throw new Error("CODEX_CHATGPT_REQUIRED");
+
+  let releaseQueue: () => void = () => undefined;
+  const previous = methodSessionQueue;
+  methodSessionQueue = new Promise<void>((resolveQueue) => {
+    releaseQueue = resolveQueue;
+  });
+  await previous;
+
+  try {
+    if (!methodSession || methodSession.closed) {
+      methodSession = new CodexChatSession();
+    }
+    const session = methodSession;
+    // CodexChatSession has no cancel(): a run here is one short ephemeral
+    // thread, and Stop is handled by the caller abandoning the promise. The
+    // signal is still honoured before the turn starts.
+    if (signal?.aborted) throw new Error("CODEX_TURN_CANCELLED");
+    return await session.run(request, {
+      instructions:
+        "You are running a Vaenyx Method. Follow its recipe and answer with the requested JSON only. You have no tools: no files, no shell, no network. If the recipe needs something you cannot reach, say so plainly instead of guessing.",
+    });
+  } finally {
+    releaseQueue();
+  }
+}
+
 function formatAskVaenyxTranscript(messages: AskVaenyxInputMessage[]): string {
   return messages
     .map((message) => {
