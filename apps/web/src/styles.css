@@ -1142,6 +1142,61 @@ textarea::placeholder {
    pile of unrelated announcements (Oskar, 2026-07-30). Note the explicit sizes
    on every input: the global rule is `input { height: 46px; width: 100% }`,
    which turns a checkbox into a large grey square. */
+/* The capability table: one row per capability — the drawing, the word, the old
+   wording in brackets, and the switch. */
+.capability-rows {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-3) 0;
+}
+
+.capability-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.capability-row-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.capability-row-icon .line-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.capability-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-md);
+}
+
+/* The old wording, kept as an explanation and only on this screen. */
+.capability-row-name em {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  font-style: normal;
+}
+
+.capability-row-pending {
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+
+/* The engine headings carry the same pair of names. */
+.settings-subhead em {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  font-style: normal;
+  font-weight: 400;
+}
+
 /* Capability chips: the drawing IS the label. Same shape whether the capability
    is there or not — dimmed means "off or not built", and a different shape
    would read as a different thing. The word rides along in title/aria, because

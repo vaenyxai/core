@@ -163,6 +163,8 @@ import {
   fetchFlywheel,
   fetchFreePicks,
   refreshFreePicks,
+  fetchCapabilities,
+  updateCapabilities,
   fetchRelay,
   updateRelaySettings,
   testRelayEngine,
@@ -243,7 +245,7 @@ import {
   type ToastTone,
 } from "./toast.js";
 import { useI18n, type Lang } from "./i18n.js";
-import { CapabilityChips } from "./capability-chips.js";
+import { CAPABILITY_META, CapabilityChips } from "./capability-chips.js";
 import { CAPABILITIES } from "./capabilities.js";
 import {
   getCodexAuthCopy,
@@ -2484,7 +2486,7 @@ function VoicePanel() {
       ) : null}
 
       <section className="engine-section">
-      <h3 className="settings-subhead">Voice Input</h3>
+      <h3 className="settings-subhead">Hearing <em>(Voice in)</em></h3>
       <p className="settings-card-copy">
         The mic button — what you say becomes text.
       </p>
@@ -2521,7 +2523,7 @@ function VoicePanel() {
       </section>
 
       <section className="engine-section">
-      <h3 className="settings-subhead">Voice Output</h3>
+      <h3 className="settings-subhead">Speaking <em>(Voice out)</em></h3>
       <p className="settings-card-copy">Replies read aloud.</p>
       <div className="engine-row">
       <label className="chat-font-field">
@@ -2790,7 +2792,7 @@ function VoicePanel() {
       </section>
 
       <section className="engine-section">
-      <h3 className="settings-subhead">Picture Input</h3>
+      <h3 className="settings-subhead">Vision <em>(Picture in)</em></h3>
       <p className="settings-card-copy">
         The camera button — a photo becomes words.
       </p>
@@ -2837,7 +2839,7 @@ function VoicePanel() {
       <section className="engine-section">
       {/* A separate slot from Picture Input: reading a picture and drawing one
           are different models. Empty = Vaenyx never tries to draw. */}
-      <h3 className="settings-subhead">Picture Output</h3>
+      <h3 className="settings-subhead">Drawing <em>(Picture out)</em></h3>
       <p className="settings-card-copy">
         Ask in chat and a picture is made. Off means Vaenyx will not try.
       </p>
@@ -10525,6 +10527,92 @@ function DoorList({
   );
 }
 
+// THE CEILING. Seven rows, one per capability: the drawing, the word used
+// everywhere, and in brackets the older familiar wording — which lives HERE and
+// nowhere else (Oskar, 2026-07-31), because this is the one screen where
+// somebody who learnt "Picture in" needs to recognise what "Vision" is.
+//
+// Whatever is off here is out of reach of every Method, every mode and every
+// Token, whatever they say about themselves. A lower layer may only narrow.
+function CapabilitiesPanel() {
+  const { lang } = useI18n();
+  const [global, setGlobal] = useState<Record<string, boolean> | null>(null);
+  const [implemented, setImplemented] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchCapabilities()
+      .then((result) => {
+        setGlobal(result.global);
+        setImplemented(result.implemented);
+      })
+      .catch(() => setGlobal(null));
+  }, []);
+
+  async function flip(id: string, on: boolean) {
+    setBusy(id);
+    try {
+      setGlobal(await updateCapabilities({ [id]: on }));
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error ? error.message : "Could not change that.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!global) return null;
+
+  return (
+    <section className="settings-card">
+      <p className="eyebrow">What Vaenyx may do</p>
+      <h2>Capabilities</h2>
+      <p className="settings-card-copy">
+        The ceiling. Anything switched off here is out of reach of every Method,
+        every mode and every app key — whatever they ask for.
+      </p>
+      <div className="capability-rows">
+        {CAPABILITY_META.map((meta) => {
+          const built = implemented[meta.id] !== false;
+          return (
+            <div className="capability-row" key={meta.id}>
+              <span className="capability-row-icon">{meta.icon}</span>
+              <span className="capability-row-name">
+                {lang === "zh" ? meta.name.zh : meta.name.en}
+                <em>({lang === "zh" ? meta.gloss.zh : meta.gloss.en})</em>
+              </span>
+              {built ? (
+                <input
+                  aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
+                  checked={global[meta.id] === true}
+                  className="door-toggle"
+                  disabled={busy === meta.id}
+                  onChange={(event) => void flip(meta.id, event.target.checked)}
+                  role="switch"
+                  type="checkbox"
+                />
+              ) : (
+                // Not "unsupported" — that reads as broken. Vaenyx simply has
+                // not built it yet, which is a different sentence and a
+                // different fix.
+                <span className="capability-row-pending">
+                  {lang === "zh" ? "还没做出来" : "not built yet"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="door-legend">
+        {lang === "zh"
+          ? "哪个模型来做这件事,在下面每一段里选。"
+          : "Which model does each job is chosen in the sections below."}
+      </p>
+    </section>
+  );
+}
+
 function ModelsPanel() {
   const { t } = useI18n();
   const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
@@ -12371,6 +12459,7 @@ function SettingsPanel({
         </details>
       </section>
       ) : null}
+      {activeTab === "ai" ? <CapabilitiesPanel /> : null}
       {activeTab === "ai" ? <ModelsPanel /> : null}
       {activeTab === "ai" ? <VoicePanel /> : null}
       {activeTab === "ai" ? <SubscriptionDoorPanel /> : null}

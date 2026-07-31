@@ -150,6 +150,7 @@ const SAVED_TOAST_PATHS = [
   /^\/v1\/backup\/config/,
   /^\/v1\/modes(\/|$)/,
   /^\/v1\/relay\/settings/,
+  /^\/v1\/capabilities/,
 ];
 
 // The app is bilingual and this bus has no i18n context, so the message comes
@@ -1493,6 +1494,24 @@ export interface FreePicksState {
 
 export function fetchFreePicks(): Promise<FreePicksState> {
   return requestJson<FreePicksState>("/v1/free-picks");
+}
+
+// The capability switches: the ceiling every Method, mode and Token sits under.
+export function fetchCapabilities(): Promise<{
+  global: Record<string, boolean>;
+  vocabulary: string[];
+  implemented: Record<string, boolean>;
+}> {
+  return requestJson("/v1/capabilities");
+}
+
+export function updateCapabilities(
+  changes: Record<string, boolean>,
+): Promise<Record<string, boolean>> {
+  return requestJson("/v1/capabilities", {
+    method: "PUT",
+    body: JSON.stringify(changes),
+  });
 }
 
 // THE SUBSCRIPTION DOOR. The Owner's own view of it: what it is set to, whether
