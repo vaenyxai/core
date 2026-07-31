@@ -1741,20 +1741,6 @@ if (typeof document !== "undefined") {
   });
 }
 
-function speakText(text: string): void {
-  try {
-    if (!("speechSynthesis" in window)) return;
-    const clean = cleanSpeechText(text);
-    if (!clean) return;
-    stopReplySpeech();
-    const utterance = new SpeechSynthesisUtterance(clean.slice(0, 4000));
-    utterance.lang = /[一-鿿]/.test(clean) ? "zh-CN" : "en-US";
-    window.speechSynthesis.speak(utterance);
-  } catch {
-    // No TTS on this device — silently skip.
-  }
-}
-
 // Split for sentence-first playback: the opening sentence is generated (and
 // starts playing) on its own while the rest generates in parallel. The same
 // helper drives the mid-stream prewarm, so the prewarmed chunk always matches
@@ -9812,6 +9798,14 @@ const SETUP_ROWS = new Set([
 // (there is no recording to feed one, and nothing here can listen to the
 // other). Their drawers say so in words instead.
 const TEST_COST: Record<string, { en: string; zh: string }> = {
+  hearing: {
+    en: "Records three seconds from this device's microphone and sends it to the engine on this row. Say anything — what comes back is what it heard. The recording is not kept.",
+    zh: "用这台设备的麦克风录三秒,发给这一行的引擎。随便说一句 —— 回来的就是它听到的。录音不保留。",
+  },
+  speaking: {
+    en: "Really speaks one line with the voice on this row, out of this device. Nothing here can listen, so your ears are the last step.",
+    zh: "用这一行的声音,从这台设备真的念一句。这里没有东西能听,最后一步靠你的耳朵。",
+  },
   drawing: {
     en: "Really makes one picture with the engine on this row. Free on Cloudflare Workers AI and Zhipu; on a paid key it costs whatever one picture costs.",
     zh: "用这一行的引擎真的画一张图。Cloudflare Workers AI 和智谱是免费的;付费 key 就是一张图的钱。",
@@ -10015,6 +10009,17 @@ function CapabilitiesPanel() {
   async function runTest(id: string) {
     setTesting(id);
     try {
+      // Two of the seven cannot be tested by the server, for opposite reasons:
+      // nothing on that side can listen, and nothing on that side can speak.
+      // Both are testable HERE, because the browser has ears and a mouth — so
+      // every row gets the same button rather than two rows quietly getting an
+      // apology instead of a control.
+      if (id === "speaking" || id === "hearing") {
+        const result =
+          id === "speaking" ? await testSpeakingHere() : await testHearingHere();
+        setTestResults((current) => ({ ...current, [id]: result }));
+        return;
+      }
       const result = await runCapabilityTest(id, lang === "zh" ? "zh" : "en");
       setTestResults((current) => ({ ...current, [id]: result }));
     } catch (error) {
@@ -10039,52 +10044,122 @@ function CapabilitiesPanel() {
     }
   }
 
-  // Hear the current voice before living with it (Oskar, dev.154). The
-  // local engine tests Chinese and English separately (two voices).
-  async function testVoice(sampleLang?: "zh" | "en") {
-    // Speaking has a switch like everything else, and this is the one control
-    // that would otherwise walk past it: the browser voice never touches the
-    // server, so nothing else would ever ask.
-    if (global && global.speaking !== true) {
-      setOutputError(
-        lang === "zh"
-          ? "「说话」这一项被你关掉了。要用的话,把这一行的开关打开。"
-          : "Speaking is switched off. Turn this row's switch on to use it.",
-      );
-      return;
+  // Speaking, tested where the ears are. The machine cannot judge whether a
+  // voice came out, so it does not pretend to: it reports that the sound was
+  // produced and played, and the owner's own ears do the last step. That is
+  // still a real test — a broken engine throws before anything plays.
+  async function testSpeakingHere(): Promise<CapabilityTestResult> {
+    const engine = speakingEngine === "none" ? "" : speakingEngine;
+    if (global?.speaking === false) {
+      return {
+        status: "failed",
+        engine,
+        detail:
+          lang === "zh"
+            ? "「念」在这一行是关的。"
+            : "Speaking is switched off on this row.",
+      };
     }
-    setSetupBusy(true);
-    setOutputError(null);
     try {
-      const effectiveLang = sampleLang ?? (lang === "zh" ? "zh" : "en");
       const sample =
-        effectiveLang === "zh"
+        lang === "zh"
           ? "你好,我是 Vaenyx。这是当前音色的试听。"
-          : "Hi, I'm Vaenyx — this is how the current voice sounds.";
-      if (outputEngine === "gemini" || outputEngine === "local") {
-        // Mobile autoplay rules tie playback to the tap, and generation can
-        // take seconds — play a silent blip NOW so this element is allowed
-        // to sound later.
-        const audio = new Audio(SILENT_WAV);
-        void audio.play().catch(() => undefined);
-        const { audioId } = await synthesizeSpeech(sample);
-        audio.src = `/v1/voice/audio/${audioId}`;
-        await audio.play();
-      } else {
-        speakText(sample);
-      }
-    } catch (nextError) {
-      // Show the server's actual reason (e.g. a Gemini free-tier limit) —
-      // "is it connected?" misled when the engine WAS connected.
-      setOutputError(
-        nextError instanceof Error && nextError.message
-          ? nextError.message
-          : lang === "zh"
-            ? "试听放不出来 —— 引擎连上了吗?"
-            : "Could not play the test — is the engine connected?",
+          : "Hello, this is Vaenyx. This is the voice you have set.";
+      // The blip must be created and played inside the click, before the await:
+      // a phone will not let an element sound seconds later unless it already
+      // sounded once during the gesture.
+      const audio = new Audio(SILENT_WAV);
+      void audio.play().catch(() => undefined);
+      const { audioId } = await synthesizeSpeech(sample);
+      audio.src = `/v1/voice/audio/${audioId}`;
+      await audio.play();
+      return {
+        status: "ok",
+        engine,
+        detail:
+          lang === "zh"
+            ? "念出来了 —— 听见了就是通了。"
+            : "It spoke — if you heard it, this works.",
+      };
+    } catch (error) {
+      return {
+        status: "failed",
+        engine,
+        detail:
+          error instanceof Error
+            ? error.message
+            : lang === "zh"
+              ? "放不出声音。"
+              : "No sound came out.",
+      };
+    }
+  }
+
+  // Hearing, tested where the microphone is. A recording of a real voice is the
+  // only honest input, and the only real voice available is the owner's — so
+  // the test records three seconds and shows what came back. You know what you
+  // said, which is what makes this a test rather than a demonstration.
+  async function testHearingHere(): Promise<CapabilityTestResult> {
+    const engine = hearingEngine === "none" ? "" : hearingEngine;
+    if (global?.hearing === false) {
+      return {
+        status: "failed",
+        engine,
+        detail:
+          lang === "zh"
+            ? "「听」在这一行是关的。"
+            : "Hearing is switched off on this row.",
+      };
+    }
+    let stream: MediaStream | null = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const parts: Blob[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) parts.push(event.data);
+      };
+      const stopped = new Promise<void>((resolve) => {
+        recorder.onstop = () => resolve();
+      });
+      recorder.start();
+      await new Promise((resolve) => window.setTimeout(resolve, 3000));
+      recorder.stop();
+      await stopped;
+      const heard = await transcribeAudio(
+        new Blob(parts, { type: recorder.mimeType || "audio/webm" }),
+        lang === "zh" ? "zh" : "en",
       );
+      const words = heard.text.trim();
+      if (!words) {
+        return {
+          status: "failed",
+          engine,
+          detail:
+            lang === "zh"
+              ? "录到了声音,但什么字都没转出来。"
+              : "It recorded, but no words came back.",
+        };
+      }
+      return {
+        status: "ok",
+        engine,
+        detail:
+          lang === "zh" ? `听到的是:「${words}」` : `It heard: “${words}”`,
+      };
+    } catch (error) {
+      return {
+        status: "failed",
+        engine,
+        detail:
+          error instanceof Error
+            ? error.message
+            : lang === "zh"
+              ? "麦克风打不开。"
+              : "The microphone could not be opened.",
+      };
     } finally {
-      setSetupBusy(false);
+      stream?.getTracks().forEach((track) => track.stop());
     }
   }
 
@@ -10196,6 +10271,33 @@ function CapabilitiesPanel() {
       : ([] as PickerOption[]);
   })();
 
+  // Opening a file is not something every backend can do — only a backend whose
+  // own tool layer can be scoped to named folders, which today is the Claude
+  // subscription. The row shows the truth either way: the one that can, or the
+  // main model greyed out so you can see WHY nothing happens rather than
+  // finding an empty control. Same shape as every other row, no exceptions.
+  const FETCH_CAPABLE = ["claude-sub"];
+  const fetchOptions: PickerOption[] = (() => {
+    const connected = providers.filter((provider) => provider.connected);
+    const options = connected
+      .filter((provider) => FETCH_CAPABLE.includes(provider.id))
+      .map((provider) => ({
+        label: provider.isDefault ? `${provider.name} ${mainNote}` : provider.name,
+        value: provider.id,
+      }));
+    if (options.length > 0) return options;
+    const main = connected.find((provider) => provider.isDefault);
+    return main
+      ? [
+          {
+            disabled: true,
+            label: `${main.name}${lang === "zh" ? " —— 打不开文件" : " — cannot open files"}`,
+            value: main.id,
+          },
+        ]
+      : [];
+  })();
+
   const engines: Record<
     string,
     | {
@@ -10266,6 +10368,7 @@ function CapabilitiesPanel() {
       },
       value: visionEngine,
     },
+    fetching: { options: fetchOptions, set: async () => undefined, value: "" },
     web: { options: mainOnly, set: async () => undefined, value: "" },
   };
   for (const entry of Object.values(engines)) {
@@ -10466,22 +10569,6 @@ function CapabilitiesPanel() {
                     beside the local voices would sound a different engine. */}
                 {outputEngine === "local" ? (
                   <>
-                    <button
-                      className="secondary-button"
-                      disabled={setupBusy}
-                      onClick={() => void testVoice("en")}
-                      type="button"
-                    >
-                      {lang === "zh" ? "试听英文" : "Test English"}
-                    </button>
-                    <button
-                      className="secondary-button"
-                      disabled={setupBusy}
-                      onClick={() => void testVoice("zh")}
-                      type="button"
-                    >
-                      {lang === "zh" ? "试听中文" : "Test Chinese"}
-                    </button>
                   </>
                 ) : null}
                 {confirmRemoveLocal ? (
@@ -10578,14 +10665,6 @@ function CapabilitiesPanel() {
               />
             </div>
             <div className="model-card-actions">
-              <button
-                className="secondary-button"
-                disabled={setupBusy}
-                onClick={() => void testVoice()}
-                type="button"
-              >
-                {lang === "zh" ? "试听" : "Test Voice"}
-              </button>
             </div>
           </>
         ) : null}
@@ -10597,14 +10676,6 @@ function CapabilitiesPanel() {
                 : "Using the device's built-in voice. Gemini TTS or the local voice sound much more natural."}
             </p>
             <div className="model-card-actions">
-              <button
-                className="secondary-button"
-                disabled={setupBusy}
-                onClick={() => void testVoice()}
-                type="button"
-              >
-                {lang === "zh" ? "试听" : "Test Voice"}
-              </button>
             </div>
           </>
         ) : null}

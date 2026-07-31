@@ -178,10 +178,15 @@ Read this inside the app: **Settings → Manual**.
   computer: Hearing, Speaking, Vision, Drawing, Reading. The two that reach past
   the machine start off and stay off until you decide otherwise: **Web**, and
   **Fetching**.
-- **Test a row** — five rows have a **Test** button that really does that one
+- **Every row is the same shape** — the drawing, the name, which model does it,
+  a **Test**, an arrow for that row's own settings, and the switch.
+- **Test a row** — every row has a **Test** button that really does that one
   job once, against something whose answer is already known, and says which of
   three things happened: it worked, it failed in the failing side's own words,
-  or that path is not built. Above the button is what one press actually costs,
+  or that path is not built. Hearing and Speaking are tested by this device
+  rather than by the server, because nothing on the server can listen or speak:
+  Hearing records three seconds from your microphone and shows what came back,
+  Speaking says one line out loud. Hold the button to see what one press costs,
   because some of them spend real money.
 - **A connected model that cannot do a job is greyed out, not hidden** — so you
   can see it is there and that it is not the tool for this.
@@ -289,5 +294,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.81** · last updated 2026-08-01.
+Manual for **v0.3.1-dev.82** · last updated 2026-08-01.
 Keep this file up to date whenever a feature changes.
