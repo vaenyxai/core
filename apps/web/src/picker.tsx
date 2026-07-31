@@ -7,6 +7,8 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface PickerOption {
+  /** Connected, but cannot do this job: shown and unpickable, never hidden. */
+  disabled?: boolean;
   label: string;
   value: string;
 }
@@ -79,6 +81,7 @@ export function Picker({
               className={
                 option.value === value ? "picker-option on" : "picker-option"
               }
+              disabled={option.disabled}
               key={option.value}
               onClick={() => {
                 setOpen(false);

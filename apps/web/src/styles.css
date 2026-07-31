@@ -1274,8 +1274,14 @@ textarea::placeholder {
   cursor: pointer;
 }
 
-.picker-option:hover {
+.picker-option:hover:not(:disabled) {
   background: var(--accent-soft);
+}
+
+/* Connected but cannot do this job: still listed, so you can see it is there. */
+.picker-option:disabled {
+  color: var(--text-faint);
+  cursor: default;
 }
 
 .picker-option.on {
@@ -1553,6 +1559,26 @@ textarea::placeholder {
 .door-subhead:first-of-type {
   padding-top: 0;
   border-top: none;
+}
+
+/* The one setting that decides who answers you. */
+.main-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  padding-bottom: var(--space-4);
+  border-bottom: 0.5px solid var(--border);
+}
+
+.main-model-label {
+  font-size: var(--fs-md);
+}
+
+.main-model-pick {
+  flex: none;
+  width: 180px;
 }
 
 /* A card heading with one action on the right. */

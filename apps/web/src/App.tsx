@@ -246,7 +246,7 @@ import {
 } from "./toast.js";
 import { useI18n, type Lang } from "./i18n.js";
 import { CAPABILITY_META, CapabilityChips } from "./capability-chips.js";
-import { Picker } from "./picker.js";
+import { Picker, type PickerOption } from "./picker.js";
 import { CAPABILITIES } from "./capabilities.js";
 import {
   getCodexAuthCopy,
@@ -2169,13 +2169,15 @@ const GEMINI_TTS_VOICES = [
 
 function VoicePanel() {
   const { lang, t } = useI18n();
-  const [status, setStatus] = useState<VoiceStatus | null>(null);
+  // Kept for the connection state the key-adding flow refreshes; the row that
+  // displayed it now lives in Capabilities.
+  const [, setStatus] = useState<VoiceStatus | null>(null);
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
-  const [vision, setVision] = useState<VisionStatus | null>(null);
+  const [, setVision] = useState<VisionStatus | null>(null);
   // What the household has signed in to. One list, shared by every slot.
   const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
   const [imageEngine, setImageEngine] = useState<VisionStatus | null>(null);
-  const [imageEngineChoice, setImageEngineChoiceState] = useState<
+  const [, setImageEngineChoiceState] = useState<
     "none" | "workersai" | "gemini" | "openai" | "zhipu"
   >("none");
   const [cloudflareToken, setCloudflareToken] = useState("");
@@ -2193,9 +2195,9 @@ function VoicePanel() {
   const [localEnVoice, setLocalEnVoice] = useState("en_US-amy-medium");
   const [localZhVoice, setLocalZhVoice] = useState("zh_CN-huayan-medium");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const [outputError, setOutputError] = useState<string | null>(null);
-  const [visionError, setVisionError] = useState<string | null>(null);
+  const [visionError] = useState<string | null>(null);
   const [freePicks, setFreePicks] = useState<FreePicksState | null>(null);
   const firstFreePick =
     freePicks?.items.voiceIn ??
@@ -2297,22 +2299,6 @@ function VoicePanel() {
     return () => window.clearInterval(timer);
   }, [localTts?.status]);
 
-  async function applyInput(provider: "none" | "groq" | "openai") {
-    setBusy(true);
-    setError(null);
-    try {
-      setStatus(await setVoiceInput(provider));
-    } catch (nextError) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Could not change voice input.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
   // Hear the current voice before living with it (Oskar, dev.154). The
   // local engine tests Chinese and English separately (two voices).
   async function testVoice(sampleLang?: "zh" | "en") {
@@ -2369,24 +2355,6 @@ function VoicePanel() {
         nextError instanceof Error
           ? nextError.message
           : "Could not change the picture engine.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function applyVisionEngine(
-    next: "none" | "gemini" | "zhipu" | "openai" | "claude-sub",
-  ) {
-    setBusy(true);
-    setVisionError(null);
-    try {
-      setVision(await setVisionEngine(next));
-    } catch (nextError) {
-      setVisionError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Could not change the vision engine.",
       );
     } finally {
       setBusy(false);
@@ -2455,7 +2423,11 @@ function VoicePanel() {
   return (
     <section className="settings-card" id="engines">
       <p className="eyebrow">AI</p>
-      <h2>Engines</h2>
+      {/* Not "Engines" any more (Oskar, 2026-07-31: "不要有 engine 那个选项").
+          Choosing which model does a job happens once, on that job's own row in
+          Capabilities. What is left here is the part a row cannot hold: pasting
+          a key, downloading the offline voice. */}
+      <h2>Model keys</h2>
 
       {/* One-line purpose + the free-options refresh on the right (Oskar,
           2026-07-27): what this page IS comes first, everything else is one of
@@ -2491,27 +2463,6 @@ function VoicePanel() {
       <p className="settings-card-copy">
         The mic button — what you say becomes text.
       </p>
-      <div className="engine-row">
-      <label className="chat-font-field">
-        Engine
-        <select
-          className="task-select"
-          disabled={busy}
-          onChange={(event) =>
-            void applyInput(
-              event.target.value as "none" | "groq" | "openai",
-            )
-          }
-          value={status?.provider ?? "none"}
-        >
-          <option value="none">None — Mic Off</option>
-          <EngineOptions capability="voice-in" providers={providers} />
-        </select>
-      </label>
-        {status?.connected ? (
-          <span className="library-chip chip-published">Connected</span>
-        ) : null}
-      </div>
       <SlotKeyAdd
         capability="voice-in"
         onConnected={refreshEngines}
@@ -2526,50 +2477,18 @@ function VoicePanel() {
       <section className="engine-section">
       <h3 className="settings-subhead">Speaking <em>(Voice out)</em></h3>
       <p className="settings-card-copy">Replies read aloud.</p>
-      <div className="engine-row">
-      <label className="chat-font-field">
-        Engine
-        <select
-          className="task-select"
-          disabled={busy}
-          onChange={(event) => {
-            const next = event.target.value as
-              | "none"
-              | "browser"
-              | "gemini"
-              | "local";
-            setOutputEngine(next);
-            if (next === "local" && !localTts?.installed) {
-              // Show the download flow first; the engine applies once the
-              // download lands.
-              return;
-            }
-            void applyOutput({ engine: next });
-          }}
-          value={outputEngine}
-        >
-          <option value="none">None</option>
-          <option value="gemini">Gemini TTS — Natural</option>
-          <option value="local">Local Voice — Offline, Free</option>
-          <option value="browser">Browser — Basic, Free</option>
-        </select>
-      </label>
-        {outputEngine === "gemini" && output?.engine === "gemini" ? (
-          <span className="library-chip chip-published">Connected</span>
-        ) : outputEngine === "local" && localTts?.installed ? (
-          <span className="library-chip chip-published">
-            {output?.engine === "local" ? "Active" : "Installed"}
-          </span>
-        ) : null}
-      </div>
       <SlotKeyAdd
         capability="voice-out"
         onConnected={refreshEngines}
         providers={providers}
       />
-      {outputEngine === "local" ? (
+      {/* Always reachable, not revealed by picking "local" in a drop-down that
+          no longer lives here (Oskar, 2026-07-31): the download IS the setup,
+          and setup you can only reach by first choosing the thing you have not
+          set up is a trap. */}
+      {localTts ? (
         <>
-          {localTts?.installed ? (
+          {localTts.installed ? (
             <>
               <p className="settings-card-copy">
                 Speech is generated on this computer — nothing leaves it and
@@ -2797,32 +2716,6 @@ function VoicePanel() {
       <p className="settings-card-copy">
         The camera button — a photo becomes words.
       </p>
-      <div className="engine-row">
-      <label className="chat-font-field">
-        Engine
-        <select
-          className="task-select"
-          disabled={busy}
-          onChange={(event) =>
-            void applyVisionEngine(
-              event.target.value as
-                | "none"
-                | "gemini"
-                | "zhipu"
-                | "openai"
-                | "claude-sub",
-            )
-          }
-          value={vision?.provider ?? "none"}
-        >
-          <option value="none">None — Camera Off</option>
-          <EngineOptions capability="vision" providers={providers} />
-        </select>
-      </label>
-        {vision?.connected ? (
-          <span className="library-chip chip-published">Connected</span>
-        ) : null}
-      </div>
       <SlotKeyAdd
         capability="vision"
         onConnected={refreshEngines}
@@ -2844,40 +2737,12 @@ function VoicePanel() {
       <p className="settings-card-copy">
         Ask in chat and a picture is made. Off means Vaenyx will not try.
       </p>
-      <div className="engine-row">
-      <label className="chat-font-field">
-        Engine
-        <select
-          className="task-select"
-          disabled={busy}
-          onChange={(event) =>
-            void applyImageEngine(
-              event.target.value as "none" | "workersai" | "gemini" | "openai" | "zhipu",
-            )
-          }
-          value={imageEngineChoice}
-        >
-          <option value="none">None — Will Not Draw</option>
-          {/* Workers AI is offered even when not yet signed in, because unlike
-              the others its token is entered right here. */}
-          <option value="workersai">Cloudflare Workers AI — Free</option>
-          <EngineOptions
-            capability="image"
-            exclude={["workersai"]}
-            providers={providers}
-          />
-        </select>
-      </label>
-        {imageEngine?.connected ? (
-          <span className="library-chip chip-published">Connected</span>
-        ) : null}
-      </div>
       {/* Cloudflare's token is typed HERE rather than under Models: it is the
           one engine a household adds solely to make pictures, and sending them
           to a different page to paste it is how a working setting turns into an
           abandoned one. The account id is looked up from the token, so this
           field is the only thing anyone has to find. */}
-      {imageEngineChoice === "workersai" && !imageEngine?.connected ? (
+      {!imageEngine?.connected ? (
         <>
           <label className="chat-font-field">
             Workers AI Token
@@ -9882,51 +9747,6 @@ function freeAnswerNotice(
     .replace("{,已联网搜索}", searched ? ",已联网搜索" : "");
 }
 
-// The engine pickers offer what the household has actually signed in to
-// (Oskar, 2026-07-27). Signing in ADDS a backend and never replaces one, so
-// every slot — the main agent and the four side engines — chooses from the
-// same accumulated set. A fixed menu listing everything that exists reads as a
-// choice and then answers "connect this somewhere else first", which is not a
-// choice; anything signed in but not capable of this job is simply not offered.
-function EngineOptions({
-  capability,
-  exclude = [],
-  providers,
-}: {
-  capability: string;
-  exclude?: string[];
-  providers: ModelProviderInfo[];
-}) {
-  // A connected model that cannot do THIS job stays in the list, greyed out
-  // (AI-CONNECT): the Owner should see that it is there and cannot do this
-  // here, instead of wondering where it went. Whether it can is read from the
-  // provider table — never from the free-model survey, because a model will
-  // cheerfully claim it can do anything and the button would light up and fail.
-  const connected = providers.filter(
-    (provider) => provider.connected && !exclude.includes(provider.id),
-  );
-  const capable = connected.filter((provider) =>
-    provider.capabilities.includes(capability),
-  );
-  const incapable = connected.filter(
-    (provider) => !provider.capabilities.includes(capability),
-  );
-  return (
-    <>
-      {capable.map((provider) => (
-        <option key={provider.id} value={provider.id}>
-          {provider.name}
-        </option>
-      ))}
-      {incapable.map((provider) => (
-        <option disabled key={provider.id} value={provider.id}>
-          {provider.name} — cannot do this
-        </option>
-      ))}
-    </>
-  );
-}
-
 // A key can be added right where it is needed (Oskar, 2026-07-27): each engine
 // slot offers to take a key for any capable backend that is not yet connected.
 // It lands in the SAME shared pool as a key added under Models — connections
@@ -10670,6 +10490,7 @@ function CapabilitiesPanel() {
   const [implemented, setImplemented] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [showFree, setShowFree] = useState(false);
+  const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
   const [hearingEngine, setHearingEngine] = useState("none");
   const [speakingEngine, setSpeakingEngine] = useState("none");
   const [visionEngine, setVisionEngineState] = useState("none");
@@ -10694,6 +10515,9 @@ function CapabilitiesPanel() {
     void fetchImageEngine()
       .then((status) => setDrawingEngine(status.provider ?? "none"))
       .catch(() => undefined);
+    void fetchModelProviders()
+      .then((result) => setProviders(result.providers))
+      .catch(() => undefined);
   }, []);
 
   // WHICH MODEL DOES THIS JOB, on the same row as WHETHER IT MAY (Oskar asked
@@ -10705,26 +10529,54 @@ function CapabilitiesPanel() {
   // cannot act on. Reading and Web genuinely have one choice today, so their
   // list has one entry — an honest list of one, not a dead caption. When they
   // grow their own engines the entries appear and nothing else changes.
-  const mainModelOnly = [
-    { value: "main", label: lang === "zh" ? "主模型" : "Main model" },
-  ];
+  // Real model names, never the words "main model" (Oskar, 2026-07-31). A row
+  // that says "main model" makes you go and look up what that is; the name is
+  // the thing you wanted to know. Which one happens to BE the main model is a
+  // note in brackets after the name — that is the fact worth marking, and it
+  // moves by itself when you change the main model below.
+  const mainNote = lang === "zh" ? "(主模型)" : "(main model)";
+  function slotOptions(slot: string, extra: PickerOption[] = []) {
+    const connected = providers.filter((provider) => provider.connected);
+    // Connected but not able to do THIS job stays in the list, greyed
+    // (AI-CONNECT): you should see that it is there and cannot do this here,
+    // not wonder where it went.
+    const options: PickerOption[] = connected.map((provider) => ({
+      disabled: !provider.capabilities.includes(slot),
+      label: provider.isDefault ? `${provider.name} ${mainNote}` : provider.name,
+      value: provider.id,
+    }));
+    return [...options, ...extra];
+  }
+  // No "off" in any of these lists (Oskar): off is what the switch on the right
+  // is for, and offering it twice means two controls that can disagree. So the
+  // list is only ever "which one", and the main model is what you get until you
+  // say otherwise.
+  function firstUsable(options: PickerOption[]) {
+    const main = options.find(
+      (option) => !option.disabled && option.label.endsWith(mainNote),
+    );
+    return (main ?? options.find((option) => !option.disabled))?.value ?? "";
+  }
+  const mainOnly = (() => {
+    const main = providers.find(
+      (provider) => provider.connected && provider.isDefault,
+    );
+    return main
+      ? [{ label: `${main.name} ${mainNote}`, value: main.id }]
+      : ([] as PickerOption[]);
+  })();
+
   const engines: Record<
     string,
     | {
-        options: { value: string; label: string }[];
+        options: PickerOption[];
         set: (next: string) => Promise<void>;
         value: string;
       }
     | undefined
   > = {
     drawing: {
-      options: [
-        { value: "none", label: "— off" },
-        { value: "workersai", label: "Workers AI" },
-        { value: "gemini", label: "Gemini" },
-        { value: "openai", label: "OpenAI" },
-        { value: "zhipu", label: "Zhipu" },
-      ],
+      options: slotOptions("image"),
       set: async (next) => {
         const status = await setImageEngineChoice(
           next as "none" | "workersai" | "gemini" | "openai" | "zhipu",
@@ -10734,29 +10586,29 @@ function CapabilitiesPanel() {
       value: drawingEngine,
     },
     hearing: {
-      options: [
-        { value: "none", label: "— off" },
-        { value: "groq", label: "Groq Whisper" },
-        { value: "openai", label: "OpenAI" },
-      ],
+      options: slotOptions("voice-in"),
       set: async (next) => {
         const status = await setVoiceInput(next as "none" | "groq" | "openai");
         setHearingEngine(status.provider ?? "none");
       },
       value: hearingEngine,
     },
-    reading: {
-      options: mainModelOnly,
-      set: async () => undefined,
-      value: "main",
-    },
+    // Reading and Web are done by whichever model answers you; there is no
+    // second choice to offer yet, so the list is one entry — the real name.
+    reading: { options: mainOnly, set: async () => undefined, value: "" },
     speaking: {
-      options: [
-        { value: "none", label: "— off" },
-        { value: "browser", label: lang === "zh" ? "本机浏览器" : "This device" },
-        { value: "local", label: lang === "zh" ? "本机语音" : "On this machine" },
-        { value: "gemini", label: "Gemini" },
-      ],
+      // The two that are not models at all: this browser's own voice, and the
+      // voice downloaded onto this machine.
+      options: slotOptions("voice-out", [
+        {
+          label: lang === "zh" ? "本机浏览器" : "This device",
+          value: "browser",
+        },
+        {
+          label: lang === "zh" ? "本机语音" : "On this machine",
+          value: "local",
+        },
+      ]),
       set: async (next) => {
         const status = await connectVoiceOutput({
           engine: next as "none" | "browser" | "gemini" | "local",
@@ -10766,13 +10618,7 @@ function CapabilitiesPanel() {
       value: speakingEngine,
     },
     vision: {
-      options: [
-        { value: "none", label: "— off" },
-        { value: "gemini", label: "Gemini" },
-        { value: "zhipu", label: "Zhipu" },
-        { value: "openai", label: "OpenAI" },
-        { value: "claude-sub", label: "Claude" },
-      ],
+      options: slotOptions("vision"),
       set: async (next) => {
         const status = await setVisionEngine(
           next as "none" | "gemini" | "zhipu" | "openai" | "claude-sub",
@@ -10781,12 +10627,14 @@ function CapabilitiesPanel() {
       },
       value: visionEngine,
     },
-    web: {
-      options: mainModelOnly,
-      set: async () => undefined,
-      value: "main",
-    },
+    web: { options: mainOnly, set: async () => undefined, value: "" },
   };
+  for (const entry of Object.values(engines)) {
+    // Nothing chosen yet reads as the main model, not as a blank.
+    if (entry && (entry.value === "" || entry.value === "none")) {
+      entry.value = firstUsable(entry.options);
+    }
+  }
 
   async function pickEngine(id: string, next: string) {
     const engine = engines[id];
@@ -10807,6 +10655,24 @@ function CapabilitiesPanel() {
     setBusy(id);
     try {
       setGlobal(await updateCapabilities({ [id]: on }));
+      // The row shows a model the moment you switch it on, so that model has to
+      // be the one really wired up — otherwise the display is a promise the
+      // machine never made. Only ever fills a blank; it never overrides a
+      // choice you made.
+      const engine = engines[id];
+      const unset =
+        id === "hearing"
+          ? hearingEngine
+          : id === "speaking"
+            ? speakingEngine
+            : id === "vision"
+              ? visionEngine
+              : id === "drawing"
+                ? drawingEngine
+                : null;
+      if (on && engine && (unset === "none" || unset === "") && engine.value) {
+        await engine.set(engine.value);
+      }
     } catch (error) {
       showErrorToast(
         error instanceof Error ? error.message : "Could not change that.",
@@ -11293,6 +11159,40 @@ function ModelsPanel() {
         tab).
       </p>
       {error ? <p className="form-error">{error}</p> : null}
+      {/* THE MAIN MODEL, chosen in one place (Oskar, 2026-07-31). It used to be
+          a "Make default" button hidden on whichever card happened to hold it,
+          so the only way to change the most important setting in the app was to
+          find the right card first. Every capability row that rides the main
+          model re-labels itself from here. */}
+      {connectedProviders.some((provider) =>
+        provider.capabilities.includes("chat"),
+      ) ? (
+        <div className="main-model-row">
+          <span className="main-model-label">Main model</span>
+          <div className="main-model-pick">
+            <Picker
+              ariaLabel="Main model"
+              disabled={busy !== null}
+              onChange={(next) => {
+                const provider = connectedProviders.find(
+                  (candidate) => candidate.id === next,
+                );
+                if (provider) void makeDefault(provider);
+              }}
+              options={connectedProviders
+                .filter((provider) => provider.capabilities.includes("chat"))
+                .map((provider) => ({
+                  label: provider.name,
+                  value: provider.id,
+                }))}
+              value={
+                connectedProviders.find((provider) => provider.isDefault)?.id ??
+                ""
+              }
+            />
+          </div>
+        </div>
+      ) : null}
       <div className="model-cards">
         {connectedProviders.map((provider) => (
           <div

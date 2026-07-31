@@ -154,10 +154,12 @@ Read this inside the app: **Settings → Manual**.
   - **Web** *(Web pages)* — going out to the internet.
 - **A connected model that cannot do a job is greyed out, not hidden** — so you
   can see it is there and that it is not the tool for this.
+- **The main model is chosen once**, in the Models card. Every row that rides it
+  re-labels itself to whatever you picked.
 - **If an engine stops working** — Vaenyx does not quietly switch to another
   model. It tells you which one failed and why, and you change it here. That is
   deliberate: a silent swap means never knowing who wrote the answer.
-- **Add a key where you need it** — every engine row can take a key for any
+- **Add a key where you need it** — the Model keys card takes a key for any
   capable provider, and it joins the same shared pool.
 
 ## 10. Subscription Door — lending your subscriptions to your own apps
@@ -249,5 +251,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.78** · last updated 2026-07-31.
+Manual for **v0.3.1-dev.79** · last updated 2026-07-31.
 Keep this file up to date whenever a feature changes.
