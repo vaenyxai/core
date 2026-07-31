@@ -80,6 +80,24 @@ function makePdf(pageCount: number): Buffer {
   return Buffer.from(body, "latin1");
 }
 
+// Reading is one of the seven capability switches, enforced at the upload
+// route (capability-gate.test.ts owns that half). It ships ON, but these tests
+// set it anyway rather than lean on a default: what they are about is the page
+// count and the cost gate, and they should not start failing the day somebody
+// changes their mind about the shipped value.
+async function switchReadingOn(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  cookie: string,
+): Promise<void> {
+  const response = await app.inject({
+    method: "PUT",
+    url: "/v1/capabilities",
+    headers: { cookie },
+    payload: { reading: true },
+  });
+  expect(response.statusCode).toBe(200);
+}
+
 describe("document reading", () => {
   it("reports the file's real page count", async () => {
     const facts = await inspectDocument(makePdf(12));
@@ -94,6 +112,7 @@ describe("document reading", () => {
       payload: { name: "Oskar", password: "private-password" },
     });
     const cookie = String(setup.headers["set-cookie"]);
+    await switchReadingOn(app, cookie);
 
     const small = await app.inject({
       method: "POST",
@@ -135,6 +154,7 @@ describe("document reading", () => {
       payload: { name: "Oskar", password: "private-password" },
     });
     const cookie = String(setup.headers["set-cookie"]);
+    await switchReadingOn(app, cookie);
 
     const junk = await app.inject({
       method: "POST",

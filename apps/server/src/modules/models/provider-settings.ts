@@ -124,6 +124,13 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
   },
 ];
 
+/** The Owner's word for a backend ("Claude (Subscription)"), never its id. A
+ *  test result that names `claude-sub` sends them looking for something that is
+ *  written nowhere on the screen. */
+export function providerDisplayName(id: string): string {
+  return KNOWN_PROVIDERS.find((known) => known.id === id)?.name ?? id;
+}
+
 export function listModelProviders(
   secretsDirectory: string,
 ): ModelProviderInfo[] {

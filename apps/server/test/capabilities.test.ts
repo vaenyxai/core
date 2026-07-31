@@ -83,15 +83,18 @@ describe("capabilities", () => {
     ]);
   });
 
-  it("starts on for what the Owner triggers, off for what a Method decides", () => {
-    // The line is drawn by who pulls the trigger, not by how dangerous it is.
+  it("starts on for what happens on this machine, off for what reaches outside it", () => {
+    // The line is drawn by where the work happens. Everything the app already
+    // does here is on, so no default can switch off a feature the manual
+    // describes as working; only the two that reach out — the web, and the
+    // Owner's own folders — have to be turned on by hand.
     expect(CAPABILITY_DEFAULT_ON.vision).toBe(true);
     expect(CAPABILITY_DEFAULT_ON["hearing"]).toBe(true);
     expect(CAPABILITY_DEFAULT_ON["speaking"]).toBe(true);
+    expect(CAPABILITY_DEFAULT_ON.reading).toBe(true);
+    expect(CAPABILITY_DEFAULT_ON.drawing).toBe(true);
     expect(CAPABILITY_DEFAULT_ON.web).toBe(false);
     expect(CAPABILITY_DEFAULT_ON.fetching).toBe(false);
-    expect(CAPABILITY_DEFAULT_ON.reading).toBe(false);
-    expect(CAPABILITY_DEFAULT_ON.drawing).toBe(false);
   });
 
   it("reads a named list", () => {

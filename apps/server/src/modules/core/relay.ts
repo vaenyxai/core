@@ -34,6 +34,8 @@ import { getCodexStatus, runCodexRelay } from "../harness/codex.js";
 import { claudeMachineLogin } from "../models/claude-login.js";
 import { claudeSubscriptionRelay } from "../models/claude-subscription-provider.js";
 
+import { capabilityOff } from "./capabilities.js";
+
 export const RELAY_ENGINES = ["openai-cli", "claude-cli"] as const;
 export type RelayEngine = (typeof RELAY_ENGINES)[number];
 
@@ -385,6 +387,17 @@ export async function runRelay(
     throw new Error(
       `RELAY_CAPABILITY_UNSUPPORTED:${request.engine}:${request.capability}`,
     );
+  }
+  // "Out of reach of every app key" is what the Capabilities card promises,
+  // and an outside app asking this machine to look at a picture is an app key
+  // asking. Refused before the linked file is fetched: a capability that is
+  // switched off should not pull the customer's file onto this disk at all.
+  // `text` is not one of the seven — it is the door itself.
+  if (
+    request.capability !== "text" &&
+    capabilityOff(database, request.capability)
+  ) {
+    throw new Error(`RELAY_CAPABILITY_OFF:${request.capability}`);
   }
 
   const started = Date.now();

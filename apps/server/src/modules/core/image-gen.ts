@@ -11,9 +11,11 @@
 // is written, and the failure has to say so rather than looking like a bug.
 import type { Buffer } from "node:buffer";
 
+import type { DatabaseHandle } from "../../db/database.js";
 import { readProviderConnections } from "../models/connections.js";
 import { writeConnections } from "../models/provider-settings.js";
 
+import { capabilityOff } from "./capabilities.js";
 import { saveImage } from "./vision.js";
 
 export type ImageEngineChoice =
@@ -315,11 +317,19 @@ export function isImageFollowUp(text: string): boolean {
 
 // Ask the configured engine for a picture and store it like any other photo,
 // so it renders in the conversation and rides the local backup.
+//
+// Drawing is refused HERE rather than at the one caller, because the caller is
+// where a second one gets added and the switch gets forgotten. This is the
+// only place a picture is made, so this is where the ceiling holds.
 export async function generateImage(
+  database: DatabaseHandle,
   secretsDirectory: string,
   dataDirectory: string,
   prompt: string,
 ): Promise<string> {
+  if (capabilityOff(database, "drawing")) {
+    throw new Error("IMAGE_CAPABILITY_OFF");
+  }
   const connections = readProviderConnections(secretsDirectory);
 
   if (connections.imageOutput?.provider === "workersai") {

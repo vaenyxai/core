@@ -2586,6 +2586,25 @@ export const RelayTestResultSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// The same three outcomes for a capability row's own Test, plus the one fact a
+// relay test never needs: WHICH engine was exercised. "Vision failed" sends the
+// Owner looking through four connected models; "Gemini (gemini-flash-latest)
+// refused the test picture" is something they can act on. Empty when nothing was
+// reached at all — nothing connected, no folder named — and the detail then
+// stands on its own.
+export const CapabilityTestResultSchema = Type.Object(
+  {
+    status: Type.Union([
+      Type.Literal("ok"),
+      Type.Literal("failed"),
+      Type.Literal("not-implemented"),
+    ]),
+    engine: Type.String(),
+    detail: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 export type RelayEngine = Static<typeof RelayEngineSchema>;
 export type RelayCapability = Static<typeof RelayCapabilitySchema>;
 export type RelayRunRequest = Static<typeof RelayRunRequestSchema>;
@@ -2599,3 +2618,4 @@ export type RelayCall = Static<typeof RelayCallSchema>;
 export type RelayTokenResponse = Static<typeof RelayTokenResponseSchema>;
 export type RelayPanel = Static<typeof RelayPanelSchema>;
 export type RelayTestResult = Static<typeof RelayTestResultSchema>;
+export type CapabilityTestResult = Static<typeof CapabilityTestResultSchema>;

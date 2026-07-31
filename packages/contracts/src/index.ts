@@ -327,4 +327,6 @@ export {
   type RelayCall,
   type RelayPanel,
   type RelayTestResult,
+  CapabilityTestResultSchema,
+  type CapabilityTestResult,
 } from "./workspace.js";

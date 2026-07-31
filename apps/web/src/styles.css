@@ -1306,15 +1306,6 @@ textarea::placeholder {
   }
 }
 
-/* The engine headings carry the same pair of names. */
-.settings-subhead em {
-  margin-left: 6px;
-  color: var(--text-faint);
-  font-size: var(--fs-label);
-  font-style: normal;
-  font-weight: 400;
-}
-
 /* Capability chips: the drawing IS the label. Same shape whether the capability
    is there or not — dimmed means "off or not built", and a different shape
    would read as a different thing. The word rides along in title/aria, because
@@ -1561,32 +1552,138 @@ textarea::placeholder {
   border-top: none;
 }
 
-/* The one setting that decides who answers you. */
-.main-model-row {
-  display: flex;
+/* Setup belonging to ONE capability, opened from that capability's own row:
+   pasting its key, downloading its voice, testing it. Folded away by default —
+   a household sets these once, and the switches above are what gets touched. */
+.capability-setup {
+  grid-column: 1 / -1;
+  margin: 0 0 var(--space-3) 26px;
+  padding: var(--space-3);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
+.capability-setup > :first-child {
+  margin-top: 0;
+}
+
+/* The Fetching drawer reuses the Subscription Door's chip list, but a folder is
+   not an email address: C:\Users\oskar\Documents\Household is long enough to
+   push the whole card off a phone. Here a chip wraps instead of overflowing,
+   and loses the pill shape because a pill wrapped onto two lines reads as a
+   mistake. */
+.capability-setup .door-chip {
+  max-width: 100%;
+  border-radius: var(--r-sm);
+  overflow-wrap: anywhere;
+}
+
+/* An open row drops its own hairline: the rule would otherwise be drawn between
+   the row and the setup it just opened, which reads as if the panel belonged to
+   the NEXT capability down. */
+.capability-row.open {
+  border-bottom-color: transparent;
+}
+
+.capability-row-more {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: var(--space-4) 0;
-  padding-bottom: var(--space-4);
-  border-bottom: 0.5px solid var(--border);
-}
-
-.main-model-label {
-  font-size: var(--fs-md);
-}
-
-.main-model-pick {
+  justify-content: center;
   flex: none;
-  width: 180px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
-/* A card heading with one action on the right. */
+.capability-row-more:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.capability-row-more .line-icon {
+  width: 14px;
+  height: 14px;
+  transition: transform 120ms ease;
+}
+
+.capability-row-more.open .line-icon {
+  transform: rotate(180deg);
+}
+
+/* The row's own Test. It sits at the foot of the drawer behind a rule, because
+   what it does is different in kind from everything above it: the rest of the
+   drawer changes settings, this one spends money and time. */
+.capability-test {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 0.5px solid var(--border);
+}
+
+.capability-test .settings-card-copy {
+  margin-bottom: var(--space-2);
+}
+
+.capability-test-result {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+
+.capability-test-result.ok {
+  color: #75b094;
+}
+
+.capability-test-result.failed {
+  color: #df938a;
+}
+
+/* 🔴 "Not built yet" is NOT a failure and must never be painted as one — that
+   is the whole reason the result has three states instead of two. It reads as
+   an ordinary note, in the same grey as anything else the app has not done. */
+.capability-test-result.not-implemented {
+  color: var(--text-faint);
+}
+
+/* A card heading with its actions on the right. */
 .settings-card-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+/* Two short text actions beside a heading. They wrap rather than squeeze the
+   heading on a narrow phone, and each keeps its own tap target. */
+.card-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+/* The shared .text-button is 12px with no side padding at all, so its tap area
+   is exactly as wide as the words — well under the 44px thumb, and these two
+   sit side by side where a miss presses the other one. Padding and a real
+   height give each its own area. No border and no fill: two chips beside a
+   heading read as a toolbar, and this is a card of switches with two small
+   actions on it, not a toolbar. */
+.card-head-actions .text-button {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+/* The survey takes a real request to the main model, so its button is out of
+   action while it runs and has to LOOK out of action — the label alone changes
+   too little to notice. */
+.card-head-actions .text-button:disabled {
+  opacity: 0.55;
 }
 
 .free-list {
@@ -7232,7 +7329,7 @@ select {
 @media (max-width: 560px) { .field-pair { grid-template-columns: 1fr; } }
 .slot-key-open { margin-top: var(--space-1); }
 .slot-key-add { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; margin-top: var(--space-2); }
-.slot-key-add .task-select { flex: 0 1 170px; }
+.slot-key-add .picker { flex: 0 1 170px; }
 .slot-key-add input { flex: 1 1 200px; }
 /* The archive window: compact pickable rows. */
 .archive-modal { display: flex; flex-direction: column; gap: var(--space-2); min-width: min(420px, 80vw); }
@@ -7268,11 +7365,8 @@ html, body { overscroll-behavior-y: none; }
 /* Splash held over a conversation whose first load is in flight: deep links go
    splash -> conversation, with no half-built frame between. */
 .chat-splash { position: absolute; inset: 0; z-index: 40; min-height: 0; background: var(--bg); }
-/* The Engines card: intro left, refresh right; four sections with a visible
-   rule between them (Oskar, 2026-07-27 - "看得很复杂" redesign). */
-.engine-intro-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
-.engine-intro-row .settings-card-copy { margin: 0; }
-.engine-intro-row .secondary-button { flex: none; }
+/* Sections with a visible rule between them (Oskar, 2026-07-27 - "看得很复杂"
+   redesign); the Tools card is what still uses them. */
 .engine-section { border-top: 2px solid var(--border); margin-top: var(--space-5); padding-top: var(--space-4); }
 .engine-section > .settings-subhead { margin-top: 0; }
 /* The Sharing card's state line + control rows (one anatomy across states). */

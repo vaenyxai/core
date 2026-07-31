@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  Fragment,
   type FormEvent,
   type ReactNode,
   type RefObject,
@@ -61,6 +62,7 @@ import type {
   RelayPanel as RelayPanelData,
   RelaySettings,
   RelayTestResult,
+  CapabilityTestResult,
 } from "@vaenyx/contracts";
 
 import {
@@ -165,6 +167,9 @@ import {
   refreshFreePicks,
   fetchCapabilities,
   updateCapabilities,
+  fetchCapabilityFolders,
+  updateCapabilityFolders,
+  runCapabilityTest,
   fetchRelay,
   updateRelaySettings,
   testRelayEngine,
@@ -207,7 +212,6 @@ import {
   postPresenceHeartbeat,
   stopTurn,
   type VoiceOutputStatus,
-  type VoiceStatus,
   rejectVaenyxMeCandidate,
   renameMethod,
   renameMethodTag,
@@ -1334,6 +1338,53 @@ function IconCheck() {
   );
 }
 
+// THE SPEAKING SWITCH, asked in the browser. Every other capability is
+// performed by the server, which asks the ceiling before it does the work — but
+// device text-to-speech happens entirely inside this page and never sends a
+// request, so nothing would ever consult the switch and Vaenyx would keep
+// talking with Speaking off. The card promises the opposite in so many words.
+// Read once per page load and shared by every speak button; `noteSpeakingOn`
+// keeps it true the moment the Owner flips the switch in Settings, so the
+// buttons come back without a reload.
+//
+// THAT LAST PART ONLY WORKS BECAUSE SETTINGS AND THE CHAT ARE NEVER ON SCREEN
+// AT THE SAME TIME. This is a module-level `let`, not state — writing it cannot
+// re-render a button that is already mounted. Flipping the switch takes hold
+// only because the top-level screen chain is one mutually exclusive ternary:
+// opening Settings unmounts the whole chat tree, and every speak button reads
+// this again on the way back. Give Settings a modal overlay, or keep the chat
+// mounted behind it, and the buttons already on screen keep whatever value they
+// were born with — the server side of the ceiling still holds, but in the
+// browser Speaking quietly stops being switchable and nothing looks broken.
+// Anyone making that change has to turn this into state the buttons subscribe
+// to first.
+let speakingOn: boolean | null = null;
+let speakingRead: Promise<boolean> | null = null;
+
+function noteSpeakingOn(global: Record<string, boolean>): void {
+  speakingOn = global.speaking === true;
+}
+
+function readSpeakingOn(): Promise<boolean> {
+  if (speakingOn !== null) return Promise.resolve(speakingOn);
+  if (!speakingRead) {
+    speakingRead = fetchCapabilities()
+      .then((result) => {
+        noteSpeakingOn(result.global);
+        return speakingOn === true;
+      })
+      .catch(() => {
+        // The ceiling itself could not be read. A reply can only be on screen
+        // because the server answered, so this is a passing failure rather than
+        // a switched-off machine — the answer is not remembered, and the next
+        // press asks again.
+        speakingRead = null;
+        return true;
+      });
+  }
+  return speakingRead;
+}
+
 // THE speech element ("同类功能必须统一", Oskar 2026-07-28): every spoken
 // thing in the app goes through this one control — replaying an Owner voice
 // recording, reading any reply aloud on tap, and the automatic read-out of a
@@ -1359,9 +1410,20 @@ function SpeakButton({
   prewarm?: SpeechPrewarm | null;
   text: string;
 }) {
+  const { lang } = useI18n();
   const [state, setState] = useState<
     "idle" | "loading" | "playing" | "paused"
   >("idle");
+  // Playing back a recording the Owner made is not Vaenyx speaking, so only
+  // the synthesised paths sit under the Speaking switch — the clip is the
+  // Owner's own voice and belongs to Hearing's side of the app.
+  const synthesises = !audioId;
+  // Seeded from what this page already knows, so only the very first button of
+  // a session can appear for the instant before the answer arrives; every
+  // reply after that is drawn right the first time.
+  const [muted, setMuted] = useState(
+    () => synthesises && speakingOn === false,
+  );
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // The clips to play in order (a recording is one clip; TTS is 1-2 sentence
   // chunks), synthesis already in flight. Built once, then replayable.
@@ -1389,6 +1451,20 @@ function SpeakButton({
     },
     [],
   );
+
+  // Ask the ceiling once, on mount, so a button that may not speak is never
+  // drawn in the first place. The read is shared and cached, so a page full of
+  // replies costs one request.
+  useEffect(() => {
+    if (!synthesises) return;
+    let alive = true;
+    void readSpeakingOn().then((allowed) => {
+      if (alive) setMuted(!allowed);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [synthesises]);
 
   async function playChunk(
     audio: HTMLAudioElement,
@@ -1422,6 +1498,22 @@ function SpeakButton({
   }
 
   async function play() {
+    // 🔴 The switch, asked before EITHER text-to-speech path and before
+    // anything else happens — a refused play must not silence whatever else is
+    // talking. Normally the mount read has already settled and this button is
+    // not on screen at all; this is the narrow case where autoStart fires
+    // first, and it says why out loud rather than going quiet (the same rule
+    // the photo button follows a few hundred lines up).
+    if (synthesises && !(await readSpeakingOn())) {
+      setMuted(true);
+      setState("idle");
+      showErrorToast(
+        lang === "zh"
+          ? "「说话」这一项被你关掉了,所以 Vaenyx 没有念出来。要用的话,去 AI Settings → Capabilities 把这一行打开。"
+          : "Speaking is switched off, so Vaenyx did not read that out. Turn the Speaking row back on under AI Settings → Capabilities.",
+      );
+      return;
+    }
     stopReplySpeech();
     const session = (sessionRef.current += 1);
     try {
@@ -1552,6 +1644,11 @@ function SpeakButton({
     onAutoConsumed?.();
     void play();
   }, [autoStart]);
+
+  // Switched off, the button is not there — which is honest, where a button
+  // that answers a tap with silence is not. Replaying a recording is untouched,
+  // so an Owner voice message still has its play button with Speaking off.
+  if (synthesises && muted) return null;
 
   return (
     <span className={className ? `speak-button ${className}` : "speak-button"}>
@@ -1710,7 +1807,7 @@ function DocumentButton({
   disabled?: boolean;
   onPicked: (document: PickedDocument) => void;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -1724,7 +1821,7 @@ function DocumentButton({
           event.target.value = "";
           if (!file) return;
           setBusy(true);
-          void uploadDocument(file)
+          void uploadDocument(file, lang)
             .then(onPicked)
             .catch(() => {
               // uploadDocument already raised the toast with the reason.
@@ -1987,6 +2084,9 @@ function MicButton({
   disabled?: boolean;
   onText: (text: string, audioId: string) => void;
 }) {
+  // Only for the refusal the server may send back: a recording has no
+  // language of its own until it has been transcribed.
+  const { lang } = useI18n();
   const [state, setState] = useState<"idle" | "recording" | "busy">("idle");
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -2069,7 +2169,7 @@ function MicButton({
           type: recorder.mimeType || "audio/webm",
         });
         setState("busy");
-        void transcribeAudio(blob)
+        void transcribeAudio(blob, lang)
           .then(({ text, audioId }) => {
             if (text) onText(text, audioId);
             setState("idle");
@@ -2149,10 +2249,6 @@ function MicButton({
   );
 }
 
-// AI Settings → Voice: the speech-to-text connection, separate from the chat
-// models (it never appears in the chat model picker). Groq Whisper = the
-// accuracy-benchmark model on the fastest chips; transcription sits inside
-// Groq's free tier. One click reuses an already-connected Groq chat key.
 // A 4-sample silent WAV: played inside the tap so the same element may make
 // real sound after a seconds-long TTS generation (mobile autoplay rules).
 const SILENT_WAV =
@@ -2167,670 +2263,12 @@ const GEMINI_TTS_VOICES = [
   { id: "Aoede", label: "Aoede" },
 ];
 
-function VoicePanel() {
-  const { lang, t } = useI18n();
-  // Kept for the connection state the key-adding flow refreshes; the row that
-  // displayed it now lives in Capabilities.
-  const [, setStatus] = useState<VoiceStatus | null>(null);
-  const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
-  const [, setVision] = useState<VisionStatus | null>(null);
-  // What the household has signed in to. One list, shared by every slot.
-  const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
-  const [imageEngine, setImageEngine] = useState<VisionStatus | null>(null);
-  const [, setImageEngineChoiceState] = useState<
-    "none" | "workersai" | "gemini" | "openai" | "zhipu"
-  >("none");
-  const [cloudflareToken, setCloudflareToken] = useState("");
-  // A Workers AI-template token cannot name its own account (verified
-  // 2026-07-27), so the id has its own always-visible field.
-  const [cfAccountId, setCfAccountId] = useState("");
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [outputEngine, setOutputEngine] = useState<
-    "none" | "browser" | "gemini" | "local"
-  >("none");
-  const [outputVoice, setOutputVoice] = useState("Kore");
-  const [localTts, setLocalTts] = useState<LocalTtsStatus | null>(null);
-  // Deleting the local voice throws away a 150 MB download — ask first.
-  const [confirmRemoveLocal, setConfirmRemoveLocal] = useState(false);
-  const [localEnVoice, setLocalEnVoice] = useState("en_US-amy-medium");
-  const [localZhVoice, setLocalZhVoice] = useState("zh_CN-huayan-medium");
-  const [busy, setBusy] = useState(false);
-  const [error] = useState<string | null>(null);
-  const [outputError, setOutputError] = useState<string | null>(null);
-  const [visionError] = useState<string | null>(null);
-  const [freePicks, setFreePicks] = useState<FreePicksState | null>(null);
-  const firstFreePick =
-    freePicks?.items.voiceIn ??
-    freePicks?.items.voiceOut ??
-    freePicks?.items.vision ??
-    freePicks?.items.image ??
-    null;
-  const [freeBusy, setFreeBusy] = useState(false);
-
-  // A "Set It Up" jump from a routine chat parked an intent: land scrolled to
-  // the Engines card (where the tool gets configured), then clear the flag so
-  // an ordinary visit opens normally.
-  useEffect(() => {
-    try {
-      if (localStorage.getItem("vaenyx.toolsIntent")) {
-        localStorage.removeItem("vaenyx.toolsIntent");
-        document.getElementById("engines")?.scrollIntoView({ block: "start" });
-      }
-    } catch {
-      // Storage blocked: the settings page still opened.
-    }
-  }, []);
-
-  async function updateFreePicks() {
-    setFreeBusy(true);
-    try {
-      setFreePicks(await refreshFreePicks());
-    } catch {
-      // requestJson already raised the toast with the server's reason.
-    } finally {
-      setFreeBusy(false);
-    }
-  }
-
-  // One loader for first mount AND for after a key is added in any slot: a new
-  // connection can auto-fill empty slots server-side, so everything re-reads.
-  const refreshEngines = useCallback(() => {
-    void fetchVoiceStatus()
-      .then(setStatus)
-      .catch(() => undefined);
-    void fetchVoiceOutput()
-      .then((current) => {
-        setOutput(current);
-        setOutputEngine(current.engine);
-        if (current.voice && current.engine === "gemini") {
-          setOutputVoice(current.voice);
-        }
-        if (current.enVoice) setLocalEnVoice(current.enVoice);
-        if (current.zhVoice) setLocalZhVoice(current.zhVoice);
-      })
-      .catch(() => undefined);
-    void fetchModelProviders()
-      .then((result) => setProviders(result.providers))
-      .catch(() => undefined);
-    void fetchVisionStatus()
-      .then(setVision)
-      .catch(() => undefined);
-    void fetchImageEngine()
-      .then((current) => {
-        setImageEngine(current);
-        // Seed the dropdown from what is saved — without this the select shows
-        // "none" after a reload even while the engine is connected.
-        if (current.provider) {
-          setImageEngineChoiceState(
-            current.provider as "workersai" | "gemini" | "openai" | "zhipu",
-          );
-        }
-      })
-      .catch(() => undefined);
-    void fetchLocalTts()
-      .then(setLocalTts)
-      .catch(() => undefined);
-    void fetchFreePicks()
-      .then(setFreePicks)
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(refreshEngines, [refreshEngines]);
-
-  // While the 150 MB local-voice download runs, poll for progress; the moment
-  // it lands, switch the engine over (that is what the download was for).
-  useEffect(() => {
-    if (localTts?.status !== "downloading") return;
-    const timer = window.setInterval(() => {
-      void fetchLocalTts()
-        .then((next) => {
-          setLocalTts(next);
-          if (next.installed && next.status === "ready") {
-            void connectVoiceOutput({ engine: "local" })
-              .then((applied) => {
-                setOutput(applied);
-                setOutputEngine(applied.engine);
-              })
-              .catch(() => undefined);
-          }
-        })
-        .catch(() => undefined);
-    }, 2000);
-    return () => window.clearInterval(timer);
-  }, [localTts?.status]);
-
-  // Hear the current voice before living with it (Oskar, dev.154). The
-  // local engine tests Chinese and English separately (two voices).
-  async function testVoice(sampleLang?: "zh" | "en") {
-    setBusy(true);
-    setOutputError(null);
-    try {
-      const effectiveLang = sampleLang ?? (lang === "zh" ? "zh" : "en");
-      const sample =
-        effectiveLang === "zh"
-          ? "你好,我是 Vaenyx。这是当前音色的试听。"
-          : "Hi, I'm Vaenyx — this is how the current voice sounds.";
-      if (outputEngine === "gemini" || outputEngine === "local") {
-        // Mobile autoplay rules tie playback to the tap, and generation can
-        // take seconds — play a silent blip NOW so this element is allowed
-        // to sound later.
-        const audio = new Audio(SILENT_WAV);
-        void audio.play().catch(() => undefined);
-        const { audioId } = await synthesizeSpeech(sample);
-        audio.src = `/v1/voice/audio/${audioId}`;
-        await audio.play();
-      } else {
-        speakText(sample);
-      }
-    } catch (nextError) {
-      // Show the server's actual reason (e.g. a Gemini free-tier limit) —
-      // "is it connected?" misled when the engine WAS connected.
-      setOutputError(
-        nextError instanceof Error && nextError.message
-          ? nextError.message
-          : "Could not play the test — is the engine connected?",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function applyImageEngine(
-    next: "none" | "workersai" | "gemini" | "openai" | "zhipu",
-    apiKey?: string,
-  ) {
-    setImageEngineChoiceState(next);
-    // Cloudflare with no token yet is a half-made choice: show its field and
-    // wait, rather than saving something that cannot work.
-    if (next === "workersai" && !apiKey && !imageEngine?.connected) return;
-    setBusy(true);
-    setImageError(null);
-    try {
-      setImageEngine(
-        await setImageEngineChoice(next, apiKey, cfAccountId.trim() || undefined),
-      );
-      setCloudflareToken("");
-    } catch (nextError) {
-      setImageError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Could not change the picture engine.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function startLocalDownload() {
-    setOutputError(null);
-    try {
-      setLocalTts(await installLocalTts());
-    } catch {
-      setOutputError("Could not start the download.");
-    }
-  }
-
-  // Pick a local voice for its language slot; a not-yet-downloaded voice
-  // starts its ~60 MB download and the status poll shows the progress.
-  async function pickLocalVoice(id: string, lang: "zh" | "en") {
-    setOutputError(null);
-    if (lang === "en") setLocalEnVoice(id);
-    else setLocalZhVoice(id);
-    try {
-      setLocalTts(await setLocalVoice(id));
-    } catch {
-      setOutputError("Could not change the local voice.");
-    }
-  }
-
-  async function removeLocalVoice() {
-    setBusy(true);
-    setOutputError(null);
-    try {
-      setLocalTts(await removeLocalTtsDownload());
-      const current = await fetchVoiceOutput();
-      setOutput(current);
-      setOutputEngine(current.engine);
-    } catch {
-      setOutputError("Could not remove the download.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function applyOutput(input: {
-    engine: "none" | "browser" | "gemini" | "local";
-    voice?: string;
-  }) {
-    setBusy(true);
-    setOutputError(null);
-    try {
-      const next = await connectVoiceOutput(input);
-      setOutput(next);
-      setOutputEngine(next.engine);
-      if (next.voice && next.engine === "gemini") setOutputVoice(next.voice);
-    } catch (nextError) {
-      setOutputError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Could not update voice output.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="settings-card" id="engines">
-      <p className="eyebrow">AI</p>
-      {/* Not "Engines" any more (Oskar, 2026-07-31: "不要有 engine 那个选项").
-          Choosing which model does a job happens once, on that job's own row in
-          Capabilities. What is left here is the part a row cannot hold: pasting
-          a key, downloading the offline voice. */}
-      <h2>Model keys</h2>
-
-      {/* One-line purpose + the free-options refresh on the right (Oskar,
-          2026-07-27): what this page IS comes first, everything else is one of
-          four plainly-named sections below. The Tools OVERVIEW lives on its
-          own settings tab (Oskar, 2026-07-29); the voice/picture engines stay
-          right here in AI Settings. */}
-      <div className="engine-intro-row">
-        <p className="settings-card-copy">
-          Four small models beside your main one — for hearing, speaking,
-          reading pictures and making pictures. Any key joins one shared pool.
-        </p>
-        <button
-          className="secondary-button"
-          disabled={freeBusy}
-          onClick={() => void updateFreePicks()}
-          title="Asks your main model what is free right now"
-          type="button"
-        >
-          {freeBusy ? "Asking…" : "Update Free Options"}
-        </button>
-      </div>
-      {/* F6, with the answers and never behind a tooltip: attribution alone
-          reads as a citation, and a citation is the opposite of a caveat —
-          these are someone else's prices, and the model can simply be wrong. */}
-      {firstFreePick ? (
-        <p className="context-disclaimer">
-          {freeAnswerNotice(t, lang, firstFreePick)}
-        </p>
-      ) : null}
-
-      <section className="engine-section">
-      <h3 className="settings-subhead">Hearing <em>(Voice in)</em></h3>
-      <p className="settings-card-copy">
-        The mic button — what you say becomes text.
-      </p>
-      <SlotKeyAdd
-        capability="voice-in"
-        onConnected={refreshEngines}
-        providers={providers}
-      />
-      {error ? <p className="form-error">{error}</p> : null}
-      <FreePick href="https://console.groq.com" pick={freePicks?.items.voiceIn}>
-        Groq — free key, no card.
-      </FreePick>
-      </section>
-
-      <section className="engine-section">
-      <h3 className="settings-subhead">Speaking <em>(Voice out)</em></h3>
-      <p className="settings-card-copy">Replies read aloud.</p>
-      <SlotKeyAdd
-        capability="voice-out"
-        onConnected={refreshEngines}
-        providers={providers}
-      />
-      {/* Always reachable, not revealed by picking "local" in a drop-down that
-          no longer lives here (Oskar, 2026-07-31): the download IS the setup,
-          and setup you can only reach by first choosing the thing you have not
-          set up is a trap. */}
-      {localTts ? (
-        <>
-          {localTts.installed ? (
-            <>
-              <p className="settings-card-copy">
-                Speech is generated on this computer — nothing leaves it and
-                there is no per-use cost. The right voice is used per reply
-                by its language.
-              </p>
-              <div className="field-pair">
-              <label className="chat-font-field">
-                English Voice
-                <select
-                  className="task-select"
-                  disabled={busy || localTts.status === "downloading"}
-                  onChange={(event) =>
-                    void pickLocalVoice(event.target.value, "en")
-                  }
-                  value={localEnVoice}
-                >
-                  {localTts.voices
-                    .filter((voice) => voice.lang === "en")
-                    .map((voice) => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.label}
-                        {voice.downloaded ? "" : " — Downloads 60 MB"}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="chat-font-field">
-                Chinese Voice
-                <select
-                  className="task-select"
-                  disabled={busy || localTts.status === "downloading"}
-                  onChange={(event) =>
-                    void pickLocalVoice(event.target.value, "zh")
-                  }
-                  value={localZhVoice}
-                >
-                  {localTts.voices
-                    .filter((voice) => voice.lang === "zh")
-                    .map((voice) => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.label}
-                        {voice.downloaded ? "" : " — Downloads 60 MB"}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              </div>
-              {localTts.status === "downloading" ? (
-                <>
-                  <p className="settings-card-copy">
-                    Downloading… {localTts.progress}%
-                    {localTts.detail ? ` · ${localTts.detail}` : ""}
-                  </p>
-                  <progress
-                    className="local-tts-progress"
-                    max={100}
-                    value={localTts.progress}
-                  />
-                </>
-              ) : null}
-              <div className="model-card-actions">
-                {output?.engine !== "local" ? (
-                  <button
-                    className="primary-button"
-                    disabled={busy}
-                    onClick={() => void applyOutput({ engine: "local" })}
-                    type="button"
-                  >
-                    Use Local Voice
-                  </button>
-                ) : null}
-                <button
-                  className="secondary-button"
-                  disabled={busy}
-                  onClick={() => void testVoice("en")}
-                  type="button"
-                >
-                  Test English
-                </button>
-                <button
-                  className="secondary-button"
-                  disabled={busy}
-                  onClick={() => void testVoice("zh")}
-                  type="button"
-                >
-                  Test Chinese
-                </button>
-                {confirmRemoveLocal ? (
-                  <>
-                    <button
-                      className="text-button danger"
-                      disabled={busy}
-                      onClick={() => {
-                        setConfirmRemoveLocal(false);
-                        void removeLocalVoice();
-                      }}
-                      type="button"
-                    >
-                      Really Remove (150 MB)
-                    </button>
-                    <button
-                      className="text-button"
-                      onClick={() => setConfirmRemoveLocal(false)}
-                      type="button"
-                    >
-                      Keep
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="text-button"
-                    disabled={busy}
-                    onClick={() => setConfirmRemoveLocal(true)}
-                    type="button"
-                  >
-                    Remove Download
-                  </button>
-                )}
-              </div>
-            </>
-          ) : localTts?.status === "downloading" ? (
-            <>
-              <p className="settings-card-copy">
-                Downloading the speech engine and two voices (about 150 MB) —
-                this happens once. {localTts.progress}%
-                {localTts.detail ? ` · ${localTts.detail}` : ""}
-              </p>
-              <progress
-                className="local-tts-progress"
-                max={100}
-                value={localTts.progress}
-              />
-            </>
-          ) : (
-            <>
-              <p className="settings-card-copy">
-                A one-time download (about 150 MB) puts a neural voice on this
-                computer: fully offline, free forever, no key. Chinese and
-                English voices are included; the right one is picked per reply.
-              </p>
-              {localTts?.status === "error" && localTts.detail ? (
-                <p className="form-error">{localTts.detail}</p>
-              ) : null}
-              <div className="model-card-actions">
-                <button
-                  className="primary-button"
-                  disabled={busy}
-                  onClick={() => void startLocalDownload()}
-                  type="button"
-                >
-                  Download Local Voice (150 MB)
-                </button>
-              </div>
-            </>
-          )}
-        </>
-      ) : outputEngine === "browser" ? (
-        <>
-          <p className="settings-card-copy">
-            Using the device's built-in voice. Gemini TTS or Local Voice
-            above sound much more natural.
-          </p>
-          <div className="model-card-actions">
-            <button
-              className="secondary-button"
-              disabled={busy}
-              onClick={() => void testVoice()}
-              type="button"
-            >
-              Test Voice
-            </button>
-          </div>
-        </>
-      ) : outputEngine === "gemini" ? (
-        output?.engine === "gemini" ? (
-          <>
-            <label className="chat-font-field">
-              Voice
-              <select
-                className="task-select"
-                disabled={busy}
-                onChange={(event) => {
-                  setOutputVoice(event.target.value);
-                  void applyOutput({
-                    engine: "gemini",
-                    voice: event.target.value,
-                  });
-                }}
-                value={outputVoice}
-              >
-                {GEMINI_TTS_VOICES.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="model-card-actions">
-              <button
-                className="secondary-button"
-                disabled={busy}
-                onClick={() => void testVoice()}
-                type="button"
-              >
-                Test Voice
-              </button>
-            </div>
-          </>
-        ) : (
-          <p className="settings-card-copy">
-            Gemini is not connected yet — add its key under Models (a free
-            Google AI Studio key works), then pick it here.
-          </p>
-        )
-      ) : null}
-      {outputError ? <p className="form-error">{outputError}</p> : null}
-      <FreePick pick={freePicks?.items.voiceOut}>
-        Local Voice — free forever, works offline.
-      </FreePick>
-      </section>
-
-      <section className="engine-section">
-      <h3 className="settings-subhead">Vision <em>(Picture in)</em></h3>
-      <p className="settings-card-copy">
-        The camera button — a photo becomes words.
-      </p>
-      <SlotKeyAdd
-        capability="vision"
-        onConnected={refreshEngines}
-        providers={providers}
-      />
-      {visionError ? <p className="form-error">{visionError}</p> : null}
-      <FreePick
-        href="https://aistudio.google.com/apikey"
-        pick={freePicks?.items.vision}
-      >
-        Gemini — free Google AI Studio key.
-      </FreePick>
-      </section>
-
-      <section className="engine-section">
-      {/* A separate slot from Picture Input: reading a picture and drawing one
-          are different models. Empty = Vaenyx never tries to draw. */}
-      <h3 className="settings-subhead">Drawing <em>(Picture out)</em></h3>
-      <p className="settings-card-copy">
-        Ask in chat and a picture is made. Off means Vaenyx will not try.
-      </p>
-      {/* Cloudflare's token is typed HERE rather than under Models: it is the
-          one engine a household adds solely to make pictures, and sending them
-          to a different page to paste it is how a working setting turns into an
-          abandoned one. The account id is looked up from the token, so this
-          field is the only thing anyone has to find. */}
-      {!imageEngine?.connected ? (
-        <>
-          <label className="chat-font-field">
-            Workers AI Token
-            <input
-              autoCapitalize="off"
-              autoComplete="off"
-              className="key-input"
-              disabled={busy}
-              onChange={(event) => setCloudflareToken(event.target.value)}
-              placeholder="Paste the token from Cloudflare"
-              spellCheck={false}
-              type="text"
-              value={cloudflareToken}
-            />
-          </label>
-          {cloudflareToken.trim().length > 0 &&
-          cloudflareToken.trim().length < 40 ? (
-            <p className="settings-card-copy text-faint">
-              That looks shorter than a Cloudflare token (40 characters) — make
-              sure the whole value was copied.
-            </p>
-          ) : null}
-          {/* Always visible, not revealed-on-error: "where do I paste the id"
-              must never be a puzzle (Oskar, 2026-07-27). A broad token can
-              leave it empty; a Workers AI-template token needs it. */}
-          <label className="chat-font-field">
-            Account ID
-            <input
-              autoCapitalize="off"
-              autoComplete="off"
-              className="key-input"
-              disabled={busy}
-              onChange={(event) => setCfAccountId(event.target.value)}
-              placeholder="32 letters and digits"
-              spellCheck={false}
-              type="text"
-              value={cfAccountId}
-            />
-          </label>
-          <button
-            className="primary-button"
-            disabled={busy || cloudflareToken.trim().length === 0}
-            onClick={() => void applyImageEngine("workersai", cloudflareToken)}
-            type="button"
-          >
-            Save Token
-          </button>
-          <p className="settings-card-copy text-faint">
-            Cloudflare dashboard → My Profile → API Tokens → Create Token →
-            Workers AI template. The Account ID is in the address bar once you
-            are signed in — dash.cloudflare.com/&lt;that long code&gt;. A token
-            made from the template cannot tell us its account, so paste both.
-          </p>
-          {/* F5, not F1: the generic cloud notice claims memories, profile and
-              attachments go to the provider, which is NOT true of an image
-              provider — one English prompt goes. The real disclosure is the
-              other way round: the main model WRITES that prompt and can see
-              context, so it can word things the Owner never typed — which is
-              why the sent prompt is shown beside every generated picture. */}
-          <p className="context-disclaimer">
-            {t("legal.notice.modelConnect.pictures")}
-          </p>
-        </>
-      ) : null}
-      <SlotKeyAdd
-        capability="image"
-        exclude={["workersai"]}
-        notice="legal.notice.modelConnect.pictures"
-        onConnected={refreshEngines}
-        providers={providers}
-      />
-      <FreePick
-        href="https://dash.cloudflare.com/profile/api-tokens"
-        pick={freePicks?.items.image}
-      >
-        Cloudflare Workers AI — free, about 170 pictures a day.
-      </FreePick>
-      {imageError ? <p className="form-error">{imageError}</p> : null}
-      </section>
-    </section>
-  );
-}
-
 // The Tools page (its own settings tab, Oskar 2026-07-29): what Vaenyx can do
 // beyond chat — built-in tools that are always on, and what may come next.
-// The voice/picture ENGINES stay under AI Settings; this page is the map, the
-// suggestion channel, and the safety line: tools ship only from Vaenyx, and
-// community content can only NAME tools from this list, never bring its own.
+// Hearing, speaking and pictures are switched on and set up on their own rows
+// in AI Settings → Capabilities; this page is the map, the suggestion channel,
+// and the safety line: tools ship only from Vaenyx, and community content can
+// only NAME tools from this list, never bring its own.
 function ToolsPanel() {
   return (
     <section className="settings-card" id="tools">
@@ -2838,8 +2276,8 @@ function ToolsPanel() {
       <h2>Tools</h2>
       <p className="settings-card-copy">
         What Vaenyx can do beyond chat. Built-in tools are always on and never
-        leave this machine. Hearing, speaking and picture engines are set up
-        under AI Settings → Engines.
+        leave this machine. Hearing, speaking and pictures are set up on their
+        own rows under AI Settings → Capabilities.
       </p>
 
       <section className="engine-section">
@@ -7805,8 +7243,9 @@ function AskVaenyxPanel({
         label: lang === "zh" ? "读文档" : "Reading",
         ready: visionReady,
       },
-      // The one word with a chip and no kernel behind it yet: never "ready",
-      // so a Routine declaring it says so instead of failing halfway.
+      // Built for Chat, but a ROUTINE step does not carry it yet — the step
+      // runner has no way to hand a Method the grant. Never "ready" here, so a
+      // Routine declaring it says so instead of failing halfway.
       fetching: {
         label: lang === "zh" ? "取文件" : "Fetching",
         ready: false,
@@ -9817,18 +9256,16 @@ function SlotKeyAdd({
   }
   return (
     <div className="slot-key-add">
-      <select
-        className="task-select"
+      <Picker
+        ariaLabel="Which service this key is for"
         disabled={saving}
-        onChange={(event) => setPick(event.target.value)}
+        onChange={setPick}
+        options={candidates.map((candidate) => ({
+          label: candidate.name,
+          value: candidate.id,
+        }))}
         value={chosen}
-      >
-        {candidates.map((candidate) => (
-          <option key={candidate.id} value={candidate.id}>
-            {candidate.name}
-          </option>
-        ))}
-      </select>
+      />
       {/* type="text" + CSS masking, NOT type="password": a model key is not a
           login, and password fields make the browser offer to save it in its
           password manager. */}
@@ -10307,12 +9744,17 @@ function SubscriptionDoorPanel() {
 // One editable list of short strings — addresses, origins, hosts. Adding or
 // removing saves straight away, like the rest of Settings.
 function DoorList({
+  addLabel,
   draft,
   items,
   onChange,
   placeholder,
   setDraft,
 }: {
+  /** The Subscription Door's own card is English throughout; the Fetching
+   *  drawer beside it is not, so the one word on the button travels with the
+   *  caller rather than a second list being written to hold a translation. */
+  addLabel?: string;
   draft: string;
   items: string[];
   onChange: (next: string[]) => void;
@@ -10361,12 +9803,12 @@ function DoorList({
             value={draft}
           />
           <button className="text-button" type="submit">
-            Add
+            {addLabel ?? "Add"}
           </button>
         </form>
       ) : (
         <button
-          aria-label={`Add ${placeholder}`}
+          aria-label={`${addLabel ?? "Add"} ${placeholder}`}
           className="door-add"
           onClick={() => setAdding(true)}
           title="Add"
@@ -10379,28 +9821,24 @@ function DoorList({
   );
 }
 
-// WHAT IS FREE RIGHT NOW, in a window you open on purpose. Opens on the answer
+// WHAT IS FREE RIGHT NOW, in a window you open on purpose. It shows the answer
 // from last time — including WHICH MODEL said it and WHEN, because free tiers
-// change constantly and models state them wrongly with total confidence. The
-// Update button goes and asks again; the old answer stays on screen until a new
-// one lands, so you are never left staring at nothing.
+// change constantly and models state them wrongly with total confidence.
+//
+// Asking again is NOT a button in here. There is exactly one control that runs
+// the survey and it sits on the card behind this window, one press from the
+// page ("同类功能必须统一" — one job, one control): a second Update in here
+// would be the same job wearing a different hat, and the card's button already
+// opens this window on the fresh answer when it lands.
 function FreeModelsModal({
   lang,
   onClose,
+  picks,
 }: {
   lang: Lang;
   onClose: () => void;
+  picks: FreePicksState | null;
 }) {
-  const [picks, setPicks] = useState<FreePicksState | null>(null);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    void fetchFreePicks()
-      .then(setPicks)
-      .catch(() => setPicks({ items: {} }));
-  }, []);
-
   const slots: { key: keyof FreePicksState["items"]; label: string }[] = [
     { key: "voiceIn", label: lang === "zh" ? "听(声音进)" : "Hearing" },
     { key: "voiceOut", label: lang === "zh" ? "念(声音出)" : "Speaking" },
@@ -10422,8 +9860,8 @@ function FreeModelsModal({
       {picks === null ? null : found.length === 0 ? (
         <p className="settings-card-copy">
           {lang === "zh"
-            ? "还没查过。按下面的按钮问一次。"
-            : "Never checked. Press Update to ask."}
+            ? "还没查过。关掉这个窗口,按「再问一次」。"
+            : "Never checked. Close this and press Ask again."}
         </p>
       ) : (
         <div className="free-list">
@@ -10445,34 +9883,6 @@ function FreeModelsModal({
           })}
         </div>
       )}
-      {error ? <p className="form-error">{error}</p> : null}
-      <div className="modal-actions">
-        <button
-          className="primary-button"
-          disabled={running}
-          onClick={() => {
-            setRunning(true);
-            setError(null);
-            void refreshFreePicks()
-              .then(setPicks)
-              .catch((cause: unknown) =>
-                setError(
-                  cause instanceof Error ? cause.message : "Could not ask.",
-                ),
-              )
-              .finally(() => setRunning(false));
-          }}
-          type="button"
-        >
-          {running
-            ? lang === "zh"
-              ? "问着…"
-              : "Asking…"
-            : lang === "zh"
-              ? "更新"
-              : "Update"}
-        </button>
-      </div>
     </Modal>
   );
 }
@@ -10484,9 +9894,69 @@ function FreeModelsModal({
 //
 // Whatever is off here is out of reach of every Method, every mode and every
 // Token, whatever they say about themselves. A lower layer may only narrow.
+//
+// Each row also carries the SETUP for its own job — the key, the offline-voice
+// download, the Cloudflare token — folded away behind the arrow (Oskar,
+// 2026-07-31: "Model key 那里面的所有东西都要集成到 Capabilities 那个页面去").
+// There is no second card any more: whether a job may happen, which model does
+// it, and what that model needs are three answers to one question, and split
+// across two cards nobody could ever tell what was actually set.
+// Fetching is on this list for a different reason from the other four: its
+// drawer holds no key at all, it holds the FOLDER WHITELIST. Switching the
+// capability on reads nothing until a folder is named there, which is the
+// second lock — and the only place in the app where that lock can be opened.
+//
+// Reading and Web have nothing to set up — they ride the main model — but they
+// are on the list because every drawer now also holds that row's TEST, and a
+// capability you cannot try is one you cannot trust. All seven are here: the
+// two that cannot be tested by machine say so in their own drawer instead of
+// showing a button that would have to pretend.
+const SETUP_ROWS = new Set([
+  "hearing",
+  "speaking",
+  "vision",
+  "drawing",
+  "reading",
+  "fetching",
+  "web",
+]);
+
+// WHAT ONE PRESS REALLY DOES, said in front of the button instead of after it.
+// Two of these spend the Owner's own money on their own account, and finding
+// that out afterwards is how a Test button becomes one nobody dares press.
+//
+// A row missing from this table gets no Test button at all — Hearing and
+// Speaking, the two that cannot be tested by machine without pretending
+// (there is no recording to feed one, and nothing here can listen to the
+// other). Their drawers say so in words instead.
+const TEST_COST: Record<string, { en: string; zh: string }> = {
+  drawing: {
+    en: "Really makes one picture with the engine on this row. Free on Cloudflare Workers AI and Zhipu; on a paid key it costs whatever one picture costs.",
+    zh: "用这一行的引擎真的画一张图。Cloudflare Workers AI 和智谱是免费的;付费 key 就是一张图的钱。",
+  },
+  fetching: {
+    en: "Looks inside the folders you named and really opens one text file from them. No model is used, nothing is sent anywhere, and the file's contents are not shown.",
+    zh: "到你点名的文件夹里看一眼,并真的打开里面的一个文字文件。不用模型,什么都不发出去,文件内容也不会显示出来。",
+  },
+  reading: {
+    en: "Reads a one-page test document. If your main model reads PDFs itself, that is one small request to it; otherwise nothing leaves this machine.",
+    zh: "读一份一页的测试文档。如果主模型自己会读 PDF,那是给它的一次很小的请求;不然什么都不出这台机器。",
+  },
+  vision: {
+    en: "Sends one small test picture to the model on this row and checks whether it can say what is in it. On a paid key that is one small request.",
+    zh: "把一张很小的测试图发给这一行的模型,看它能不能说出里面是什么。用付费 key 的话,这是一次很小的请求。",
+  },
+  web: {
+    en: "Asks your main model to look something up on the internet once, and checks that it really searched. It can take half a minute.",
+    zh: "让主模型上网查一次,并确认它真的去搜了。可能要半分钟。",
+  },
+};
+
 function CapabilitiesPanel() {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const [global, setGlobal] = useState<Record<string, boolean> | null>(null);
+  // Told apart from "not loaded yet", because the two need different sentences.
+  const [ceilingUnread, setCeilingUnread] = useState(false);
   const [implemented, setImplemented] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [showFree, setShowFree] = useState(false);
@@ -10495,30 +9965,308 @@ function CapabilitiesPanel() {
   const [speakingEngine, setSpeakingEngine] = useState("none");
   const [visionEngine, setVisionEngineState] = useState("none");
   const [drawingEngine, setDrawingEngine] = useState("none");
+  // Which row has its setup showing. One at a time: four drawers open at once
+  // is a wall of forms with the switches lost somewhere inside it.
+  const [openSetup, setOpenSetup] = useState<string | null>(null);
+  // Everything below belongs to the setup drawers — what used to be a separate
+  // card of its own.
+  const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
+  const [imageEngine, setImageEngine] = useState<VisionStatus | null>(null);
+  const [cloudflareToken, setCloudflareToken] = useState("");
+  // A Workers AI-template token cannot name its own account (verified
+  // 2026-07-27), so the id has its own always-visible field.
+  const [cfAccountId, setCfAccountId] = useState("");
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [outputVoice, setOutputVoice] = useState("Kore");
+  const [localTts, setLocalTts] = useState<LocalTtsStatus | null>(null);
+  // Deleting the local voice throws away a 150 MB download — ask first.
+  const [confirmRemoveLocal, setConfirmRemoveLocal] = useState(false);
+  const [localEnVoice, setLocalEnVoice] = useState("en_US-amy-medium");
+  const [localZhVoice, setLocalZhVoice] = useState("zh_CN-huayan-medium");
+  const [outputError, setOutputError] = useState<string | null>(null);
+  // Separate from `busy`, which names the row whose switch is being written: a
+  // drawer's own buttons must not grey out because another row is mid-save.
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [freePicks, setFreePicks] = useState<FreePicksState | null>(null);
+  // The free-options survey is a real request to the main model and can take
+  // half a minute, so its button has to say it is working.
+  const [freeBusy, setFreeBusy] = useState(false);
+  // Which row is being tested right now, and what each row's last test said.
+  // Kept per row rather than one result: a test you ran a minute ago is still
+  // the answer for that row, and clearing it when you open another one would
+  // throw away the only record of what happened.
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<
+    Record<string, CapabilityTestResult>
+  >({});
+  // The folders "Files on this machine" may look in, and the one being typed.
+  const [folders, setFolders] = useState<string[]>([]);
+  const [folderDraft, setFolderDraft] = useState("");
+  // A list, not one string: each refused folder gets its own line, because
+  // three reasons run together on one line is three reasons nobody reads.
+  const [folderErrors, setFolderErrors] = useState<string[]>([]);
+  // The engine the SERVER has, never the one the row's chooser happens to
+  // display: a blank slot is back-filled below with the main model's name, so
+  // the chooser can read "gemini" while nothing is connected.
+  const outputEngine = output?.engine ?? "none";
 
-  useEffect(() => {
+  // One loader for first mount AND for after a key is added in any drawer: a
+  // new connection can auto-fill empty slots server-side, so every slot
+  // re-reads rather than only the one that was typed into.
+  const reload = useCallback(() => {
     void fetchCapabilities()
       .then((result) => {
         setGlobal(result.global);
         setImplemented(result.implemented);
+        setCeilingUnread(false);
+        // The speak buttons on the chat page read this too, and they are a
+        // different component tree that will not re-fetch on its own.
+        noteSpeakingOn(result.global);
       })
-      .catch(() => setGlobal(null));
+      .catch(() => setCeilingUnread(true));
     void fetchVoiceStatus()
       .then((status) => setHearingEngine(status.provider ?? "none"))
       .catch(() => undefined);
     void fetchVoiceOutput()
-      .then((status) => setSpeakingEngine(status.engine ?? "none"))
+      .then((status) => {
+        setOutput(status);
+        setSpeakingEngine(status.engine ?? "none");
+        if (status.voice && status.engine === "gemini") {
+          setOutputVoice(status.voice);
+        }
+        if (status.enVoice) setLocalEnVoice(status.enVoice);
+        if (status.zhVoice) setLocalZhVoice(status.zhVoice);
+      })
       .catch(() => undefined);
     void fetchVisionStatus()
       .then((status) => setVisionEngineState(status.provider ?? "none"))
       .catch(() => undefined);
     void fetchImageEngine()
-      .then((status) => setDrawingEngine(status.provider ?? "none"))
+      .then((status) => {
+        setImageEngine(status);
+        setDrawingEngine(status.provider ?? "none");
+      })
       .catch(() => undefined);
     void fetchModelProviders()
       .then((result) => setProviders(result.providers))
       .catch(() => undefined);
+    void fetchLocalTts()
+      .then(setLocalTts)
+      .catch(() => undefined);
+    void fetchFreePicks()
+      .then(setFreePicks)
+      .catch(() => undefined);
+    void fetchCapabilityFolders()
+      .then((result) => setFolders(result.folders))
+      .catch(() => undefined);
   }, []);
+
+  useEffect(reload, [reload]);
+
+  // A "Set It Up" jump from a routine chat parked an intent: land scrolled to
+  // this card (where the tool gets switched on and set up), then clear the flag
+  // so an ordinary visit opens normally.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("vaenyx.toolsIntent")) {
+        localStorage.removeItem("vaenyx.toolsIntent");
+        document.getElementById("engines")?.scrollIntoView({ block: "start" });
+      }
+    } catch {
+      // Storage blocked: the settings page still opened.
+    }
+  }, []);
+
+  // While the 150 MB local-voice download runs, poll for progress; the moment
+  // it lands, switch the engine over (that is what the download was for).
+  // This lives on the card and NOT inside the drawer: a drawer that is closed
+  // is unmounted, and an unmounted interval means a finished download that
+  // never switches anything on.
+  useEffect(() => {
+    if (localTts?.status !== "downloading") return;
+    const timer = window.setInterval(() => {
+      void fetchLocalTts()
+        .then((next) => {
+          setLocalTts(next);
+          if (next.installed && next.status === "ready") {
+            void connectVoiceOutput({ engine: "local" })
+              .then((applied) => {
+                setOutput(applied);
+                setSpeakingEngine(applied.engine ?? "none");
+              })
+              .catch(() => undefined);
+          }
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [localTts?.status]);
+
+  // Ask the main model what is free right now. This is the "Update Free
+  // Options" button the old Model keys card had, restored to one press from
+  // the page when that card was folded into this one.
+  //
+  // The window opens on the answer that just arrived: everything this press
+  // changes lives inside that window, and a button whose entire effect is
+  // hidden behind another button is a button that did nothing.
+  async function updateFreeOptions() {
+    setFreeBusy(true);
+    try {
+      setFreePicks(await refreshFreePicks());
+      setShowFree(true);
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error
+          ? error.message
+          : lang === "zh"
+            ? "问不到。"
+            : "Could not ask.",
+      );
+    } finally {
+      setFreeBusy(false);
+    }
+  }
+
+  // Really do this one job, once, and say what happened. The three outcomes
+  // come back from the server already worded — it is the only side that knows
+  // which engine answered and what it said.
+  async function runTest(id: string) {
+    setTesting(id);
+    try {
+      const result = await runCapabilityTest(id, lang === "zh" ? "zh" : "en");
+      setTestResults((current) => ({ ...current, [id]: result }));
+    } catch (error) {
+      // The test never reached the server (offline, session expired). That is a
+      // failure of the test, not of the capability, and it is worded as one.
+      setTestResults((current) => ({
+        ...current,
+        [id]: {
+          status: "failed",
+          engine: "",
+          detail:
+            error instanceof Error
+              ? error.message
+              : lang === "zh"
+                ? "测试没跑起来。"
+                : "The test could not be run.",
+        },
+      }));
+    } finally {
+      // Always back to normal: a button stuck on "Testing…" is its own lie.
+      setTesting(null);
+    }
+  }
+
+  // Hear the current voice before living with it (Oskar, dev.154). The
+  // local engine tests Chinese and English separately (two voices).
+  async function testVoice(sampleLang?: "zh" | "en") {
+    // Speaking has a switch like everything else, and this is the one control
+    // that would otherwise walk past it: the browser voice never touches the
+    // server, so nothing else would ever ask.
+    if (global && global.speaking !== true) {
+      setOutputError(
+        lang === "zh"
+          ? "「说话」这一项被你关掉了。要用的话,把这一行的开关打开。"
+          : "Speaking is switched off. Turn this row's switch on to use it.",
+      );
+      return;
+    }
+    setSetupBusy(true);
+    setOutputError(null);
+    try {
+      const effectiveLang = sampleLang ?? (lang === "zh" ? "zh" : "en");
+      const sample =
+        effectiveLang === "zh"
+          ? "你好,我是 Vaenyx。这是当前音色的试听。"
+          : "Hi, I'm Vaenyx — this is how the current voice sounds.";
+      if (outputEngine === "gemini" || outputEngine === "local") {
+        // Mobile autoplay rules tie playback to the tap, and generation can
+        // take seconds — play a silent blip NOW so this element is allowed
+        // to sound later.
+        const audio = new Audio(SILENT_WAV);
+        void audio.play().catch(() => undefined);
+        const { audioId } = await synthesizeSpeech(sample);
+        audio.src = `/v1/voice/audio/${audioId}`;
+        await audio.play();
+      } else {
+        speakText(sample);
+      }
+    } catch (nextError) {
+      // Show the server's actual reason (e.g. a Gemini free-tier limit) —
+      // "is it connected?" misled when the engine WAS connected.
+      setOutputError(
+        nextError instanceof Error && nextError.message
+          ? nextError.message
+          : lang === "zh"
+            ? "试听放不出来 —— 引擎连上了吗?"
+            : "Could not play the test — is the engine connected?",
+      );
+    } finally {
+      setSetupBusy(false);
+    }
+  }
+
+  async function saveWorkersAiToken() {
+    setSetupBusy(true);
+    setImageError(null);
+    try {
+      const status = await setImageEngineChoice(
+        "workersai",
+        cloudflareToken.trim(),
+        cfAccountId.trim() || undefined,
+      );
+      setImageEngine(status);
+      // The row's chooser has to move the instant the token saves, or the two
+      // halves of one decision disagree on the same screen.
+      setDrawingEngine(status.provider ?? "none");
+      setCloudflareToken("");
+    } catch (nextError) {
+      setImageError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not change the picture engine.",
+      );
+    } finally {
+      setSetupBusy(false);
+    }
+  }
+
+  async function startLocalDownload() {
+    setOutputError(null);
+    try {
+      setLocalTts(await installLocalTts());
+    } catch {
+      setOutputError("Could not start the download.");
+    }
+  }
+
+  // Pick a local voice for its language slot; a not-yet-downloaded voice
+  // starts its ~60 MB download and the status poll shows the progress.
+  async function pickLocalVoice(id: string, slotLang: "zh" | "en") {
+    setOutputError(null);
+    if (slotLang === "en") setLocalEnVoice(id);
+    else setLocalZhVoice(id);
+    try {
+      setLocalTts(await setLocalVoice(id));
+    } catch {
+      setOutputError("Could not change the local voice.");
+    }
+  }
+
+  async function removeLocalVoice() {
+    setSetupBusy(true);
+    setOutputError(null);
+    try {
+      setLocalTts(await removeLocalTtsDownload());
+      const current = await fetchVoiceOutput();
+      setOutput(current);
+      setSpeakingEngine(current.engine ?? "none");
+    } catch {
+      setOutputError("Could not remove the download.");
+    } finally {
+      setSetupBusy(false);
+    }
+  }
 
   // WHICH MODEL DOES THIS JOB, on the same row as WHETHER IT MAY (Oskar asked
   // four times). They are the two halves of one capability; split across two
@@ -10570,7 +10318,10 @@ function CapabilitiesPanel() {
     string,
     | {
         options: PickerOption[];
-        set: (next: string) => Promise<void>;
+        /** `voice` is Speaking's alone — the Gemini voices are a property of
+         *  the connection, so choosing one goes through the same call that
+         *  chose the engine rather than a second path that could drift. */
+        set: (next: string, voice?: string) => Promise<void>;
         value: string;
       }
     | undefined
@@ -10581,6 +10332,7 @@ function CapabilitiesPanel() {
         const status = await setImageEngineChoice(
           next as "none" | "workersai" | "gemini" | "openai" | "zhipu",
         );
+        setImageEngine(status);
         setDrawingEngine(status.provider ?? "none");
       },
       value: drawingEngine,
@@ -10609,11 +10361,16 @@ function CapabilitiesPanel() {
           value: "local",
         },
       ]),
-      set: async (next) => {
+      set: async (next, voice) => {
         const status = await connectVoiceOutput({
           engine: next as "none" | "browser" | "gemini" | "local",
+          ...(voice ? { voice } : {}),
         });
+        setOutput(status);
         setSpeakingEngine(status.engine ?? "none");
+        if (status.voice && status.engine === "gemini") {
+          setOutputVoice(status.voice);
+        }
       },
       value: speakingEngine,
     },
@@ -10644,7 +10401,11 @@ function CapabilitiesPanel() {
       await engine.set(next);
     } catch (error) {
       showErrorToast(
-        error instanceof Error ? error.message : "Could not change that.",
+        error instanceof Error
+          ? error.message
+          : lang === "zh"
+            ? "改不了。"
+            : "Could not change that.",
       );
     } finally {
       setBusy(null);
@@ -10654,7 +10415,11 @@ function CapabilitiesPanel() {
   async function flip(id: string, on: boolean) {
     setBusy(id);
     try {
-      setGlobal(await updateCapabilities({ [id]: on }));
+      const next = await updateCapabilities({ [id]: on }, lang);
+      setGlobal(next);
+      // Switching Speaking back on has to bring the chat page's speak buttons
+      // back without a reload, and switching it off has to take them away.
+      noteSpeakingOn(next);
       // The row shows a model the moment you switch it on, so that model has to
       // be the one really wired up — otherwise the display is a promise the
       // machine never made. Only ever fills a blank; it never overrides a
@@ -10675,90 +10440,790 @@ function CapabilitiesPanel() {
       }
     } catch (error) {
       showErrorToast(
-        error instanceof Error ? error.message : "Could not change that.",
+        error instanceof Error
+          ? error.message
+          : lang === "zh"
+            ? "改不了。"
+            : "Could not change that.",
       );
     } finally {
       setBusy(null);
     }
   }
 
-  if (!global) return null;
+  // Speaking's voice list belongs to the Gemini connection, so choosing one
+  // goes back through the connection rather than through a second setting.
+  async function applyGeminiVoice(voice: string) {
+    setSetupBusy(true);
+    setOutputError(null);
+    try {
+      setOutputVoice(voice);
+      await engines.speaking?.set("gemini", voice);
+    } catch (nextError) {
+      setOutputError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not update voice output.",
+      );
+    } finally {
+      setSetupBusy(false);
+    }
+  }
+
+  // F6 (copy pack): a free-option line that came from the model — rather than
+  // from the hand-checked shipped list — carries the may-be-wrong caveat right
+  // beside it. Only one drawer is open at a time, so it appears at most once.
+  function freeAnswerLine(
+    pick: { checkedAt: string; source: string } | undefined,
+  ) {
+    if (!pick) return null;
+    return (
+      <p className="context-disclaimer">{freeAnswerNotice(t, lang, pick)}</p>
+    );
+  }
+
+  function hearingSetup() {
+    return (
+      <>
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "麦克风按钮 —— 你说的话变成文字。"
+            : "The mic button — what you say becomes text."}
+        </p>
+        <SlotKeyAdd
+          capability="voice-in"
+          onConnected={reload}
+          providers={providers}
+        />
+        <FreePick
+          href="https://console.groq.com"
+          pick={freePicks?.items.voiceIn}
+        >
+          {lang === "zh"
+            ? "Groq —— 免费 key,不用绑卡。"
+            : "Groq — free key, no card."}
+        </FreePick>
+        {freeAnswerLine(freePicks?.items.voiceIn)}
+        {/* The one row with no Test button, and the reason is worth saying out
+            loud rather than leaving as a gap: a real test needs a real
+            recording of a real voice, and there is none on this machine to
+            send. Making one with the voice on the row above would tie two
+            engines together, so a failure could not be pinned on either. */}
+        <p className="settings-card-copy text-faint">
+          {lang === "zh"
+            ? "这一项 Vaenyx 自己测不了 —— 它得有一段真人说话的录音。到聊天里按一下麦克风说几句:你说的话应该变成文字出现。"
+            : "Vaenyx cannot test this one for you — it would need a real recording of a real voice. Press the microphone in a chat and say a few words: what you said should come back as text."}
+        </p>
+      </>
+    );
+  }
+
+  function localVoiceOptions(voiceLang: "zh" | "en"): PickerOption[] {
+    return (localTts?.voices ?? [])
+      .filter((voice) => voice.lang === voiceLang)
+      .map((voice) => ({
+        label: voice.downloaded
+          ? voice.label
+          : `${voice.label}${lang === "zh" ? " —— 需下载 60 MB" : " — Downloads 60 MB"}`,
+        value: voice.id,
+      }));
+  }
+
+  function speakingSetup() {
+    return (
+      <>
+        <p className="settings-card-copy">
+          {lang === "zh" ? "回复念出来。" : "Replies read aloud."}
+        </p>
+        <SlotKeyAdd
+          capability="voice-out"
+          onConnected={reload}
+          providers={providers}
+        />
+        {/* Always reachable, not revealed by first choosing "local" in the
+            row's chooser (Oskar, 2026-07-31): the download IS the setup, and
+            setup you can only reach by first choosing the thing you have not
+            set up is a trap. */}
+        {localTts ? (
+          localTts.installed ? (
+            <>
+              <p className="settings-card-copy">
+                {lang === "zh"
+                  ? "语音在这台电脑上生成 —— 什么都不出去,也没有每次的费用。回复是哪种语言,就用哪个音色。"
+                  : "Speech is generated on this computer — nothing leaves it and there is no per-use cost. The right voice is used per reply by its language."}
+              </p>
+              <div className="field-pair">
+                <div className="chat-font-field">
+                  <span>{lang === "zh" ? "英文音色" : "English Voice"}</span>
+                  <Picker
+                    ariaLabel={lang === "zh" ? "英文音色" : "English voice"}
+                    disabled={setupBusy || localTts.status === "downloading"}
+                    onChange={(next) => void pickLocalVoice(next, "en")}
+                    options={localVoiceOptions("en")}
+                    value={localEnVoice}
+                  />
+                </div>
+                <div className="chat-font-field">
+                  <span>{lang === "zh" ? "中文音色" : "Chinese Voice"}</span>
+                  <Picker
+                    ariaLabel={lang === "zh" ? "中文音色" : "Chinese voice"}
+                    disabled={setupBusy || localTts.status === "downloading"}
+                    onChange={(next) => void pickLocalVoice(next, "zh")}
+                    options={localVoiceOptions("zh")}
+                    value={localZhVoice}
+                  />
+                </div>
+              </div>
+              {localTts.status === "downloading" ? (
+                <>
+                  <p className="settings-card-copy">
+                    {lang === "zh" ? "下载中… " : "Downloading… "}
+                    {localTts.progress}%
+                    {localTts.detail ? ` · ${localTts.detail}` : ""}
+                  </p>
+                  <progress
+                    className="local-tts-progress"
+                    max={100}
+                    value={localTts.progress}
+                  />
+                </>
+              ) : null}
+              <div className="model-card-actions">
+                {/* The test plays whatever engine is live, so it only belongs
+                    here while the local one IS live — otherwise pressing it
+                    beside the local voices would sound a different engine. */}
+                {outputEngine === "local" ? (
+                  <>
+                    <button
+                      className="secondary-button"
+                      disabled={setupBusy}
+                      onClick={() => void testVoice("en")}
+                      type="button"
+                    >
+                      {lang === "zh" ? "试听英文" : "Test English"}
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={setupBusy}
+                      onClick={() => void testVoice("zh")}
+                      type="button"
+                    >
+                      {lang === "zh" ? "试听中文" : "Test Chinese"}
+                    </button>
+                  </>
+                ) : null}
+                {confirmRemoveLocal ? (
+                  <>
+                    <button
+                      className="text-button danger"
+                      disabled={setupBusy}
+                      onClick={() => {
+                        setConfirmRemoveLocal(false);
+                        void removeLocalVoice();
+                      }}
+                      type="button"
+                    >
+                      {lang === "zh"
+                        ? "确认删除(150 MB)"
+                        : "Really Remove (150 MB)"}
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() => setConfirmRemoveLocal(false)}
+                      type="button"
+                    >
+                      {lang === "zh" ? "留着" : "Keep"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="text-button"
+                    disabled={setupBusy}
+                    onClick={() => setConfirmRemoveLocal(true)}
+                    type="button"
+                  >
+                    {lang === "zh" ? "删除下载" : "Remove Download"}
+                  </button>
+                )}
+              </div>
+            </>
+          ) : localTts.status === "downloading" ? (
+            <>
+              <p className="settings-card-copy">
+                {lang === "zh"
+                  ? "正在下载语音引擎和两个音色(约 150 MB)—— 只下载这一次。 "
+                  : "Downloading the speech engine and two voices (about 150 MB) — this happens once. "}
+                {localTts.progress}%
+                {localTts.detail ? ` · ${localTts.detail}` : ""}
+              </p>
+              <progress
+                className="local-tts-progress"
+                max={100}
+                value={localTts.progress}
+              />
+            </>
+          ) : (
+            <>
+              <p className="settings-card-copy">
+                {lang === "zh"
+                  ? "下载一次(约 150 MB),这台电脑上就有了一个神经网络语音:完全离线,永久免费,不用 key。中文和英文音色都在里面,按回复的语言自动选。"
+                  : "A one-time download (about 150 MB) puts a neural voice on this computer: fully offline, free forever, no key. Chinese and English voices are included; the right one is picked per reply."}
+              </p>
+              {localTts.status === "error" && localTts.detail ? (
+                <p className="form-error">{localTts.detail}</p>
+              ) : null}
+              <div className="model-card-actions">
+                <button
+                  className="primary-button"
+                  disabled={setupBusy}
+                  onClick={() => void startLocalDownload()}
+                  type="button"
+                >
+                  {lang === "zh"
+                    ? "下载本机语音(150 MB)"
+                    : "Download Local Voice (150 MB)"}
+                </button>
+              </div>
+            </>
+          )
+        ) : null}
+        {/* Independent of the block above, not its `else` — the two describe
+            different engines, and the old chain hid these behind a local-voice
+            status that is present on every healthy machine. */}
+        {outputEngine === "gemini" ? (
+          <>
+            <div className="chat-font-field">
+              <span>{lang === "zh" ? "音色" : "Voice"}</span>
+              <Picker
+                ariaLabel={lang === "zh" ? "Gemini 音色" : "Gemini voice"}
+                disabled={setupBusy}
+                onChange={(next) => void applyGeminiVoice(next)}
+                options={GEMINI_TTS_VOICES.map((option) => ({
+                  label: option.label,
+                  value: option.id,
+                }))}
+                value={outputVoice}
+              />
+            </div>
+            <div className="model-card-actions">
+              <button
+                className="secondary-button"
+                disabled={setupBusy}
+                onClick={() => void testVoice()}
+                type="button"
+              >
+                {lang === "zh" ? "试听" : "Test Voice"}
+              </button>
+            </div>
+          </>
+        ) : null}
+        {outputEngine === "browser" ? (
+          <>
+            <p className="settings-card-copy">
+              {lang === "zh"
+                ? "用的是这台设备自带的语音。Gemini TTS 或本机语音听起来自然得多。"
+                : "Using the device's built-in voice. Gemini TTS or the local voice sound much more natural."}
+            </p>
+            <div className="model-card-actions">
+              <button
+                className="secondary-button"
+                disabled={setupBusy}
+                onClick={() => void testVoice()}
+                type="button"
+              >
+                {lang === "zh" ? "试听" : "Test Voice"}
+              </button>
+            </div>
+          </>
+        ) : null}
+        {outputError ? <p className="form-error">{outputError}</p> : null}
+        <FreePick pick={freePicks?.items.voiceOut}>
+          {lang === "zh"
+            ? "本机语音 —— 永久免费,离线可用。"
+            : "Local Voice — free forever, works offline."}
+        </FreePick>
+        {freeAnswerLine(freePicks?.items.voiceOut)}
+      </>
+    );
+  }
+
+  function visionSetup() {
+    return (
+      <>
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "相机按钮 —— 一张照片变成文字。"
+            : "The camera button — a photo becomes words."}
+        </p>
+        <SlotKeyAdd
+          capability="vision"
+          onConnected={reload}
+          providers={providers}
+        />
+        <FreePick
+          href="https://aistudio.google.com/apikey"
+          pick={freePicks?.items.vision}
+        >
+          {lang === "zh"
+            ? "Gemini —— Google AI Studio 的免费 key。"
+            : "Gemini — free Google AI Studio key."}
+        </FreePick>
+        {freeAnswerLine(freePicks?.items.vision)}
+      </>
+    );
+  }
+
+  function drawingSetup() {
+    return (
+      <>
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "在聊天里说一句,就画出一张图。关掉,Vaenyx 就不会去画。"
+            : "Ask in chat and a picture is made. Off means Vaenyx will not try."}
+        </p>
+        {/* Cloudflare's token is typed HERE rather than under Models: it is the
+            one engine a household adds solely to make pictures, and sending
+            them to a different page to paste it is how a working setting turns
+            into an abandoned one. */}
+        {!imageEngine?.connected ? (
+          <>
+            <div className="chat-font-field">
+              <span>
+                {lang === "zh" ? "Workers AI 令牌" : "Workers AI Token"}
+              </span>
+              <input
+                autoCapitalize="off"
+                autoComplete="off"
+                className="key-input"
+                disabled={setupBusy}
+                onChange={(event) => setCloudflareToken(event.target.value)}
+                placeholder={
+                  lang === "zh"
+                    ? "粘贴 Cloudflare 那边的令牌"
+                    : "Paste the token from Cloudflare"
+                }
+                spellCheck={false}
+                type="text"
+                value={cloudflareToken}
+              />
+            </div>
+            {cloudflareToken.trim().length > 0 &&
+            cloudflareToken.trim().length < 40 ? (
+              <p className="settings-card-copy text-faint">
+                {lang === "zh"
+                  ? "这比 Cloudflare 的令牌短(应该是 40 个字符)—— 确认整段都复制到了。"
+                  : "That looks shorter than a Cloudflare token (40 characters) — make sure the whole value was copied."}
+              </p>
+            ) : null}
+            {/* Always visible, not revealed-on-error: "where do I paste the id"
+                must never be a puzzle (Oskar, 2026-07-27). A broad token can
+                leave it empty; a Workers AI-template token needs it. */}
+            <div className="chat-font-field">
+              <span>{lang === "zh" ? "账户 ID" : "Account ID"}</span>
+              <input
+                autoCapitalize="off"
+                autoComplete="off"
+                className="key-input"
+                disabled={setupBusy}
+                onChange={(event) => setCfAccountId(event.target.value)}
+                placeholder={
+                  lang === "zh" ? "32 位字母和数字" : "32 letters and digits"
+                }
+                spellCheck={false}
+                type="text"
+                value={cfAccountId}
+              />
+            </div>
+            <button
+              className="primary-button"
+              disabled={setupBusy || cloudflareToken.trim().length === 0}
+              onClick={() => void saveWorkersAiToken()}
+              type="button"
+            >
+              {lang === "zh" ? "保存令牌" : "Save Token"}
+            </button>
+            <p className="settings-card-copy text-faint">
+              {lang === "zh"
+                ? "Cloudflare 控制台 → My Profile → API Tokens → Create Token → Workers AI 模板。登录后地址栏里就有账户 ID —— dash.cloudflare.com/<那串长码>。用模板做出来的令牌说不出自己属于哪个账户,所以两个都要粘。"
+                : "Cloudflare dashboard → My Profile → API Tokens → Create Token → Workers AI template. The Account ID is in the address bar once you are signed in — dash.cloudflare.com/<that long code>. A token made from the template cannot tell us its account, so paste both."}
+            </p>
+            {/* F5, not F1: the generic cloud notice claims memories, profile and
+                attachments go to the provider, which is NOT true of an image
+                provider — one English prompt goes. The real disclosure is the
+                other way round: the main model WRITES that prompt and can see
+                context, so it can word things the Owner never typed — which is
+                why the sent prompt is shown beside every generated picture. */}
+            <p className="context-disclaimer">
+              {t("legal.notice.modelConnect.pictures")}
+            </p>
+          </>
+        ) : null}
+        <SlotKeyAdd
+          capability="image"
+          exclude={["workersai"]}
+          notice="legal.notice.modelConnect.pictures"
+          onConnected={reload}
+          providers={providers}
+        />
+        <FreePick
+          href="https://dash.cloudflare.com/profile/api-tokens"
+          pick={freePicks?.items.image}
+        >
+          {lang === "zh"
+            ? "Cloudflare Workers AI —— 免费,一天大约 170 张。"
+            : "Cloudflare Workers AI — free, about 170 pictures a day."}
+        </FreePick>
+        {freeAnswerLine(freePicks?.items.image)}
+        {imageError ? <p className="form-error">{imageError}</p> : null}
+      </>
+    );
+  }
+
+  // Every refusal has a different fix, so each one gets its own sentence. A
+  // single "that folder could not be added" would leave the Owner guessing
+  // between a typo, a folder that is not there, and one Vaenyx will never open.
+  function folderRefusal(reason: string): string {
+    if (reason === "not-absolute") {
+      return lang === "zh"
+        ? "要写完整路径,例如 C:\\Users\\你\\Documents。"
+        : "Give the full path, like C:\\Users\\you\\Documents.";
+    }
+    if (reason === "not-a-folder") {
+      return lang === "zh"
+        ? "那是一个文件,不是文件夹。"
+        : "That is a file, not a folder.";
+    }
+    if (reason === "protected") {
+      return lang === "zh"
+        ? "那个文件夹装着 Vaenyx 自己的资料,永远不能加进来。"
+        : "That folder holds Vaenyx's own data, so it can never be added.";
+    }
+    if (reason === "too-many") {
+      return lang === "zh" ? "文件夹太多了。" : "That is too many folders.";
+    }
+    return lang === "zh" ? "找不到那个文件夹。" : "There is no such folder.";
+  }
+
+  // The server is the one that decides: it resolves the path, follows any
+  // links and refuses what it will not take, so the screen shows what was
+  // really stored rather than what was typed.
+  async function saveFolders(next: string[]) {
+    setFolderErrors([]);
+    try {
+      const result = await updateCapabilityFolders(next, lang);
+      setFolders(result.folders);
+      setFolderErrors(
+        result.rejected.map(
+          (entry) => `${entry.folder} — ${folderRefusal(entry.reason)}`,
+        ),
+      );
+    } catch (error) {
+      setFolderErrors([
+        error instanceof Error
+          ? error.message
+          : lang === "zh"
+            ? "这些文件夹没能存下来。"
+            : "Could not save the folders.",
+      ]);
+    }
+  }
+
+  function fetchingSetup() {
+    return (
+      <>
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "只有你在下面点名的文件夹,Vaenyx 才能打开里面的文字文件。没有点名之前,就算开关是开的,它也一个字都读不到。"
+            : "Vaenyx can open text files from the folders you name here, and nowhere else. Until you name one, the switch on its own reads nothing at all."}
+        </p>
+        <DoorList
+          addLabel={lang === "zh" ? "加上" : "Add"}
+          draft={folderDraft}
+          items={folders}
+          onChange={(next) => void saveFolders(next)}
+          placeholder={
+            lang === "zh"
+              ? "C:\\Users\\你\\Documents"
+              : "C:\\Users\\you\\Documents"
+          }
+          setDraft={setFolderDraft}
+        />
+        {/* Said plainly rather than discovered: the Owner would otherwise
+            switch it on, name a folder, ask about a file and be told no, with
+            nothing on the screen explaining why. */}
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "今天只有 Claude(订阅)这个后台能真的去开文件;换成别的主模型,Vaenyx 会直说它开不了,而不是瞎猜。文档和扫描件走聊天里的附件按钮,那是「读文档」。"
+            : "Only the Claude (Subscription) backend can actually open a file today. With any other main model Vaenyx says so rather than guessing. Documents and scans go through the chat's attach button instead — that is Reading."}
+        </p>
+        {folderErrors.map((line) => (
+          <p className="form-error" key={line}>
+            {line}
+          </p>
+        ))}
+      </>
+    );
+  }
+
+  // Reading and Web have no key and no engine of their own — they ride the main
+  // model — so their drawers hold the one thing that was missing: what the row
+  // actually means on this machine, and a way to try it.
+  function readingSetup() {
+    return (
+      <p className="settings-card-copy">
+        {lang === "zh"
+          ? "在聊天里用附件按钮丢进来的 PDF。怎么读要看主模型:Claude 会把每一页当图片和文字一起读;别的模型只拿到本机抠出来的文字,图和表格它看不见。"
+          : "A PDF you attach in a chat. How it gets read depends on your main model: Claude takes every page as picture and text; every other model is handed words pulled out of the PDF here, so drawings and tables never reach it."}
+      </p>
+    );
+  }
+
+  function webSetup() {
+    return (
+      <p className="settings-card-copy">
+        {lang === "zh"
+          ? "回答的时候上网查。今天只有 Codex CLI (ChatGPT) 和 Claude(订阅)这两个后台真的会去搜;别的模型只能用它训练时记住的东西回答。"
+          : "Looking things up on the internet while it answers. Only the Codex CLI (ChatGPT) and Claude (Subscription) backends really search today; every other model answers from what it memorised when it was trained."}
+      </p>
+    );
+  }
+
+  // Three outcomes, never merged: it worked, it failed in the failing side's
+  // own words, or that path is not built. The wording all comes from the server
+  // — it is the only side that knows which engine answered and what it said.
+  function testSection(id: string) {
+    const cost = TEST_COST[id];
+    if (!cost) return null;
+    const result = testResults[id];
+    const running = testing === id;
+    const mark =
+      result?.status === "ok" ? "✓" : result?.status === "failed" ? "✗" : "—";
+    return (
+      <div className="capability-test">
+        <p className="settings-card-copy text-faint">
+          {lang === "zh" ? cost.zh : cost.en}
+        </p>
+        <button
+          className="door-test"
+          disabled={running}
+          onClick={() => void runTest(id)}
+          type="button"
+        >
+          {running
+            ? lang === "zh"
+              ? "测试中…"
+              : "Testing…"
+            : lang === "zh"
+              ? "测一次"
+              : "Test It"}
+        </button>
+        {result ? (
+          <p className={`capability-test-result ${result.status}`}>
+            {`${mark} ${result.engine ? `${result.engine}${lang === "zh" ? ":" : ": "}` : ""}${result.detail}`}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  function setupFor(id: string) {
+    const body =
+      id === "hearing"
+        ? hearingSetup()
+        : id === "speaking"
+          ? speakingSetup()
+          : id === "vision"
+            ? visionSetup()
+            : id === "drawing"
+              ? drawingSetup()
+              : id === "reading"
+                ? readingSetup()
+                : id === "fetching"
+                  ? fetchingSetup()
+                  : id === "web"
+                    ? webSetup()
+                    : null;
+    if (!body) return null;
+    return (
+      <>
+        {body}
+        {testSection(id)}
+      </>
+    );
+  }
 
   return (
-    <section className="settings-card">
+    // The id the routine chat's "Set It Up" button scrolls to. It still reads
+    // "engines" because that is the value already parked in localStorage by
+    // installed copies; renaming it would strand every pending jump.
+    <section className="settings-card" id="engines">
       <p className="eyebrow">What Vaenyx may do</p>
       <div className="settings-card-head">
         <h2>Capabilities</h2>
-        {/* The free-model survey lives behind this, not on the page (Oskar,
-            2026-07-31). It is a thing you consult perhaps twice a year; on the
-            page it was permanent furniture in front of the switches you touch
-            weekly. The popup opens on LAST time's answer — a stale answer you
-            can see beats a spinner every time you look. */}
-        <button
-          className="text-button"
-          onClick={() => setShowFree(true)}
-          type="button"
-        >
-          {lang === "zh" ? "免费额度" : "Free models"}
-        </button>
+        {/* The free-model survey lives behind these two, not on the page
+            (Oskar, 2026-07-31). It is a thing you consult perhaps twice a
+            year; on the page it was permanent furniture in front of the
+            switches you touch weekly. The first opens LAST time's answer — a
+            stale answer you can see beats a spinner every time you look — and
+            the second is the survey's ONE refresh, on the page rather than
+            inside the window because that is where it sat on the Model keys
+            card this page swallowed.
+
+            The two labels name different things on purpose. "Update Free
+            Options" contained "Free models" word for word, so on a phone the
+            pair read as one label wrapped onto two lines and either one could
+            be pressed for the other — and pressing the wrong one costs a real
+            request to the main model. */}
+        <div className="card-head-actions">
+          <button
+            className="text-button"
+            onClick={() => setShowFree(true)}
+            type="button"
+          >
+            {lang === "zh" ? "免费额度" : "Free models"}
+          </button>
+          <button
+            className="text-button"
+            disabled={freeBusy}
+            onClick={() => void updateFreeOptions()}
+            type="button"
+          >
+            {freeBusy
+              ? lang === "zh"
+                ? "问着…"
+                : "Asking…"
+              : lang === "zh"
+                ? "再问一次"
+                : "Ask again"}
+          </button>
+        </div>
       </div>
       <p className="settings-card-copy">
-        The ceiling. Anything switched off here is out of reach of every Method,
-        every mode and every app key — whatever they ask for.
+        {lang === "zh"
+          ? "这是天花板。在这里关掉的东西,任何 Method、任何模式、任何 app 钥匙都够不着 —— 不管它们要什么。"
+          : "The ceiling. Anything switched off here is out of reach of every Method, every mode and every app key — whatever they ask for."}
+      </p>
+      {/* One row is not yet all of that, and saying so is cheaper than a
+          promise that quietly is not kept: switching Web off does stop a
+          Method and an app key from searching, but an ordinary chat still
+          looks things up. Enforcing it there would need every backend to
+          honour it, and two of them cannot yet. */}
+      <p className="settings-card-copy">
+        {lang === "zh"
+          ? "只有「上网」还差一步:关掉它,Method 和 app 钥匙就不能搜了,但普通聊天还是会去查。"
+          : "Web is the one that is not all the way there yet: switching it off stops Methods and app keys from searching, but an ordinary chat still looks things up."}
+      </p>
+      {/* The fact the old Model keys card opened with, and it belongs wherever
+          keys are typed: they are not four separate accounts. Without it the
+          Owner has no way to know that connecting Gemini on the Speaking row
+          also connected it for Vision. */}
+      <p className="settings-card-copy">
+        {lang === "zh"
+          ? "key 加在哪一行都一样,进的是同一个池子:一个服务商连一次,凡是它能干的活,每一行都能挑它。"
+          : "A key added on any row joins one shared pool: connect a provider once and every row that provider can serve may choose it."}
       </p>
       {showFree ? (
-        <FreeModelsModal lang={lang} onClose={() => setShowFree(false)} />
+        <FreeModelsModal
+          lang={lang}
+          onClose={() => setShowFree(false)}
+          picks={freePicks}
+        />
+      ) : null}
+      {/* A failed read greys the switches and says so, rather than removing the
+          card: this is now the only place a key can be added, and a card that
+          silently disappears looks like a finished page instead of a broken
+          one. */}
+      {ceilingUnread ? (
+        <p className="form-error">
+          {lang === "zh"
+            ? "这些开关读不出来,现在改不了。下面每一行的设置照常能用。"
+            : "The switches could not be read, so they cannot be changed right now. The setup on each row still works."}
+        </p>
       ) : null}
       <div className="capability-rows">
         {CAPABILITY_META.map((meta) => {
           const built = implemented[meta.id] !== false;
           const engine = engines[meta.id];
+          const hasSetup = SETUP_ROWS.has(meta.id);
+          const open = openSetup === meta.id;
           return (
-            <div className="capability-row" key={meta.id}>
-              <span className="capability-row-icon">{meta.icon}</span>
-              <span className="capability-row-name">
-                {lang === "zh" ? meta.name.zh : meta.name.en}
-                <em>({lang === "zh" ? meta.gloss.zh : meta.gloss.en})</em>
-              </span>
-              {engine ? (
-                <div className="capability-row-engine">
-                  <Picker
-                    ariaLabel={`${meta.name.en} model`}
-                    disabled={busy === meta.id}
-                    onChange={(next) => void pickEngine(meta.id, next)}
-                    options={engine.options}
-                    value={engine.value}
-                  />
-                </div>
-              ) : (
-                <span className="capability-row-engine" />
-              )}
-              {built ? (
-                <input
-                  aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
-                  checked={global[meta.id] === true}
-                  className="door-toggle"
-                  disabled={busy === meta.id}
-                  onChange={(event) => void flip(meta.id, event.target.checked)}
-                  role="switch"
-                  type="checkbox"
-                />
-              ) : (
-                // Not "unsupported" — that reads as broken. Vaenyx simply has
-                // not built it yet, which is a different sentence and a
-                // different fix.
-                <span className="capability-row-pending">
-                  {lang === "zh" ? "还没做出来" : "not built yet"}
+            <Fragment key={meta.id}>
+              <div className={open ? "capability-row open" : "capability-row"}>
+                <span className="capability-row-icon">{meta.icon}</span>
+                <span className="capability-row-name">
+                  {lang === "zh" ? meta.name.zh : meta.name.en}
+                  <em>({lang === "zh" ? meta.gloss.zh : meta.gloss.en})</em>
                 </span>
-              )}
-            </div>
+                {engine ? (
+                  <div className="capability-row-engine">
+                    <Picker
+                      ariaLabel={`${meta.name.en} model`}
+                      disabled={busy === meta.id}
+                      onChange={(next) => void pickEngine(meta.id, next)}
+                      options={engine.options}
+                      value={engine.value}
+                    />
+                  </div>
+                ) : (
+                  <span className="capability-row-engine" />
+                )}
+                {hasSetup ? (
+                  <button
+                    aria-controls={`setup-${meta.id}`}
+                    aria-expanded={open}
+                    aria-label={
+                      lang === "zh"
+                        ? `${meta.name.zh}的设置`
+                        : `${meta.name.en} setup`
+                    }
+                    className={
+                      open ? "capability-row-more open" : "capability-row-more"
+                    }
+                    onClick={() => setOpenSetup(open ? null : meta.id)}
+                    type="button"
+                  >
+                    <LineIcon>
+                      <path d="m7 10 5 5 5-5" />
+                    </LineIcon>
+                  </button>
+                ) : null}
+                {built ? (
+                  <input
+                    aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
+                    checked={global?.[meta.id] === true}
+                    className="door-toggle"
+                    disabled={busy === meta.id || !global}
+                    onChange={(event) =>
+                      void flip(meta.id, event.target.checked)
+                    }
+                    role="switch"
+                    type="checkbox"
+                  />
+                ) : (
+                  // Not "unsupported" — that reads as broken. Vaenyx simply has
+                  // not built it yet, which is a different sentence and a
+                  // different fix.
+                  <span className="capability-row-pending">
+                    {lang === "zh" ? "还没做出来" : "not built yet"}
+                  </span>
+                )}
+              </div>
+              {/* A SIBLING of the row, never a child: the indent and the full
+                  width come from `grid-column: 1 / -1`, which resolves against
+                  the rows grid and not against the flex row. */}
+              {hasSetup && open ? (
+                <div className="capability-setup" id={`setup-${meta.id}`}>
+                  {setupFor(meta.id)}
+                </div>
+              ) : null}
+            </Fragment>
           );
         })}
       </div>
       <p className="door-legend">
         {lang === "zh"
-          ? "没有连上的模型,先到下面 Models 里加钥匙。"
-          : "A model you have not connected yet gets its key below, in Models."}
+          ? "还没连上的模型,点那一行右边的箭头,钥匙就在那里加。"
+          : "A model you have not connected yet gets its key on its own row — open the arrow beside it."}
       </p>
     </section>
   );
@@ -11159,40 +11624,6 @@ function ModelsPanel() {
         tab).
       </p>
       {error ? <p className="form-error">{error}</p> : null}
-      {/* THE MAIN MODEL, chosen in one place (Oskar, 2026-07-31). It used to be
-          a "Make default" button hidden on whichever card happened to hold it,
-          so the only way to change the most important setting in the app was to
-          find the right card first. Every capability row that rides the main
-          model re-labels itself from here. */}
-      {connectedProviders.some((provider) =>
-        provider.capabilities.includes("chat"),
-      ) ? (
-        <div className="main-model-row">
-          <span className="main-model-label">Main model</span>
-          <div className="main-model-pick">
-            <Picker
-              ariaLabel="Main model"
-              disabled={busy !== null}
-              onChange={(next) => {
-                const provider = connectedProviders.find(
-                  (candidate) => candidate.id === next,
-                );
-                if (provider) void makeDefault(provider);
-              }}
-              options={connectedProviders
-                .filter((provider) => provider.capabilities.includes("chat"))
-                .map((provider) => ({
-                  label: provider.name,
-                  value: provider.id,
-                }))}
-              value={
-                connectedProviders.find((provider) => provider.isDefault)?.id ??
-                ""
-              }
-            />
-          </div>
-        </div>
-      ) : null}
       <div className="model-cards">
         {connectedProviders.map((provider) => (
           <div
@@ -12646,7 +13077,6 @@ function SettingsPanel({
       ) : null}
       {activeTab === "ai" ? <CapabilitiesPanel /> : null}
       {activeTab === "ai" ? <ModelsPanel /> : null}
-      {activeTab === "ai" ? <VoicePanel /> : null}
       {activeTab === "ai" ? <SubscriptionDoorPanel /> : null}
       {activeTab === "tools" ? <ToolsPanel /> : null}
       {activeTab === "notifications" ? <NotificationsPanel /> : null}

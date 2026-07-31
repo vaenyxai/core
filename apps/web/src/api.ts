@@ -6,6 +6,7 @@ import type {
   RelaySettings,
   RelayTestResult,
   RelayTokenResponse,
+  CapabilityTestResult,
   ReasoningEffort,
   ClassifyRoutineResponse,
   ApproveVaenyxMeCandidateRequest,
@@ -1212,13 +1213,19 @@ export function saveAnnotations(
 
 // Document Reading: upload a PDF and learn its facts BEFORE anything is spent
 // — the page count is what the M1 cost gate names.
-export async function uploadDocument(file: File): Promise<{
+// `lang` is not decoration: the server refuses this upload outright when
+// Reading is switched off, and a PDF gives it no other clue which language to
+// say so in.
+export async function uploadDocument(
+  file: File,
+  lang: string,
+): Promise<{
   documentId: string;
   name: string;
   pages: number;
   needsCostGate: boolean;
 }> {
-  const response = await fetch("/v1/documents/upload", {
+  const response = await fetch(`/v1/documents/upload?lang=${lang}`, {
     method: "POST",
     credentials: "same-origin",
     headers: {
@@ -1267,10 +1274,14 @@ export async function describePhoto(
   return body.text ?? "";
 }
 
+// Same reason as uploadDocument: with Hearing switched off this comes back
+// refused before a word has been transcribed, so the refusal has to be told
+// which language the Owner reads.
 export async function transcribeAudio(
   blob: Blob,
+  lang: string,
 ): Promise<{ text: string; audioId: string }> {
-  const response = await fetch("/v1/voice/transcribe", {
+  const response = await fetch(`/v1/voice/transcribe?lang=${lang}`, {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": blob.type || "application/octet-stream" },
@@ -1505,13 +1516,53 @@ export function fetchCapabilities(): Promise<{
   return requestJson("/v1/capabilities");
 }
 
+// `lang` rides along because this route can refuse — a session inside a mode
+// may not touch the ceiling — and the refusal is read by the Owner.
 export function updateCapabilities(
   changes: Record<string, boolean>,
+  lang: string,
 ): Promise<Record<string, boolean>> {
-  return requestJson("/v1/capabilities", {
+  return requestJson(`/v1/capabilities?lang=${lang}`, {
     method: "PUT",
     body: JSON.stringify(changes),
   });
+}
+
+// The folders "Files on this machine" may look in — a second decision after
+// the switch, and empty until the Owner names one. The server answers with the
+// list it actually stored plus anything it would not take, so the screen never
+// shows a folder that was refused.
+export interface CapabilityFolders {
+  folders: string[];
+  rejected: { folder: string; reason: string }[];
+}
+
+export function fetchCapabilityFolders(): Promise<{ folders: string[] }> {
+  return requestJson("/v1/capabilities/folders");
+}
+
+export function updateCapabilityFolders(
+  folders: string[],
+  lang: string,
+): Promise<CapabilityFolders> {
+  return requestJson(`/v1/capabilities/folders?lang=${lang}`, {
+    method: "PUT",
+    body: JSON.stringify({ folders }),
+  });
+}
+
+// Really do this one capability, once, and say what happened. The path is
+// "capability-test" and not "capabilities/…/test" on purpose: the SAVED_TOAST
+// rule above matches /v1/capabilities by prefix, so the second shape would pop
+// "Saved" over the test result on every press.
+export function runCapabilityTest(
+  capability: string,
+  lang: string,
+): Promise<CapabilityTestResult> {
+  return requestJson<CapabilityTestResult>(
+    `/v1/capability-test/${encodeURIComponent(capability)}?lang=${encodeURIComponent(lang)}`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
 }
 
 // THE SUBSCRIPTION DOOR. The Owner's own view of it: what it is set to, whether

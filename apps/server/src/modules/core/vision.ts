@@ -191,12 +191,27 @@ export function setVisionEngine(
   return getVisionStatus(secretsDirectory);
 }
 
-export async function describeImage(
+/** What one question to the vision engine came back with, and who answered it.
+ *  The model id is carried out because a failure that only says "Gemini"
+ *  cannot tell the Owner that the model name itself is what has been retired —
+ *  the exact bug the candidate table above documents. */
+export interface VisionAnswer {
+  engine: string;
+  model: string;
+  text: string;
+}
+
+// One question about one picture — the shared body of describeImage,
+// annotateImage and the Capabilities row's own Test. Each caller brings its own
+// prompt and its own failure code, because the routes above split those codes
+// back apart to word the refusal.
+export async function askVisionModel(
   secretsDirectory: string,
+  prompt: string,
   image: Buffer,
   mimeType: string,
-  lang: string,
-): Promise<string> {
+  options: { failureCode: string; temperature?: number },
+): Promise<VisionAnswer> {
   const connections = readProviderConnections(secretsDirectory);
   const candidate = pickCandidate(connections);
   if (!candidate) {
@@ -205,25 +220,21 @@ export async function describeImage(
   const connection = connections[candidate.id];
   const apiKey = connection?.apiKey ?? "";
   const dataUrl = `data:${mimeType};base64,${image.toString("base64")}`;
-  // Dot points, never prose (app-wide rule, Oskar 2026-07-28): this text lands
-  // in front of the Owner (routine confirm cards, composer surfaces), so it
-  // must read as short scannable lines, not a markdown essay.
-  const prompt =
-    lang === "zh"
-      ? "把这张照片的内容写成清单:一行一项,格式如「牛肉 ×1」。食材/冰箱/购物照片就逐项列出能辨认的食物和数量;文档或票据就一行一条列关键信息;其它内容一行一个要点。禁止 markdown、星号、标题、分区、段落——只要干净的行。只输出清单本身,不要客套话。"
-      : "Write this photo's contents as a list: one item per line, like 'beef steak x1'. For food/fridge/grocery photos list every identifiable item with a rough quantity; for documents or receipts one key fact per line; otherwise one short point per line. NO markdown, NO asterisks, NO headings, NO sections, NO paragraphs — clean lines only. Output the list itself, no preamble.";
 
   if (candidate.id === "claude-sub") {
-    return (
-      await claudeSubscriptionVision(
-        secretsDirectory,
-        prompt,
-        image.toString("base64"),
-        mimeType,
-      )
-    ).trim();
+    const text = await claudeSubscriptionVision(
+      secretsDirectory,
+      prompt,
+      image.toString("base64"),
+      mimeType,
+    );
+    return { engine: candidate.id, model: candidate.model, text: text.trim() };
   }
 
+  // The candidate's own model, never `connection.model`: that field holds the
+  // CHAT model the Owner picked for this backend, and pointing a picture at it
+  // would send the photo to a text-only model.
+  const model = candidate.model;
   const response = await fetch(
     `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,
     {
@@ -233,7 +244,10 @@ export async function describeImage(
         authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: candidate.model,
+        model,
+        ...(options.temperature === undefined
+          ? {}
+          : { temperature: options.temperature }),
         messages: [
           {
             role: "user",
@@ -263,14 +277,39 @@ export async function describeImage(
       // Non-JSON body: the status code is all there is.
     }
     throw new Error(
-      `VISION_DESCRIBE_FAILED:${response.status}${detail ? `:${detail}` : ""}`,
+      `${options.failureCode}:${response.status}${detail ? `:${detail}` : ""}`,
     );
   }
   const parsed = (await response.json()) as {
     choices?: { message?: { content?: unknown } }[];
   };
   const text = parsed.choices?.[0]?.message?.content;
-  return typeof text === "string" ? text.trim() : "";
+  return {
+    engine: candidate.id,
+    model,
+    text: typeof text === "string" ? text.trim() : "",
+  };
+}
+
+export async function describeImage(
+  secretsDirectory: string,
+  image: Buffer,
+  mimeType: string,
+  lang: string,
+): Promise<string> {
+  // Dot points, never prose (app-wide rule, Oskar 2026-07-28): this text lands
+  // in front of the Owner (routine confirm cards, composer surfaces), so it
+  // must read as short scannable lines, not a markdown essay.
+  const prompt =
+    lang === "zh"
+      ? "把这张照片的内容写成清单:一行一项,格式如「牛肉 ×1」。食材/冰箱/购物照片就逐项列出能辨认的食物和数量;文档或票据就一行一条列关键信息;其它内容一行一个要点。禁止 markdown、星号、标题、分区、段落——只要干净的行。只输出清单本身,不要客套话。"
+      : "Write this photo's contents as a list: one item per line, like 'beef steak x1'. For food/fridge/grocery photos list every identifiable item with a rough quantity; for documents or receipts one key fact per line; otherwise one short point per line. NO markdown, NO asterisks, NO headings, NO sections, NO paragraphs — clean lines only. Output the list itself, no preamble.";
+
+  return (
+    await askVisionModel(secretsDirectory, prompt, image, mimeType, {
+      failureCode: "VISION_DESCRIBE_FAILED",
+    })
+  ).text;
 }
 
 // One marked item on a photo: a dot at (x, y) — percent of the image, 0-100 —
@@ -292,14 +331,6 @@ export async function annotateImage(
   lang: string,
   focus?: string | null,
 ): Promise<ImageAnnotationItem[]> {
-  const connections = readProviderConnections(secretsDirectory);
-  const candidate = pickCandidate(connections);
-  if (!candidate) {
-    throw new Error("VISION_NOT_CONNECTED");
-  }
-  const connection = connections[candidate.id];
-  const apiKey = connection?.apiKey ?? "";
-  const dataUrl = `data:${mimeType};base64,${image.toString("base64")}`;
   const prompt = [
     "Detect the most prominent distinct objects in this photo (at most 10).",
     // A Routine's declared focus ("food and drink items"): the tool narrows
@@ -317,61 +348,16 @@ export async function annotateImage(
     "No markdown fences, no commentary.",
   ].join(" ");
 
-  let text: string;
-  if (candidate.id === "claude-sub") {
-    text = await claudeSubscriptionVision(
-      secretsDirectory,
-      prompt,
-      image.toString("base64"),
-      mimeType,
-    );
-  } else {
-    const response = await fetch(
-      `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: candidate.model,
-          temperature: 0,
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: prompt },
-                { type: "image_url", image_url: { url: dataUrl } },
-              ],
-            },
-          ],
-        }),
-      },
-    );
-    if (!response.ok) {
-      let detail = "";
-      try {
-        const body = (await response.json()) as {
-          error?: { message?: unknown } | string;
-        };
-        const raw =
-          typeof body.error === "string" ? body.error : body.error?.message;
-        if (typeof raw === "string") detail = raw.slice(0, 300);
-      } catch {
-        // Non-JSON body: the status code is all there is.
-      }
-      throw new Error(
-        `VISION_ANNOTATE_FAILED:${response.status}${detail ? `:${detail}` : ""}`,
-      );
-    }
-    const parsed = (await response.json()) as {
-      choices?: { message?: { content?: unknown } }[];
-    };
-    const content = parsed.choices?.[0]?.message?.content;
-    if (typeof content !== "string") throw new Error("VISION_ANNOTATE_EMPTY");
-    text = content;
-  }
+  // Temperature 0: the same photo has to produce the same marks twice, or the
+  // Owner cannot tell a moved dot from a changed picture.
+  const { text } = await askVisionModel(
+    secretsDirectory,
+    prompt,
+    image,
+    mimeType,
+    { failureCode: "VISION_ANNOTATE_FAILED", temperature: 0 },
+  );
+  if (!text) throw new Error("VISION_ANNOTATE_EMPTY");
   return parseAnnotations(text);
 }
 

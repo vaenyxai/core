@@ -23,6 +23,11 @@ import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
 import { claudeMachineLogin, getClaudeHomeDirectory } from "./claude-login.js";
 import { readProviderConnections } from "./connections.js";
+import {
+  FETCH_TOOL_NAMES,
+  fetchToolBriefing,
+  fetchToolServer,
+} from "./fetch-tools.js";
 import type {
   ModelChatMessage,
   ModelChatOptions,
@@ -275,6 +280,13 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     const onAbort = () => abort.abort();
     options?.signal?.addEventListener("abort", onAbort, { once: true });
 
+    // FETCHING. The caller hands over a live grant or nothing at all — this
+    // file never asks the database what the Owner allowed, because the same
+    // provider serves the subscription door lent to OUTSIDE APPS, and a
+    // provider that looked the folders up for itself would hand them to that
+    // door too. Absent here means the turn cannot open a file, full stop.
+    const files = options?.fetchAccess ?? null;
+
     // Vision (probe-verified 2026-07-29): the SDK's streaming input takes
     // native image content blocks, so a conversation photo rides the request
     // first-hand — no describe-to-text middle layer. The same input takes a
@@ -287,7 +299,9 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
 
     const prompt = [
       "Continue this Vaenyx Chat conversation and answer the latest Owner message.",
-      "You have no tools, no file access and no web access — answer from knowledge and the conversation alone, and say so plainly when something needs live data.",
+      files
+        ? fetchToolBriefing(files.folders)
+        : "You have no tools, no file access and no web access — answer from knowledge and the conversation alone, and say so plainly when something needs live data.",
       ...(imageMatch
         ? [
             "The attached image is the photo from the conversation's most recent photo message — you are seeing it first-hand.",
@@ -360,9 +374,26 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           // A turn that may not look things up gets NO tools at all — the same
           // lockdown reading a photo runs under. Enforcement lives in every
           // backend, or the guarantee is only as strong as the weakest one.
-          allowedTools: options?.allowWeb === false ? [] : [...WEB_TOOLS],
+          allowedTools: [
+            ...(options?.allowWeb === false ? [] : WEB_TOOLS),
+            // Auto-approved because there is nobody to answer a prompt in a
+            // household chat — and safe because the permission is not what
+            // guards the disk: the handler behind this name is.
+            ...(files ? FETCH_TOOL_NAMES : []),
+          ],
           disallowedTools:
             options?.allowWeb === false ? DENIED_TOOLS : MACHINE_TOOLS,
+          // 🔴 On a file-opening turn the built-in toolbox stops EXISTING
+          // rather than merely being denied by name: `tools` is the base set,
+          // so Read, Glob, Grep and Bash are not there to be reached for. That
+          // matters because Glob and Grep take an optional path and Grep can
+          // return file contents without ever naming a file, so a deny list
+          // written against a file path would not see them coming. Ordinary
+          // turns are left exactly as they were — one lockdown to reason
+          // about, changed only where the risk actually changes.
+          ...(files
+            ? { tools: options?.allowWeb === false ? [] : [...WEB_TOOLS] }
+            : {}),
           cwd: jail,
           env: cleanChildEnvironment(auth.token),
           // Four was too tight and the briefing died on the cap (Oskar,
@@ -372,7 +403,9 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           // (see error_max_turns below).
           maxTurns: 10,
           // Never read the machine's Claude settings, CLAUDE.md or MCP config.
-          mcpServers: {},
+          // The one server that can ever appear here is built in this process
+          // from the Owner's own folder list; nothing is read off the disk.
+          mcpServers: files ? { vaenyx_files: fetchToolServer(files) } : {},
           settingSources: [],
           systemPrompt:
             // The connector line: it kept closing briefings with a note about
@@ -380,7 +413,15 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
             // 2026-07-30). There is no such thing here — it was describing a
             // different product it assumed it was part of. Saying what it is
             // NOT is the only way to stop a model volunteering that.
-            "You are the chat voice of Vaenyx, a private household assistant. You can search the web and read a page when the answer depends on current facts; say so plainly when you could not check something rather than answering from memory. Search efficiently: batch what you need into as few rounds as you can, and do not re-check something you have already found — the Owner is waiting. You have no other tools and no access to this machine. You are NOT claude.ai: there are no connectors here, no Gmail, no Calendar, no Drive, no way to send or file anything, and no authorisation the Owner could grant to change that. Never mention connectors or ask him to authorise one. If something is outside what you can do, name that one thing in a short line and stop.",
+            `You are the chat voice of Vaenyx, a private household assistant. You can search the web and read a page when the answer depends on current facts; say so plainly when you could not check something rather than answering from memory. Search efficiently: batch what you need into as few rounds as you can, and do not re-check something you have already found — the Owner is waiting. ${
+              files
+                ? // Said here as well as in the prompt because this is the
+                  // sentence the model reaches for when it is asked something
+                  // it cannot do: it has to know the reach is a few named
+                  // folders and not the machine.
+                  "You can also open text files, but ONLY from the folders named in the Owner's message — those folders are the whole of your reach into this machine, and everything else on it is closed to you."
+                : "You have no other tools and no access to this machine."
+            } You are NOT claude.ai: there are no connectors here, no Gmail, no Calendar, no Drive, no way to send or file anything, and no authorisation the Owner could grant to change that. Never mention connectors or ask him to authorise one. If something is outside what you can do, name that one thing in a short line and stop.`,
           ...(options?.model?.trim() ? { model: options.model.trim() } : {}),
         },
       });

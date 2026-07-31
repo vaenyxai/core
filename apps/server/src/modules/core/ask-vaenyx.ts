@@ -12,6 +12,13 @@ import type {
 import type { DatabaseHandle } from "../../db/database.js";
 import type { ModelProvider } from "../models/provider.js";
 import { getModelRegistry, resolveProvider } from "../models/registry.js";
+import { recordAudit } from "../guard/audit.js";
+import { getOwner } from "../guard/auth.js";
+import { type Capability, capabilityOff } from "./capabilities.js";
+import {
+  FETCHING_CAPABLE_PROVIDER_IDS,
+  grantFetchAccess,
+} from "./fetching.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
@@ -767,11 +774,35 @@ export async function createAskVaenyxMessage(
   const ownerMessageId = randomUUID();
   const trimmedContent = content.trim();
 
+  // A chat turn reaches for three of the seven capabilities by itself — it
+  // reads documents, looks at photos and draws — so the ceiling is read here
+  // and honoured below. The dedicated routes are gated at the gateway; this is
+  // the same guarantee for the path that has no route of its own.
+  const drawingOff = capabilityOff(database, "drawing");
+  const readingOff = capabilityOff(database, "reading");
+  const visionOff = capabilityOff(database, "vision");
+  const noteCapabilityRefused = (
+    capability: Capability,
+    what: string,
+  ): void => {
+    recordAudit(database, {
+      actorType: "owner",
+      actorId: ownerId,
+      actorName: getOwner(database)?.name ?? "Owner",
+      action: "capability.refused",
+      decision: "denied",
+      reason: `${capability} is switched off globally, so ${what}`,
+      resourceType: "capability",
+      resourceId: capability,
+    });
+  };
+
   // The M1 cost gate, enforced server-side: a document at or above the page
   // threshold cannot be read until the Owner has answered the gate. The money
   // is theirs, so the rule cannot live only in the screen they were shown.
+  // Nothing to gate when the document will not be read at all.
   let documentPages: number | null = null;
-  if (options?.documentId && options.dataDirectory) {
+  if (options?.documentId && options.dataDirectory && !readingOff) {
     const file = readDocument(options.dataDirectory, options.documentId);
     if (!file) throw new Error("DOCUMENT_NOT_FOUND");
     const facts = await inspectDocument(file);
@@ -866,7 +897,7 @@ export async function createAskVaenyxMessage(
   // rules text can only make things stricter, never looser).
   const modeRow = database.sqlite
     .prepare(
-      `SELECT modes.name AS name, modes.rules AS rules,
+      `SELECT modes.id AS id, modes.name AS name, modes.rules AS rules,
               modes.local_only AS local_only, modes.agent_name AS agent_name
        FROM ask_vaenyx_conversations
        JOIN modes ON modes.id = ask_vaenyx_conversations.mode_id
@@ -874,6 +905,7 @@ export async function createAskVaenyxMessage(
     )
     .get(conversationId) as
     | {
+        id: string;
         name: string;
         rules: string;
         local_only: number;
@@ -930,24 +962,69 @@ export async function createAskVaenyxMessage(
       provider = localProvider;
     }
 
+    // FETCHING — "Files on this machine". Everything that has to be true before
+    // a turn may open one is asked in a single place: the global switch, the
+    // mode the conversation is in, and at least one folder the Owner actually
+    // named. Nothing is granted until that returns an object, and a turn that
+    // did not get one has no path it could use.
+    //
+    // Both directories are required rather than defaulted, because they are
+    // what the whitelist is checked AGAINST: Vaenyx's own database and key
+    // store stay closed however the folders are set, and a grant that did not
+    // know where they were would be a grant with a hole in it.
+    const fetchAccess =
+      options?.dataDirectory && options?.secretsDirectory
+        ? grantFetchAccess(database, {
+            actorId: ownerId,
+            actorName: getOwner(database)?.name ?? "Owner",
+            modeId: modeRow?.id ?? null,
+            protectedPaths: [options.dataDirectory, options.secretsDirectory],
+          })
+        : null;
+    // 🔴 Degrade BY NAME, never silently. Only the Claude subscription channel
+    // has a real tool loop — every other backend answers in one shot with
+    // nowhere to put a request for a file. Left unsaid, the Owner would see the
+    // switch on, the folders listed, and a model cheerfully answering about a
+    // file it never opened. That is exactly the shape `allowWeb` had while it
+    // was a silent no-op on four backends.
+    const canFetch =
+      fetchAccess !== null &&
+      FETCHING_CAPABLE_PROVIDER_IDS.includes(provider.id);
+    if (fetchAccess && !canFetch) {
+      projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner has switched on "Files on this machine" and named folders for it, but ${provider.name} cannot open files — it answers in one round and has no way to ask for one. If they ask about a file, say plainly that ${provider.name} cannot open files on this machine and that the Claude subscription backend is the one that can. Never guess at what a file contains.`;
+    }
+
     // A document fed to this turn. A backend that reads PDFs natively gets the
     // FILE (every page as picture and text — the path M1 warns about); any
     // other backend gets locally extracted text, which is cheaper and loses
     // the drawings, so the gate's sentence is never shown for it.
     let documentBase64: string | undefined;
     let documentText = "";
+    let documentRefusedNote: string | null = null;
     if (options?.documentId && options.dataDirectory) {
-      const file = readDocument(options.dataDirectory, options.documentId);
-      if (file) {
-        if (DOCUMENT_NATIVE_PROVIDER_IDS.includes(provider.id)) {
-          documentBase64 = file.toString("base64");
-        } else {
-          try {
-            documentText = await extractDocumentText(file);
-          } catch {
-            // Unreadable here means the upload check already passed but the
-            // text layer is unusable (a scan): the reply says so plainly.
-            documentText = "";
+      // Uploading is refused at the door once Reading is off, so a document
+      // can only reach this turn if it was uploaded BEFORE the switch was
+      // thrown. It is still not read.
+      if (readingOff) {
+        noteCapabilityRefused(
+          "reading",
+          "a document attached to a chat message was not read.",
+        );
+        documentRefusedNote =
+          "The Owner attached a document, but document reading is switched OFF in their Settings, so it was not opened and you cannot see any of it. Tell them plainly that reading documents is switched off and that they can turn it on in Settings. Do not guess at the contents.";
+      } else {
+        const file = readDocument(options.dataDirectory, options.documentId);
+        if (file) {
+          if (DOCUMENT_NATIVE_PROVIDER_IDS.includes(provider.id)) {
+            documentBase64 = file.toString("base64");
+          } else {
+            try {
+              documentText = await extractDocumentText(file);
+            } catch {
+              // Unreadable here means the upload check already passed but the
+              // text layer is unusable (a scan): the reply says so plainly.
+              documentText = "";
+            }
           }
         }
       }
@@ -975,7 +1052,13 @@ export async function createAskVaenyxMessage(
         ].join("\n")
       : null;
     projectContext =
-      [historySummary, ownerProfile, projectContext, documentContext]
+      [
+        historySummary,
+        ownerProfile,
+        projectContext,
+        documentContext,
+        documentRefusedNote,
+      ]
         .filter((part): part is string => Boolean(part && part.trim()))
         .join("\n\n") || undefined;
 
@@ -988,6 +1071,7 @@ export async function createAskVaenyxMessage(
     let imageAttachmentPath: string | undefined;
     if (
       options?.dataDirectory &&
+      !visionOff &&
       VISION_DIRECT_PROVIDER_IDS.includes(provider.id)
     ) {
       const effectiveImageId =
@@ -1023,10 +1107,23 @@ export async function createAskVaenyxMessage(
     // Owner's own message is never replaced by that text — the photo stays a
     // photo in the conversation (Oskar, 2026-07-26).
     let photoContext = "";
+    if (options?.imageId && visionOff) {
+      // The picture stays in the conversation for the Owner to look at; what
+      // is refused is Vaenyx looking at it. Without this note the model has a
+      // photo it cannot see and no idea why, which is how a confident wrong
+      // description gets written.
+      noteCapabilityRefused(
+        "vision",
+        "a photo attached to a chat message was not looked at.",
+      );
+      photoContext =
+        "The Owner attached a photo, but picture-reading is switched OFF in their Settings, so nothing has looked at it and you cannot see it. Say that plainly and tell them they can turn it on in Settings. Never describe or guess at what is in the picture.";
+    }
     if (
       options?.imageId &&
       options.dataDirectory &&
       options.secretsDirectory &&
+      !visionOff &&
       !imageAttachment
     ) {
       try {
@@ -1056,7 +1153,12 @@ export async function createAskVaenyxMessage(
     // 2026-07-29): the reply carries the same picture with dots and names, and
     // the written summary sits under it. The marking runs in parallel with the
     // model call, so it costs no extra wall time.
-    if (options?.imageId && options.dataDirectory && options.secretsDirectory) {
+    if (
+      options?.imageId &&
+      options.dataDirectory &&
+      options.secretsDirectory &&
+      !visionOff
+    ) {
       echoImageId = options.imageId;
       const photoId = options.imageId;
       // Tell the client NOW: the picture appears with the first words, not
@@ -1102,7 +1204,14 @@ export async function createAskVaenyxMessage(
         .get(conversationId) as { image_id: string } | undefined;
       let annotateNote =
         "The Owner asked for the photo to be marked, but no photo could be found in this conversation. Say so briefly.";
-      if (latestPhoto) {
+      if (visionOff) {
+        noteCapabilityRefused(
+          "vision",
+          "a request to mark the objects in a photo was refused.",
+        );
+        annotateNote =
+          "The Owner asked for a photo to be marked, but picture-reading is switched OFF in their Settings, so nothing looked at it and no marks were made. Say that plainly and tell them they can turn it on in Settings.";
+      } else if (latestPhoto) {
         try {
           const found = readImage(options.dataDirectory, latestPhoto.image_id);
           if (found) {
@@ -1163,6 +1272,11 @@ export async function createAskVaenyxMessage(
       if (suppliedPrompt || fastYes) {
         let imageNote: string;
         try {
+          // generateImage refuses on its own when Drawing is switched off, but
+          // asking here first saves a model call: turning the Owner's words
+          // into an English image prompt costs money, and a refused turn
+          // should not spend any.
+          if (drawingOff) throw new Error("IMAGE_CAPABILITY_OFF");
           // English prompt first: the image model reads English, not the
           // Owner's language (see buildImagePrompt for the landscape story).
           // The judge usually handed the prompt over with its verdict.
@@ -1171,6 +1285,7 @@ export async function createAskVaenyxMessage(
             suppliedPrompt ?? (await buildImagePrompt(provider, content));
           options?.onStatus?.("image-generating");
           generatedImageId = await generateImage(
+            database,
             options.secretsDirectory,
             options.dataDirectory,
             imagePrompt,
@@ -1179,10 +1294,19 @@ export async function createAskVaenyxMessage(
           imageNote = `The system just generated a real image for the Owner's request (prompt used: "${imagePrompt}") and it is attached to your reply. Refer to it naturally, but do not describe details you cannot see.`;
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
-          const detail = message.split(":").slice(2).join(":").trim();
-          imageNote = `The system tried to generate the image the Owner asked for and FAILED${
-            detail ? ` (provider said: ${detail})` : ""
-          }. Say so plainly. Do not claim any picture was made.`;
+          if (message === "IMAGE_CAPABILITY_OFF") {
+            noteCapabilityRefused(
+              "drawing",
+              "a request to make a picture was refused.",
+            );
+            imageNote =
+              "The Owner asked for a picture, but picture-making is switched OFF in their Settings, so nothing was generated. Say that plainly and tell them they can turn it on in Settings. Do not claim any picture was made.";
+          } else {
+            const detail = message.split(":").slice(2).join(":").trim();
+            imageNote = `The system tried to generate the image the Owner asked for and FAILED${
+              detail ? ` (provider said: ${detail})` : ""
+            }. Say so plainly. Do not claim any picture was made.`;
+          }
         }
         contextWithPhoto = [contextWithPhoto, imageNote]
           .filter(Boolean)
@@ -1215,6 +1339,7 @@ export async function createAskVaenyxMessage(
       ...(options?.documentName
         ? { documentName: options.documentName }
         : {}),
+      ...(canFetch && fetchAccess ? { fetchAccess } : {}),
     });
     assistantContent = result.answer;
     assistantStatus = "completed";

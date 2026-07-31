@@ -64,17 +64,27 @@ export function isCapability(value: unknown): value is Capability {
   );
 }
 
-// Whose finger is on the trigger, not how dangerous it is. Reactive
-// capabilities happen because the Owner pressed something, so they start on;
-// autonomous ones — the Method decides when to act, with nobody watching —
-// start off. `documents` is off for cost, `draw` because connecting an image
-// engine is itself the switch.
+// Where the thing HAPPENS, not how dangerous it sounds. A capability starts on
+// when it is something this app already does on this machine — the Owner
+// attaches a photo, records a sentence, asks for a picture, drops in a PDF —
+// and starts off when it reaches OUTSIDE the machine (`web`) or into the
+// Owner's own files (`fetching`). Those two have to be a deliberate act, never
+// something that was already true because nobody looked.
+//
+// 🔴 These values ARE what a fresh instance gets, and what this instance gets:
+// until the Owner touches a switch there is no row in `instance_settings`, so
+// `readGlobalCapabilities` falls straight through to here. `reading` and
+// `drawing` were false while nothing consulted this table; the gates are real
+// now, and false would have meant an attached PDF answering 403 and a request
+// for a picture being refused — two things the shipped manual describes as
+// working. A default that silently switches off a working feature is a bug,
+// not a safe choice.
 export const CAPABILITY_DEFAULT_ON: Record<Capability, boolean> = {
   hearing: true,
   speaking: true,
   vision: true,
-  drawing: false,
-  reading: false,
+  drawing: true,
+  reading: true,
   fetching: false,
   web: false,
 };
@@ -162,9 +172,9 @@ export function capabilitiesFromManifest(parsed: unknown): MethodManifest {
 
 // What this Vaenyx can actually DO, as opposed to what it has a word for. A
 // capability needs two independent things to be true — the kernel has it, and
-// the connected model can do it — and this is the first of the two. `files` has
-// a word and a chip and no implementation behind it yet, which is exactly the
-// case the waiting list exists for.
+// the connected model can do it — and this is the first of the two. It is what
+// decides whether the Owner gets a SWITCH on the Capabilities card or the words
+// "not built yet".
 export const CAPABILITY_IMPLEMENTED: Record<Capability, boolean> = {
   hearing: true,
   speaking: true,
@@ -172,13 +182,32 @@ export const CAPABILITY_IMPLEMENTED: Record<Capability, boolean> = {
   drawing: true,
   reading: true,
   web: true,
-  // The only word today with a chip and no kernel behind it — and, once built,
-  // it must take EVERY kind of file, not just PDFs (Oskar, 2026-07-31).
+  // Built 2026-08-01 (core/fetching.ts): a whitelist of folders the Owner
+  // names, empty until they do, and only text files up to a size cap. Not yet
+  // EVERY kind of file, which is where it has to end up (Oskar, 2026-07-31) —
+  // a PDF or a scan still goes through Reading's own attach button.
+  fetching: true,
+};
+
+// A different question, and conflating the two is how a community shelf fills
+// up with Methods that do nothing. "This Vaenyx can open files" is true; "a
+// METHOD RUN can open files" is not — `executeMethod` hands the backend the
+// prompt and the web answer and nothing else, and a Routine step has no
+// database to ask in the first place. So a Method declaring `fetching` would
+// pass the publish gate, land on somebody else's shelf and quietly answer
+// about a file it never opened.
+//
+// This table is what publishing and the waiting list ask. When a Method run
+// really carries the grant, this line goes and the two tables become one.
+const CAPABILITY_IN_METHOD_RUNS: Record<Capability, boolean> = {
+  ...CAPABILITY_IMPLEMENTED,
   fetching: false,
 };
 
 export function missingCapabilities(declared: Capability[]): Capability[] {
-  return declared.filter((capability) => !CAPABILITY_IMPLEMENTED[capability]);
+  return declared.filter(
+    (capability) => !CAPABILITY_IN_METHOD_RUNS[capability],
+  );
 }
 
 // A Method wanting something this Vaenyx does not have yet: it can be built and
@@ -193,7 +222,10 @@ export function recordCapabilityWanted(
   for (const capability of capabilities) {
     // Only what does not EXIST. A capability the Owner merely switched off must
     // never land here: that person is not waiting for anything to be built.
-    if (CAPABILITY_IMPLEMENTED[capability]) continue;
+    // The Method-run table, not the switch table — this counter exists to
+    // answer "what should be built next", and what a Method still cannot reach
+    // is exactly that.
+    if (CAPABILITY_IN_METHOD_RUNS[capability]) continue;
     database.sqlite
       .prepare(
         `INSERT INTO capability_waiting (capability) VALUES (?)
@@ -233,7 +265,7 @@ export function listCapabilityWaiting(
 export function noticeArrivedCapabilities(database: DatabaseHandle): Capability[] {
   const arrived: Capability[] = [];
   for (const row of listCapabilityWaiting(database)) {
-    if (row.arrived || !CAPABILITY_IMPLEMENTED[row.capability]) continue;
+    if (row.arrived || !CAPABILITY_IN_METHOD_RUNS[row.capability]) continue;
     database.sqlite
       .prepare(
         "UPDATE capability_waiting SET arrived_at = CURRENT_TIMESTAMP WHERE capability = ?",
@@ -273,6 +305,19 @@ export function readGlobalCapabilities(
         : CAPABILITY_DEFAULT_ON[capability];
   }
   return out;
+}
+
+// The ceiling asked about ONE capability, at the door of the code that is
+// about to do the thing. Everywhere that describes a photo, transcribes a
+// recording, speaks, draws or reads a document calls this first — the card the
+// Owner reads says an off switch is "out of reach of every Method, every mode
+// and every app key", and for a long time that was true only of the two Method
+// routes. A ceiling nothing consults is decoration.
+export function capabilityOff(
+  database: DatabaseHandle,
+  capability: Capability,
+): boolean {
+  return readGlobalCapabilities(database)[capability] !== true;
 }
 
 export function writeGlobalCapabilities(
@@ -443,39 +488,59 @@ export function chargeToken(
   };
 }
 
+// Each capability said the way the Owner would say it, never the way the code
+// says it: they switched off "Picture in", not `vision`.
+export type CapabilityLanguage = "en" | "zh";
+
+const PLAIN_WORDS: Record<CapabilityLanguage, Record<Capability, string>> = {
+  en: {
+    hearing: "listen",
+    speaking: "speak",
+    vision: "look at pictures",
+    drawing: "make pictures",
+    reading: "read documents",
+    fetching: "open files on this machine",
+    web: "use the web",
+  },
+  zh: {
+    hearing: "听",
+    speaking: "说话",
+    vision: "看图片",
+    drawing: "画图",
+    reading: "读文档",
+    fetching: "打开这台机器上的文件",
+    web: "上网",
+  },
+};
+
 // Never "unsupported" — that reads as broken and sends the Owner looking for a
 // fault that is not there. The two real reasons need two different sentences,
 // because they have two different fixes.
 export function refusedCapabilityMessage(
   capability: Capability,
   reason: "global" | "mode",
+  language: CapabilityLanguage = "en",
 ): string {
-  const plain: Record<Capability, string> = {
-    hearing: "listen",
-    speaking: "speak",
-    vision: "look at pictures",
-    drawing: "make pictures",
-    reading: "read documents",
-    fetching: "open files on this machine",
-    web: "use the web",
-  };
+  const plain = PLAIN_WORDS[language][capability];
+  if (language === "zh") {
+    return reason === "global"
+      ? `这需要${plain},而你把这一项关掉了。要用的话,到设置里打开。`
+      : `这需要${plain},而你当前所在的模式不允许。`;
+  }
   return reason === "global"
-    ? `This needs to ${plain[capability]}, and you have that switched off. Turn it on in Settings to use it.`
-    : `This needs to ${plain[capability]}, and the mode you are in does not allow it.`;
+    ? `This needs to ${plain}, and you have that switched off. Turn it on in Settings to use it.`
+    : `This needs to ${plain}, and the mode you are in does not allow it.`;
 }
 
 // The message the Owner sees when a Method reaches for something it never
 // declared. Naming the capability matters: "this Method wants the web but never
 // declared it" is actionable, a wrong answer is not.
-export function undeclaredCapabilityMessage(capability: Capability): string {
-  const plain: Record<Capability, string> = {
-    hearing: "listen",
-    speaking: "speak",
-    vision: "look at pictures",
-    drawing: "make pictures",
-    reading: "read documents",
-    fetching: "open files on this machine",
-    web: "use the web",
-  };
-  return `This Method tried to ${plain[capability]}, but its manifest never declared that capability. It was refused.`;
+export function undeclaredCapabilityMessage(
+  capability: Capability,
+  language: CapabilityLanguage = "en",
+): string {
+  const plain = PLAIN_WORDS[language][capability];
+  return language === "zh"
+    ? `这个 Method 想${plain},但它的 manifest 从来没有声明过这项能力,已经被拒绝。`
+    : `This Method tried to ${plain}, but its manifest never declared that capability. It was refused.`;
 }

@@ -209,6 +209,7 @@ import {
   RelayRunResponseSchema,
   RelaySettingsSchema,
   RelayTestResultSchema,
+  CapabilityTestResultSchema,
   UpdateRelaySettingsRequestSchema,
   type RelayEngine,
   type RelayRunRequest,
@@ -391,6 +392,7 @@ import {
 import { classifyRoutineIntent } from "../core/routine-intent.js";
 import { getFreePicks, refreshFreePicks } from "../core/free-picks.js";
 import { getDefaultProvider, initModelRegistry } from "../models/registry.js";
+import type { ModelProvider } from "../models/provider.js";
 import { fetchCatalogue, installRoutine, installMethod } from "../core/catalogue.js";
 import {
   recordLegalAcknowledgement,
@@ -517,7 +519,10 @@ import { listAuditEvents, recordAudit } from "../guard/audit.js";
 import {
   CAPABILITIES,
   CAPABILITY_IMPLEMENTED,
+  type Capability,
+  type CapabilityLanguage,
   capabilitiesFromManifest,
+  capabilityOff,
   decideCapabilities,
   decideTokenCapabilities,
   isCapability,
@@ -525,8 +530,11 @@ import {
   readGlobalCapabilities,
   readProfileCapabilities,
   recordCapabilityWanted,
+  refusedCapabilityMessage,
   writeGlobalCapabilities,
 } from "../core/capabilities.js";
+import { runCapabilityProbe } from "../core/capability-probe.js";
+import { readFetchFolders, writeFetchFolders } from "../core/fetching.js";
 import {
   forgetRelayEngineStatus,
   listRelayCalls,
@@ -692,6 +700,11 @@ export async function registerGatewayRoutes(
   // dev.170) — everything structural below remains blocked.
   const LOCKED_MUTATION_PREFIXES = [
     "/v1/models/",
+    // The capability ceiling is the one setting a restricted session must
+    // never reach: everything else here is a convenience, but a session that
+    // can switch a capability back on can walk straight out of its own mode.
+    // It was missing while the route above it promised exactly this guarantee.
+    "/v1/capabilities",
     "/v1/voice/connect",
     "/v1/voice/output",
     "/v1/voice/local",
@@ -733,6 +746,42 @@ export async function registerGatewayRoutes(
       error: "Settings are locked in this mode.",
     });
   });
+
+  // 🔴 The capability ceiling, enforced where the work is DONE. The card in
+  // Settings tells the Owner that anything switched off there is out of reach
+  // of every Method, every mode and every app key; until this existed that was
+  // true only of the two Method routes, so Vision could be off while
+  // /v1/vision/describe happily called the vision model. A route asks this
+  // before it performs its capability, and refuses in the Owner's own words —
+  // hiding the button is not a ceiling, because the route is still there.
+  const capabilityRefusal = (
+    capability: Capability,
+    owner: { id: string; name: string },
+    language: CapabilityLanguage = "en",
+  ): string | null => {
+    if (!capabilityOff(context.database, capability)) return null;
+    recordAudit(context.database, {
+      actorType: "owner",
+      actorId: owner.id,
+      actorName: owner.name,
+      action: "capability.refused",
+      decision: "denied",
+      reason: `${capability} is switched off globally, so the request was refused.`,
+      resourceType: "capability",
+      resourceId: capability,
+    });
+    return refusedCapabilityMessage(capability, "global", language);
+  };
+
+  // The same door, said the same way, wherever it is met: the switches, the
+  // folder whitelist behind Fetching, and a row's Test all belong to the
+  // person who owns the account rather than to whoever is sitting inside a
+  // mode. One sentence for the three, so they cannot drift apart — and it was
+  // English-only in a bilingual app until now.
+  const switchesLiveInUserMode = (language: CapabilityLanguage): string =>
+    language === "zh"
+      ? "能力的开关与测试只在 User Mode 里进行 —— 先退出当前模式。"
+      : "Capabilities are set and tested in User Mode — exit this mode first.";
 
   // Custom Mode supervision events (spec §6, "must push"): a blocked action
   // inside a mode notifies every device immediately — deliberately NOT
@@ -2286,7 +2335,15 @@ export async function registerGatewayRoutes(
           : "en";
       let effectiveContent = request.body.content;
       let photoAnnotations: ImageAnnotationItem[] | null = null;
-      if (request.body.imageId && !request.body.input) {
+      // Vision switched off refuses the LOOKING, not the run: the typed words
+      // still go through, exactly as they do when no vision model is
+      // connected. The photo is never sent anywhere.
+      const visionRefused = Boolean(
+        request.body.imageId &&
+          !request.body.input &&
+          capabilityRefusal("vision", owner, runLanguage),
+      );
+      if (request.body.imageId && !request.body.input && !visionRefused) {
         const found = readImage(
           context.config.dataDirectory,
           request.body.imageId,
@@ -4216,6 +4273,21 @@ export async function registerGatewayRoutes(
           ok: false,
           failure: code,
         });
+        // The door answers calling apps in codes, not sentences, so this one
+        // stays a code too — it names the capability, which is what an app
+        // needs to tell its own user why the answer did not come.
+        if (code.startsWith("RELAY_CAPABILITY_OFF")) {
+          recordAudit(context.database, {
+            actorType: "app",
+            actorName: "App Token",
+            action: "capability.refused",
+            decision: "denied",
+            reason: `${request.body.capability} is switched off globally, so a relay request was refused.`,
+            resourceType: "capability",
+            resourceId: request.body.capability,
+          });
+          return reply.code(403).send({ error: code });
+        }
         const status =
           code === "RELAY_NOT_OWNER"
             ? 403
@@ -4270,7 +4342,10 @@ export async function registerGatewayRoutes(
     },
   );
 
-  app.put<{ Body: Record<string, boolean> }>(
+  app.put<{
+    Body: Record<string, boolean>;
+    Querystring: { lang?: string };
+  }>(
     "/v1/capabilities",
     {
       schema: {
@@ -4279,6 +4354,7 @@ export async function registerGatewayRoutes(
           200: Type.Record(Type.String(), Type.Boolean()),
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
         },
       },
     },
@@ -4287,13 +4363,27 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      const language: CapabilityLanguage =
+        request.query.lang === "zh" ? "zh" : "en";
+      // The prefix list above only bites inside a mode that has "lock
+      // settings" ticked, and the ceiling needs more than that: a mode's
+      // capabilities are intersected with the global ones, so ANY session
+      // inside ANY mode that could raise the ceiling would be widening its
+      // own mode. Mode management is already User-Mode-only for the same
+      // reason; this is the other half of the same door.
+      if (owner.modeId) {
+        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+      }
       const unknown = Object.keys(request.body).filter(
         (name) => !isCapability(name),
       );
       if (unknown.length > 0) {
-        return reply
-          .code(400)
-          .send({ error: `Not a capability: ${unknown.join(", ")}` });
+        return reply.code(400).send({
+          error:
+            language === "zh"
+              ? `这不是一项能力:${unknown.join(", ")}`
+              : `Not a capability: ${unknown.join(", ")}`,
+        });
       }
       const next = writeGlobalCapabilities(context.database, request.body);
       for (const [name, on] of Object.entries(request.body)) {
@@ -4308,6 +4398,201 @@ export async function registerGatewayRoutes(
         });
       }
       return next;
+    },
+  );
+
+  // THE FOLDER WHITELIST behind "Files on this machine". It is deliberately a
+  // second, separate decision from the switch: switching Fetching on still
+  // reads nothing at all until a folder is named here, so a stray tap on a
+  // toggle can never open the disk.
+  //
+  // These sit under /v1/capabilities on purpose — the locked-mode prefix list
+  // matches by prefix, so a restricted session cannot add itself a folder any
+  // more than it can raise the ceiling.
+  app.get(
+    "/v1/capabilities/folders",
+    {
+      schema: {
+        response: {
+          200: Type.Object(
+            { folders: Type.Array(Type.String()) },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return { folders: readFetchFolders(context.database) };
+    },
+  );
+
+  app.put<{ Body: { folders: string[] }; Querystring: { lang?: string } }>(
+    "/v1/capabilities/folders",
+    {
+      schema: {
+        body: Type.Object(
+          {
+            folders: Type.Array(Type.String({ maxLength: 4000 }), {
+              maxItems: 64,
+            }),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: Type.Object(
+            {
+              folders: Type.Array(Type.String()),
+              rejected: Type.Array(
+                Type.Object(
+                  { folder: Type.String(), reason: Type.String() },
+                  { additionalProperties: false },
+                ),
+              ),
+            },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      // The same any-mode door as the switches themselves: a mode narrows what
+      // may happen, so a session inside one must not be able to widen the very
+      // list the narrowing is measured against.
+      if (owner.modeId) {
+        return reply.code(403).send({
+          error: switchesLiveInUserMode(
+            request.query.lang === "zh" ? "zh" : "en",
+          ),
+        });
+      }
+      const result = writeFetchFolders(
+        context.database,
+        request.body.folders,
+        // Vaenyx's own data is never inside the whitelist, however it is typed.
+        [context.config.dataDirectory, context.config.secretsDirectory],
+      );
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "capability.folders",
+        decision: result.folders.length > 0 ? "allowed" : "denied",
+        reason: `Files on this machine may now be opened from ${result.folders.length} folder(s).`,
+        resourceType: "capability",
+        resourceId: "fetching",
+      });
+      return result;
+    },
+  );
+
+  // THE ROW'S OWN TEST. One press really performs the capability once, against
+  // something whose answer is already known, and reports which of three things
+  // happened — it worked, it failed in the failing side's own words, or that
+  // path is not built. The probes themselves live in core/capability-probe.ts.
+  //
+  // 🔴 The path deliberately does NOT begin "/v1/capabilities": that prefix is
+  // matched by startsWith in two places that would both be wrong here — the
+  // locked-mode mutation list, and the web app's "Saved" toast rule, which
+  // would pop "Saved" over a test result on every press.
+  app.post<{ Params: { capability: string }; Querystring: { lang?: string } }>(
+    "/v1/capability-test/:capability",
+    {
+      schema: {
+        response: {
+          200: CapabilityTestResultSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const language: CapabilityLanguage =
+        request.query.lang === "zh" ? "zh" : "en";
+      // A test spends the Owner's real money on their real account and names
+      // their engines. It belongs to the person who owns the account, not to
+      // whoever happens to be sitting inside a mode — the same door the
+      // switches themselves have.
+      if (owner.modeId) {
+        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+      }
+      const capability = request.params.capability;
+      if (!isCapability(capability)) {
+        return reply.code(400).send({
+          error:
+            language === "zh"
+              ? `这不是一项能力:${capability}`
+              : `Not a capability: ${capability}`,
+        });
+      }
+      // The switch comes first, and it answers in the Owner's own words. A test
+      // that performed the thing anyway would be the one place in the app where
+      // an off switch does not mean off.
+      const refused = capabilityRefusal(capability, owner, language);
+      if (refused) {
+        return { status: "failed" as const, engine: "", detail: refused };
+      }
+      if (!CAPABILITY_IMPLEMENTED[capability]) {
+        return {
+          status: "not-implemented" as const,
+          engine: "",
+          detail:
+            language === "zh"
+              ? "这一项 Vaenyx 还没有做出来。"
+              : "Vaenyx has not built this one yet.",
+        };
+      }
+      // Resolved here rather than inside the probe: the registry is process
+      // state, and a probe that reached for it could not be driven by a test
+      // without a real backend behind it.
+      let mainModel: ModelProvider | null = null;
+      try {
+        mainModel = getDefaultProvider();
+      } catch {
+        // Nothing registered at all — the probes say so in the Owner's words.
+      }
+      const result = await runCapabilityProbe(capability, {
+        database: context.database,
+        dataDirectory: context.config.dataDirectory,
+        secretsDirectory: context.config.secretsDirectory,
+        lang: language,
+        owner: { id: owner.id, name: owner.name },
+        provider: mainModel,
+      });
+      // Recorded whichever way it went, the way the Forge test is: what was
+      // tried, with which engine, and what came back, so a Test pressed last
+      // week is still answerable this week. A press that never got past the
+      // switch above is already written down as the refusal it was — one press,
+      // one row, under the name of what actually happened.
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "capability.test",
+        decision: result.status === "ok" ? "allowed" : "denied",
+        reason: `${capability} test: ${result.status}${result.engine ? ` (${result.engine})` : ""} — ${result.detail}`.slice(
+          0,
+          500,
+        ),
+        resourceType: "capability",
+        resourceId: capability,
+      });
+      return result;
     },
   );
 
@@ -5302,6 +5587,7 @@ export async function registerGatewayRoutes(
           200: VisionDescribeResponseSchema,
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
       },
@@ -5311,6 +5597,10 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      const language: CapabilityLanguage =
+        request.query.lang === "zh" ? "zh" : "en";
+      const refused = capabilityRefusal("vision", owner, language);
+      if (refused) return reply.code(403).send({ error: refused });
       const image = request.body as Buffer | undefined;
       if (!image || !Buffer.isBuffer(image) || image.length === 0) {
         return reply.code(400).send({ error: "No image received." });
@@ -5320,7 +5610,7 @@ export async function registerGatewayRoutes(
           context.config.secretsDirectory,
           image,
           request.headers["content-type"] ?? "image/jpeg",
-          request.query.lang === "zh" ? "zh" : "en",
+          language,
         );
         return { text };
       } catch (error) {
@@ -5429,7 +5719,7 @@ export async function registerGatewayRoutes(
     },
   );
 
-  app.post(
+  app.post<{ Querystring: { lang?: string } }>(
     "/v1/voice/transcribe",
     {
       bodyLimit: 15_000_000,
@@ -5438,6 +5728,7 @@ export async function registerGatewayRoutes(
           200: TranscribeVoiceResponseSchema,
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
       },
@@ -5447,6 +5738,17 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      // The recording itself carries no language until it has been
+      // transcribed — and the refusal happens before that — so the screen the
+      // mic button sits on says which language to answer in. Refusing a
+      // Chinese-speaking Owner in English was the one thing this route could
+      // still get wrong.
+      const refused = capabilityRefusal(
+        "hearing",
+        owner,
+        request.query.lang === "zh" ? "zh" : "en",
+      );
+      if (refused) return reply.code(403).send({ error: refused });
       const audio = request.body as Buffer | undefined;
       if (!audio || !Buffer.isBuffer(audio) || audio.length === 0) {
         return reply.code(400).send({ error: "No audio received." });
@@ -5642,6 +5944,7 @@ export async function registerGatewayRoutes(
           200: SpeakResponseSchema,
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
       },
@@ -5651,6 +5954,15 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      // The sentence about to be spoken is the only language signal this
+      // route has, and it is the same one the local engine already uses to
+      // pick its voice.
+      const refused = capabilityRefusal(
+        "speaking",
+        owner,
+        /[一-鿿]/.test(request.body.text) ? "zh" : "en",
+      );
+      if (refused) return reply.code(403).send({ error: refused });
       try {
         const audioId = await synthesizeSpeech(
           context.config.secretsDirectory,
@@ -5827,6 +6139,7 @@ export async function registerGatewayRoutes(
           200: AnnotateImageResponseSchema,
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
@@ -5837,6 +6150,10 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      const language: CapabilityLanguage =
+        request.body.language === "zh" ? "zh" : "en";
+      const refused = capabilityRefusal("vision", owner, language);
+      if (refused) return reply.code(403).send({ error: refused });
       const found = readImage(context.config.dataDirectory, request.body.imageId);
       if (!found) {
         return reply.code(404).send({ error: "Image not found." });
@@ -5846,7 +6163,7 @@ export async function registerGatewayRoutes(
           context.config.secretsDirectory,
           found.image,
           found.mimeType,
-          request.body.language === "zh" ? "zh" : "en",
+          language,
         );
         context.database.sqlite
           .prepare(
@@ -5880,7 +6197,7 @@ export async function registerGatewayRoutes(
   // — above all its REAL page count. Every refusal says what is actually
   // wrong (too big, too many pages, password-protected, unreadable), because
   // "something went wrong" is not something an Owner can act on.
-  app.post(
+  app.post<{ Querystring: { lang?: string } }>(
     "/v1/documents/upload",
     {
       bodyLimit: MAX_DOCUMENT_BYTES + 1024,
@@ -5889,6 +6206,7 @@ export async function registerGatewayRoutes(
           200: DocumentUploadResponseSchema,
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           413: ErrorResponseSchema,
         },
       },
@@ -5898,6 +6216,16 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      // Refused before the file is stored, not after: a document that may
+      // not be read has no business sitting in the Owner's data directory.
+      // A PDF has no language this route can trust, so the attach button
+      // sends the one the Owner is reading the app in.
+      const refused = capabilityRefusal(
+        "reading",
+        owner,
+        request.query.lang === "zh" ? "zh" : "en",
+      );
+      if (refused) return reply.code(403).send({ error: refused });
       const file = request.body as Buffer | undefined;
       if (!file || !Buffer.isBuffer(file) || file.length === 0) {
         return reply.code(400).send({ error: "No document received." });

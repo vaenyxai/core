@@ -30,7 +30,7 @@ Read this inside the app: **Settings → Manual**.
   the page reconnects on its own.
 - **Sign in** — your Owner name and password, made the first time you ran it.
 - **Forgot the password** — there is no reset. Restore from a backup, or start
-  a fresh instance. 🔴 This is the one thing nobody can undo for you.
+  a fresh instance. **Warning:** This is the one thing nobody can undo for you.
 
 ## 2. Updating
 
@@ -43,11 +43,13 @@ Read this inside the app: **Settings → Manual**.
 ## 3. Chatting
 
 - **Ask anything** — type in the box at the bottom and press **Send**.
-- **Speak instead of typing** — the microphone button. Needs a Voice Input
-  engine (Settings → AI Settings).
+- **Speak instead of typing** — the microphone button. Needs the **Hearing** row
+  switched on with an engine (Settings → AI Settings → Capabilities).
 - **Hear the answer** — the ▶ button at the bottom-right of any reply. It reads
   a summary, not the punctuation. Vaenyx speaks back on its own only when you
-  spoke to it.
+  spoke to it. With **Speaking** switched off (AI Settings → Capabilities) the
+  button is not there at all — replaying a voice message you recorded yourself
+  still works, because that is your voice, not Vaenyx speaking.
 - **Send a photo** — the camera button (take one) or the picture button (choose
   one). The model reads the photo itself; you do not have to describe it.
 - **Mark things on a photo** — ask, in your own words, to point something out.
@@ -58,6 +60,8 @@ Read this inside the app: **Settings → Manual**.
 - **Send a document** — the document button. PDFs only for now.
   - Over ten pages, Vaenyx asks first and tells you the page count, because long
     documents cost real money on a paid model.
+  - With **Reading** switched off (AI Settings → Capabilities) the file is
+    refused at the door and Vaenyx says which switch did it.
 - **Stop a reply** — the **Stop** button while it is answering. It stops at once.
 - **Switch model or thinking level** — the two pickers under the message box.
   They apply to this conversation only.
@@ -68,8 +72,13 @@ Read this inside the app: **Settings → Manual**.
   summary of everything before that, plus your approved *Vaenyx Me* facts.
 - **Looking things up** — it can search the web and read a page when the answer
   depends on current facts, and it tells you when it could not check something
-  rather than answering from memory. It still cannot read anything on your
-  computer.
+  rather than answering from memory.
+- **Files on your computer** — Vaenyx reads nothing on this computer unless you
+  switch **Fetching** on *and* name the folders it may look in (AI Settings →
+  Capabilities → Fetching). Both are needed: the switch on its own, with no
+  folder named, still reads nothing at all. Once you have named folders, only
+  what is inside them can be opened, text files only — nothing else on the
+  machine is offered to a model. It ships switched off with the list empty.
 
 ## 4. Projects
 
@@ -129,13 +138,16 @@ Read this inside the app: **Settings → Manual**.
   run is marked failed with the reason; nothing is silently retried on a
   different model.
 
-## 9. AI Settings — connecting models
+## 9. AI Settings — capabilities and models
 
-- **Where** — Settings → **AI Settings**.
-- **Survey button** — asks a connected model what free models exist right now and
-  refreshes the list. 🔴 The answer says which model said it and when, because
-  free tiers change constantly and models state them wrongly with confidence.
-  Check the provider's own site before relying on it.
+- **Where** — Settings → **AI Settings** → the **Capabilities** card. Everything
+  about models now lives on that one card: what Vaenyx may do, which model does
+  it, and where a key is pasted.
+- **Free models** — the **Free models** button beside the heading shows what was
+  found last time; **Ask again** beside it asks your main model again and then
+  shows you the new answer. **Careful:** The answer says which model said it and
+  when, because free tiers change constantly and models state them wrongly with
+  confidence. Check the provider's own site before relying on it.
 - **Two groups, never mixed**
   - *Use a subscription you already have* — ChatGPT (Codex CLI) and Claude. Sign
     in once, inside the app. These are **not** free credit; they are your own
@@ -144,23 +156,44 @@ Read this inside the app: **Settings → Manual**.
 - **The Capabilities table is the whole picture** — one row per capability, and
   the row carries both halves: which model does that job, and whether Vaenyx may
   do it at all. Hearing, Speaking, Vision and Drawing each choose their own
-  model; Reading and Web ride the main model and say so on the row; Fetching is
-  not built yet.
+  model; Reading, Fetching and Web ride the main model and say so on the row.
   - **Hearing** *(Voice in)* — speech to text.
   - **Speaking** *(Voice out)* — text to speech.
   - **Vision** *(Picture in)* — looking at a photo.
   - **Drawing** *(Picture out)* — making a picture.
   - **Reading** *(Documents, PDF)* — a document you attached.
+  - **Fetching** *(Files on this machine)* — opening text files from folders you
+    name yourself, in that row's own setup. Text files only, and not large ones.
+    Today only the Claude subscription backend can really open a file; with any
+    other main model Vaenyx says so instead of guessing. A PDF still goes
+    through the document button in a chat, which is Reading. A Method or a
+    Routine cannot use this at all yet.
   - **Web** *(Web pages)* — going out to the internet.
+- **The switch is a ceiling** — anything switched off on a row is out of reach
+  of every Method, every mode and every app key, whatever they ask for. Web is
+  the one that is not all the way there yet: switching it off stops Methods and
+  app keys from searching, but an ordinary chat still looks things up, and the
+  card says so on its face.
+- **What is on when you install it** — everything Vaenyx already does on this
+  computer: Hearing, Speaking, Vision, Drawing, Reading. The two that reach past
+  the machine start off and stay off until you decide otherwise: **Web**, and
+  **Fetching**.
+- **Test a row** — five rows have a **Test** button that really does that one
+  job once, against something whose answer is already known, and says which of
+  three things happened: it worked, it failed in the failing side's own words,
+  or that path is not built. Above the button is what one press actually costs,
+  because some of them spend real money.
 - **A connected model that cannot do a job is greyed out, not hidden** — so you
   can see it is there and that it is not the tool for this.
-- **The main model is chosen once**, in the Models card. Every row that rides it
-  re-labels itself to whatever you picked.
+- **The main model is chosen once**, in the **Models** card below this one —
+  **Set As Default**. Every row that rides the main model re-labels itself to
+  whatever you picked.
 - **If an engine stops working** — Vaenyx does not quietly switch to another
   model. It tells you which one failed and why, and you change it here. That is
   deliberate: a silent swap means never knowing who wrote the answer.
-- **Add a key where you need it** — the Model keys card takes a key for any
-  capable provider, and it joins the same shared pool.
+- **Add a key where you need it** — each row's own setup takes a key for any
+  provider that can do that job, and it joins the same shared pool: connect a
+  provider once and every row that provider can serve may choose it.
 
 ## 10. Subscription Door — lending your subscriptions to your own apps
 
@@ -178,7 +211,7 @@ Read this inside the app: **Settings → Manual**.
 - **Files** — apps send a short-lived download link, never the file. Vaenyx
   fetches it only from the hosts you listed, uses it, and deletes it.
 - **What is written down** — time, kind of job, which subscription, how long,
-  worked or not. 🔴 Never the prompt, the file, or the answer.
+  worked or not. **Never** the prompt, the file, or the answer.
 - **Test** — a Test button per subscription sends a real request. Green means it
   really worked.
 - **Prerequisite** — the app's device must be on your private network. If it is
@@ -198,12 +231,12 @@ Read this inside the app: **Settings → Manual**.
 
 - **Back up now** — Settings → Backup → **Create backup**.
 - **Automatic backups** — the same screen: off, daily, or weekly, and the hour.
-- **Encrypt them** — set a backup password. 🔴 Lose that password and the backup
-  cannot be opened by anyone, including you.
+- **Encrypt them** — set a backup password. **Warning:** Lose that password and
+  the backup cannot be opened by anyone, including you.
 - **Where they go** — the destination on that screen; how many are kept is the
   *Keep* setting.
 - **Restore** — Settings → Backup → the backup → **Restore**.
-  🔴 **Restoring replaces everything you have now. It cannot be undone.**
+  **Warning: restoring replaces everything you have now. It cannot be undone.**
 - **Note** — pushing to GitHub is not a backup, and deploying is not a backup.
 
 ## 13. Modes
@@ -228,6 +261,9 @@ Read this inside the app: **Settings → Manual**.
 - **Legal documents** — Settings → Legal. The operative texts, as shipped.
 - **What leaves this computer** — whatever you send to a model backend. Vaenyx
   does not claim otherwise, because the backend is your choice.
+- **Your own files** — none of them, unless you switched **Fetching** on and
+  named the folders yourself; then a file from one of those folders can be sent
+  to the model like anything else you attach. See *Files on your computer* above.
 - **Audit trail** — the Guard screen lists what was allowed and refused.
 - **Change your password** — Settings → Personal.
 - **Sign every device out** — Settings → Personal → **Log out everywhere**.
@@ -242,8 +278,10 @@ Read this inside the app: **Settings → Manual**.
 | Phone cannot reach it, computer can | The phone is off the private network. Reconnect Tailscale. |
 | "Not signed in" on a subscription | Settings → AI Settings → sign in to that one again. |
 | An engine fails and nothing else happens | By design. Read which one failed, then pick another engine on that row. |
-| Voice button does nothing | No Voice Input engine is set. Settings → AI Settings → Voice in. |
-| Photo comes back with no marks | Picture Input has no engine set, or the model found nothing to mark. |
+| Voice button does nothing | The Hearing row has no engine, or Hearing is switched off. Settings → AI Settings → Capabilities → Hearing. |
+| The ▶ button is missing from replies | Speaking is switched off. Settings → AI Settings → Capabilities → Speaking. |
+| "You have that switched off" | You did, on that capability's row. Settings → AI Settings → Capabilities, and turn the row back on. |
+| Photo comes back with no marks | The Vision row has no engine or is switched off, or the model found nothing to mark. |
 | A PDF asks about pages first | Over ten pages, on purpose. It is telling you the cost before spending it. |
 | Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the address is not on the owner list. |
 | A scheduled run failed overnight | The computer slept. The failure and its reason stay on the run. |
@@ -251,5 +289,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.79** · last updated 2026-07-31.
+Manual for **v0.3.1-dev.80** · last updated 2026-08-01.
 Keep this file up to date whenever a feature changes.
