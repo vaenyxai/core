@@ -1199,23 +1199,87 @@ textarea::placeholder {
    the name flexes instead. */
 .capability-row-engine {
   flex: none;
-  width: 120px;
-  padding: 4px 6px;
-  border: 0.5px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--text);
-  font-size: var(--fs-label);
-  font-family: inherit;
+  width: 132px;
 }
 
-.capability-row-engine.none {
-  width: 120px;
-  padding: 4px 6px;
-  border-color: transparent;
-  background: none;
+/* Our own drop-down, because the browser's own popup ignores the theme and
+   opens white on a dark screen. See picker.tsx. */
+.picker {
+  position: relative;
+}
+
+.picker-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding: 5px 6px 5px 9px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-label);
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.picker-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.picker-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
   color: var(--text-faint);
-  text-align: right;
+}
+
+.picker-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+
+.picker-option {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-label);
+  white-space: nowrap;
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker-option:hover {
+  background: var(--accent-soft);
+}
+
+.picker-option.on {
+  color: var(--accent);
 }
 
 /* On a phone the row wraps to two lines rather than crushing the name: the
@@ -1489,6 +1553,44 @@ textarea::placeholder {
 .door-subhead:first-of-type {
   padding-top: 0;
   border-top: none;
+}
+
+/* A card heading with one action on the right. */
+.settings-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.free-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.free-item {
+  padding-top: var(--space-3);
+  border-top: 0.5px solid var(--border);
+}
+
+.free-item-slot {
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.free-item-text {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-base);
+}
+
+.free-item-meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-label);
+  color: var(--text-faint);
 }
 
 /* Nothing but a plus where an empty input used to sit. */

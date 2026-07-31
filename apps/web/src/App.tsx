@@ -246,6 +246,7 @@ import {
 } from "./toast.js";
 import { useI18n, type Lang } from "./i18n.js";
 import { CAPABILITY_META, CapabilityChips } from "./capability-chips.js";
+import { Picker } from "./picker.js";
 import { CAPABILITIES } from "./capabilities.js";
 import {
   getCodexAuthCopy,
@@ -10558,6 +10559,104 @@ function DoorList({
   );
 }
 
+// WHAT IS FREE RIGHT NOW, in a window you open on purpose. Opens on the answer
+// from last time — including WHICH MODEL said it and WHEN, because free tiers
+// change constantly and models state them wrongly with total confidence. The
+// Update button goes and asks again; the old answer stays on screen until a new
+// one lands, so you are never left staring at nothing.
+function FreeModelsModal({
+  lang,
+  onClose,
+}: {
+  lang: Lang;
+  onClose: () => void;
+}) {
+  const [picks, setPicks] = useState<FreePicksState | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchFreePicks()
+      .then(setPicks)
+      .catch(() => setPicks({ items: {} }));
+  }, []);
+
+  const slots: { key: keyof FreePicksState["items"]; label: string }[] = [
+    { key: "voiceIn", label: lang === "zh" ? "听(声音进)" : "Hearing" },
+    { key: "voiceOut", label: lang === "zh" ? "念(声音出)" : "Speaking" },
+    { key: "vision", label: lang === "zh" ? "看(图形进)" : "Vision" },
+    { key: "image", label: lang === "zh" ? "画(图形出)" : "Drawing" },
+  ];
+  const found = slots.filter((slot) => picks?.items?.[slot.key]);
+
+  return (
+    <Modal
+      onClose={onClose}
+      title={lang === "zh" ? "现在有哪些免费的" : "What is free right now"}
+    >
+      <p className="settings-card-copy">
+        {lang === "zh"
+          ? "这是上一次问出来的答案。免费额度天天变,模型也会非常自信地答错 —— 用之前请到服务商官网确认。"
+          : "This is what was found last time. Free tiers change constantly and models state them wrongly with confidence — check the provider's own site before relying on it."}
+      </p>
+      {picks === null ? null : found.length === 0 ? (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "还没查过。按下面的按钮问一次。"
+            : "Never checked. Press Update to ask."}
+        </p>
+      ) : (
+        <div className="free-list">
+          {found.map((slot) => {
+            const item = picks.items[slot.key];
+            if (!item) return null;
+            return (
+              <div className="free-item" key={slot.key}>
+                <span className="free-item-slot">{slot.label}</span>
+                <p className="free-item-text">{item.text}</p>
+                <p className="free-item-meta">
+                  {lang === "zh" ? "是 " : "said by "}
+                  {item.source}
+                  {lang === "zh" ? " 说的 · " : " · "}
+                  {new Date(item.checkedAt).toLocaleDateString()}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {error ? <p className="form-error">{error}</p> : null}
+      <div className="modal-actions">
+        <button
+          className="primary-button"
+          disabled={running}
+          onClick={() => {
+            setRunning(true);
+            setError(null);
+            void refreshFreePicks()
+              .then(setPicks)
+              .catch((cause: unknown) =>
+                setError(
+                  cause instanceof Error ? cause.message : "Could not ask.",
+                ),
+              )
+              .finally(() => setRunning(false));
+          }}
+          type="button"
+        >
+          {running
+            ? lang === "zh"
+              ? "问着…"
+              : "Asking…"
+            : lang === "zh"
+              ? "更新"
+              : "Update"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 // THE CEILING. Seven rows, one per capability: the drawing, the word used
 // everywhere, and in brackets the older familiar wording — which lives HERE and
 // nowhere else (Oskar, 2026-07-31), because this is the one screen where
@@ -10570,6 +10669,7 @@ function CapabilitiesPanel() {
   const [global, setGlobal] = useState<Record<string, boolean> | null>(null);
   const [implemented, setImplemented] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [showFree, setShowFree] = useState(false);
   const [hearingEngine, setHearingEngine] = useState("none");
   const [speakingEngine, setSpeakingEngine] = useState("none");
   const [visionEngine, setVisionEngineState] = useState("none");
@@ -10598,9 +10698,16 @@ function CapabilitiesPanel() {
 
   // WHICH MODEL DOES THIS JOB, on the same row as WHETHER IT MAY (Oskar asked
   // four times). They are the two halves of one capability; split across two
-  // cards, nobody can ever tell what is actually set. Four capabilities have an
-  // engine slot of their own. Reading and Web ride the main model — that is a
-  // fact worth printing, not a blank. Fetching is not built.
+  // cards, nobody can ever tell what is actually set.
+  //
+  // Every row that can be done at all gets a chooser, never a printed word
+  // (Oskar, 2026-07-31): "main model" written flat looks like a label you
+  // cannot act on. Reading and Web genuinely have one choice today, so their
+  // list has one entry — an honest list of one, not a dead caption. When they
+  // grow their own engines the entries appear and nothing else changes.
+  const mainModelOnly = [
+    { value: "main", label: lang === "zh" ? "主模型" : "Main model" },
+  ];
   const engines: Record<
     string,
     | {
@@ -10638,6 +10745,11 @@ function CapabilitiesPanel() {
       },
       value: hearingEngine,
     },
+    reading: {
+      options: mainModelOnly,
+      set: async () => undefined,
+      value: "main",
+    },
     speaking: {
       options: [
         { value: "none", label: "— off" },
@@ -10668,6 +10780,11 @@ function CapabilitiesPanel() {
         setVisionEngineState(status.provider ?? "none");
       },
       value: visionEngine,
+    },
+    web: {
+      options: mainModelOnly,
+      set: async () => undefined,
+      value: "main",
     },
   };
 
@@ -10704,11 +10821,28 @@ function CapabilitiesPanel() {
   return (
     <section className="settings-card">
       <p className="eyebrow">What Vaenyx may do</p>
-      <h2>Capabilities</h2>
+      <div className="settings-card-head">
+        <h2>Capabilities</h2>
+        {/* The free-model survey lives behind this, not on the page (Oskar,
+            2026-07-31). It is a thing you consult perhaps twice a year; on the
+            page it was permanent furniture in front of the switches you touch
+            weekly. The popup opens on LAST time's answer — a stale answer you
+            can see beats a spinner every time you look. */}
+        <button
+          className="text-button"
+          onClick={() => setShowFree(true)}
+          type="button"
+        >
+          {lang === "zh" ? "免费额度" : "Free models"}
+        </button>
+      </div>
       <p className="settings-card-copy">
         The ceiling. Anything switched off here is out of reach of every Method,
         every mode and every app key — whatever they ask for.
       </p>
+      {showFree ? (
+        <FreeModelsModal lang={lang} onClose={() => setShowFree(false)} />
+      ) : null}
       <div className="capability-rows">
         {CAPABILITY_META.map((meta) => {
           const built = implemented[meta.id] !== false;
@@ -10721,29 +10855,17 @@ function CapabilitiesPanel() {
                 <em>({lang === "zh" ? meta.gloss.zh : meta.gloss.en})</em>
               </span>
               {engine ? (
-                <select
-                  aria-label={`${meta.name.en} model`}
-                  className="capability-row-engine"
-                  disabled={busy === meta.id}
-                  onChange={(event) =>
-                    void pickEngine(meta.id, event.target.value)
-                  }
-                  value={engine.value}
-                >
-                  {engine.options.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="capability-row-engine">
+                  <Picker
+                    ariaLabel={`${meta.name.en} model`}
+                    disabled={busy === meta.id}
+                    onChange={(next) => void pickEngine(meta.id, next)}
+                    options={engine.options}
+                    value={engine.value}
+                  />
+                </div>
               ) : (
-                <span className="capability-row-engine none">
-                  {built
-                    ? lang === "zh"
-                      ? "主模型"
-                      : "main model"
-                    : ""}
-                </span>
+                <span className="capability-row-engine" />
               )}
               {built ? (
                 <input
