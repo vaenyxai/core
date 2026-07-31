@@ -64,13 +64,16 @@ const IconDrawing = (
 
 // Pages with a folded corner — many pages, which is the whole reason this is
 // not the same capability as looking at one picture.
-// An open book. A single folded page read as "a file"; a book reads as READING
-// and, because it is open, as many pages at once — which is the entire reason
-// this is not the same capability as looking at one picture.
+// Pages you handed over, not a book. Nobody is sitting down with a novel here:
+// this is a document the Owner attached, and the second sheet behind the first
+// is the whole point — many pages, which is why it is not the same capability
+// as looking at one picture (Oskar, 2026-07-31).
 const IconReading = (
   <LineIcon>
-    <path d="M12 7C10 5.5 7.5 5 5 5v12c2.5 0 5 .5 7 2 2-1.5 4.5-2 7-2V5c-2.5 0-5 .5-7 2z" />
-    <path d="M12 7v12" />
+    <path d="M9 3h4.5L18 7.5V16" />
+    <path d="M6 6.5h5L15 10.5V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7.5a1 1 0 0 1 1-1z" />
+    <path d="M11 6.5v4h4" />
+    <path d="M7.5 14h5M7.5 16.5h5" />
   </LineIcon>
 );
 

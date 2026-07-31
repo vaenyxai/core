@@ -1169,10 +1169,16 @@ textarea::placeholder {
   height: 18px;
 }
 
+/* The icon looked a shade high against the words (Oskar, 2026-07-31). It was
+   not: centring puts the middle of the icon against the middle of the text's
+   BOX, and a 1.5 line-height leaves more space above the glyphs than below, so
+   the letters sit low. Hugging the glyphs with line-height 1 makes box centre
+   and optical centre the same thing. */
 .capability-row-name {
   flex: 1;
   min-width: 0;
   font-size: var(--fs-md);
+  line-height: 1;
 }
 
 /* The old wording, kept as an explanation and only on this screen. */
