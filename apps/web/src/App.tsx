@@ -10271,32 +10271,13 @@ function CapabilitiesPanel() {
       : ([] as PickerOption[]);
   })();
 
-  // Opening a file is not something every backend can do — only a backend whose
-  // own tool layer can be scoped to named folders, which today is the Claude
-  // subscription. The row shows the truth either way: the one that can, or the
-  // main model greyed out so you can see WHY nothing happens rather than
-  // finding an empty control. Same shape as every other row, no exceptions.
-  const FETCH_CAPABLE = ["claude-sub"];
-  const fetchOptions: PickerOption[] = (() => {
-    const connected = providers.filter((provider) => provider.connected);
-    const options = connected
-      .filter((provider) => FETCH_CAPABLE.includes(provider.id))
-      .map((provider) => ({
-        label: provider.isDefault ? `${provider.name} ${mainNote}` : provider.name,
-        value: provider.id,
-      }));
-    if (options.length > 0) return options;
-    const main = connected.find((provider) => provider.isDefault);
-    return main
-      ? [
-          {
-            disabled: true,
-            label: `${main.name}${lang === "zh" ? " —— 打不开文件" : " — cannot open files"}`,
-            value: main.id,
-          },
-        ]
-      : [];
-  })();
+  // Fetching rides the main model like Reading does, and for the same reason
+  // (Oskar, 2026-08-01: "不应该限制到claude"). Tying it to one backend was an
+  // implementation showing through the product: it was built on that backend's
+  // own file tool, so only that backend could do it. Wrong way round — VAENYX
+  // opens the file, against the folders the Owner named, and hands the words to
+  // whichever model answers. Every model works, and the model never gets a tool
+  // that can reach a disk at all, which is also the safer half of the trade.
 
   const engines: Record<
     string,
@@ -10368,7 +10349,7 @@ function CapabilitiesPanel() {
       },
       value: visionEngine,
     },
-    fetching: { options: fetchOptions, set: async () => undefined, value: "" },
+    fetching: { options: mainOnly, set: async () => undefined, value: "" },
     web: { options: mainOnly, set: async () => undefined, value: "" },
   };
   for (const entry of Object.values(engines)) {
@@ -10879,13 +10860,12 @@ function CapabilitiesPanel() {
           }
           setDraft={setFolderDraft}
         />
-        {/* Said plainly rather than discovered: the Owner would otherwise
-            switch it on, name a folder, ask about a file and be told no, with
-            nothing on the screen explaining why. */}
+        {/* Who opens the file matters more than which model answers, so it is
+            said here rather than left to be inferred from the row's chooser. */}
         <p className="settings-card-copy">
           {lang === "zh"
-            ? "今天只有 Claude(订阅)这个后台能真的去开文件;换成别的主模型,Vaenyx 会直说它开不了,而不是瞎猜。文档和扫描件走聊天里的附件按钮,那是「读文档」。"
-            : "Only the Claude (Subscription) backend can actually open a file today. With any other main model Vaenyx says so rather than guessing. Documents and scans go through the chat's attach button instead — that is Reading."}
+            ? "开文件的是 Vaenyx 自己,不是模型 —— 模型拿到的只是文字,它没有任何能碰到硬盘的工具。所以主模型是哪个都行。文档和扫描件走聊天里的附件按钮,那是「读文档」。"
+            : "Vaenyx opens the file, not the model — the model is handed words and never gets a tool that can touch a disk. So it works with whichever main model you use. Documents and scans go through the chat's attach button instead — that is Reading."}
         </p>
         {folderErrors.map((line) => (
           <p className="form-error" key={line}>

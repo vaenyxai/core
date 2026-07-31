@@ -205,7 +205,7 @@ export function loadConfig(): AppConfig {
     ),
     mode,
     port: readPort(process.env.VAENYX_PORT),
-    version: "0.3.1-dev.82",
+    version: "0.3.1-dev.83",
     webDistDirectory: resolve(
       serverRoot,
       process.env.VAENYX_WEB_DIST ?? "../web/dist",

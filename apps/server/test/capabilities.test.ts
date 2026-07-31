@@ -83,17 +83,18 @@ describe("capabilities", () => {
     ]);
   });
 
-  it("starts on for what happens on this machine, off for what reaches outside it", () => {
-    // The line is drawn by where the work happens. Everything the app already
-    // does here is on, so no default can switch off a feature the manual
-    // describes as working; only the two that reach out — the web, and the
-    // Owner's own folders — have to be turned on by hand.
+  it("starts on for everything but reaching into the Owner's own folders", () => {
+    // No default may switch off a feature the manual describes as working, and
+    // that now includes looking things up: a model that cannot check answers
+    // today's question from what it memorised, and sounds equally certain
+    // either way. The one thing left off is Vaenyx opening the Owner's own
+    // files, which has to be a decision somebody made.
     expect(CAPABILITY_DEFAULT_ON.vision).toBe(true);
     expect(CAPABILITY_DEFAULT_ON["hearing"]).toBe(true);
     expect(CAPABILITY_DEFAULT_ON["speaking"]).toBe(true);
     expect(CAPABILITY_DEFAULT_ON.reading).toBe(true);
     expect(CAPABILITY_DEFAULT_ON.drawing).toBe(true);
-    expect(CAPABILITY_DEFAULT_ON.web).toBe(false);
+    expect(CAPABILITY_DEFAULT_ON.web).toBe(true);
     expect(CAPABILITY_DEFAULT_ON.fetching).toBe(false);
   });
 
@@ -141,8 +142,11 @@ describe("capabilities", () => {
 
   it("lets a lower layer narrow, never widen", () => {
     const database = createTestDatabase();
-    // Default: web is off globally. A Method declaring it is refused, and the
+    // A Method may only ever narrow. Web ships on, so switch it off first and
+    // a Method declaring it is refused; the rest of its list still runs.
+    // Original note: the web is off globally. A Method declaring it is refused, and the
     // reason says which layer refused it.
+    writeGlobalCapabilities(database, { web: false });
     const shut = decideCapabilities(database, ["web", "vision"], null);
     expect(shut.allowed).toEqual(["vision"]);
     expect(shut.refused).toEqual([{ capability: "web", reason: "global" }]);

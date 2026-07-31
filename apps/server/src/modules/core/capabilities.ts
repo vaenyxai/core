@@ -85,8 +85,16 @@ export const CAPABILITY_DEFAULT_ON: Record<Capability, boolean> = {
   vision: true,
   drawing: true,
   reading: true,
+  // The ONE thing that stays off until asked for: reading files on this
+  // machine. Everything else here is Vaenyx doing its job; this is Vaenyx
+  // opening the Owner's own folders, and that has to be a decision somebody
+  // made rather than a default they inherited.
   fetching: false,
-  web: false,
+  // On (Oskar, 2026-08-01: "web我觉得要一直打开,不然根本拿不到最新的信息"). A
+  // model that cannot look anything up answers today's question with what it
+  // memorised a year ago and sounds equally sure either way — being wrong
+  // confidently is worse than reaching the internet.
+  web: true,
 };
 
 export class UnknownCapabilityError extends Error {

@@ -164,8 +164,9 @@ Read this inside the app: **Settings → Manual**.
   - **Reading** *(Documents, PDF)* — a document you attached.
   - **Fetching** *(Files on this machine)* — opening text files from folders you
     name yourself, in that row's own setup. Text files only, and not large ones.
-    Today only the Claude subscription backend can really open a file; with any
-    other main model Vaenyx says so instead of guessing. A PDF still goes
+    Vaenyx opens the file itself, so it works with whichever main model you
+    use — the model is handed words and never gets a tool that could reach a
+    disk. A PDF still goes
     through the document button in a chat, which is Reading. A Method or a
     Routine cannot use this at all yet.
   - **Web** *(Web pages)* — going out to the internet.
@@ -294,5 +295,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.82** · last updated 2026-08-01.
+Manual for **v0.3.1-dev.83** · last updated 2026-08-01.
 Keep this file up to date whenever a feature changes.
