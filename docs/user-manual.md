@@ -191,7 +191,7 @@ Read this inside the app: **Settings → Manual**.
 - **If an engine stops working** — Vaenyx does not quietly switch to another
   model. It tells you which one failed and why, and you change it here. That is
   deliberate: a silent swap means never knowing who wrote the answer.
-- **Add a key where you need it** — each row's own setup takes a key for any
+- **Add a key where you need it** — the Models card takes a key for any
   provider that can do that job, and it joins the same shared pool: connect a
   provider once and every row that provider can serve may choose it.
 
@@ -289,5 +289,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.80** · last updated 2026-08-01.
+Manual for **v0.3.1-dev.81** · last updated 2026-08-01.
 Keep this file up to date whenever a feature changes.

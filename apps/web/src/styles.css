@@ -1629,6 +1629,35 @@ textarea::placeholder {
   margin-bottom: var(--space-2);
 }
 
+/* The Test button sits ON the row, beside the model it tests. */
+.capability-row-test {
+  flex: none;
+  padding: 5px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--fs-label);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.capability-row-test:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.capability-row-test:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.capability-test-result {
+  grid-column: 1 / -1;
+  margin: 0 0 var(--space-2) 26px;
+}
+
 .capability-test-result {
   margin: var(--space-2) 0 0;
   font-size: var(--fs-label);

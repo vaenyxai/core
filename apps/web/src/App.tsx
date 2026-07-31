@@ -9186,124 +9186,6 @@ function freeAnswerNotice(
     .replace("{,已联网搜索}", searched ? ",已联网搜索" : "");
 }
 
-// A key can be added right where it is needed (Oskar, 2026-07-27): each engine
-// slot offers to take a key for any capable backend that is not yet connected.
-// It lands in the SAME shared pool as a key added under Models — connections
-// accumulate wherever they were typed, and every slot chooses from all of them.
-function SlotKeyAdd({
-  capability,
-  exclude = [],
-  notice = "legal.notice.modelConnect.cloud",
-  onConnected,
-  providers,
-}: {
-  capability: string;
-  exclude?: string[];
-  /** Which third-party notice fits this slot: the generic cloud one (F1) by
-   *  default; the pictures slot passes F5, because what leaves the device for
-   *  an image provider is one prompt, not the F1 list. */
-  notice?: string;
-  onConnected: () => void;
-  providers: ModelProviderInfo[];
-}) {
-  const { t } = useI18n();
-  const candidates = providers.filter(
-    (provider) =>
-      !provider.connected &&
-      provider.needsKey &&
-      provider.kind !== "cli-login" &&
-      provider.capabilities.includes(capability) &&
-      !exclude.includes(provider.id),
-  );
-  const [open, setOpen] = useState(false);
-  const [pick, setPick] = useState("");
-  const [key, setKey] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const first = candidates[0];
-  if (!first) return null;
-  const chosen = candidates.some((candidate) => candidate.id === pick)
-    ? pick
-    : first.id;
-
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      await connectModelProvider(chosen, { apiKey: key.trim() });
-      setOpen(false);
-      setKey("");
-      onConnected();
-    } catch (saveError) {
-      setError(
-        saveError instanceof Error ? saveError.message : "Could not connect.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!open) {
-    return (
-      <button
-        className="text-button slot-key-open"
-        onClick={() => setOpen(true)}
-        type="button"
-      >
-        + Add A Key Here
-      </button>
-    );
-  }
-  return (
-    <div className="slot-key-add">
-      <Picker
-        ariaLabel="Which service this key is for"
-        disabled={saving}
-        onChange={setPick}
-        options={candidates.map((candidate) => ({
-          label: candidate.name,
-          value: candidate.id,
-        }))}
-        value={chosen}
-      />
-      {/* type="text" + CSS masking, NOT type="password": a model key is not a
-          login, and password fields make the browser offer to save it in its
-          password manager. */}
-      <input
-        autoCapitalize="off"
-        autoComplete="off"
-        className="key-input"
-        disabled={saving}
-        onChange={(event) => setKey(event.target.value)}
-        placeholder="API key"
-        spellCheck={false}
-        type="text"
-        value={key}
-      />
-      <button
-        className="primary-button"
-        disabled={saving || key.trim().length === 0}
-        onClick={() => void save()}
-        type="button"
-      >
-        Save
-      </button>
-      <button
-        className="secondary-button"
-        disabled={saving}
-        onClick={() => setOpen(false)}
-        type="button"
-      >
-        Cancel
-      </button>
-      {/* TPN n.3: every surface that connects a cloud model renders the
-          third-party notice — this inline add is such a surface. */}
-      <p className="context-disclaimer">{t(notice)}</p>
-      {error ? <p className="form-error">{error}</p> : null}
-    </div>
-  );
-}
-
 // The free way to do each of the four things Vaenyx needs an outside model for
 // (Oskar, 2026-07-27). Someone who cannot pay should still be able to run the
 // whole app, and finding that out should not require reading four pricing pages.
@@ -10490,11 +10372,6 @@ function CapabilitiesPanel() {
             ? "麦克风按钮 —— 你说的话变成文字。"
             : "The mic button — what you say becomes text."}
         </p>
-        <SlotKeyAdd
-          capability="voice-in"
-          onConnected={reload}
-          providers={providers}
-        />
         <FreePick
           href="https://console.groq.com"
           pick={freePicks?.items.voiceIn}
@@ -10535,11 +10412,6 @@ function CapabilitiesPanel() {
         <p className="settings-card-copy">
           {lang === "zh" ? "回复念出来。" : "Replies read aloud."}
         </p>
-        <SlotKeyAdd
-          capability="voice-out"
-          onConnected={reload}
-          providers={providers}
-        />
         {/* Always reachable, not revealed by first choosing "local" in the
             row's chooser (Oskar, 2026-07-31): the download IS the setup, and
             setup you can only reach by first choosing the thing you have not
@@ -10755,11 +10627,6 @@ function CapabilitiesPanel() {
             ? "相机按钮 —— 一张照片变成文字。"
             : "The camera button — a photo becomes words."}
         </p>
-        <SlotKeyAdd
-          capability="vision"
-          onConnected={reload}
-          providers={providers}
-        />
         <FreePick
           href="https://aistudio.google.com/apikey"
           pick={freePicks?.items.vision}
@@ -10858,13 +10725,6 @@ function CapabilitiesPanel() {
             </p>
           </>
         ) : null}
-        <SlotKeyAdd
-          capability="image"
-          exclude={["workersai"]}
-          notice="legal.notice.modelConnect.pictures"
-          onConnected={reload}
-          providers={providers}
-        />
         <FreePick
           href="https://dash.cloudflare.com/profile/api-tokens"
           pick={freePicks?.items.image}
@@ -10991,38 +10851,45 @@ function CapabilitiesPanel() {
   // Three outcomes, never merged: it worked, it failed in the failing side's
   // own words, or that path is not built. The wording all comes from the server
   // — it is the only side that knows which engine answered and what it said.
-  function testSection(id: string) {
+  // On the row, not folded away (Oskar, 2026-08-01). A test you have to go
+  // looking for is a test nobody runs; "does this actually work" is the first
+  // question anyone has about a row, so it is answered on the row. The cost
+  // rides in the button's title rather than as a line of its own, because four
+  // words of warning beside every row is louder than the rows themselves.
+  function rowTest(id: string) {
     const cost = TEST_COST[id];
     if (!cost) return null;
-    const result = testResults[id];
     const running = testing === id;
-    const mark =
-      result?.status === "ok" ? "✓" : result?.status === "failed" ? "✗" : "—";
     return (
-      <div className="capability-test">
-        <p className="settings-card-copy text-faint">
-          {lang === "zh" ? cost.zh : cost.en}
-        </p>
-        <button
-          className="door-test"
-          disabled={running}
-          onClick={() => void runTest(id)}
-          type="button"
-        >
-          {running
-            ? lang === "zh"
-              ? "测试中…"
-              : "Testing…"
-            : lang === "zh"
-              ? "测一次"
-              : "Test It"}
-        </button>
-        {result ? (
-          <p className={`capability-test-result ${result.status}`}>
-            {`${mark} ${result.engine ? `${result.engine}${lang === "zh" ? ":" : ": "}` : ""}${result.detail}`}
-          </p>
-        ) : null}
-      </div>
+      <button
+        className="capability-row-test"
+        disabled={running}
+        onClick={() => void runTest(id)}
+        title={lang === "zh" ? cost.zh : cost.en}
+        type="button"
+      >
+        {running
+          ? lang === "zh"
+            ? "测试中…"
+            : "Testing…"
+          : lang === "zh"
+            ? "测一次"
+            : "Test"}
+      </button>
+    );
+  }
+
+  // The answer is a sentence in somebody else's words, so it gets the full
+  // width under the row rather than being squeezed into it.
+  function testAnswer(id: string) {
+    const result = testResults[id];
+    if (!result) return null;
+    const mark =
+      result.status === "ok" ? "✓" : result.status === "failed" ? "✗" : "—";
+    return (
+      <p className={`capability-test-result ${result.status}`}>
+        {`${mark} ${result.engine ? `${result.engine}${lang === "zh" ? ":" : ": "}` : ""}${result.detail}`}
+      </p>
     );
   }
 
@@ -11043,13 +10910,7 @@ function CapabilitiesPanel() {
                   : id === "web"
                     ? webSetup()
                     : null;
-    if (!body) return null;
-    return (
-      <>
-        {body}
-        {testSection(id)}
-      </>
-    );
+    return body;
   }
 
   return (
@@ -11167,6 +11028,7 @@ function CapabilitiesPanel() {
                 ) : (
                   <span className="capability-row-engine" />
                 )}
+                {rowTest(meta.id)}
                 {hasSetup ? (
                   <button
                     aria-controls={`setup-${meta.id}`}
@@ -11211,6 +11073,7 @@ function CapabilitiesPanel() {
               {/* A SIBLING of the row, never a child: the indent and the full
                   width come from `grid-column: 1 / -1`, which resolves against
                   the rows grid and not against the flex row. */}
+              {testAnswer(meta.id)}
               {hasSetup && open ? (
                 <div className="capability-setup" id={`setup-${meta.id}`}>
                   {setupFor(meta.id)}
@@ -11220,10 +11083,15 @@ function CapabilitiesPanel() {
           );
         })}
       </div>
+      {/* Adding a model happens in ONE place and it is not this card (Oskar,
+          2026-08-01). A key belongs to the model, not to the job: the same key
+          serves every row that model can do, so offering to add it on four
+          different rows made one thing look like four. Here you only choose
+          among what is connected. */}
       <p className="door-legend">
         {lang === "zh"
-          ? "还没连上的模型,点那一行右边的箭头,钥匙就在那里加。"
-          : "A model you have not connected yet gets its key on its own row — open the arrow beside it."}
+          ? "这里只选模型。要加新模型、贴 key,都在下面的 Models 里。"
+          : "You only choose here. Connecting a model and pasting its key both happen below, in Models."}
       </p>
     </section>
   );
