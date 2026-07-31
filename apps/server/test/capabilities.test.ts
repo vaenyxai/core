@@ -12,7 +12,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CAPABILITIES,
   CAPABILITY_DEFAULT_ON,
+  chargeToken,
   decideCapabilities,
+  decideTokenCapabilities,
+  readTokenSpend,
+  tokenGrantable,
   listCapabilityWaiting,
   missingCapabilities,
   noticeArrivedCapabilities,
@@ -189,6 +193,48 @@ describe("capabilities", () => {
     expect(off).not.toContain("unsupported");
     expect(mode).not.toContain("unsupported");
     expect(off).not.toBe(mode);
+  });
+
+  it("never lets a Token carry files, and only carries what it was granted", () => {
+    const database = createTestDatabase();
+    writeGlobalCapabilities(database, { web: true, files: true, vision: true });
+
+    // Even with files switched on globally, declared by the Method AND ticked
+    // on the token, it does not travel. This is a property of the code.
+    expect(tokenGrantable(["vision", "files", "web"])).toEqual([
+      "vision",
+      "web",
+    ]);
+    const decided = decideTokenCapabilities(
+      database,
+      ["vision", "files", "web"],
+      ["vision", "files", "web"],
+    );
+    expect(decided.allowed).not.toContain("files");
+    expect(decided.allowed).toEqual(["vision", "web"]);
+
+    // Declared but not granted to this token: not allowed.
+    expect(
+      decideTokenCapabilities(database, ["vision", "web"], ["vision"]).allowed,
+    ).toEqual(["vision"]);
+  });
+
+  it("stops a Token at its ceiling before the work, not after the bill", () => {
+    const database = createTestDatabase();
+    database.sqlite
+      .prepare(
+        "INSERT INTO app_profiles (id, name, token_hash, token_prefix, spend_limit_cents) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("p1", "Estimating", "hash", "vaenyx_app_", 100);
+
+    expect(chargeToken(database, "p1", 60).allowed).toBe(true);
+    expect(readTokenSpend(database, "p1").spentCents).toBe(60);
+    // 60 + 60 would pass the ceiling, so it is refused and nothing is charged.
+    expect(chargeToken(database, "p1", 60).allowed).toBe(false);
+    expect(readTokenSpend(database, "p1").spentCents).toBe(60);
+    // Exactly on the ceiling is still allowed.
+    expect(chargeToken(database, "p1", 40).allowed).toBe(true);
+    expect(readTokenSpend(database, "p1").spentCents).toBe(100);
   });
 
   it("names the capability when one was reached for but never declared", () => {

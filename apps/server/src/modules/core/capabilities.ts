@@ -310,6 +310,103 @@ export function decideCapabilities(
   return { allowed, refused };
 }
 
+// ── What a Method Token may carry ────────────────────────────────────────────
+//
+// 🔴 `files` can NEVER be granted through a token. Reading the Owner's disk on
+// behalf of another app is not something a token should be able to carry,
+// whatever the Method declared and whatever the Owner ticked — so this is a
+// property of the code, not a default someone can turn around.
+// 🔴 `web` needs its own explicit approval per token: it can turn this machine
+// into somebody else's proxy, which is a different question from "may this app
+// use my Method".
+export const NEVER_VIA_TOKEN: readonly Capability[] = ["files"];
+export const NEEDS_OWN_TOKEN_APPROVAL: readonly Capability[] = ["web"];
+
+export function tokenGrantable(declared: Capability[]): Capability[] {
+  return declared.filter(
+    (capability) => !NEVER_VIA_TOKEN.includes(capability),
+  );
+}
+
+// global ∩ what this token was granted ∩ what the Method declared — and no mode
+// layer, because a token call has no conversation to be in a mode.
+export function decideTokenCapabilities(
+  database: DatabaseHandle,
+  declared: Capability[],
+  granted: Capability[],
+): CapabilityDecision {
+  const base = decideCapabilities(database, declared, null);
+  const allowed: Capability[] = [];
+  const refused = [...base.refused];
+  for (const capability of base.allowed) {
+    if (NEVER_VIA_TOKEN.includes(capability)) continue; // never, silently
+    if (!granted.includes(capability)) continue; // not granted to this token
+    allowed.push(capability);
+  }
+  return { allowed, refused };
+}
+
+// What the Owner granted this particular token. Absent = nothing beyond the
+// recipe, which is what every token issued before capabilities existed carries:
+// a token never silently gains reach because the feature arrived.
+export function readProfileCapabilities(
+  database: DatabaseHandle,
+  profileId: string,
+): Capability[] {
+  const row = database.sqlite
+    .prepare("SELECT capabilities FROM app_profiles WHERE id = ?")
+    .get(profileId) as { capabilities?: string | null } | undefined;
+  if (!row?.capabilities) return [];
+  try {
+    const parsed = JSON.parse(row.capabilities) as unknown;
+    return Array.isArray(parsed) ? tokenGrantable(parsed.filter(isCapability)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface TokenSpend {
+  limitCents: number | null;
+  spentCents: number;
+}
+
+export function readTokenSpend(
+  database: DatabaseHandle,
+  profileId: string,
+): TokenSpend {
+  const row = database.sqlite
+    .prepare(
+      "SELECT spend_limit_cents AS limitCents, spent_cents AS spentCents FROM app_profiles WHERE id = ?",
+    )
+    .get(profileId) as
+    | { limitCents: number | null; spentCents: number }
+    | undefined;
+  return {
+    limitCents: row?.limitCents ?? null,
+    spentCents: row?.spentCents ?? 0,
+  };
+}
+
+// Charge a token and say whether it may still run. The ceiling is checked
+// BEFORE the work, because the point is to stop spending, not to report it.
+export function chargeToken(
+  database: DatabaseHandle,
+  profileId: string,
+  cents: number,
+): { allowed: boolean; spend: TokenSpend } {
+  const spend = readTokenSpend(database, profileId);
+  if (spend.limitCents !== null && spend.spentCents + cents > spend.limitCents) {
+    return { allowed: false, spend };
+  }
+  database.sqlite
+    .prepare("UPDATE app_profiles SET spent_cents = spent_cents + ? WHERE id = ?")
+    .run(cents, profileId);
+  return {
+    allowed: true,
+    spend: { ...spend, spentCents: spend.spentCents + cents },
+  };
+}
+
 // Never "unsupported" — that reads as broken and sends the Owner looking for a
 // fault that is not there. The two real reasons need two different sentences,
 // because they have two different fixes.

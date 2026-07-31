@@ -517,7 +517,9 @@ import { listAuditEvents, recordAudit } from "../guard/audit.js";
 import {
   capabilitiesFromManifest,
   decideCapabilities,
+  decideTokenCapabilities,
   missingCapabilities,
+  readProfileCapabilities,
   recordCapabilityWanted,
 } from "../core/capabilities.js";
 import {
@@ -7964,11 +7966,15 @@ export async function registerGatewayRoutes(
           methodId,
         );
         // A Token call has no conversation and no mode, so the mode layer
-        // does not apply: global ∩ what this Method declared, nothing else.
-        const tokenAllowed = decideCapabilities(
+        // does not apply: global ∩ what this token was granted ∩ what the
+        // Method declared. `files` is stripped here whatever anyone ticked —
+        // reading the Owner's disk for another app is not something a token
+        // carries.
+        const tokenGrants = readProfileCapabilities(context.database, profile.id);
+        const tokenAllowed = decideTokenCapabilities(
           context.database,
           capabilitiesFromManifest(method.manifest).capabilities,
-          null,
+          tokenGrants,
         );
         const result = await executeMethod(
           method,
