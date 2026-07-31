@@ -43,16 +43,20 @@ export type RelayEngine = (typeof RELAY_ENGINES)[number];
 // Cloudflare), so they are reported unsupported rather than quietly missing.
 export const RELAY_CAPABILITIES = [
   "text",
-  "voice-in",
-  "voice-out",
-  "image-in",
-  "image-out",
+  "hearing",
+  "speaking",
+  "vision",
+  "reading",
+  "drawing",
 ] as const;
 export type RelayCapability = (typeof RELAY_CAPABILITIES)[number];
 
+// Split now that the vocabulary distinguishes them: Claude reads a PDF itself,
+// Codex takes pictures only — so a caller sending a PDF to Codex must turn its
+// pages into images first, which is what the hand-off prompt already says.
 const ENGINE_CAPABILITIES: Record<RelayEngine, RelayCapability[]> = {
-  "openai-cli": ["text", "image-in"],
-  "claude-cli": ["text", "image-in"],
+  "openai-cli": ["text", "vision"],
+  "claude-cli": ["text", "vision", "reading"],
 };
 
 export interface RelayConfig {
@@ -389,7 +393,10 @@ export async function runRelay(
   try {
     const files = await fetchLinkedFiles(request.files, config, scratch);
     const attachment = files[0];
-    if (request.capability === "image-in" && !attachment) {
+    if (
+      (request.capability === "vision" || request.capability === "reading") &&
+      !attachment
+    ) {
       throw new Error("RELAY_NO_FILE");
     }
 

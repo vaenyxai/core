@@ -73,31 +73,31 @@ afterEach(() => {
 describe("capabilities", () => {
   it("is a closed vocabulary of seven", () => {
     expect([...CAPABILITIES]).toEqual([
+      "hearing",
+      "speaking",
       "vision",
-      "documents",
-      "voice-in",
-      "voice-out",
-      "draw",
+      "drawing",
+      "reading",
+      "fetching",
       "web",
-      "files",
     ]);
   });
 
   it("starts on for what the Owner triggers, off for what a Method decides", () => {
     // The line is drawn by who pulls the trigger, not by how dangerous it is.
     expect(CAPABILITY_DEFAULT_ON.vision).toBe(true);
-    expect(CAPABILITY_DEFAULT_ON["voice-in"]).toBe(true);
-    expect(CAPABILITY_DEFAULT_ON["voice-out"]).toBe(true);
+    expect(CAPABILITY_DEFAULT_ON["hearing"]).toBe(true);
+    expect(CAPABILITY_DEFAULT_ON["speaking"]).toBe(true);
     expect(CAPABILITY_DEFAULT_ON.web).toBe(false);
-    expect(CAPABILITY_DEFAULT_ON.files).toBe(false);
-    expect(CAPABILITY_DEFAULT_ON.documents).toBe(false);
-    expect(CAPABILITY_DEFAULT_ON.draw).toBe(false);
+    expect(CAPABILITY_DEFAULT_ON.fetching).toBe(false);
+    expect(CAPABILITY_DEFAULT_ON.reading).toBe(false);
+    expect(CAPABILITY_DEFAULT_ON.drawing).toBe(false);
   });
 
   it("reads a named list", () => {
-    const directory = methodFolder({ capabilities: ["vision", "documents"] });
+    const directory = methodFolder({ capabilities: ["vision", "reading"] });
     expect(readMethodManifest(directory)).toEqual({
-      capabilities: ["vision", "documents"],
+      capabilities: ["vision", "reading"],
       minimumVersion: null,
     });
   });
@@ -119,7 +119,7 @@ describe("capabilities", () => {
     const both = methodFolder({
       permissions: { network: true, readFiles: true },
     });
-    expect(readMethodManifest(both).capabilities).toEqual(["web", "files"]);
+    expect(readMethodManifest(both).capabilities).toEqual(["web", "fetching"]);
 
     // The shape every Method on disk carries today: both false, so nothing.
     const shipped = methodFolder({
@@ -168,15 +168,15 @@ describe("capabilities", () => {
 
   it("records only what does not EXIST, and notices when it arrives", () => {
     const database = createTestDatabase();
-    // `files` has a word and a chip and no implementation; `web` has all three.
-    expect(missingCapabilities(["web", "files", "vision"])).toEqual(["files"]);
+    // `fetching` has a word and a chip and no implementation; `web` has all three.
+    expect(missingCapabilities(["web", "fetching", "vision"])).toEqual(["fetching"]);
 
-    recordCapabilityWanted(database, ["files", "web"]);
-    recordCapabilityWanted(database, ["files"]);
+    recordCapabilityWanted(database, ["fetching", "web"]);
+    recordCapabilityWanted(database, ["fetching"]);
     const waiting = listCapabilityWaiting(database);
     // `web` exists — wanting it is not waiting for anything to be built, and
     // counting it would poison the priority signal.
-    expect(waiting.map((row) => row.capability)).toEqual(["files"]);
+    expect(waiting.map((row) => row.capability)).toEqual(["fetching"]);
     expect(waiting[0]?.timesWanted).toBe(2);
     expect(waiting[0]?.arrived).toBe(false);
 
@@ -185,8 +185,8 @@ describe("capabilities", () => {
   });
 
   it("gives the two refusals two different sentences, and never says unsupported", () => {
-    const off = refusedCapabilityMessage("files", "global");
-    const mode = refusedCapabilityMessage("files", "mode");
+    const off = refusedCapabilityMessage("fetching", "global");
+    const mode = refusedCapabilityMessage("fetching", "mode");
     expect(off).toContain("switched off");
     expect(off).toContain("Settings");
     expect(mode).toContain("mode you are in");
@@ -197,20 +197,20 @@ describe("capabilities", () => {
 
   it("never lets a Token carry files, and only carries what it was granted", () => {
     const database = createTestDatabase();
-    writeGlobalCapabilities(database, { web: true, files: true, vision: true });
+    writeGlobalCapabilities(database, { web: true, fetching: true, vision: true });
 
     // Even with files switched on globally, declared by the Method AND ticked
     // on the token, it does not travel. This is a property of the code.
-    expect(tokenGrantable(["vision", "files", "web"])).toEqual([
+    expect(tokenGrantable(["vision", "fetching", "web"])).toEqual([
       "vision",
       "web",
     ]);
     const decided = decideTokenCapabilities(
       database,
-      ["vision", "files", "web"],
-      ["vision", "files", "web"],
+      ["vision", "fetching", "web"],
+      ["vision", "fetching", "web"],
     );
-    expect(decided.allowed).not.toContain("files");
+    expect(decided.allowed).not.toContain("fetching");
     expect(decided.allowed).toEqual(["vision", "web"]);
 
     // Declared but not granted to this token: not allowed.

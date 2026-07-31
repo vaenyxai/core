@@ -90,7 +90,7 @@ describe("the subscription door", () => {
     expect(saved.ownerEmails).toEqual(["oskar@example.com", "b@x.com"]);
   });
 
-  it("offers text and image-in, and says so about the other three", () => {
+  it("offers the same words a Method declares, and says so about the rest", () => {
     const database = createTestDatabase();
     const health = relayHealth(database);
     expect(health.on).toBe(false);
@@ -99,10 +99,10 @@ describe("the subscription door", () => {
       "claude-cli",
     ]);
     for (const engine of health.engines) {
-      expect(engine.capabilities).toEqual(["text", "image-in"]);
-      expect(engine.capabilities).not.toContain("voice-in");
-      expect(engine.capabilities).not.toContain("voice-out");
-      expect(engine.capabilities).not.toContain("image-out");
+      expect(engine.capabilities).toEqual(engine.id === "claude-cli" ? ["text", "vision", "reading"] : ["text", "vision"]);
+      expect(engine.capabilities).not.toContain("hearing");
+      expect(engine.capabilities).not.toContain("speaking");
+      expect(engine.capabilities).not.toContain("drawing");
     }
   });
 
@@ -123,7 +123,7 @@ describe("the subscription door", () => {
     await expect(
       runOnce(database, {
         caller: " Owner@Example.com ",
-        capability: "voice-in",
+        capability: "hearing",
       }),
     ).rejects.toThrow("RELAY_CAPABILITY_UNSUPPORTED");
   });
@@ -131,7 +131,7 @@ describe("the subscription door", () => {
   it("refuses a capability the subscriptions do not have", async () => {
     const database = createTestDatabase();
     writeRelayConfig(database, OPEN_DOOR);
-    for (const capability of ["voice-in", "voice-out", "image-out"] as const) {
+    for (const capability of ["hearing", "speaking", "drawing"] as const) {
       await expect(runOnce(database, { capability })).rejects.toThrow(
         `RELAY_CAPABILITY_UNSUPPORTED:claude-cli:${capability}`,
       );
@@ -143,14 +143,14 @@ describe("the subscription door", () => {
     writeRelayConfig(database, OPEN_DOOR);
     await expect(
       runOnce(database, {
-        capability: "image-in",
+        capability: "vision",
         files: [{ name: "a.pdf", url: "https://evil.example.net/a.pdf" }],
       }),
     ).rejects.toThrow("RELAY_HOST_NOT_ALLOWED:evil.example.net");
     // Plain http never counts, even on a listed host.
     await expect(
       runOnce(database, {
-        capability: "image-in",
+        capability: "vision",
         files: [{ name: "a.pdf", url: "http://files.example.com/a.pdf" }],
       }),
     ).rejects.toThrow("RELAY_HOST_NOT_ALLOWED");
@@ -161,7 +161,7 @@ describe("the subscription door", () => {
     writeRelayConfig(database, { ...OPEN_DOOR, maxFiles: 1 });
     await expect(
       runOnce(database, {
-        capability: "image-in",
+        capability: "vision",
         files: [
           { name: "a.pdf", url: "https://files.example.com/a.pdf" },
           { name: "b.pdf", url: "https://files.example.com/b.pdf" },

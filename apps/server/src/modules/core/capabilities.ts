@@ -17,16 +17,42 @@ import { join } from "node:path";
 
 import type { DatabaseHandle } from "../../db/database.js";
 
+// Oskar's order, 2026-07-31, and it is the order everywhere: what comes in,
+// what goes out, then what it goes and gets. Each word names a FACULTY — the
+// ability itself, the way you would describe a person's senses — not the
+// direction of a pipe. That is why it is `hearing`, not `voice-in`.
 export const CAPABILITIES = [
+  "hearing",
+  "speaking",
   "vision",
-  "documents",
-  "voice-in",
-  "voice-out",
-  "draw",
+  "drawing",
+  "reading",
+  "fetching",
   "web",
-  "files",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
+
+// The vocabulary will grow and change (Oskar: "以后会加,会改"), so renaming has
+// to be survivable. An old name MIGRATES; only a name nobody has ever used is
+// unknown and refuses the run. Without this table a rename would quietly strip
+// capabilities from every Method written before it — which is the same silent
+// failure the unknown-name rule exists to prevent.
+const RENAMED_TO: Record<string, Capability> = {
+  "voice-in": "hearing",
+  "voice-out": "speaking",
+  draw: "drawing",
+  documents: "reading",
+  files: "fetching",
+  // Older still: the two booleans this all started from.
+  network: "web",
+  readFiles: "fetching",
+};
+
+export function currentCapabilityName(value: unknown): Capability | null {
+  if (isCapability(value)) return value;
+  if (typeof value === "string" && RENAMED_TO[value]) return RENAMED_TO[value];
+  return null;
+}
 
 // Deliberately kept apart from `vision`: reading one receipt and reading thirty
 // pages of drawings are different levels of reliability AND of cost, and one
@@ -44,13 +70,13 @@ export function isCapability(value: unknown): value is Capability {
 // start off. `documents` is off for cost, `draw` because connecting an image
 // engine is itself the switch.
 export const CAPABILITY_DEFAULT_ON: Record<Capability, boolean> = {
+  hearing: true,
+  speaking: true,
   vision: true,
-  "voice-in": true,
-  "voice-out": true,
-  documents: false,
-  draw: false,
+  drawing: false,
+  reading: false,
+  fetching: false,
   web: false,
-  files: false,
 };
 
 export class UnknownCapabilityError extends Error {
@@ -101,18 +127,26 @@ export function capabilitiesFromManifest(parsed: unknown): MethodManifest {
 
   const declared = Array.isArray(raw.capabilities) ? raw.capabilities : null;
   if (declared) {
-    const unknown = declared.filter((entry) => !isCapability(entry));
+    // A renamed word migrates; only a word nobody has ever used is unknown, and
+    // that still refuses the run.
+    const unknown = declared.filter(
+      (entry) => currentCapabilityName(entry) === null,
+    );
     if (unknown.length > 0) {
       throw new UnknownCapabilityError(unknown.map((entry) => String(entry)));
     }
     return {
-      capabilities: [...new Set(declared as Capability[])],
+      capabilities: [
+        ...new Set(
+          declared.map((entry) => currentCapabilityName(entry) as Capability),
+        ),
+      ],
       minimumVersion:
         typeof raw.minimumVersion === "string" ? raw.minimumVersion : null,
     };
   }
 
-  // The old shape, still on disk in every Method written before today:
+  // The oldest shape, still on disk in every Method written before today:
   // {"permissions":{"network":false,"readFiles":false}}. Two booleans map
   // straight onto two capabilities, which is exactly how the design says to
   // start. Nothing needs rewriting on disk for a Method to keep working.
@@ -122,7 +156,7 @@ export function capabilitiesFromManifest(parsed: unknown): MethodManifest {
       : {};
   const migrated: Capability[] = [];
   if (permissions.network === true) migrated.push("web");
-  if (permissions.readFiles === true) migrated.push("files");
+  if (permissions.readFiles === true) migrated.push("fetching");
   return { capabilities: migrated, minimumVersion: null };
 }
 
@@ -132,13 +166,15 @@ export function capabilitiesFromManifest(parsed: unknown): MethodManifest {
 // a word and a chip and no implementation behind it yet, which is exactly the
 // case the waiting list exists for.
 export const CAPABILITY_IMPLEMENTED: Record<Capability, boolean> = {
+  hearing: true,
+  speaking: true,
   vision: true,
-  documents: true,
-  "voice-in": true,
-  "voice-out": true,
-  draw: true,
+  drawing: true,
+  reading: true,
   web: true,
-  files: false,
+  // The only word today with a chip and no kernel behind it — and, once built,
+  // it must take EVERY kind of file, not just PDFs (Oskar, 2026-07-31).
+  fetching: false,
 };
 
 export function missingCapabilities(declared: Capability[]): Capability[] {
@@ -319,7 +355,7 @@ export function decideCapabilities(
 // 🔴 `web` needs its own explicit approval per token: it can turn this machine
 // into somebody else's proxy, which is a different question from "may this app
 // use my Method".
-export const NEVER_VIA_TOKEN: readonly Capability[] = ["files"];
+export const NEVER_VIA_TOKEN: readonly Capability[] = ["fetching"];
 export const NEEDS_OWN_TOKEN_APPROVAL: readonly Capability[] = ["web"];
 
 export function tokenGrantable(declared: Capability[]): Capability[] {
@@ -415,13 +451,13 @@ export function refusedCapabilityMessage(
   reason: "global" | "mode",
 ): string {
   const plain: Record<Capability, string> = {
+    hearing: "listen",
+    speaking: "speak",
     vision: "look at pictures",
-    documents: "read multi-page documents",
-    "voice-in": "listen",
-    "voice-out": "speak",
-    draw: "make pictures",
+    drawing: "make pictures",
+    reading: "read documents",
+    fetching: "open files on this machine",
     web: "use the web",
-    files: "read files",
   };
   return reason === "global"
     ? `This needs to ${plain[capability]}, and you have that switched off. Turn it on in Settings to use it.`
@@ -433,13 +469,13 @@ export function refusedCapabilityMessage(
 // declared it" is actionable, a wrong answer is not.
 export function undeclaredCapabilityMessage(capability: Capability): string {
   const plain: Record<Capability, string> = {
+    hearing: "listen",
+    speaking: "speak",
     vision: "look at pictures",
-    documents: "read multi-page documents",
-    "voice-in": "listen",
-    "voice-out": "speak",
-    draw: "make pictures",
+    drawing: "make pictures",
+    reading: "read documents",
+    fetching: "open files on this machine",
     web: "use the web",
-    files: "read files",
   };
   return `This Method tried to ${plain[capability]}, but its manifest never declared that capability. It was refused.`;
 }

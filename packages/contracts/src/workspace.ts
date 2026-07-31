@@ -2442,10 +2442,11 @@ export const RelayEngineSchema = Type.Union([
 
 export const RelayCapabilitySchema = Type.Union([
   Type.Literal("text"),
-  Type.Literal("voice-in"),
-  Type.Literal("voice-out"),
-  Type.Literal("image-in"),
-  Type.Literal("image-out"),
+  Type.Literal("hearing"),
+  Type.Literal("speaking"),
+  Type.Literal("vision"),
+  Type.Literal("reading"),
+  Type.Literal("drawing"),
 ]);
 
 export const RelayRunRequestSchema = Type.Object(
