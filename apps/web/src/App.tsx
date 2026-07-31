@@ -7821,6 +7821,13 @@ function AskVaenyxPanel({
             </div>
           ) : null}
 
+          {/* The home screen is a composer too, and the copy pack puts this
+              line ON the composer, persistently. It was on the open chat and
+              never on the screen every session starts at. */}
+          <p className="composer-disclaimer">
+            {t("legal.disclaimer.aiGeneral.composer")}
+          </p>
+
           {error ? <p className="form-error">{error}</p> : null}
         </form>
       </div>

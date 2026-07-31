@@ -29,10 +29,14 @@ function LineIcon({ children }: { children: React.ReactNode }) {
 }
 
 // An ear, and sound leaving a mouth: the in/out pair reads as a pair.
+// A real ear: the outer helix curls right round to the lobe, and the inner
+// curl sits inside it. The first attempt was a hook with a bump and read as
+// nothing at all (Oskar, 2026-07-31).
 const IconHearing = (
   <LineIcon>
-    <path d="M9 21c-1.4-1-2-2.4-2-4V9a5 5 0 0 1 10 0c0 3-3 3.4-3 6a2 2 0 1 1-4 0" />
-    <path d="M11 9a1.5 1.5 0 0 1 3 0" />
+    <path d="M7 10a5 5 0 0 1 10 0c0 2.6-1.7 3.6-2.8 4.6-.9.8-1.2 1.5-1.2 2.6A2.8 2.8 0 0 1 7.6 18" />
+    <path d="M10.2 10.2a2 2 0 0 1 3.9.5c0 1.2-.9 1.7-1.6 2.3" />
+    <path d="M7 10v5.5" />
   </LineIcon>
 );
 const IconSpeaking = (
@@ -60,20 +64,26 @@ const IconDrawing = (
 
 // Pages with a folded corner — many pages, which is the whole reason this is
 // not the same capability as looking at one picture.
+// An open book. A single folded page read as "a file"; a book reads as READING
+// and, because it is open, as many pages at once — which is the entire reason
+// this is not the same capability as looking at one picture.
 const IconReading = (
   <LineIcon>
-    <path d="M8 3h6l5 5v12a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
-    <path d="M14 3v5h5" />
-    <path d="M10 13h6M10 16h6" />
+    <path d="M12 7C10 5.5 7.5 5 5 5v12c2.5 0 5 .5 7 2 2-1.5 4.5-2 7-2V5c-2.5 0-5 .5-7 2z" />
+    <path d="M12 7v12" />
   </LineIcon>
 );
 
-// A folder with something being lifted out of it: it goes and gets.
+// A filing drawer pulled open. The folder-with-an-arrow-up read as UPLOAD
+// (Oskar, 2026-07-31), which is close to the opposite of what this means: the
+// drawer is the Owner's own cabinet, and it is being opened and reached into.
 const IconFetching = (
   <LineIcon>
-    <path d="M3 7h6l2 2h10v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z" />
-    <path d="M12 17v-6" />
-    <path d="m9.5 13.5 2.5-2.5 2.5 2.5" />
+    <path d="M4 4h16v16H4z" />
+    <path d="M4 11h16" />
+    <path d="M10 7.5h4" />
+    <path d="M9 15.5h6" />
+    <path d="m17 15.5-2-2M17 15.5l-2 2" />
   </LineIcon>
 );
 
