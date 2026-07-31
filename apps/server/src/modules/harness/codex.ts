@@ -1351,6 +1351,12 @@ export interface RunAskVaenyxOptions {
   // input item with a path, so the main model sees the picture first-hand —
   // no describe-to-text middle layer.
   imagePath?: string;
+  // May this turn look things up? Default yes — chat and tasks always may. A
+  // Method run sets it from its manifest, so a Method that never declared `web`
+  // cannot search WHICHEVER backend the Owner has chosen (capabilities design:
+  // enforcement, not a label). Every backend must honour it or the guarantee is
+  // only as strong as the backend nobody checked.
+  allowWeb?: boolean;
   // A PDF the Owner fed to this turn, base64 with its media type. Only the
   // backends that read documents natively use it (Claude); the rest ignore it
   // and the caller falls back to extracted text.

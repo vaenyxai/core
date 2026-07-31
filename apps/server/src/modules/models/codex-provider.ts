@@ -2,7 +2,11 @@
 // delegates to the existing harness so behaviour is unchanged; multi-model adds
 // sibling providers (OpenAI / Claude / Gemini / local) implementing the same
 // interface.
-import { getCodexStatus, runAskVaenyxChat } from "../harness/codex.js";
+import {
+  getCodexStatus,
+  runAskVaenyxChat,
+  runCodexMethodOffline,
+} from "../harness/codex.js";
 
 import type {
   ModelChatMessage,
@@ -16,11 +20,24 @@ export class CodexProvider implements ModelProvider {
   readonly id = "codex";
   readonly name = "Codex CLI (ChatGPT)";
 
-  sendChat(
+  async sendChat(
     messages: ModelChatMessage[],
     projectContext?: string,
     options?: ModelChatOptions,
   ): Promise<ModelChatResult> {
+    // A turn that may not look things up runs on a session spawned WITHOUT the
+    // web-search flag — the tool is absent, not discouraged. Enforcement has to
+    // live in every backend, or the guarantee is only as strong as the one
+    // nobody checked.
+    if (options?.allowWeb === false) {
+      const answer = await runCodexMethodOffline(
+        [projectContext, messages.map((m) => m.content).join("\n\n")]
+          .filter(Boolean)
+          .join("\n\n"),
+        options.signal,
+      );
+      return { answer, webSearchUsed: false };
+    }
     return runAskVaenyxChat(messages, projectContext, options);
   }
 

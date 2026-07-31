@@ -357,8 +357,12 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           // only two tools that never touch the disk, the shell or the
           // machine's own Claude configuration — everything else stays denied
           // by name, the jail is still empty, no settings or MCP are loaded.
-          allowedTools: [...WEB_TOOLS],
-          disallowedTools: MACHINE_TOOLS,
+          // A turn that may not look things up gets NO tools at all — the same
+          // lockdown reading a photo runs under. Enforcement lives in every
+          // backend, or the guarantee is only as strong as the weakest one.
+          allowedTools: options?.allowWeb === false ? [] : [...WEB_TOOLS],
+          disallowedTools:
+            options?.allowWeb === false ? DENIED_TOOLS : MACHINE_TOOLS,
           cwd: jail,
           env: cleanChildEnvironment(auth.token),
           // Four was too tight and the briefing died on the cap (Oskar,
