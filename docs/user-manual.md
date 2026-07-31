@@ -141,12 +141,17 @@ Read this inside the app: **Settings → Manual**.
     in once, inside the app. These are **not** free credit; they are your own
     paid subscriptions.
   - *Free API allowance* — pick a provider and paste its key.
-- **Five capabilities, each with its own engine**
-  - **Text** — the model that answers you.
-  - **Voice in** — speech to text.
-  - **Voice out** — text to speech.
-  - **Picture in** — reading a photo or a PDF.
-  - **Picture out** — making a picture.
+- **The Capabilities table is the whole picture** — one row per capability, and
+  the row carries both halves: which model does that job, and whether Vaenyx may
+  do it at all. Hearing, Speaking, Vision and Drawing each choose their own
+  model; Reading and Web ride the main model and say so on the row; Fetching is
+  not built yet.
+  - **Hearing** *(Voice in)* — speech to text.
+  - **Speaking** *(Voice out)* — text to speech.
+  - **Vision** *(Picture in)* — looking at a photo.
+  - **Drawing** *(Picture out)* — making a picture.
+  - **Reading** *(Documents, PDF)* — a document you attached.
+  - **Web** *(Web pages)* — going out to the internet.
 - **A connected model that cannot do a job is greyed out, not hidden** — so you
   can see it is there and that it is not the tool for this.
 - **If an engine stops working** — Vaenyx does not quietly switch to another
@@ -244,5 +249,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.53** · last updated 2026-07-30.
+Manual for **v0.3.1-dev.77** · last updated 2026-07-31.
 Keep this file up to date whenever a feature changes.

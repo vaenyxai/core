@@ -1194,6 +1194,48 @@ textarea::placeholder {
   font-size: var(--fs-label);
 }
 
+/* Which model does this job — on the row itself, not on a second card. Sized to
+   the longest engine name so the seven switches still line up in one column;
+   the name flexes instead. */
+.capability-row-engine {
+  flex: none;
+  width: 120px;
+  padding: 4px 6px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-label);
+  font-family: inherit;
+}
+
+.capability-row-engine.none {
+  width: 120px;
+  padding: 4px 6px;
+  border-color: transparent;
+  background: none;
+  color: var(--text-faint);
+  text-align: right;
+}
+
+/* On a phone the row wraps to two lines rather than crushing the name: the
+   drawing and the name keep the first line, model and switch take the second
+   (Oskar: "一行显示一个,或者分两行"). */
+@media (max-width: 560px) {
+  .capability-row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .capability-row-name {
+    flex: 1 0 60%;
+  }
+
+  .capability-row-engine {
+    margin-left: 26px;
+  }
+}
+
 /* The engine headings carry the same pair of names. */
 .settings-subhead em {
   margin-left: 6px;
@@ -1429,13 +1471,43 @@ textarea::placeholder {
   line-height: 1.45;
 }
 
+/* A rule above every heading (Oskar: divider 多画几个). The card is five
+   different subjects in a row; without a line between them the eye reads one
+   long list and gives up. The first heading needs no line — the card's own top
+   edge is the line. */
 .door-subhead {
   margin: var(--space-5) 0 var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 0.5px solid var(--border);
   font-size: var(--fs-eyebrow);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-faint);
+}
+
+.door-subhead:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Nothing but a plus where an empty input used to sit. */
+.door-add {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.door-add:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
 }
 
 .door-address {

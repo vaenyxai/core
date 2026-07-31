@@ -10498,6 +10498,10 @@ function DoorList({
   placeholder: string;
   setDraft: (value: string) => void;
 }) {
+  // An empty box asking to be filled in is the loudest thing on a screen, and
+  // this card had three of them stacked (Oskar: 一切重简). Nothing shows but a
+  // plus until you actually want to add something.
+  const [adding, setAdding] = useState(false);
   return (
     <div className="door-list">
       {items.map((item) => (
@@ -10512,24 +10516,44 @@ function DoorList({
           </button>
         </span>
       ))}
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          const value = draft.trim();
-          if (!value) return;
-          onChange([...items, value]);
-          setDraft("");
-        }}
-      >
-        <input
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={placeholder}
-          value={draft}
-        />
-        <button className="text-button" type="submit">
-          Add
+      {adding ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const value = draft.trim();
+            if (!value) {
+              setAdding(false);
+              return;
+            }
+            onChange([...items, value]);
+            setDraft("");
+            setAdding(false);
+          }}
+        >
+          <input
+            autoFocus
+            onBlur={() => {
+              if (!draft.trim()) setAdding(false);
+            }}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={placeholder}
+            value={draft}
+          />
+          <button className="text-button" type="submit">
+            Add
+          </button>
+        </form>
+      ) : (
+        <button
+          aria-label={`Add ${placeholder}`}
+          className="door-add"
+          onClick={() => setAdding(true)}
+          title="Add"
+          type="button"
+        >
+          +
         </button>
-      </form>
+      )}
     </div>
   );
 }
@@ -10546,6 +10570,10 @@ function CapabilitiesPanel() {
   const [global, setGlobal] = useState<Record<string, boolean> | null>(null);
   const [implemented, setImplemented] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [hearingEngine, setHearingEngine] = useState("none");
+  const [speakingEngine, setSpeakingEngine] = useState("none");
+  const [visionEngine, setVisionEngineState] = useState("none");
+  const [drawingEngine, setDrawingEngine] = useState("none");
 
   useEffect(() => {
     void fetchCapabilities()
@@ -10554,7 +10582,109 @@ function CapabilitiesPanel() {
         setImplemented(result.implemented);
       })
       .catch(() => setGlobal(null));
+    void fetchVoiceStatus()
+      .then((status) => setHearingEngine(status.provider ?? "none"))
+      .catch(() => undefined);
+    void fetchVoiceOutput()
+      .then((status) => setSpeakingEngine(status.engine ?? "none"))
+      .catch(() => undefined);
+    void fetchVisionStatus()
+      .then((status) => setVisionEngineState(status.provider ?? "none"))
+      .catch(() => undefined);
+    void fetchImageEngine()
+      .then((status) => setDrawingEngine(status.provider ?? "none"))
+      .catch(() => undefined);
   }, []);
+
+  // WHICH MODEL DOES THIS JOB, on the same row as WHETHER IT MAY (Oskar asked
+  // four times). They are the two halves of one capability; split across two
+  // cards, nobody can ever tell what is actually set. Four capabilities have an
+  // engine slot of their own. Reading and Web ride the main model — that is a
+  // fact worth printing, not a blank. Fetching is not built.
+  const engines: Record<
+    string,
+    | {
+        options: { value: string; label: string }[];
+        set: (next: string) => Promise<void>;
+        value: string;
+      }
+    | undefined
+  > = {
+    drawing: {
+      options: [
+        { value: "none", label: "— off" },
+        { value: "workersai", label: "Workers AI" },
+        { value: "gemini", label: "Gemini" },
+        { value: "openai", label: "OpenAI" },
+        { value: "zhipu", label: "Zhipu" },
+      ],
+      set: async (next) => {
+        const status = await setImageEngineChoice(
+          next as "none" | "workersai" | "gemini" | "openai" | "zhipu",
+        );
+        setDrawingEngine(status.provider ?? "none");
+      },
+      value: drawingEngine,
+    },
+    hearing: {
+      options: [
+        { value: "none", label: "— off" },
+        { value: "groq", label: "Groq Whisper" },
+        { value: "openai", label: "OpenAI" },
+      ],
+      set: async (next) => {
+        const status = await setVoiceInput(next as "none" | "groq" | "openai");
+        setHearingEngine(status.provider ?? "none");
+      },
+      value: hearingEngine,
+    },
+    speaking: {
+      options: [
+        { value: "none", label: "— off" },
+        { value: "browser", label: lang === "zh" ? "本机浏览器" : "This device" },
+        { value: "local", label: lang === "zh" ? "本机语音" : "On this machine" },
+        { value: "gemini", label: "Gemini" },
+      ],
+      set: async (next) => {
+        const status = await connectVoiceOutput({
+          engine: next as "none" | "browser" | "gemini" | "local",
+        });
+        setSpeakingEngine(status.engine ?? "none");
+      },
+      value: speakingEngine,
+    },
+    vision: {
+      options: [
+        { value: "none", label: "— off" },
+        { value: "gemini", label: "Gemini" },
+        { value: "zhipu", label: "Zhipu" },
+        { value: "openai", label: "OpenAI" },
+        { value: "claude-sub", label: "Claude" },
+      ],
+      set: async (next) => {
+        const status = await setVisionEngine(
+          next as "none" | "gemini" | "zhipu" | "openai" | "claude-sub",
+        );
+        setVisionEngineState(status.provider ?? "none");
+      },
+      value: visionEngine,
+    },
+  };
+
+  async function pickEngine(id: string, next: string) {
+    const engine = engines[id];
+    if (!engine) return;
+    setBusy(id);
+    try {
+      await engine.set(next);
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error ? error.message : "Could not change that.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function flip(id: string, on: boolean) {
     setBusy(id);
@@ -10582,6 +10712,7 @@ function CapabilitiesPanel() {
       <div className="capability-rows">
         {CAPABILITY_META.map((meta) => {
           const built = implemented[meta.id] !== false;
+          const engine = engines[meta.id];
           return (
             <div className="capability-row" key={meta.id}>
               <span className="capability-row-icon">{meta.icon}</span>
@@ -10589,6 +10720,31 @@ function CapabilitiesPanel() {
                 {lang === "zh" ? meta.name.zh : meta.name.en}
                 <em>({lang === "zh" ? meta.gloss.zh : meta.gloss.en})</em>
               </span>
+              {engine ? (
+                <select
+                  aria-label={`${meta.name.en} model`}
+                  className="capability-row-engine"
+                  disabled={busy === meta.id}
+                  onChange={(event) =>
+                    void pickEngine(meta.id, event.target.value)
+                  }
+                  value={engine.value}
+                >
+                  {engine.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="capability-row-engine none">
+                  {built
+                    ? lang === "zh"
+                      ? "主模型"
+                      : "main model"
+                    : ""}
+                </span>
+              )}
               {built ? (
                 <input
                   aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
@@ -10613,8 +10769,8 @@ function CapabilitiesPanel() {
       </div>
       <p className="door-legend">
         {lang === "zh"
-          ? "哪个模型来做这件事,在下面每一段里选。"
-          : "Which model does each job is chosen in the sections below."}
+          ? "没有连上的模型,先到下面 Models 里加钥匙。"
+          : "A model you have not connected yet gets its key below, in Models."}
       </p>
     </section>
   );
