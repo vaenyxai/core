@@ -70,6 +70,9 @@ function runOnce(
     capability: "text",
     caller: "owner@example.com",
     files: [],
+    // The door's own key by default: it has no per-key list, so the ceiling is
+    // the only layer. An app key knocking instead passes its own id.
+    appProfileId: null,
     ...changes,
   });
 }

@@ -43,13 +43,18 @@ export const MAX_FETCH_BYTES = 200_000;
 // otherwise BE the whole answer.
 const MAX_FETCH_ENTRIES = 200;
 
-// Only the Claude subscription backend can do this today: it is the one channel
-// with a real tool loop, so it can ask for a file, read the answer and carry on.
-// Every other backend answers in one shot and has nowhere to put a tool call —
-// which is why the chat says so BY NAME instead of quietly behaving as if the
-// switch were off (the failure that made `allowWeb` a silent no-op on four
-// backends before anyone noticed).
-export const FETCHING_CAPABLE_PROVIDER_IDS = ["claude-sub"];
+// 🔴 WHICH BACKENDS GET A LIVE TOOL LOOP — and nothing more than that. Fetching
+// itself works on every backend: VAENYX opens the file, against the whitelist
+// below, and hands over the words. This list only names the channels that can
+// ask for a SECOND file after reading the first, because they can put a tool
+// call in the middle of an answer; everything else is handed the folder listing
+// and the named file up front.
+//
+// It was once the list of backends that could fetch AT ALL, which made it a
+// gate. It is not one any more (Oskar, 2026-08-01: "不应该限制到claude"), and
+// anything reading it as one — a Test button that reports "not built", copy that
+// names Claude as the only one — is describing a design that is gone.
+export const FETCHING_TOOL_LOOP_PROVIDER_IDS = ["claude-sub"];
 
 export type FetchFolderRefusal =
   | "not-absolute"

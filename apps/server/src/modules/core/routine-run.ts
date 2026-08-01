@@ -19,6 +19,7 @@ import type { DatabaseHandle } from "../../db/database.js";
 
 import { getDefaultProvider } from "../models/registry.js";
 
+import { capabilitiesFromManifest, type Capability } from "./capabilities.js";
 import {
   executeMethod,
   loadMethod,
@@ -53,17 +54,29 @@ export type RoutineStepRunner = (
   method: LoadedMethod,
   input: unknown,
   signal: AbortSignal,
+  // What the layers above this run left this step, already narrowed. Decided
+  // by the orchestrator rather than inside the runner, so the layers are
+  // applied identically whoever runs the step.
+  allowed: Capability[],
 ) => Promise<MethodRunResult>;
+
+// How the layers above a step narrow it: given what that step's Method
+// declared, it answers what the step may actually reach for. A Routine is run
+// by an Owner in a mode or by an app key, and each of those has its own
+// ceiling — without this the steps ran on the Method's own declaration alone,
+// so a Routine Token could search the web with the instance's Web switch off.
+export type CapabilityNarrowing = (declared: Capability[]) => Capability[];
 
 // Default: run the step's Method through the model backend with its few-shot
 // examples — the same path as the Method test-run.
 function defaultStepRunner(libraryDirectory: string): RoutineStepRunner {
-  return (method, input, signal) =>
+  return (method, input, signal, allowed) =>
     executeMethod(
       method,
       loadMethodExamples(libraryDirectory, method.id),
       input,
       signal,
+      allowed,
     );
 }
 
@@ -83,6 +96,10 @@ export async function runRoutine(
     // The photo this run was fed with — kept on the journal entry so the chat
     // shows a picture, never a text dump ("visual first", Oskar 2026-07-28).
     imageId?: string | null;
+    // What the layers above this run allow each step to reach for. Absent = the
+    // Method's own declaration alone, which is all a caller with no database
+    // could ask about anyway.
+    narrow?: CapabilityNarrowing;
   } = {},
 ): Promise<RoutineRunResult> {
   const routine = loadRoutine(routinesDirectory, libraryDirectory, id);
@@ -98,6 +115,7 @@ export async function runRoutine(
   const stateless = options.stateless === true;
   const chatId = options.chatId ?? null;
   const runStep = options.runStep ?? defaultStepRunner(libraryDirectory);
+  const narrow = options.narrow ?? ((declared: Capability[]) => declared);
 
   const journalEntry =
     routine.storage.journal && !stateless
@@ -134,7 +152,15 @@ export async function runRoutine(
       );
     }
 
-    const result = await runStep(method, input, signal);
+    // Narrowed per STEP, not per routine: each step is its own Method with its
+    // own manifest, and a routine that took the union would hand step one
+    // whatever step three declared.
+    const result = await runStep(
+      method,
+      input,
+      signal,
+      narrow(capabilitiesFromManifest(method.manifest).capabilities),
+    );
     webSearchUsed = webSearchUsed || result.webSearchUsed;
     previous = result.output;
     steps.push({

@@ -13,9 +13,9 @@ import type { Buffer } from "node:buffer";
 
 import type { DatabaseHandle } from "../../db/database.js";
 import { readProviderConnections } from "../models/connections.js";
-import { writeConnections } from "../models/provider-settings.js";
+import { fillEngineDefaults, writeConnections } from "../models/provider-settings.js";
 
-import { capabilityOff } from "./capabilities.js";
+import { capabilityRefusedBy } from "./capabilities.js";
 import { saveImage } from "./vision.js";
 
 export type ImageEngineChoice =
@@ -202,12 +202,61 @@ export function getImageEngineStatus(secretsDirectory: string): {
     : { connected: false, provider: null };
 }
 
-export async function setImageEngine(
+// 🔴 CONNECTING A PROVIDER AND CHOOSING WHAT DRAWS ARE TWO DIFFERENT ACTS, and
+// they used to be one call. Storing the Cloudflare pair also wrote
+// `imageOutput`, so pasting the token — or opening Edit on the connected card
+// and saving again — re-pointed the Drawing row at Workers AI over whatever the
+// Owner had chosen there, without a word. Both manuals promise the opposite:
+// Vaenyx does not quietly switch to another model.
+//
+// So this one only ever stores credentials. Whether the new connection ends up
+// drawing is `fillEngineDefaults`' answer, and it fills the slot only while it
+// is empty — the same rule the voice and vision slots have always followed.
+export async function connectWorkersAi(
   secretsDirectory: string,
-  choice: ImageEngineChoice,
   apiKey?: string,
   accountIdInput?: string,
-): Promise<ReturnType<typeof getImageEngineStatus>> {
+): Promise<void> {
+  const connections = readProviderConnections(secretsDirectory);
+  const stored = connections.workersai as CloudflareConnection | undefined;
+  // An already-connected card can be re-saved to fix ONE of the two fields:
+  // whichever was left blank falls back to what is stored, so correcting a
+  // wrong account id does not mean pasting the whole token again.
+  const key = apiKey?.trim() || stored?.apiKey;
+  if (!key) throw new Error("IMAGE_NO_KEY");
+  // The account id: typed by the Owner (a template token cannot name it),
+  // already stored, or discovered from a broad token — in that order. Then
+  // the pair is verified with a real Workers AI call, so a wrong id says so
+  // while the Owner is still looking at the field.
+  const accountId =
+    accountIdInput?.trim().toLowerCase() ||
+    stored?.accountId ||
+    (await discoverCloudflareAccount(key));
+  if (!/^[0-9a-f]{32}$/.test(accountId)) {
+    throw new Error("IMAGE_CF_BAD_ACCOUNT_ID");
+  }
+  await verifyWorkersAiAccess(key, accountId);
+  connections.workersai = {
+    ...stored,
+    apiKey: key,
+    accountId,
+    // Signing in ADDS a backend rather than dedicating one (Oskar,
+    // 2026-07-27). The same token can drive chat through Cloudflare's
+    // OpenAI-compatible endpoint, so fill that in too and the registry picks
+    // it up — one login, available to whichever slot wants it.
+    baseUrl: `${CLOUDFLARE_API}/accounts/${accountId}/ai/v1`,
+  };
+  fillEngineDefaults(connections);
+  writeConnections(secretsDirectory, connections);
+}
+
+// WHICH connected backend draws — the Drawing row's own answer, and nothing
+// else. No credentials pass through here: a provider with no key is refused so
+// the row cannot point at something that would fail at the first picture.
+export function setImageEngine(
+  secretsDirectory: string,
+  choice: ImageEngineChoice,
+): ReturnType<typeof getImageEngineStatus> {
   const connections = readProviderConnections(secretsDirectory);
   if (choice === "none") {
     if ("imageOutput" in connections) {
@@ -217,39 +266,11 @@ export async function setImageEngine(
     return getImageEngineStatus(secretsDirectory);
   }
 
-  if (choice === "workersai") {
-    const key = apiKey?.trim() || (connections.workersai as CloudflareConnection | undefined)?.apiKey;
-    if (!key) throw new Error("IMAGE_NO_KEY");
-    // The account id: typed by the Owner (a template token cannot name it),
-    // already stored, or discovered from a broad token — in that order. Then
-    // the pair is verified with a real Workers AI call, so a wrong id says so
-    // while the Owner is still looking at the field.
-    const accountId =
-      accountIdInput?.trim().toLowerCase() ||
-      (connections.workersai as CloudflareConnection | undefined)?.accountId ||
-      (await discoverCloudflareAccount(key));
-    if (!/^[0-9a-f]{32}$/.test(accountId)) {
-      throw new Error("IMAGE_CF_BAD_ACCOUNT_ID");
-    }
-    await verifyWorkersAiAccess(key, accountId);
-    connections.workersai = {
-      ...(connections.workersai as CloudflareConnection | undefined),
-      apiKey: key,
-      accountId,
-      // Signing in ADDS a backend rather than dedicating one (Oskar,
-      // 2026-07-27). The same token can drive chat through Cloudflare's
-      // OpenAI-compatible endpoint, so fill that in too and the registry picks
-      // it up — one login, available to whichever slot wants it.
-      baseUrl: `${CLOUDFLARE_API}/accounts/${accountId}/ai/v1`,
-    };
-    connections.imageOutput = { provider: "workersai" };
-    writeConnections(secretsDirectory, connections);
-    return getImageEngineStatus(secretsDirectory);
-  }
-
-  if (!connections[choice]?.apiKey) {
-    throw new Error("IMAGE_NO_KEY");
-  }
+  const ready =
+    choice === "workersai"
+      ? cloudflareReady(connections)
+      : Boolean(connections[choice]?.apiKey);
+  if (!ready) throw new Error("IMAGE_NO_KEY");
   connections.imageOutput = { provider: choice };
   writeConnections(secretsDirectory, connections);
   return getImageEngineStatus(secretsDirectory);
@@ -321,13 +342,19 @@ export function isImageFollowUp(text: string): boolean {
 // Drawing is refused HERE rather than at the one caller, because the caller is
 // where a second one gets added and the switch gets forgotten. This is the
 // only place a picture is made, so this is where the ceiling holds.
+//
+// `modeId` is REQUIRED, and required is the point: both layers are asked, so a
+// new caller cannot get past the mode ceiling by simply not knowing about it.
+// null means "there is no session in a mode here" — the Test button, which is
+// User-Mode-only — and never "do not check".
 export async function generateImage(
   database: DatabaseHandle,
   secretsDirectory: string,
   dataDirectory: string,
   prompt: string,
+  modeId: string | null,
 ): Promise<string> {
-  if (capabilityOff(database, "drawing")) {
+  if (capabilityRefusedBy(database, "drawing", modeId)) {
     throw new Error("IMAGE_CAPABILITY_OFF");
   }
   const connections = readProviderConnections(secretsDirectory);

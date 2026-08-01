@@ -61,7 +61,9 @@ Read this inside the app: **Settings → Manual**.
   - Over ten pages, Vaenyx asks first and tells you the page count, because long
     documents cost real money on a paid model.
   - With **Reading** switched off (AI Settings → Capabilities) the file is
-    refused at the door and Vaenyx says which switch did it.
+    refused at the door, and Vaenyx names what stopped it: the switch on that
+    row, or the mode you are in, which is not a switch and not one you can
+    reach from inside.
 - **Stop a reply** — the **Stop** button while it is answering. It stops at once.
 - **Switch model or thinking level** — the two pickers under the message box.
   They apply to this conversation only.
@@ -70,9 +72,14 @@ Read this inside the app: **Settings → Manual**.
   something new in it.
 - **What it remembers** — the last thirty messages in full, plus a rolling
   summary of everything before that, plus your approved *Vaenyx Me* facts.
-- **Looking things up** — it can search the web and read a page when the answer
-  depends on current facts, and it tells you when it could not check something
-  rather than answering from memory.
+- **Looking things up** — whether it really goes and looks depends on which main
+  model you are on. Only the ChatGPT (Codex CLI) and Claude subscriptions search
+  the web today; every other model answers from what it memorised when it was
+  trained, and sounds just as certain when that is out of date. The **Web**
+  switch (AI Settings → Capabilities) ships **on**, and switching it off does not
+  stop those two searching in an ordinary chat — it stops Methods and app keys.
+  Both of those are said on the card itself; *AI Settings* below has the whole
+  of it.
 - **Files on your computer** — Vaenyx reads nothing on this computer unless you
   switch **Fetching** on *and* name the folders it may look in (AI Settings →
   Capabilities → Fetching). Both are needed: the switch on its own, with no
@@ -107,10 +114,36 @@ Read this inside the app: **Settings → Manual**.
   become a Routine. Vaenyx drafts it and offers a test run before saving.
 - **Where they live** — the **Library** screen.
 - **Edit a recipe** — Library → the Method → **Edit recipe**.
-- **Test run** — the same screen. It runs for real but changes nothing.
+- **Test run** — the same screen. It runs for real but changes nothing. If the
+  Method reached for something it did not get, the result says so above the
+  output and names which of the three layers said no.
 - **Tags** — rename and group them from the Library screen.
 - **Import / export** — Library → **Import Skill** takes a SKILL.md folder;
   each Method can be exported the same way.
+- **Let another app use one** — Library → **Token**. A Token is an app key: one
+  of your other apps holds it and can then call the Routine or the Methods you
+  granted it, and nothing else.
+- **What a key may do** — the key's card, **What It May Do**. The same seven
+  capabilities as AI Settings, in the same order, with a tick each. A new key
+  starts with **nothing** ticked — it may run the recipe you granted it and no
+  more — and the card says what it may do without opening anything.
+  - **Fetching can never be given to a key.** The row says so rather than
+    quietly disappearing. Reaching into your own files on another program's
+    behalf is not something a key carries, whatever it asks for.
+  - **Web takes its own approval** — a separate press, not the same tick as the
+    rest, because a key that can reach the internet can make this machine
+    somebody else's way onto it. You can take it back with the switch.
+  - **The ceiling still wins.** A capability switched off in AI Settings shows
+    as *off for the whole machine* and cannot be ticked here at all. One you
+    granted before it was switched off stays on the key, does nothing while the
+    machine says no, and works again the moment you switch it back on.
+  - **Only from User Mode**, like the other two layers.
+  - **What the app is told** — if a Method asks for something the key was not
+    given, the run still happens without it and the answer names the capability
+    and says which of the three said no. It is never silently dropped, so a
+    refusal cannot be mistaken for a poor answer.
+- **Keys you already made** — every key made before this existed has nothing
+  ticked, so nothing gained reach on its own. Tick what each app actually needs.
 
 ## 7. Community
 
@@ -118,6 +151,14 @@ Read this inside the app: **Settings → Manual**.
 - **Install** — the Install button on any item. It lands in your Library.
 - **Publish your own** — the Publish button on one of your items. Needs a Google
   or GitHub sign-in, because your name goes on it.
+- **If it needs something Vaenyx cannot do yet** — publishing is refused, and the
+  Method stays here and keeps working for you. A Method that cannot run on this
+  computer cannot run on anybody else's either. Vaenyx then **asks** whether it
+  may write down that the missing thing was wanted. What gets written down is
+  the name of the capability and a count — nothing about the Method, nothing
+  about its recipe, nothing else from this computer — and it stays on this
+  machine; when an update finally brings that capability, Vaenyx knows it was
+  waiting and tells you. Saying no writes nothing and changes nothing else.
 - **Pause publishing** — Settings → Sharing. Nothing of yours leaves while it is
   paused.
 - **Corrections you make can become shared examples** — always stripped of
@@ -140,9 +181,12 @@ Read this inside the app: **Settings → Manual**.
 
 ## 9. AI Settings — capabilities and models
 
-- **Where** — Settings → **AI Settings** → the **Capabilities** card. Everything
-  about models now lives on that one card: what Vaenyx may do, which model does
-  it, and where a key is pasted.
+- **Where** — Settings → **AI Settings**. Two cards, and the split between them
+  never moves: **Capabilities** is what Vaenyx may do, which model does each job,
+  and a **Test** to see that it really does; **Models** is where a model gets
+  connected. Every model key is pasted in Models, without exception. (The
+  Subscription Door's own key is not a model key: it is made, and replaced, on
+  that card.)
 - **Free models** — the **Free models** button beside the heading shows what was
   found last time; **Ask again** beside it asks your main model again and then
   shows you the new answer. **Careful:** The answer says which model said it and
@@ -175,10 +219,45 @@ Read this inside the app: **Settings → Manual**.
   the one that is not all the way there yet: switching it off stops Methods and
   app keys from searching, but an ordinary chat still looks things up, and the
   card says so on its face.
+- **A mode can be narrower than this, never wider** — each Custom Mode has its
+  own seven switches under Settings → Modes → **What It May Do**, and they can
+  only take away. See *Modes* below.
+- **An app key is narrower still** — every key another app holds has its own
+  seven ticks, under Library → Token → **What It May Do**, and starts with none
+  of them ticked. Fetching can never be ticked there at all. See *Methods and
+  Routines* above.
 - **What is on when you install it** — everything Vaenyx already does on this
-  computer: Hearing, Speaking, Vision, Drawing, Reading. The two that reach past
-  the machine start off and stay off until you decide otherwise: **Web**, and
-  **Fetching**.
+  computer: Hearing, Speaking, Vision, Drawing, Reading. **Web is also on**: a
+  model that cannot look anything up answers today's question out of last year's
+  memory and sounds just as certain, and being confidently wrong is worse than
+  reaching the internet. **Fetching is the one that starts off** and stays off
+  until you decide otherwise — that is Vaenyx opening your own folders.
+- **Two of them explain themselves before you use them** — once each, and both
+  buttons in the window are real, so *Switch it off* really switches it off.
+  - **Web** — the words your model searches for leave this machine. They go out
+    through that model's own backend, and a search company on the far end
+    receives them; Vaenyx does not choose that company and never contacts it
+    itself. The model writes those words, so they can say things you did not
+    type. Because Web ships on, this is shown the first time you open the card
+    rather than waiting for a switch you may never touch.
+  - **Fetching** — the part people miss is not that Vaenyx can read a file. It is
+    that **the words in that file are handed to whichever model is answering**,
+    exactly like anything you type into a chat; if that model is a cloud one,
+    they leave this machine. Vaenyx opens the file, never the model, it reads
+    nothing until you name a folder, and no app key can ever be given this.
+- **What one call costs** — on the card, above the switches. Vaenyx charges
+  nothing and never will; what gets spent is your own model connection. A
+  **subscription you already pay for** (ChatGPT via Codex CLI, Claude) costs
+  nothing extra per call — you are using the allowance you already bought, and it
+  runs out rather than billing you. A **metered API key** (OpenAI, Anthropic,
+  Gemini, Groq and the rest) bills you per call, by how much went through it, and
+  looking at a photo and reading a document cost the most, because pictures are
+  dearer than words and a document is read as pictures too. **Nothing at all**
+  for the voice on this machine and for any local model, because those run here.
+  Opening a file is free too — but the words inside it are then handed to
+  whichever model answers, so the file is free and the answer costs whatever
+  that model costs. No prices are printed: they are the provider's,
+  they change, and a stale number of ours would be worse than none.
 - **Every row is the same shape** — the drawing, the name, which model does it,
   a **Test**, an arrow for that row's own settings, and the switch.
 - **Test a row** — every row has a **Test** button that really does that one
@@ -197,9 +276,41 @@ Read this inside the app: **Settings → Manual**.
 - **If an engine stops working** — Vaenyx does not quietly switch to another
   model. It tells you which one failed and why, and you change it here. That is
   deliberate: a silent swap means never knowing who wrote the answer.
-- **Add a key where you need it** — the Models card takes a key for any
-  provider that can do that job, and it joins the same shared pool: connect a
-  provider once and every row that provider can serve may choose it.
+- **If your backend cannot do the thing you asked** — one sentence, the same
+  everywhere it happens: *Vaenyx cannot do X with Y*. It names the backend, it
+  names what could not be done, and **when something else did the job instead it
+  names that too, and what it cost you**. Two of those happen every day: a model
+  that cannot open a PDF is handed words this machine pulled out of the file, so
+  drawings, tables and layout never reach it; a model that cannot see a photo is
+  handed another model's description of it. Both are useful, and neither is the
+  real thing — so neither is allowed to pass as it.
+- **A model is added in one place** — the **Models** card below, and nowhere
+  else. A key belongs to the model, not to the job you bought it for, so it
+  joins one shared pool: connect a provider once and every row that provider
+  can serve may choose it. A capability row only ever chooses.
+- **Cloudflare Workers AI (free pictures)** — pick **Workers AI (Cloudflare)**
+  from **Add a Model** in the Models card. It asks for two things, because a
+  token made from Cloudflare's Workers AI template cannot say which account it
+  belongs to: the **token** (Cloudflare dashboard → My Profile → API Tokens →
+  Create Token → Workers AI template) and the **Account ID**, which is in the
+  address bar once you are signed in — `dash.cloudflare.com/<that long code>`.
+  Vaenyx checks the pair with a real call before saving it, so a wrong one says
+  so while you are still looking at the field. The same connection can also
+  answer chats. Connecting it does **not** change which model draws: that stays
+  whatever the Drawing row says, and only an empty row fills itself. Once it is
+  connected you can re-save either field on its own — correcting an Account ID
+  does not mean fetching the token again.
+- **A voice on this machine (free, offline)** — the bottom of the **Models**
+  card, **Download Local Voice**. It is about 150 MB, once, and it puts a
+  neural voice on this computer: no key, no per-use cost, works with no
+  internet. Chinese and English voices are both included. Watch the progress
+  bar there; when it lands, the Speaking row switches to it by itself. The same
+  block removes the download again, and asks you once before it does. Which of
+  the voices reads a reply is chosen on the **Speaking** row instead — that is
+  how the job sounds, not what is installed. There are more voices than the two
+  that come with it, and **picking one you do not have yet starts its own ~60 MB
+  download**: the option says so, and the progress shows on the Speaking row
+  where you started it.
 
 ## 10. Subscription Door — lending your subscriptions to your own apps
 
@@ -212,8 +323,19 @@ Read this inside the app: **Settings → Manual**.
   button beside it.
 - **Who gets in** — only the email addresses you list. Everyone else is refused
   and their app falls back to a free model.
-- **What it can do** — text, and reading a picture or PDF. It cannot do voice or
-  make pictures; those say so in grey.
+- **What it can do** — text, and reading a picture or PDF. The same seven
+  capabilities as AI Settings are listed under each subscription, and what it
+  cannot do is dimmed rather than left out: these two subscriptions do no voice
+  and make no pictures, and **Fetching** and **Web** never come through this
+  door at all, whatever is ticked anywhere.
+- **One key for every app, not one each** — so the door's own key has no list of
+  its own: it follows the switches in AI Settings, and a capability switched off
+  there is refused here before anything is even downloaded.
+- **An app knocking with its own Token brings its list with it** — the door also
+  accepts a Token from Library → Token, and then that key's ticks apply here
+  exactly as they do to a Method run. If an app of yours knocks with its Token
+  and gets `RELAY_CAPABILITY_NOT_GRANTED`, tick that capability on the key —
+  or give the app the door's own key instead, which has no list.
 - **Files** — apps send a short-lived download link, never the file. Vaenyx
   fetches it only from the hosts you listed, uses it, and deletes it.
 - **What is written down** — time, kind of job, which subscription, how long,
@@ -249,10 +371,35 @@ Read this inside the app: **Settings → Manual**.
 
 - **What a mode is** — a restricted way in, for a shared or borrowed device.
 - **Make one** — Settings → Modes → **New mode**. Give it a PIN.
-- **What it locks** — settings, and the chats outside that mode.
+- **What it locks** — settings, the chats outside that mode, and — if you say so
+  — what Vaenyx may do at all while somebody is inside it.
+- **What this mode may do** — on the mode's card, **What It May Do**. The same
+  seven capabilities as AI Settings, in the same order, with a switch each.
+  Switch off what a borrowed device has no business doing: a mode that may not
+  draw, may not look at photos, and may never open your files.
+  - **Web is the one to be careful with.** It carries exactly the same gap it
+    has in AI Settings: switching Web off for a mode stops Methods and app keys
+    from searching, but an ordinary chat inside that mode still looks things up.
+    Do not hand a device over believing that switch cuts it off from the
+    internet. "Local model only", in the same mode's settings, does.
+  - **A mode only ever narrows.** It cannot be given something the instance has
+    switched off. Those rows show **off for the whole machine** instead of a
+    switch, because a switch there would be a switch that does nothing.
+  - **It stays narrow.** Turning a capability back on for the whole machine does
+    *not* hand it back to a mode you narrowed — the mode's row shows a switch
+    again, still off, and you decide.
+  - **Only from User Mode.** From inside a mode you can neither change this list
+    nor read it, whether or not "Lock settings" is ticked. That is the point: a
+    mode nobody can widen from the inside.
+  - **What it looks like from inside** — the thing simply does not happen, and
+    Vaenyx says the mode does not allow it. It never tells whoever is holding
+    the device to go and change a setting, because they cannot.
 - **Bind a device** — Settings → Modes → Devices, so a given device always opens
   in that mode.
 - **Leave a mode** — the badge at the top of the screen.
+- **Modes you already made** — a mode you made before this existed adds no
+  restriction of its own until you open **What It May Do** and switch something
+  off. Nothing changed underneath you.
 
 ## 14. Appearance and language
 
@@ -287,13 +434,17 @@ Read this inside the app: **Settings → Manual**.
 | Voice button does nothing | The Hearing row has no engine, or Hearing is switched off. Settings → AI Settings → Capabilities → Hearing. |
 | The ▶ button is missing from replies | Speaking is switched off. Settings → AI Settings → Capabilities → Speaking. |
 | "You have that switched off" | You did, on that capability's row. Settings → AI Settings → Capabilities, and turn the row back on. |
+| "the mode you are in does not allow it" | That mode was narrowed, and nothing inside it can widen it. Leave the mode (the badge at the top), then Settings → Modes → that mode → What It May Do. |
+| "this app key was not given that" | The app knocked with its own Token. Library → Token → that key → What It May Do, and tick it. |
+| "no app key can ever be given that" | Fetching, and no key can hold it — not a setting, a rule. Do that job from a chat instead. |
 | Photo comes back with no marks | The Vision row has no engine or is switched off, or the model found nothing to mark. |
 | A PDF asks about pages first | Over ten pages, on purpose. It is telling you the cost before spending it. |
 | Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the address is not on the owner list. |
+| Your app gets `RELAY_CAPABILITY_NOT_GRANTED` | It knocked with its own Token, and that capability is not ticked on the key. Library → Token → that key → What It May Do — or give the app the door's own key, which has no list of its own. |
 | A scheduled run failed overnight | The computer slept. The failure and its reason stay on the run. |
 | An update banner will not go away | Press it, then Restart. |
 
 ---
 
-Manual for **v0.3.1-dev.84** · last updated 2026-08-01.
+Manual for **v0.3.1-dev.85** · last updated 2026-08-01.
 Keep this file up to date whenever a feature changes.

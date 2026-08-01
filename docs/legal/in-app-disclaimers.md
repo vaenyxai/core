@@ -8,7 +8,7 @@
 | Governing law | Victoria, Australia |
 | Contact | hello@vaenyx.ai |
 | Effective | 26 July 2026 |
-| Copy pack version | `legal.copyVersion = "2.6"` |
+| Copy pack version | `legal.copyVersion = "3.1"` |
 
 Placeholders — all resolved 2026-07-25:
 - **Operator** = **Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724)**, incorporated 25 July 2026.
@@ -16,6 +16,25 @@ Placeholders — all resolved 2026-07-25:
 - **Effective date** = **26 July 2026** (set at v2.4, after the feature-existence amendments).
 
 ---
+
+## 0a. What changed at copy version 3.1 (2026-08-01)
+
+**Part N is new: the Capabilities card.** The seven switches shipped and were
+enforced at three layers before four of the notices that belong beside them had
+been written. Two capabilities shipped with no explanation of what they do (Web,
+which ships **on**; Fetching, whose consequence nobody guesses), a counter
+recorded what a Method wanted without asking, and one standing sentence existed
+five times in five wordings. N1–N5 settle all of it.
+
+**Every entry is an addition. No existing string changed**, so
+`LEGAL_CONSENT_FLOOR` does not move and nobody already using Vaenyx is re-asked
+for anything. N3 is a new `consent`-class string with nobody's answer recorded
+against it yet, which is why it needs no floor of its own.
+
+**A drift fixed at the same time:** `legal.copyVersion` in `i18n.tsx` still read
+2.6 while the app recorded 3.0 against every acknowledgement. A record that
+names a version the string table does not have is a record nobody can check
+back against. Both now read 3.1.
 
 ## 0. What changed at copy version 2.6
 
@@ -1023,6 +1042,173 @@ advice that follows actionable.
   **Not Claude-specific.** Every vision model reads PDFs this way, so the gate
   belongs in the document path, not in one provider.
 
+### Part N — The Capabilities card *(the seven switches; ships at copy version 3.1)*
+
+*Status.* The switches are live and enforced at three layers (instance, mode, app
+key). Five of the things that belong beside them were left as holes: two
+capabilities that ship without ever explaining what they do (N1, N2), a counter
+that records something without asking (N3), a standing sentence that existed
+five times in five wordings (N4), and no answer anywhere to "what does one call
+cost" (N5). They are settled here so the code is written against agreed copy, in
+the same way Parts K and L were.
+
+**None of these is a consent-floor event.** N1, N2 and N5 are `notice` class and
+N3 is a new `consent` string nobody has answered yet, so `LEGAL_CONSENT_FLOOR`
+does not move and nobody already using Vaenyx is re-asked for anything.
+
+**N1 — `legal.notice.capability.web`** *(the first time the web is reachable)*
+
+**Web ships on** (2026-08-01: a model that cannot look anything up answers
+today's question out of last year's memory and sounds equally certain). That
+decision is defensible only if the Owner is told, so this notice cannot wait for
+somebody to flip a switch they will never touch — it is shown the first time
+they open the card as well.
+
+**What it must say, and what it must not.** Clause 3.2 forbids "nothing leaves
+your device", and here it would be flatly false: searching sends words out. The
+non-obvious half is *which* words. The model composes the query, so it can
+contain things the person never typed — the same disclosure F5 makes about an
+image prompt, for the same reason.
+
+- **Title — EN:** "Before Vaenyx searches the web" / **ZH:** 「在 Vaenyx 上网搜索之前」
+- **EN:** "With this on, your main model can look things up while it answers. What leaves this machine is the words it searches for: they go out through that model's own backend, and a search company on the far end receives them. Vaenyx does not choose that company and never contacts it itself. The model writes those words, so they can say things you did not type. Only the Codex CLI (ChatGPT) and Claude (Subscription) backends really search today; the rest answer from memory whether this is on or off."
+- **ZH:** "开着这一项,主模型在回答时可以上网查。离开这台机器的,是它拿去搜的那几个词:它们经由该模型自己的后台发出去,最终由另一端的一家搜索公司收到。这家公司不是 Vaenyx 选的,Vaenyx 自己也不会去联系它。这几个词是模型自己写的,所以里面可能出现你并没有打出来的内容。今天真的会搜的只有 Codex CLI (ChatGPT) 和 Claude(订阅);其余的模型开不开都只能凭记忆回答。"
+- **Precision note.** An earlier draft said the provider is one Vaenyx "never
+  sees". It is not sayable: with the Claude backend the search runs inside an SDK
+  stream that passes through this process, and Vaenyx not reading it is a choice
+  in code, not a structural fact. What IS structural, and is what the Owner
+  actually needs, is that Vaenyx makes no request of its own to any search
+  company — so that is what the string claims (clause 3.2).
+- **Buttons:** **EN:** "Leave it on" / "Switch it off" — **ZH:** 「就这样开着」/「把它关掉」
+- **Behaviour:** One-time per Owner, recorded with key, copy version, language
+  and time. Shown the first time Web is switched on **and** on the first visit to
+  the Capabilities card while it is on, because the shipped default means the
+  switch may never be touched. **Both buttons are real:** declining switches Web
+  off then and there, so the notice is a decision and not a wall to click past.
+  Neither is pre-selected or highlighted (clause 3.6).
+
+**N2 — `legal.notice.capability.fetching`** *(the first time it is switched on)*
+
+The sentence people miss is not "Vaenyx can read my files". It is what happens
+to what it read. So that sentence stands alone as its own paragraph and is
+written in the plainest words available: the contents go to the model, exactly
+like anything typed into a chat.
+
+- **Title — EN:** "Before Vaenyx opens your files" / **ZH:** 「在 Vaenyx 打开你的文件之前」
+- **EN:** "Vaenyx can open text files from folders you name here, and nowhere else. Vaenyx opens them, not the model — the model is never given a tool that can touch a disk.
+
+  But what it reads is handed to whichever model is answering. The words in that file go to that model exactly like anything you type into a chat, and if that model is a cloud one they leave this machine.
+
+  It reads nothing until you name a folder. And no app key can ever be given this, whatever it asks for."
+- **ZH:** "Vaenyx 只能打开你在这里点名的文件夹里的文字文件,别处一律不行。打开文件的是 Vaenyx 自己,不是模型 —— 模型手上从来没有能碰硬盘的工具。
+
+  但读到的东西会交给正在回答的那个模型。文件里的字会送到那个模型那里,和你自己在聊天里打进去的内容一模一样;如果那是云端模型,它们就离开了这台机器。
+
+  在你点名文件夹之前,它一个字也读不到。而且任何 app 钥匙都永远拿不到这一项,不管它怎么要。"
+- **Buttons:** as N1.
+- **Behaviour:** One-time per Owner, recorded. Fetching ships **off**, so the
+  only way in is the switch, and this is shown at that moment. The last sentence
+  is a structural gate statement (clause 3.7): `NEVER_VIA_TOKEN` is a property of
+  the code, refused at the write and again at the read, not a default anyone can
+  turn around. If that ever stops being true the sentence goes first.
+
+**N3 — `legal.consent.capability.wanted`** *(a Method wanting something unbuilt)*
+
+Publishing a Method that needs a capability Vaenyx has not built is refused, and
+the attempt is the operator's best signal about what to build next. Counting it
+without asking is a small thing recorded behind somebody's back, which is the
+category of small thing this pack exists to stop.
+
+- **Title — EN:** "Vaenyx cannot do this yet" / **ZH:** 「这一项 Vaenyx 还做不到」
+- **EN:** "This Method needs something Vaenyx cannot do yet, so it cannot be shared. It stays here and keeps working for you.
+
+  Vaenyx can write down that it was wanted. What gets written down is the name of the missing capability and a count — nothing about this Method, nothing about its recipe, nothing else from this computer — and it stays on this machine. When an update finally brings that capability, this machine knows it was waiting and tells you.
+
+  Say no and nothing is written down. Nothing else changes either way."
+- **ZH:** "这个 Method 需要 Vaenyx 还做不到的东西,所以没法分享出去。它会留在这里,照常给你用。
+
+  Vaenyx 可以把「有人要过这一项」记下来。记下的只有那项能力的名字和一个次数 —— 不包括这个 Method 的任何内容、不包括它的配方、也不包括这台电脑上的任何别的东西 —— 而且只留在本机。等哪次更新真的把这项能力做出来了,这台机器知道它一直在等,会告诉你一声。
+
+  你说不,就什么都不记。不管选哪个,别的都不会有任何变化。"
+- **Buttons:** **EN:** "Write it down" / "No, don't" — **ZH:** 「记下来」/「不用记」
+- **Behaviour:** Consent class, **point-of-action** — asked each time rather than
+  once, because it is rare (it takes a refused publish to reach it) and because a
+  remembered yes would keep recording for capabilities the Owner never saw named.
+  Neither option pre-selected; the decline is one tap and is recorded as a choice
+  like the acceptance. **Feature-existence (clause 6.7):** "it stays on this
+  machine" is true of the build that ships this string — the counter is a local
+  SQLite row and nothing sends it anywhere. The day anything transmits it, this
+  string, the Schedule and the consent are revisited together, and consent is
+  taken again at that point.
+
+**N4 — the named-degradation sentence** *(composed in code, not an i18n key)*
+
+The switch is on, the Owner asked, and the backend in front of them cannot do
+it. This had five separate wordings in the code — three in the capability Tests
+and two in the chat turn — and five wordings drift until one of them is quietly
+wrong about what happened. One shape, filled in at each site:
+
+- **EN, nothing stood in:** "Vaenyx cannot {do the thing} with {backend}, and nothing was put in its place."
+- **EN, something stood in:** "Vaenyx cannot {do the thing} with {backend}, so {who did it instead} did it instead — {what that costs}."
+- **ZH, nothing stood in:** 「用{backend},Vaenyx 不能{做那件事},也没有拿别的东西顶上。」
+- **ZH, something stood in:** 「用{backend},Vaenyx 不能{做那件事},所以这件事改由{顶上的那个}来做 —— {代价}。」
+
+- **Behaviour:** Wherever a capability degrades. Three rules the shape exists to keep:
+  1. **The backend is named.** "Vision failed" sends the Owner through four
+     connected models; "Vaenyx cannot look at pictures with Gemini" is actionable.
+  2. **A stand-in is named, and so is its cost.** This is the whole point. An
+     Owner who attached a PDF and got an answer written from extracted text must
+     be told that the drawings in it reached nobody. Silent substitution while
+     the feature is advertised as working is the same misleading conduct clause
+     L4 refuses about Skill imports, and it is our own statement about our own
+     product.
+  3. **"Vaenyx cannot … with X", never "X cannot …".** Sometimes the backend
+     genuinely cannot (a model with no eyes) and sometimes Vaenyx has simply not
+     wired it up for that backend (web search). Only the first phrasing is true
+     in both cases, and a sentence that blames a third party for our own gap is
+     a claim about them we cannot support.
+
+  Where the stand-in note is written for the **model** rather than the Owner (the
+  chat turn's context notes), it carries a fixed instruction to pass it on:
+  naming the stand-in only to the party that already knew is not disclosure.
+
+**N5 — `legal.notice.capability.cost`** *(what one call costs, on the card)*
+
+The Owner asked "what does one call cost" and the app had no answer anywhere
+except the per-press line on each Test button. It belongs where somebody is
+deciding whether to switch something on, so it sits on the Capabilities card,
+above the switches.
+
+**No prices, ever.** F6 already records what happens when a model states
+somebody else's pricing in our interface. A number of ours would be worse: it is
+our own statement, it goes stale silently, and a person who connects a paid
+service on the strength of it gets a bill. What is stateable without a number is
+*which kind of spending each path is*, and that is the actual question.
+
+- **EN:** "What one call costs. Vaenyx charges nothing, and never will. What gets spent is your own model connection.
+
+  A subscription you already pay for — Codex CLI (ChatGPT), Claude (Subscription) — costs nothing extra per call. You are using the allowance you already bought, and it runs out rather than billing you.
+
+  A metered API key — OpenAI, Anthropic, Gemini, Groq and the rest — bills you per call, by how much went through it. Looking at a photo and reading a document cost the most: pictures are dearer than words, and a document is read as pictures too.
+
+  Nothing at all — the voice on this machine, opening files on this machine, and any local model — because those run here.
+
+  No prices are printed here. They are the provider's, they change, and a number of ours that has gone stale is worse than none. Only the provider's own pricing page is right."
+- **ZH:** "问一次到底花多少钱。Vaenyx 自己不收费,以后也不会收。花出去的,是你自己的模型连接。
+
+  你已经在付的订阅 —— Codex CLI (ChatGPT)、Claude(订阅)—— 每次调用不额外花钱。你用的是已经买下的额度,用完就是用完,不会另外向你收费。
+
+  按量计费的 API key —— OpenAI、Anthropic、Gemini、Groq 等等 —— 按次计费,按走过去的量算。看图和读文档最贵:图比文字贵,而文档也是当成图来读的。
+
+  完全不花钱 —— 本机语音、打开这台机器上的文件、以及任何本地模型 —— 因为它们就在这里跑。
+
+  这里不写价格。价格是服务商的,会变,而我们写下的一个过期数字比不写更糟。只有服务商自己的价格页面是准的。"
+- **Behaviour:** Persistent on the Capabilities card, above the rows. States
+  categories, never amounts, and never a comparison between providers — a
+  cheapest-provider claim is a pricing statement wearing a different hat.
+  Clause 3.4 is satisfied in both halves: Vaenyx charges nothing (stated), and
+  the third party's fees are flagged as the Owner's own cost (stated).
+
 ## 5. Placement Summary Matrix
 
 | Key (root) | Surface | Behaviour |
@@ -1052,6 +1238,11 @@ advice that follows actionable.
 | `legal.consent.flywheel.settingsNote` | Settings → Sharing | Persistent |
 | `legal.notice.settings.legalLinks` | Settings → About / Legal | Persistent |
 | `legal.notice.methodToken.feedback` | Method Token `sendFeedback` toggle | Point-of-action + on-demand |
+| `legal.notice.capability.cost` | Capabilities card, above the switches | Persistent |
+| `legal.notice.capability.web` | First time Web is on / first visit to the card | One-time, both buttons real |
+| `legal.notice.capability.fetching` | First time Fetching is switched on | One-time, both buttons real |
+| `legal.consent.capability.wanted` | Publish refused for an unbuilt capability | Gated, every time, never pre-selected |
+| N4 (composed in code) | Wherever a capability degrades | Point-of-action |
 
 ## 6. Implementation Rules
 

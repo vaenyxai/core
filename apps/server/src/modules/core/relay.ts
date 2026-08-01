@@ -34,7 +34,11 @@ import { getCodexStatus, runCodexRelay } from "../harness/codex.js";
 import { claudeMachineLogin } from "../models/claude-login.js";
 import { claudeSubscriptionRelay } from "../models/claude-subscription-provider.js";
 
-import { capabilityOff } from "./capabilities.js";
+import {
+  capabilityOff,
+  decideTokenCapabilities,
+  readProfileCapabilities,
+} from "./capabilities.js";
 
 export const RELAY_ENGINES = ["openai-cli", "claude-cli"] as const;
 export type RelayEngine = (typeof RELAY_ENGINES)[number];
@@ -293,6 +297,10 @@ export interface RelayRunRequest {
   capability: RelayCapability;
   caller: string;
   files: RelayFileRequest[];
+  // Which app key knocked, when the caller used one instead of the door's own
+  // key. REQUIRED, and null is a real answer rather than a shortcut: null means
+  // "the door key, which has no list of its own", never "skip the check".
+  appProfileId: string | null;
 }
 
 export interface RelayRunResult {
@@ -393,11 +401,33 @@ export async function runRelay(
   // asking. Refused before the linked file is fetched: a capability that is
   // switched off should not pull the customer's file onto this disk at all.
   // `text` is not one of the seven — it is the door itself.
-  if (
-    request.capability !== "text" &&
-    capabilityOff(database, request.capability)
-  ) {
-    throw new Error(`RELAY_CAPABILITY_OFF:${request.capability}`);
+  //
+  // The global switch is the ONLY layer here, and deliberately, on both
+  // counts. A relay call arrives from another program over the network with an
+  // owner email on it, not from a browser session, so there is no mode it
+  // could be inside. And this door has ONE key for every app rather than a key
+  // per app — the per-key lists on the Token screen belong to app_profiles,
+  // and nothing in this file has a profile to read. Anything that wants a list
+  // of its own has to become a per-app key first; until then, honouring the
+  // ceiling is the whole of what this door can honour.
+  if (request.capability !== "text") {
+    if (capabilityOff(database, request.capability)) {
+      throw new Error(`RELAY_CAPABILITY_OFF:${request.capability}`);
+    }
+    // The third layer, where it applies: this door also accepts an app key,
+    // and a key that was never granted `vision` must not be able to get it by
+    // knocking here instead of running a Method. A key's list would be worth
+    // nothing if another endpoint handed out the same capability.
+    if (
+      request.appProfileId &&
+      !decideTokenCapabilities(
+        database,
+        [request.capability],
+        readProfileCapabilities(database, request.appProfileId),
+      ).allowed.includes(request.capability)
+    ) {
+      throw new Error(`RELAY_CAPABILITY_NOT_GRANTED:${request.capability}`);
+    }
   }
 
   const started = Date.now();

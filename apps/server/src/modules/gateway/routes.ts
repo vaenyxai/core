@@ -42,6 +42,7 @@ import {
   type CreateModeRequest,
   UpdateModeRequestSchema,
   type UpdateModeRequest,
+  ModeCapabilitiesSchema,
   SwitchModeRequestSchema,
   type SwitchModeRequest,
   ExitModeRequestSchema,
@@ -135,6 +136,7 @@ import {
   PublishRoutineResponseSchema,
   UpdateAppProfileRequestSchema,
   UpdateAppProfileResponseSchema,
+  UpdateAppProfileCapabilitiesRequestSchema,
   SetTaskScheduleRequestSchema,
   SetupOwnerRequestSchema,
   SystemStatusSchema,
@@ -191,6 +193,7 @@ import {
   type PublishMethodResponse,
   type PublishRoutineResponse,
   type UpdateAppProfileRequest,
+  type UpdateAppProfileCapabilitiesRequest,
   type SetTaskScheduleRequest,
   type SetupOwnerRequest,
   type UpdateProjectMemoryRequest,
@@ -385,6 +388,7 @@ import {
   previewSkillImport,
 } from "../core/skills-interop.js";
 import {
+  connectWorkersAi,
   getImageEngineStatus,
   setImageEngine,
   type ImageEngineChoice,
@@ -520,18 +524,30 @@ import {
   CAPABILITIES,
   CAPABILITY_IMPLEMENTED,
   type Capability,
+  type CapabilityDecision,
   type CapabilityLanguage,
+  cannotShareMessage,
   capabilitiesFromManifest,
-  capabilityOff,
+  capabilityRefusedBy,
   decideCapabilities,
   decideTokenCapabilities,
   isCapability,
+  listCapabilityWaiting,
   missingCapabilities,
+  ModeAboveCeilingError,
+  modeAboveCeilingMessage,
+  NEEDS_OWN_TOKEN_APPROVAL,
+  NEVER_VIA_TOKEN,
   readGlobalCapabilities,
+  readModeCapabilities,
   readProfileCapabilities,
   recordCapabilityWanted,
   refusedCapabilityMessage,
+  TokenGrantRefusedError,
+  tokenGrantRefusedMessage,
   writeGlobalCapabilities,
+  writeModeCapabilities,
+  writeProfileCapabilities,
 } from "../core/capabilities.js";
 import { runCapabilityProbe } from "../core/capability-probe.js";
 import { readFetchFolders, writeFetchFolders } from "../core/fetching.js";
@@ -570,6 +586,24 @@ const HealthSchema = Type.Object(
 const ErrorResponseSchema = Type.Object(
   {
     error: Type.String(),
+  },
+  {
+    additionalProperties: false,
+  },
+);
+
+// A refusal the screen has to ACT on rather than only print. A publish blocked
+// because Vaenyx cannot do something yet is followed by the copy pack's N3
+// question — may this be written down? — and the screen needs the capability
+// names as data to ask it. Scraping them back out of the sentence would break
+// the first time somebody read that sentence in Chinese.
+//
+// The array is optional so this one schema still serialises the ordinary
+// {error} refusals the same route sends for everything else.
+const PublishRefusedResponseSchema = Type.Object(
+  {
+    error: Type.String(),
+    missingCapabilities: Type.Optional(Type.Array(Type.String())),
   },
   {
     additionalProperties: false,
@@ -704,11 +738,24 @@ export async function registerGatewayRoutes(
     // never reach: everything else here is a convenience, but a session that
     // can switch a capability back on can walk straight out of its own mode.
     // It was missing while the route above it promised exactly this guarantee.
+    //
+    // This is a PREFIX, and it is meant to be: it covers the switches
+    // themselves, the folder whitelist behind Fetching, and — since the mode
+    // layer became real — each mode's own capability list at
+    // /v1/capabilities/modes/:id. All three are the same door, so they are
+    // deliberately all under the same path. Each of those routes ALSO refuses
+    // any session that is in a mode at all, locked or not; this entry is the
+    // shared floor beneath them.
     "/v1/capabilities",
     "/v1/voice/connect",
     "/v1/voice/output",
     "/v1/voice/local",
     "/v1/vision/engine",
+    // Which model draws, beside the sibling slots it belongs with. It was the
+    // one engine pointer missing from this floor, so a locked mode could
+    // re-point Drawing at another backend — and, until the Cloudflare token
+    // moved to /v1/models/, store a key through it as well.
+    "/v1/images/engine",
     "/v1/app-profiles",
     "/v1/system/backup",
     "/v1/system/restart",
@@ -754,23 +801,78 @@ export async function registerGatewayRoutes(
   // /v1/vision/describe happily called the vision model. A route asks this
   // before it performs its capability, and refuses in the Owner's own words —
   // hiding the button is not a ceiling, because the route is still there.
+  //
+  // Both layers, in one question: the global switch first, then the mode this
+  // SESSION is in. A route that only asked the global one would let a mode be
+  // narrowed on the Modes screen and then ignored by every door in the app —
+  // which is what "the mode layer is inert" meant. The refusal names the layer
+  // that said no, because telling somebody sitting inside a mode to go and
+  // change a setting they cannot reach is worse than saying nothing.
   const capabilityRefusal = (
     capability: Capability,
-    owner: { id: string; name: string },
+    owner: { id: string; name: string; modeId: string | null },
     language: CapabilityLanguage = "en",
   ): string | null => {
-    if (!capabilityOff(context.database, capability)) return null;
+    const reason = capabilityRefusedBy(
+      context.database,
+      capability,
+      owner.modeId,
+    );
+    if (!reason) return null;
     recordAudit(context.database, {
       actorType: "owner",
       actorId: owner.id,
       actorName: owner.name,
       action: "capability.refused",
       decision: "denied",
-      reason: `${capability} is switched off globally, so the request was refused.`,
+      reason:
+        reason === "mode"
+          ? `${capability} is not allowed in the mode this session is in, so the request was refused.`
+          : `${capability} is switched off globally, so the request was refused.`,
       resourceType: "capability",
       resourceId: capability,
     });
-    return refusedCapabilityMessage(capability, "global", language);
+    return refusedCapabilityMessage(capability, reason, language);
+  };
+
+  // The same honesty for a Method run, which cannot refuse the whole call: a
+  // Method declaring four capabilities and getting three still has a job to do,
+  // so the run goes ahead WITHOUT the fourth and says so. Both Method routes
+  // used to throw `decision.refused` away, which made a run that never looked
+  // at the picture indistinguishable from a run that looked and answered
+  // badly — the caller could not tell, and neither could the Owner.
+  //
+  // The audit line is English like every other one on the Guard page; the
+  // sentence handed back to the caller is in the language they asked in.
+  const reportRefusals = (
+    refused: CapabilityDecision["refused"],
+    actor: {
+      actorType: "owner" | "app";
+      actorId: string;
+      actorName: string;
+    },
+    methodId: string,
+    language: CapabilityLanguage = "en",
+  ): { capability: string; reason: string; message: string }[] => {
+    for (const entry of refused) {
+      recordAudit(context.database, {
+        ...actor,
+        action: "capability.refused",
+        decision: "denied",
+        reason: `${entry.capability} was refused to this method run (${entry.reason}).`,
+        resourceType: "method",
+        resourceId: methodId,
+      });
+    }
+    return refused.map((entry) => ({
+      capability: entry.capability,
+      reason: entry.reason,
+      message: refusedCapabilityMessage(
+        entry.capability,
+        entry.reason,
+        language,
+      ),
+    }));
   };
 
   // The same door, said the same way, wherever it is met: the switches, the
@@ -2468,6 +2570,13 @@ export async function registerGatewayRoutes(
           {
             chatId: request.params.id,
             imageId: request.body.imageId ?? null,
+            // The Owner's own run meets the two layers a session has: the
+            // global switches and whatever mode this session is in. A Routine
+            // is several Method runs in a row, so it cannot be the one path
+            // that ignores a switch every single Method run honours.
+            narrow: (declared) =>
+              decideCapabilities(context.database, declared, owner.modeId ?? null)
+                .allowed,
           },
         );
         touchChatThread(
@@ -4176,11 +4285,19 @@ export async function registerGatewayRoutes(
   // is the one an app is given — one key, because a key says WHICH APP is
   // knocking and the subscription to use is named in each request. Regenerating
   // it in Settings is how an app is cut off.
-  function knocking(request: FastifyRequest): boolean {
-    return (
-      relayTokenAccepted(context.database, request.headers.authorization) ||
-      Boolean(authenticateAppProfile(context.database, request))
-    );
+  //
+  // It answers WHO rather than yes/no, because the two callers are not the same
+  // thing: an App Token carries its own capability list and the door's own key
+  // does not have one. A door that could not tell them apart would let a key
+  // that was granted nothing take whatever the machine allows.
+  function knocking(
+    request: FastifyRequest,
+  ): { doorKey: true; profileId: null } | { doorKey: false; profileId: string } | null {
+    if (relayTokenAccepted(context.database, request.headers.authorization)) {
+      return { doorKey: true, profileId: null };
+    }
+    const profile = authenticateAppProfile(context.database, request);
+    return profile ? { doorKey: false, profileId: profile.id } : null;
   }
 
   for (const path of ["/v1/ai/run", "/v1/ai/health"]) {
@@ -4209,6 +4326,7 @@ export async function registerGatewayRoutes(
     },
   );
 
+
   app.post<{ Body: RelayRunRequest }>(
     "/v1/ai/run",
     {
@@ -4226,7 +4344,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
-      if (!knocking(request)) {
+      const knocker = knocking(request);
+      if (!knocker) {
         recordAudit(context.database, {
           actorType: "system",
           actorName: "Vaenyx Guard",
@@ -4250,6 +4369,7 @@ export async function registerGatewayRoutes(
             capability: request.body.capability,
             caller: request.body.caller,
             files: request.body.files ?? [],
+            appProfileId: knocker.profileId,
           },
         );
         recordRelayCall(context.database, {
@@ -4288,6 +4408,22 @@ export async function registerGatewayRoutes(
           });
           return reply.code(403).send({ error: code });
         }
+        // Its own code, not the one above: "the machine has this switched off"
+        // and "this key was not given it" have two different fixes, and an app
+        // that cannot tell them apart tells its own user the wrong thing.
+        if (code.startsWith("RELAY_CAPABILITY_NOT_GRANTED")) {
+          recordAudit(context.database, {
+            actorType: "app",
+            actorId: knocker.profileId,
+            actorName: "App Token",
+            action: "capability.refused",
+            decision: "denied",
+            reason: `${request.body.capability} was not granted to this app key, so a relay request was refused.`,
+            resourceType: "capability",
+            resourceId: request.body.capability,
+          });
+          return reply.code(403).send({ error: code });
+        }
         const status =
           code === "RELAY_NOT_OWNER"
             ? 403
@@ -4320,8 +4456,11 @@ export async function registerGatewayRoutes(
           200: Type.Object(
             {
               global: Type.Record(Type.String(), Type.Boolean()),
+              session: Type.Record(Type.String(), Type.Boolean()),
               vocabulary: Type.Array(Type.String()),
               implemented: Type.Record(Type.String(), Type.Boolean()),
+              neverViaToken: Type.Array(Type.String()),
+              needsOwnTokenApproval: Type.Array(Type.String()),
             },
             { additionalProperties: false },
           ),
@@ -4334,10 +4473,45 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      // 🔴 TWO CEILINGS, BECAUSE THERE ARE TWO QUESTIONS AND THEY HAVE DIFFERENT
+      // ANSWERS INSIDE A MODE. `global` is the machine's own switches — what the
+      // Capabilities card writes, and what an app key's grant is measured
+      // against, both of which are about the instance and not about whoever is
+      // asking. `session` is global ∩ the mode this session is in: what the
+      // caller may actually do right now.
+      //
+      // The browser needs the second one because it performs some capabilities
+      // ITSELF. Device text-to-speech is spoken by the page and never sends a
+      // request, so this answer is the only thing that can stop it — while it
+      // read `global`, a mode with Speaking narrowed off still spoke, and a
+      // switch that does nothing is exactly what the three layers exist to
+      // prevent. Anything the browser does on its own gates on `session`.
+      //
+      // Handing back what this session may do is not a map out of the mode: it
+      // is what the session discovers by trying. What a DIFFERENT mode still
+      // allows stays behind /v1/capabilities/modes/:id, which refuses inside a
+      // mode for exactly that reason.
+      const session = Object.fromEntries(
+        CAPABILITIES.map((capability) => [
+          capability,
+          capabilityRefusedBy(
+            context.database,
+            capability,
+            owner.modeId ?? null,
+          ) === null,
+        ]),
+      );
       return {
         global: readGlobalCapabilities(context.database),
+        session,
         vocabulary: [...CAPABILITIES],
         implemented: CAPABILITY_IMPLEMENTED,
+        // What an app key may never be handed, and what it may be handed only
+        // as its own separate act. Both come from here rather than being
+        // written into the screen a second time: the day one of those lists
+        // changes, the screen has to change with it or it starts lying.
+        neverViaToken: [...NEVER_VIA_TOKEN],
+        needsOwnTokenApproval: [...NEEDS_OWN_TOKEN_APPROVAL],
       };
     },
   );
@@ -4398,6 +4572,162 @@ export async function registerGatewayRoutes(
         });
       }
       return next;
+    },
+  );
+
+  // WHAT ONE MODE MAY DO — the middle of the three layers. The column has been
+  // on `modes` since migration 0053 and nothing in the server ever wrote it, so
+  // every mode sat at NULL and the layer did nothing at all.
+  //
+  // The whole point of a mode ceiling is a device you hand to somebody else
+  // being narrower than your own instance, so the answer carries the global
+  // switches with it: a capability the INSTANCE has switched off has to show as
+  // unavailable in the mode rather than as a switch that would quietly do
+  // nothing.
+  app.get<{ Params: { id: string }; Querystring: { lang?: string } }>(
+    "/v1/capabilities/modes/:id",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: ModeCapabilitiesSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      // Reading is refused inside a mode as well as writing, and that is not
+      // caution for its own sake: knowing exactly which capabilities a mode
+      // still has is the map somebody would use to look for a way out of it.
+      // Every other mode setting is already User-Mode-only for the same reason.
+      if (owner.modeId) {
+        return reply.code(403).send({
+          error: switchesLiveInUserMode(
+            request.query.lang === "zh" ? "zh" : "en",
+          ),
+        });
+      }
+      const mode = findMode(context.database, request.params.id);
+      if (!mode) return reply.code(404).send({ error: "Mode not found." });
+      const stored = readModeCapabilities(context.database, mode.id);
+      const capabilities: Record<string, boolean> = {};
+      for (const capability of CAPABILITIES) {
+        capabilities[capability] = stored
+          ? stored.includes(capability)
+          : // NULL: this mode has never been narrowed, so it adds nothing of
+            // its own and every row starts where the instance leaves it.
+            true;
+      }
+      return {
+        modeId: mode.id,
+        modeName: mode.name,
+        capabilities,
+        narrowed: stored !== null,
+        global: readGlobalCapabilities(context.database),
+        implemented: CAPABILITY_IMPLEMENTED,
+      };
+    },
+  );
+
+  app.put<{
+    Params: { id: string };
+    Body: Record<string, boolean>;
+    Querystring: { lang?: string };
+  }>(
+    "/v1/capabilities/modes/:id",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        body: Type.Record(Type.String(), Type.Boolean()),
+        response: {
+          200: ModeCapabilitiesSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const language: CapabilityLanguage =
+        request.query.lang === "zh" ? "zh" : "en";
+      // 🔴 The guarantee the whole layer rests on: a session inside ANY mode
+      // cannot change ANY mode's capabilities — least of all its own. The
+      // locked-mode prefix hook above only bites when "lock settings" is
+      // ticked, which would leave every unlocked mode able to hand itself back
+      // whatever it was denied.
+      if (owner.modeId) {
+        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+      }
+      const unknown = Object.keys(request.body).filter(
+        (name) => !isCapability(name),
+      );
+      if (unknown.length > 0) {
+        return reply.code(400).send({
+          error:
+            language === "zh"
+              ? `这不是一项能力:${unknown.join(", ")}`
+              : `Not a capability: ${unknown.join(", ")}`,
+        });
+      }
+      const mode = findMode(context.database, request.params.id);
+      if (!mode) return reply.code(404).send({ error: "Mode not found." });
+
+      let stored: Capability[];
+      try {
+        stored = writeModeCapabilities(
+          context.database,
+          mode.id,
+          request.body as Partial<Record<Capability, boolean>>,
+        );
+      } catch (error) {
+        // The one thing a mode may not do. It is answered in the Owner's own
+        // words rather than as a validation failure, because the fix is a
+        // switch on the card above and nobody guesses that from "400".
+        if (error instanceof ModeAboveCeilingError) {
+          return reply.code(400).send({
+            error: modeAboveCeilingMessage(error.capabilities, language),
+          });
+        }
+        throw error;
+      }
+      // Audited exactly like the global switches, and named so the Guard page
+      // can tell the two apart at a glance: who, when, which mode, which
+      // capability, on or off.
+      for (const [name, on] of Object.entries(request.body)) {
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "capability.mode.switch",
+          decision: on ? "allowed" : "denied",
+          reason: `${name} switched ${on ? "on" : "off"} for mode "${mode.name}".`,
+          resourceType: "mode",
+          resourceId: mode.id,
+        });
+      }
+      const capabilities: Record<string, boolean> = {};
+      for (const capability of CAPABILITIES) {
+        capabilities[capability] = stored.includes(capability);
+      }
+      return {
+        modeId: mode.id,
+        modeName: mode.name,
+        capabilities,
+        narrowed: true,
+        global: readGlobalCapabilities(context.database),
+        implemented: CAPABILITY_IMPLEMENTED,
+      };
     },
   );
 
@@ -4493,6 +4823,87 @@ export async function registerGatewayRoutes(
         resourceId: "fetching",
       });
       return result;
+    },
+  );
+
+  // THE WAITING LIST, written only when the Owner says it may be (copy pack N3).
+  // A publish refused for a capability Vaenyx has not built used to count the
+  // attempt on its way past and then tell the Owner it had; this is the same
+  // counter with the question asked first.
+  //
+  // What lands in the table is the capability NAME and a count. Nothing about
+  // the Method, nothing about its recipe, and it never leaves this machine —
+  // which is exactly what the string the Owner just read promised, so a future
+  // sender of this table changes that string in the same commit.
+  //
+  // Under /v1/capabilities on purpose: the locked-mode prefix list matches by
+  // prefix, so a restricted session cannot reach it either.
+  app.post<{
+    Body: { capabilities: string[] };
+    Querystring: { lang?: string };
+  }>(
+    "/v1/capabilities/wanted",
+    {
+      schema: {
+        body: Type.Object(
+          {
+            capabilities: Type.Array(Type.String({ maxLength: 64 }), {
+              maxItems: 16,
+            }),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: Type.Object(
+            { counted: Type.Array(Type.String()) },
+            { additionalProperties: false },
+          ),
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const language: CapabilityLanguage =
+        request.query.lang === "zh" ? "zh" : "en";
+      // Same door as the switches: whoever is inside a mode is not the person
+      // who answers a question about what this instance records.
+      if (owner.modeId) {
+        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+      }
+      const named = request.body.capabilities.filter(isCapability);
+      if (named.length === 0) {
+        return reply.code(400).send({
+          error:
+            language === "zh"
+              ? "这不是一项能力。"
+              : "That is not a capability.",
+        });
+      }
+      // recordCapabilityWanted keeps its own rule about what belongs in the
+      // table: only what a Method run genuinely cannot reach yet. A capability
+      // the Owner merely switched off is not something anybody is waiting for,
+      // and a consent cannot talk that filter out of the way.
+      recordCapabilityWanted(context.database, named);
+      const counted = listCapabilityWaiting(context.database)
+        .map((row) => row.capability)
+        .filter((capability) => named.includes(capability));
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "capability.wanted",
+        decision: "allowed",
+        reason: `The Owner agreed to record that ${counted.join(", ") || named.join(", ")} was wanted.`,
+        resourceType: "capability",
+        resourceId: counted[0] ?? named[0] ?? "",
+      });
+      return { counted };
     },
   );
 
@@ -5502,21 +5913,16 @@ export async function registerGatewayRoutes(
     }
   });
 
-  app.post<{ Body: { provider: string; apiKey?: string; accountId?: string } }>(
+  app.post<{ Body: { provider: string } }>(
     "/v1/images/engine",
     {
       schema: {
+        // WHICH connected backend draws, and nothing else. No key comes through
+        // here any more: connecting Workers AI is POST /v1/models/workersai,
+        // because a call that stored a key AND re-pointed this row meant the
+        // Owner's choice was overwritten every time they saved a token.
         body: Type.Object(
-          {
-            provider: Type.String({ minLength: 1 }),
-            // Only Cloudflare uses these: its token is typed into the Pictures
-            // setting itself rather than under Models, because it is the one
-            // engine a household adds solely to make pictures. The account id
-            // is asked for only when the token cannot name it (a Workers AI
-            // template token cannot).
-            apiKey: Type.Optional(Type.String({ maxLength: 500 })),
-            accountId: Type.Optional(Type.String({ maxLength: 64 })),
-          },
+          { provider: Type.String({ minLength: 1 }) },
           { additionalProperties: false },
         ),
         response: {
@@ -5532,9 +5938,59 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       try {
-        return await setImageEngine(
+        return setImageEngine(
           context.config.secretsDirectory,
           request.body.provider as ImageEngineChoice,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "IMAGE_NO_KEY") {
+          return reply.code(400).send({
+            error:
+              "That model has no key yet — connect it under Models first, then pick it here.",
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // CONNECTING Cloudflare Workers AI — its own door, because it is its own act.
+  // Every other provider is connected through /v1/models/providers/:id; this one
+  // needs a route of its own only because the pair has to be VERIFIED with a
+  // real Workers AI call and the account id looked up, neither of which the
+  // generic connect does. What it deliberately does NOT do is decide what draws:
+  // that is the Drawing row's answer, and an empty slot fills itself the way the
+  // voice and vision slots always have.
+  app.post<{ Body: { apiKey?: string; accountId?: string } }>(
+    "/v1/models/workersai",
+    {
+      schema: {
+        body: Type.Object(
+          {
+            apiKey: Type.Optional(Type.String({ maxLength: 500 })),
+            // Asked for because a Workers AI-template token cannot name its own
+            // account. Either field may be left out when the card is already
+            // connected: whichever is blank falls back to what is stored, so a
+            // wrong account id can be fixed without re-pasting the token.
+            accountId: Type.Optional(Type.String({ maxLength: 64 })),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: ModelProvidersResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        await connectWorkersAi(
+          context.config.secretsDirectory,
           request.body.apiKey,
           request.body.accountId,
         );
@@ -5542,12 +5998,9 @@ export async function registerGatewayRoutes(
         const code = error instanceof Error ? error.message : "";
         if (code === "IMAGE_NO_KEY") {
           return reply.code(400).send({
-            error:
-              "That model has no key yet — connect it under Models first, then pick it here.",
+            error: "Paste the Workers AI token — there is none stored yet.",
           });
         }
-        // Cloudflare is the one engine whose key is entered right here, so its
-        // key problems have to be answered right here too.
         if (code.startsWith("IMAGE_CF_TOKEN_REJECTED")) {
           return reply.code(400).send({
             error:
@@ -5575,6 +6028,20 @@ export async function registerGatewayRoutes(
         }
         throw error;
       }
+      // The stored pair carries a chat base URL as well, so re-register:
+      // without this the Models card would go on calling Workers AI "Not
+      // Connected" until the next restart, right after the Owner connected it.
+      initModelRegistry({ secretsDirectory: context.config.secretsDirectory });
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "model.provider.connect",
+        decision: "allowed",
+        reason: 'Owner connected model provider "workersai".',
+        resourceType: "system",
+      });
+      return { providers: listModelProviders(context.config.secretsDirectory) };
     },
   );
 
@@ -5834,8 +6301,11 @@ export async function registerGatewayRoutes(
           error instanceof Error &&
           error.message === "LOCAL_TTS_NOT_INSTALLED"
         ) {
+          // Naming the card matters more than it used to: the download button
+          // is no longer in the drawer this row's chooser sits above.
           return reply.code(400).send({
-            error: "Local voice is not installed yet — download it first.",
+            error:
+              "Local voice is not installed yet — download it under Models first.",
           });
         }
         throw error;
@@ -6576,6 +7046,130 @@ export async function registerGatewayRoutes(
 
         throw error;
       }
+    },
+  );
+
+  // WHAT ONE APP KEY MAY DO — the third of the three layers
+  // (global ∩ what this key was granted ∩ what the Method declared). The column
+  // has been on `app_profiles` since migration 0055 and nothing ever wrote it,
+  // so every key sat at "nothing" and granting one was impossible.
+  //
+  // 🔴 Owner only, and User Mode only. A key is a hole in the ceiling that
+  // outlives the session that made it: somebody inside a mode who could grant
+  // a key `vision` could then call that key from another program and look at
+  // whatever they liked. The same door as the global switches and each mode's
+  // own list, for the same reason.
+  app.put<{
+    Params: { id: string };
+    Body: UpdateAppProfileCapabilitiesRequest;
+    Querystring: { lang?: string };
+  }>(
+    "/v1/app-profiles/:id/capabilities",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: UpdateAppProfileCapabilitiesRequestSchema,
+        response: {
+          200: UpdateAppProfileResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const language: CapabilityLanguage =
+        request.query.lang === "zh" ? "zh" : "en";
+      if (owner.modeId) {
+        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+      }
+      const named = [
+        ...Object.keys(request.body.changes),
+        ...(request.body.approve ?? []),
+      ];
+      const unknown = named.filter((name) => !isCapability(name));
+      if (unknown.length > 0) {
+        return reply.code(400).send({
+          error:
+            language === "zh"
+              ? `这不是一项能力:${unknown.join(", ")}`
+              : `Not a capability: ${unknown.join(", ")}`,
+        });
+      }
+
+      try {
+        writeProfileCapabilities(
+          context.database,
+          request.params.id,
+          request.body.changes as Partial<Record<Capability, boolean>>,
+          (request.body.approve ?? []).filter(isCapability),
+        );
+      } catch (error) {
+        // The three things a key may not be handed, each answered in the
+        // Owner's own words rather than as a validation failure: nobody works
+        // out from "400" that the fix is a switch one card away, or that this
+        // particular tick needs a second deliberate press.
+        if (error instanceof TokenGrantRefusedError) {
+          recordAudit(context.database, {
+            actorType: "owner",
+            actorId: owner.id,
+            actorName: owner.name,
+            action: "capability.token.refused",
+            decision: "denied",
+            reason: `Refused to grant ${error.capabilities.join(", ")} to an app key (${error.refusal}).`,
+            resourceType: "app_profile",
+            resourceId: request.params.id,
+          });
+          return reply.code(400).send({
+            error: tokenGrantRefusedMessage(
+              error.capabilities,
+              error.refusal,
+              language,
+            ),
+          });
+        }
+        if (error instanceof Error && error.message === "APP_PROFILE_NOT_FOUND") {
+          return reply.code(404).send({ error: "App Profile not found." });
+        }
+        throw error;
+      }
+
+      // The whole profile, not just the list: the card the Owner is looking at
+      // draws itself from one object, so handing back anything less would leave
+      // the screen assembling a key out of two answers.
+      const profile = listAppProfiles(context.database).find(
+        (item) => item.id === request.params.id,
+      );
+      if (!profile) {
+        return reply.code(404).send({ error: "App Profile not found." });
+      }
+
+      // Audited like the other two layers, and named so the Guard page can tell
+      // the three apart at a glance: who, when, which key, which capability.
+      // The key by NAME — an id tells the Owner nothing about which of their
+      // apps just gained something.
+      for (const [name, on] of Object.entries(request.body.changes)) {
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "capability.token.switch",
+          decision: on ? "allowed" : "denied",
+          reason: `${name} ${on ? "granted to" : "taken from"} app key "${profile.name}".`,
+          resourceType: "app_profile",
+          resourceId: profile.id,
+        });
+      }
+
+      return { profile };
     },
   );
 
@@ -8147,7 +8741,11 @@ export async function registerGatewayRoutes(
   // uses the Owner session instead of an app token, and skips the allowlist /
   // version lock (those gate apps, not the Owner). No 200 response schema:
   // `output` is the method's arbitrary structured JSON.
-  app.post<{ Params: { id: string }; Body: RunMethodRequest }>(
+  app.post<{
+    Params: { id: string };
+    Body: RunMethodRequest;
+    Querystring: { lang?: string };
+  }>(
     "/v1/methods/:id/test-run",
     {
       schema: {
@@ -8205,6 +8803,16 @@ export async function registerGatewayRoutes(
           capabilitiesFromManifest(method.manifest).capabilities,
           owner.modeId ?? null,
         );
+        const refusals = reportRefusals(
+          ownerAllowed.refused,
+          {
+            actorType: "owner",
+            actorId: owner.id,
+            actorName: owner.name,
+          },
+          request.params.id,
+          request.query.lang === "zh" ? "zh" : "en",
+        );
         const result = await executeMethod(
           method,
           examples,
@@ -8232,6 +8840,7 @@ export async function registerGatewayRoutes(
           outputValid: result.outputValid,
           raw: result.raw,
           webSearchUsed: result.webSearchUsed,
+          ...(refusals.length > 0 ? { capabilityRefusals: refusals } : {}),
         };
         return response;
       } catch (error) {
@@ -8387,6 +8996,18 @@ export async function registerGatewayRoutes(
           capabilitiesFromManifest(method.manifest).capabilities,
           tokenGrants,
         );
+        // Said out loud, to the app and on the Guard page. An app that was
+        // never granted `vision` gets a sentence saying so, not a picture-blind
+        // answer that reads like the Method being poor at its job.
+        const refusals = reportRefusals(
+          tokenAllowed.refused,
+          {
+            actorType: "app",
+            actorId: profile.id,
+            actorName: profile.name,
+          },
+          methodId,
+        );
         const result = await executeMethod(
           method,
           examples,
@@ -8414,6 +9035,7 @@ export async function registerGatewayRoutes(
           outputValid: result.outputValid,
           raw: result.raw,
           webSearchUsed: result.webSearchUsed,
+          ...(refusals.length > 0 ? { capabilityRefusals: refusals } : {}),
         };
         return response;
       } catch (error) {
@@ -9020,7 +9642,11 @@ export async function registerGatewayRoutes(
   // Publish one of the Owner's Methods to the community warehouse. Owner-only;
   // requires a linked Google identity + configured GitHub token. Every publish
   // carries the G2/G2a acceptance (copy pack clause 2.3).
-  app.post<{ Params: { id: string }; Body: PublishAcceptanceRequest }>(
+  app.post<{
+    Params: { id: string };
+    Querystring: { lang?: string };
+    Body: PublishAcceptanceRequest;
+  }>(
     "/v1/library/methods/:id/publish",
     {
       schema: {
@@ -9032,7 +9658,7 @@ export async function registerGatewayRoutes(
         response: {
           200: PublishMethodResponseSchema,
           401: ErrorResponseSchema,
-          403: ErrorResponseSchema,
+          403: PublishRefusedResponseSchema,
           404: ErrorResponseSchema,
           502: ErrorResponseSchema,
           503: ErrorResponseSchema,
@@ -9063,16 +9689,26 @@ export async function registerGatewayRoutes(
         }
         // Built, kept — but not published. A Method that cannot run here cannot
         // run on anyone else's Vaenyx either, and a community shelf half greyed
-        // out is a fatal first impression. The ATTEMPT is the vote: it is
-        // recorded (capability name only, nothing about this Method) so the
-        // operator knows what to build next.
+        // out is a fatal first impression. The ATTEMPT is the vote.
+        //
+        // 🔴 The vote is no longer counted HERE. It used to be recorded on the
+        // way past, and the refusal then told the Owner it had been — a record
+        // made and announced afterwards is not a choice. The names go back with
+        // the refusal instead, and the screen asks the copy pack's N3 question
+        // before anything is written down (POST /v1/capabilities/wanted).
         const wanted = missingCapabilities(
           capabilitiesFromManifest(method.manifest).capabilities,
         );
         if (wanted.length > 0) {
-          recordCapabilityWanted(context.database, wanted);
           return reply.code(403).send({
-            error: `This Method needs something Vaenyx cannot do yet (${wanted.join(", ")}), so it cannot be shared. It is saved here, and your request has been counted.`,
+            error: cannotShareMessage(
+              wanted,
+              request.query.lang === "zh" ? "zh" : "en",
+            ),
+            // The names ride back as data as well as inside the sentence: the
+            // screen asks the N3 question about them, and reading them out of a
+            // translated sentence is how that breaks in the other language.
+            missingCapabilities: wanted,
           });
         }
         const consentError = await ensureOverseasConsentOnService(
@@ -9566,7 +10202,20 @@ export async function registerGatewayRoutes(
           routineId,
           request.body.input,
           controller.signal,
-          { stateless: true },
+          {
+            stateless: true,
+            // A Routine Token runs several Methods in a row, and each step is
+            // narrowed by the same three layers as a single Method run. Without
+            // this the steps ran on their own manifests alone — so a Routine
+            // Token could search the web with the instance's Web switch off,
+            // and a grant ticked on the key changed nothing.
+            narrow: (declared) =>
+              decideTokenCapabilities(
+                context.database,
+                declared,
+                readProfileCapabilities(context.database, profile.id),
+              ).allowed,
+          },
         );
         recordAudit(context.database, {
           actorType: "app",

@@ -54,6 +54,7 @@ import type {
   Mode,
   CreateModeRequest,
   UpdateModeRequest,
+  ModeCapabilities,
   DeviceMode,
   SetDeviceModeRequest,
   Project,
@@ -88,12 +89,33 @@ import type {
   Workspace,
 } from "@vaenyx/contracts";
 
-export type { Mode, DeviceMode, UpdateStatus } from "@vaenyx/contracts";
+export type {
+  Mode,
+  ModeCapabilities,
+  DeviceMode,
+  UpdateStatus,
+} from "@vaenyx/contracts";
 
 import { showErrorToast, showSavedToast } from "./toast.js";
 
 interface ErrorResponse {
   error?: string;
+}
+
+// A refusal that carries more than a sentence. Most do not, and every existing
+// `catch (error) { error instanceof Error }` keeps working unchanged — this only
+// adds the parsed body for the handful of screens that must ACT on the reason
+// (today: a publish blocked by an unbuilt capability, which is followed by the
+// question in copy pack N3 and needs the names as data, not as prose).
+export class VaenyxRequestError extends Error {
+  readonly status: number;
+  readonly body: Record<string, unknown>;
+  constructor(message: string, status: number, body: Record<string, unknown>) {
+    super(message);
+    this.name = "VaenyxRequestError";
+    this.status = status;
+    this.body = body;
+  }
 }
 
 async function requestJson<T>(
@@ -121,7 +143,11 @@ async function requestJson<T>(
     if (method !== "GET" && response.status !== 401) {
       showErrorToast(message);
     }
-    throw new Error(message);
+    throw new VaenyxRequestError(
+      message,
+      response.status,
+      body as Record<string, unknown>,
+    );
   }
 
   // Settings save themselves the moment they change, which is silent by
@@ -152,6 +178,10 @@ const SAVED_TOAST_PATHS = [
   /^\/v1\/modes(\/|$)/,
   /^\/v1\/relay\/settings/,
   /^\/v1\/capabilities/,
+  // The third capability layer lives under the key it belongs to rather than
+  // under /v1/capabilities, so it needs its own line to say "Saved" like the
+  // other two.
+  /^\/v1\/app-profiles\/[^/]+\/capabilities/,
 ];
 
 // The app is bilingual and this bus has no i18n context, so the message comes
@@ -280,12 +310,16 @@ function publishBody(acceptance: PublishAcceptance): string {
   return JSON.stringify({ acceptance: rest, receiveExamples });
 }
 
+// `lang` rides along because this one can refuse in a sentence the Owner reads:
+// a Method needing something Vaenyx cannot do yet is told so here, and the N3
+// window that follows it is in both languages.
 export function publishMethodToCommunity(
   id: string,
   acceptance: PublishAcceptance,
+  lang: string,
 ): Promise<PublishMethodResponse> {
   return requestJson<PublishMethodResponse>(
-    `/v1/library/methods/${encodeURIComponent(id)}/publish`,
+    `/v1/library/methods/${encodeURIComponent(id)}/publish?lang=${lang}`,
     { method: "POST", body: publishBody(acceptance) },
   );
 }
@@ -890,6 +924,24 @@ export function updateAppProfile(
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+// WHAT ONE KEY MAY DO — the third capability layer. A CHANGE SET, never the
+// whole list, for the same reason the other two take one: the screen sends the
+// tick that was just made, so a screen that went stale cannot silently undo a
+// grant it never showed. `approve` carries the capabilities the Owner said yes
+// to separately (today: the web), and `lang` rides along because this route
+// refuses in words the Owner reads.
+export function updateAppProfileCapabilities(
+  profileId: string,
+  changes: Record<string, boolean>,
+  approve: string[],
+  lang: string,
+): Promise<UpdateAppProfileResponse> {
+  return requestJson<UpdateAppProfileResponse>(
+    `/v1/app-profiles/${encodeURIComponent(profileId)}/capabilities?lang=${lang}`,
+    { method: "PUT", body: JSON.stringify({ changes, approve }) },
+  );
 }
 
 export function regenerateAppProfileToken(
@@ -1508,11 +1560,24 @@ export function fetchFreePicks(): Promise<FreePicksState> {
 }
 
 // The capability switches: the ceiling every Method, mode and Token sits under.
-export function fetchCapabilities(): Promise<{
+export interface CapabilityCeiling {
+  /** The machine's own switches. What the Capabilities card writes, and what an
+   *  app key's grant is measured against — both facts about the instance. */
   global: Record<string, boolean>;
+  /** `global` ∩ the mode THIS session is in: what the caller may do right now.
+   *  Anything the browser performs by itself — device text-to-speech is the one
+   *  that never sends a request — has to gate on this and not on `global`, or
+   *  a mode's switch reaches nothing. */
+  session: Record<string, boolean>;
   vocabulary: string[];
   implemented: Record<string, boolean>;
-}> {
+  /** Never grantable to an app key, whatever anyone ticks. */
+  neverViaToken: string[];
+  /** Grantable to an app key, but only as its own deliberate approval. */
+  needsOwnTokenApproval: string[];
+}
+
+export function fetchCapabilities(): Promise<CapabilityCeiling> {
   return requestJson("/v1/capabilities");
 }
 
@@ -1526,6 +1591,33 @@ export function updateCapabilities(
     method: "PUT",
     body: JSON.stringify(changes),
   });
+}
+
+// WHAT ONE MODE MAY DO — the middle layer. The answer carries the instance's
+// own switches alongside the mode's, because a mode can only ever narrow: a
+// capability switched off for the whole instance has to show as unavailable in
+// the mode rather than as a switch that would quietly change nothing.
+export function fetchModeCapabilities(
+  modeId: string,
+): Promise<ModeCapabilities> {
+  return requestJson<ModeCapabilities>(
+    `/v1/capabilities/modes/${encodeURIComponent(modeId)}`,
+  );
+}
+
+// A CHANGE SET, never the whole list: the screen sends the switch that was just
+// flipped, so a screen that went stale cannot silently undo whatever changed
+// underneath it. `lang` rides along because this route refuses in words the
+// Owner reads — a mode may not be given what the instance has switched off.
+export function updateModeCapabilities(
+  modeId: string,
+  changes: Record<string, boolean>,
+  lang: string,
+): Promise<ModeCapabilities> {
+  return requestJson<ModeCapabilities>(
+    `/v1/capabilities/modes/${encodeURIComponent(modeId)}?lang=${lang}`,
+    { method: "PUT", body: JSON.stringify(changes) },
+  );
 }
 
 // The folders "Files on this machine" may look in — a second decision after
@@ -1548,6 +1640,19 @@ export function updateCapabilityFolders(
   return requestJson(`/v1/capabilities/folders?lang=${lang}`, {
     method: "PUT",
     body: JSON.stringify({ folders }),
+  });
+}
+
+// The waiting list (copy pack N3), written only after the Owner has been asked
+// and said yes. Never called on the way past a refusal — that is the whole
+// point of it being a separate request.
+export function recordCapabilityWanted(
+  capabilities: string[],
+  lang: string,
+): Promise<{ counted: string[] }> {
+  return requestJson(`/v1/capabilities/wanted?lang=${lang}`, {
+    method: "POST",
+    body: JSON.stringify({ capabilities }),
   });
 }
 
@@ -1616,19 +1721,38 @@ export function fetchImageEngine(): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/images/engine");
 }
 
+// WHICH connected backend draws — the Drawing row's answer and nothing else.
+// No key travels with it: connecting Workers AI is `connectWorkersAi` below,
+// because one call that did both re-pointed this row every time a token was
+// saved, over whatever the Owner had chosen.
 export function setImageEngineChoice(
   provider: "none" | "workersai" | "gemini" | "openai" | "zhipu",
-  apiKey?: string,
-  accountId?: string,
 ): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/images/engine", {
     method: "POST",
-    body: JSON.stringify({
-      provider,
-      ...(apiKey ? { apiKey } : {}),
-      ...(accountId ? { accountId } : {}),
-    }),
+    body: JSON.stringify({ provider }),
   });
+}
+
+// Cloudflare Workers AI: the one provider connected with a token AND an account
+// id, verified against Cloudflare before it is stored. Either field may be left
+// empty on an already-connected card — the stored value stands in — so a wrong
+// account id can be corrected without re-pasting the token. Answers with the
+// whole provider list, like every other connect.
+export function connectWorkersAi(
+  apiKey?: string,
+  accountId?: string,
+): Promise<{ providers: ModelProviderInfo[] }> {
+  return requestJson<{ providers: ModelProviderInfo[] }>(
+    "/v1/models/workersai",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...(apiKey ? { apiKey } : {}),
+        ...(accountId ? { accountId } : {}),
+      }),
+    },
+  );
 }
 
 // One Routine in full — what it does, step by step — so the Library can
@@ -1825,12 +1949,15 @@ export function renameMethodTag(
   });
 }
 
+// `lang` rides along because a run can come back having been refused one of the
+// capabilities the Method declared, and that sentence is read by the Owner.
 export function testRunMethod(
   id: string,
   input: unknown,
+  lang: string,
 ): Promise<RunMethodResponse> {
   return requestJson<RunMethodResponse>(
-    `/v1/methods/${encodeURIComponent(id)}/test-run`,
+    `/v1/methods/${encodeURIComponent(id)}/test-run?lang=${lang}`,
     { method: "POST", body: JSON.stringify({ input }) },
   );
 }

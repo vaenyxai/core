@@ -166,10 +166,13 @@ import {
   fetchFreePicks,
   refreshFreePicks,
   fetchCapabilities,
+  type CapabilityCeiling,
   updateCapabilities,
   fetchCapabilityFolders,
   updateCapabilityFolders,
+  recordCapabilityWanted,
   runCapabilityTest,
+  VaenyxRequestError,
   fetchRelay,
   updateRelaySettings,
   testRelayEngine,
@@ -180,13 +183,13 @@ import {
   type FlywheelState,
   fetchImageEngine,
   setImageEngineChoice,
+  connectWorkersAi,
   saveAnnotations,
   uploadDocument,
   startClaudeLogin,
   submitClaudeLoginCode,
   describePhoto,
   uploadPhoto,
-  type VisionStatus,
   fetchVoiceOutput,
   connectVoiceOutput,
   synthesizeSpeech,
@@ -202,11 +205,14 @@ import {
   switchMode,
   exitMode,
   fetchModeThreads,
+  fetchModeCapabilities,
+  updateModeCapabilities,
   fetchDeviceModes,
   setDeviceMode,
   forgetDeviceMode,
   applyDeviceMode,
   type Mode,
+  type ModeCapabilities,
   type DeviceMode,
   type LocalTtsStatus,
   postPresenceHeartbeat,
@@ -234,6 +240,7 @@ import {
   setPublishDisplayName,
   testRunMethod,
   updateAppProfile,
+  updateAppProfileCapabilities,
   updateMemory,
   updateProject,
   updateProjectInstructions,
@@ -249,7 +256,12 @@ import {
   type ToastTone,
 } from "./toast.js";
 import { useI18n, type Lang } from "./i18n.js";
-import { CAPABILITY_META, CapabilityChips } from "./capability-chips.js";
+import {
+  CAPABILITY_META,
+  CapabilityChip,
+  CapabilityChips,
+  capabilityMeta,
+} from "./capability-chips.js";
 import { Picker, type PickerOption } from "./picker.js";
 import { CAPABILITIES } from "./capabilities.js";
 import {
@@ -1347,6 +1359,12 @@ function IconCheck() {
 // keeps it true the moment the Owner flips the switch in Settings, so the
 // buttons come back without a reload.
 //
+// 🔴 IT IS THE SESSION'S CEILING THAT IS ASKED, NOT THE MACHINE'S. A mode
+// narrows what this session may do, and with the device voice there is no
+// server call for the mode layer to bite on — so reading `global` here meant a
+// mode with Speaking switched off still spoke. Entering or leaving a mode
+// reloads the page, so one read per load is the whole of what this needs.
+//
 // THAT LAST PART ONLY WORKS BECAUSE SETTINGS AND THE CHAT ARE NEVER ON SCREEN
 // AT THE SAME TIME. This is a module-level `let`, not state — writing it cannot
 // re-render a button that is already mounted. Flipping the switch takes hold
@@ -1361,8 +1379,8 @@ function IconCheck() {
 let speakingOn: boolean | null = null;
 let speakingRead: Promise<boolean> | null = null;
 
-function noteSpeakingOn(global: Record<string, boolean>): void {
-  speakingOn = global.speaking === true;
+function noteSpeakingOn(allowed: Record<string, boolean>): void {
+  speakingOn = allowed.speaking === true;
 }
 
 function readSpeakingOn(): Promise<boolean> {
@@ -1370,7 +1388,7 @@ function readSpeakingOn(): Promise<boolean> {
   if (!speakingRead) {
     speakingRead = fetchCapabilities()
       .then((result) => {
-        noteSpeakingOn(result.global);
+        noteSpeakingOn(result.session);
         return speakingOn === true;
       })
       .catch(() => {
@@ -1508,9 +1526,13 @@ function SpeakButton({
       setMuted(true);
       setState("idle");
       showErrorToast(
+        // Two different reasons land here — the instance switch, or the mode
+        // narrowing it — and only one of them can be acted on from Settings.
+        // Sending somebody inside a mode to a screen that refuses them is worse
+        // than saying nothing, so the sentence names both doors.
         lang === "zh"
-          ? "「说话」这一项被你关掉了,所以 Vaenyx 没有念出来。要用的话,去 AI Settings → Capabilities 把这一行打开。"
-          : "Speaking is switched off, so Vaenyx did not read that out. Turn the Speaking row back on under AI Settings → Capabilities.",
+          ? "「念」现在是关的,所以 Vaenyx 没有念出来。在 AI Settings → Capabilities 把这一行打开;如果你正在某个模式里,要先退出那个模式。"
+          : "Speaking is off, so Vaenyx did not read that out. Turn the Speaking row back on under AI Settings → Capabilities — and if you are inside a mode, leave the mode first.",
       );
       return;
     }
@@ -2942,7 +2964,7 @@ function AppsPanel({
   onUpdate: (profile: AppProfile) => void;
   onDelete: (profileId: string) => void;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [name, setName] = useState("");
   const [kind, setKind] = useState<AppProfileKind>("routine");
   const [routineId, setRoutineId] = useState("");
@@ -2967,10 +2989,87 @@ function AppsPanel({
   } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // WHAT ONE KEY MAY DO — the third capability layer (global ∩ what this key
+  // was granted ∩ what the Method declared). One key's rows open at a time.
+  const [capsFor, setCapsFor] = useState<string | null>(null);
+  const [capsBusy, setCapsBusy] = useState(false);
+  const [capsError, setCapsError] = useState<string | null>(null);
+  // The one grant that is its own act rather than one more tick: which key, and
+  // which capability is waiting for the second press.
+  const [approving, setApproving] = useState<{
+    profileId: string;
+    capability: string;
+  } | null>(null);
+
+  // The instance's own switches, read once when this screen opens. A key's row
+  // is meaningless without the ceiling it is measured against: a capability the
+  // machine has switched off has to show as unavailable here rather than as a
+  // tick that would quietly do nothing. The same answer also carries what a key
+  // may NEVER be handed and what needs its own approval, so those two rules
+  // live in one place instead of being written into this screen a second time.
+  const [ceiling, setCeiling] = useState<CapabilityCeiling | null>(null);
+  const [ceilingFailed, setCeilingFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetchCapabilities()
+      .then((next) => {
+        if (active) setCeiling(next);
+      })
+      .catch(() => {
+        // 🔴 Failing to read the ceiling must never draw the rows anyway. Every
+        // row would say "off for the whole machine" — which is a statement
+        // about this machine, and it would be false.
+        if (active) setCeilingFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const methodName = (id: string) =>
     methods.find((method) => method.id === id)?.name ?? id;
   const routineName = (id: string | null) =>
     routines.find((routine) => routine.id === id)?.name ?? id ?? "—";
+  const capabilityNames = (ids: string[]) =>
+    ids
+      .map((id) => {
+        const meta = capabilityMeta(id);
+        if (!meta) return id;
+        return lang === "zh" ? meta.name.zh : meta.name.en;
+      })
+      .join(lang === "zh" ? "、" : ", ");
+
+  // One tick, sent on its own. The answer is the whole key, so the card and its
+  // rows redraw from one object and cannot disagree with each other.
+  async function grantCapability(
+    profileId: string,
+    capability: string,
+    on: boolean,
+    approve: string[] = [],
+  ) {
+    setCapsBusy(true);
+    setCapsError(null);
+    try {
+      const { profile } = await updateAppProfileCapabilities(
+        profileId,
+        { [capability]: on },
+        approve,
+        lang,
+      );
+      onUpdate(profile);
+      setApproving(null);
+    } catch (nextError) {
+      setCapsError(
+        nextError instanceof Error
+          ? nextError.message
+          : lang === "zh"
+            ? "改不了。"
+            : "Could not change that.",
+      );
+    } finally {
+      setCapsBusy(false);
+    }
+  }
 
   const canCreate =
     kind === "routine" ? routineId !== "" : allowedMethodIds.length > 0;
@@ -3328,6 +3427,27 @@ function AppsPanel({
                       </div>
                     </>
                   )}
+                  {/* What this key may DO, as opposed to which Methods it may
+                      call — on the card, because "nothing" is the answer for
+                      every key until somebody ticks something and that is worth
+                      seeing without opening anything. */}
+                  <div>
+                    <dt>{lang === "zh" ? "能做" : "May do"}</dt>
+                    <dd>
+                      {profile.capabilities.length === 0 ? (
+                        lang === "zh" ? (
+                          "只有配方"
+                        ) : (
+                          "The recipe only"
+                        )
+                      ) : (
+                        <CapabilityChips
+                          items={profile.capabilities}
+                          lang={lang}
+                        />
+                      )}
+                    </dd>
+                  </div>
                 </dl>
                 {createdToken?.profileId === profile.id ? (
                   <div className="token-once">
@@ -3337,6 +3457,199 @@ function AppsPanel({
                       You can view or copy it again any time with the Show and
                       Copy buttons on this Token.
                     </p>
+                  </div>
+                ) : null}
+                <div className="model-card-actions">
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setCapsError(null);
+                      setApproving(null);
+                      setCapsFor((current) =>
+                        current === profile.id ? null : profile.id,
+                      );
+                    }}
+                    type="button"
+                  >
+                    {capsFor === profile.id
+                      ? lang === "zh"
+                        ? "收起能力"
+                        : "Hide What It May Do"
+                      : lang === "zh"
+                        ? "它能做什么"
+                        : "What It May Do"}
+                  </button>
+                </div>
+                {capsFor === profile.id ? (
+                  <div className="capability-window">
+                    {/* Said before the ticks: these seven look exactly like the
+                        seven in AI Settings, and somebody who reads them as a
+                        second independent set will assume ticking one here can
+                        give an outside app something this machine refuses. It
+                        cannot. */}
+                    <p className="settings-card-copy">
+                      {lang === "zh"
+                        ? "一把钥匙从「什么都不能」开始,只有你在这里勾上,它才拿得到。AI 设置里关掉的东西,这里也给不出去。"
+                        : "A key starts with nothing, and only gets what you tick here. Anything switched off in AI Settings cannot be handed to a key either."}
+                    </p>
+                    {capsError ? (
+                      <p className="form-error">{capsError}</p>
+                    ) : null}
+                    {!ceiling ? (
+                      <p className={ceilingFailed ? "form-error" : "library-note"}>
+                        {ceilingFailed
+                          ? lang === "zh"
+                            ? "这台机器自己的开关读不出来,所以现在什么都不能勾。"
+                            : "This machine's own switches could not be read, so nothing can be ticked right now."
+                          : lang === "zh"
+                            ? "读着…"
+                            : "Reading…"}
+                      </p>
+                    ) : (
+                      <div className="capability-rows">
+                        {CAPABILITY_META.map((meta) => {
+                          const never = ceiling.neverViaToken.includes(meta.id);
+                          const built = ceiling.implemented[meta.id] !== false;
+                          const machineOn = ceiling.global[meta.id] === true;
+                          const granted = profile.capabilities.includes(meta.id);
+                          const ownApproval =
+                            ceiling.needsOwnTokenApproval.includes(meta.id);
+                          return (
+                            <div className="capability-row" key={meta.id}>
+                              <span className="capability-row-icon">
+                                {meta.icon}
+                              </span>
+                              <span className="capability-row-name">
+                                {lang === "zh" ? meta.name.zh : meta.name.en}
+                                <em>
+                                  (
+                                  {lang === "zh" ? meta.gloss.zh : meta.gloss.en})
+                                </em>
+                              </span>
+                              {never ? (
+                                // Shown and refused, never quietly left out of
+                                // the list: a row that is simply missing reads as
+                                // an oversight, and the Owner would go looking
+                                // for the switch somewhere else.
+                                <span className="capability-row-pending">
+                                  {lang === "zh"
+                                    ? "钥匙永远拿不到"
+                                    : "never through a key"}
+                                </span>
+                              ) : !built ? (
+                                <span className="capability-row-pending">
+                                  {lang === "zh"
+                                    ? "还没做出来"
+                                    : "not built yet"}
+                                </span>
+                              ) : !machineOn ? (
+                                <span className="capability-row-pending">
+                                  {lang === "zh"
+                                    ? "整台机器都关着"
+                                    : "off for the whole machine"}
+                                </span>
+                              ) : ownApproval && !granted ? (
+                                // Its own act, deliberately not the same tick as
+                                // the rest: this one can turn the machine into
+                                // somebody else's way onto the internet.
+                                <button
+                                  className="secondary-button"
+                                  disabled={capsBusy}
+                                  onClick={() =>
+                                    setApproving({
+                                      profileId: profile.id,
+                                      capability: meta.id,
+                                    })
+                                  }
+                                  type="button"
+                                >
+                                  {lang === "zh" ? "单独批准" : "Approve"}
+                                </button>
+                              ) : (
+                                <input
+                                  aria-label={
+                                    lang === "zh" ? meta.name.zh : meta.name.en
+                                  }
+                                  checked={granted}
+                                  className="door-toggle"
+                                  // All seven wait, not only the one being
+                                  // written: the answer is the whole key, so two
+                                  // ticks in flight would race and the loser
+                                  // would silently come back.
+                                  disabled={capsBusy}
+                                  onChange={(event) =>
+                                    void grantCapability(
+                                      profile.id,
+                                      meta.id,
+                                      event.target.checked,
+                                    )
+                                  }
+                                  role="switch"
+                                  type="checkbox"
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* The two rules that are not switches, each with its
+                        reason. The names come from the server's own lists, so
+                        this cannot drift from what the rows do. */}
+                    {ceiling && ceiling.neverViaToken.length > 0 ? (
+                      <p className="library-note">
+                        {lang === "zh"
+                          ? `${capabilityNames(ceiling.neverViaToken)}:永远给不了钥匙。替别的程序伸手进这台机器,不是一把钥匙该带的东西。`
+                          : `${capabilityNames(ceiling.neverViaToken)} can never be given to a key. Reaching into this machine on another program's behalf is not something a key carries.`}
+                      </p>
+                    ) : null}
+                    {ceiling && ceiling.needsOwnTokenApproval.length > 0 ? (
+                      <p className="library-note">
+                        {lang === "zh"
+                          ? `${capabilityNames(ceiling.needsOwnTokenApproval)}:要单独批准一次,不跟其他几项一起勾。它可以把这台机器变成别人上网的通道。`
+                          : `${capabilityNames(ceiling.needsOwnTokenApproval)} takes its own approval rather than the same tick as the rest: a key that can reach the internet can turn this machine into somebody else's way onto it.`}
+                      </p>
+                    ) : null}
+                    {approving?.profileId === profile.id ? (
+                      <div className="token-reset-confirm">
+                        <span>
+                          {lang === "zh"
+                            ? `把「${capabilityNames([approving.capability])}」给这把钥匙?拿着它的程序就能通过这台机器上网。随时可以收回。`
+                            : `Give this key ${capabilityNames([approving.capability])}? Whatever holds it can then reach the internet through this machine. You can take it back at any time.`}
+                        </span>
+                        <div className="profile-card-actions">
+                          <button
+                            className="danger-button"
+                            disabled={capsBusy}
+                            onClick={() =>
+                              void grantCapability(
+                                profile.id,
+                                approving.capability,
+                                true,
+                                [approving.capability],
+                              )
+                            }
+                            type="button"
+                          >
+                            {capsBusy
+                              ? lang === "zh"
+                                ? "处理中…"
+                                : "Working..."
+                              : lang === "zh"
+                                ? "批准"
+                                : "Approve"}
+                          </button>
+                          <button
+                            className="text-button"
+                            disabled={capsBusy}
+                            onClick={() => setApproving(null)}
+                            type="button"
+                          >
+                            {lang === "zh" ? "取消" : "Cancel"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {confirming?.id === profile.id ? (
@@ -3842,6 +4155,11 @@ function ModeBadge({ mode }: { mode: Mode }) {
 // Enter gates (PIN or account password), the per-session sandbox filter
 // server-side, and the persistent badge with its exit gate.
 function ModesPanel() {
+  // Only the capability block below is bilingual so far — the rest of this
+  // screen is still English-only, and translating it is its own pass. New copy
+  // is written in both languages from the day it lands, which is the only way
+  // the gap ever closes.
+  const { lang } = useI18n();
   const [modes, setModes] = useState<Mode[]>([]);
   const [name, setName] = useState("");
   const [rules, setRules] = useState("");
@@ -3877,6 +4195,61 @@ function ModesPanel() {
       setViewThreads(await fetchModeThreads(modeId));
     } catch {
       setViewThreads([]);
+    }
+  }
+
+  // WHAT THIS MODE MAY DO — the middle of the three capability layers. One mode
+  // open at a time, and its answer is held with the mode id it came from: two
+  // modes' lists look identical on screen, so showing the previous one against
+  // the wrong name for even a moment would be a lie about a security setting.
+  const [capsFor, setCapsFor] = useState<string | null>(null);
+  const [caps, setCaps] = useState<ModeCapabilities | null>(null);
+  const [capsBusy, setCapsBusy] = useState<string | null>(null);
+  const [capsError, setCapsError] = useState<string | null>(null);
+
+  async function openModeCapabilities(modeId: string) {
+    if (capsFor === modeId) {
+      setCapsFor(null);
+      return;
+    }
+    setCapsFor(modeId);
+    setCaps(null);
+    setCapsError(null);
+    try {
+      setCaps(await fetchModeCapabilities(modeId));
+    } catch (nextError) {
+      setCapsError(
+        nextError instanceof Error
+          ? nextError.message
+          : lang === "zh"
+            ? "读不出来。"
+            : "Could not read it.",
+      );
+    }
+  }
+
+  // One switch, sent on its own. The server answers with the whole resulting
+  // state — including the instance's own switches — so a row that has just
+  // become unreachable stops offering a switch without a second request.
+  async function flipModeCapability(
+    modeId: string,
+    capability: string,
+    on: boolean,
+  ) {
+    setCapsBusy(capability);
+    setCapsError(null);
+    try {
+      setCaps(await updateModeCapabilities(modeId, { [capability]: on }, lang));
+    } catch (nextError) {
+      setCapsError(
+        nextError instanceof Error
+          ? nextError.message
+          : lang === "zh"
+            ? "改不了。"
+            : "Could not change that.",
+      );
+    } finally {
+      setCapsBusy(null);
     }
   }
 
@@ -4576,6 +4949,19 @@ function ModesPanel() {
                 <div className="model-card-actions">
                   <button
                     className="text-button"
+                    onClick={() => void openModeCapabilities(mode.id)}
+                    type="button"
+                  >
+                    {capsFor === mode.id
+                      ? lang === "zh"
+                        ? "收起能力"
+                        : "Hide What It May Do"
+                      : lang === "zh"
+                        ? "它能做什么"
+                        : "What It May Do"}
+                  </button>
+                  <button
+                    className="text-button"
                     onClick={() => void openModeView(mode.id)}
                     type="button"
                   >
@@ -4584,6 +4970,92 @@ function ModesPanel() {
                       : "View Activity"}
                   </button>
                 </div>
+                {capsFor === mode.id ? (
+                  <div className="capability-window">
+                    {/* Said before the switches, not after: these seven look
+                        exactly like the seven in AI Settings, and somebody who
+                        reads them as a second independent set will assume this
+                        screen can hand a shared device something the instance
+                        refuses. It cannot. */}
+                    <p className="settings-card-copy">
+                      {lang === "zh"
+                        ? "模式只能往窄里收。AI 设置里关掉的东西,在这里也开不了 —— 这一层只会拿走,不会给回来。"
+                        : "A mode only ever narrows. Anything switched off in AI Settings is off in here too — this layer takes away, it never gives back."}
+                    </p>
+                    {capsError ? (
+                      <p className="form-error">{capsError}</p>
+                    ) : null}
+                    {caps && caps.modeId === mode.id ? (
+                      <div className="capability-rows">
+                        {CAPABILITY_META.map((meta) => {
+                          const built = caps.implemented[meta.id] !== false;
+                          const ceiling = caps.global[meta.id] === true;
+                          return (
+                            <div className="capability-row" key={meta.id}>
+                              <span className="capability-row-icon">
+                                {meta.icon}
+                              </span>
+                              <span className="capability-row-name">
+                                {lang === "zh" ? meta.name.zh : meta.name.en}
+                                <em>
+                                  (
+                                  {lang === "zh" ? meta.gloss.zh : meta.gloss.en}
+                                  )
+                                </em>
+                              </span>
+                              {!built ? (
+                                <span className="capability-row-pending">
+                                  {lang === "zh"
+                                    ? "还没做出来"
+                                    : "not built yet"}
+                                </span>
+                              ) : !ceiling ? (
+                                // A switch here would be a switch that does
+                                // nothing: the instance already refuses this
+                                // one, so the mode cannot be given it. Saying
+                                // where it is switched off is the difference
+                                // between an unavailable row and a broken one.
+                                <span className="capability-row-pending">
+                                  {lang === "zh"
+                                    ? "整台机器都关着"
+                                    : "off for the whole machine"}
+                                </span>
+                              ) : (
+                                <input
+                                  aria-label={
+                                    lang === "zh" ? meta.name.zh : meta.name.en
+                                  }
+                                  checked={caps.capabilities[meta.id] === true}
+                                  className="door-toggle"
+                                  // ALL seven wait, not just the one being
+                                  // written: the answer to a write is the whole
+                                  // resulting list, so two flips in flight
+                                  // would race and the loser would silently
+                                  // come back on. The write is one small
+                                  // request; the pause is not felt.
+                                  disabled={capsBusy !== null}
+                                  onChange={(event) =>
+                                    void flipModeCapability(
+                                      mode.id,
+                                      meta.id,
+                                      event.target.checked,
+                                    )
+                                  }
+                                  role="switch"
+                                  type="checkbox"
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : capsError ? null : (
+                      <p className="library-note">
+                        {lang === "zh" ? "读着…" : "Reading…"}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
                 {viewingModeId === mode.id ? (
                   <div className="mode-view-window">
                     {viewThreads.length === 0 ? (
@@ -9181,7 +9653,10 @@ function freeAnswerNotice(
 // copies of a date is four chances for the UI to claim a check that never
 // happened. Every claim under it was verified against the provider, not
 // remembered — Google's image quota of zero is exactly what that catches.
-const FREE_PICK_CHECKED = "27 Jul 2026";
+// Stored as a plain date rather than as English words, so both languages render
+// it the same way the model-answered variant below already does — one fact, one
+// constant, and no second spelling of it to go stale.
+const FREE_PICK_CHECKED = "2026-07-27";
 
 function FreePick({
   children,
@@ -9195,14 +9670,22 @@ function FreePick({
    *  the shipped line was verified by hand, this one was not. */
   pick?: { text: string; checkedAt: string; source: string } | undefined;
 }) {
+  // This sits inside four drawers that are written in both languages, and it
+  // was the one line in them still speaking only English.
+  const { lang } = useI18n();
+  const checked = new Date(
+    pick ? pick.checkedAt : FREE_PICK_CHECKED,
+  ).toLocaleDateString();
   return (
     <p className="free-pick">
-      <strong>Free option</strong>{" "}
+      <strong>{lang === "zh" ? "免费选项" : "Free option"}</strong>{" "}
       <span className="text-faint">
-        (checked{" "}
-        {pick
-          ? `${new Date(pick.checkedAt).toLocaleDateString()} by ${pick.source}`
-          : FREE_PICK_CHECKED}
+        (
+        {lang === "zh"
+          ? pick
+            ? `${pick.source} 于 ${checked} 核对`
+            : `${checked} 核对`
+          : `checked ${checked}${pick ? ` by ${pick.source}` : ""}`}
         )
       </span>{" "}
       {pick ? pick.text : children}
@@ -9254,18 +9737,23 @@ const DOOR_ENGINES = [
   { id: "openai-cli" as const, name: "ChatGPT subscription (Codex CLI)" },
   { id: "claude-cli" as const, name: "Claude subscription" },
 ];
-// The same seven words a Method declares — one vocabulary, so "needs vision" on
-// a Method and "vision" here are visibly the same thing.
-const DOOR_CAPABILITIES = [
-  { id: "text", name: "Text" },
-  { id: "hearing", name: "Hearing" },
-  { id: "speaking", name: "Speaking" },
-  { id: "vision", name: "Vision" },
-  { id: "reading", name: "Reading (PDF)" },
-  { id: "drawing", name: "Drawing" },
-];
+// 🔴 ONE VOCABULARY, and this card is drawn from it rather than keeping a copy.
+// The copy it used to keep had drifted to a third spelling of one row ("Reading
+// (PDF)" where the Capabilities card says "Reading" and the manual agrees with
+// the card), no drawn icons, and two capabilities missing altogether — so an
+// Owner reading this card could not line it up against the one two cards up.
+// CAPABILITY_META is the list; a word only ever changes there.
+//
+// The two that are simply not on offer here are SHOWN and refused, never left
+// out: a row that is missing reads as an oversight, and the Owner goes looking
+// for the switch somewhere else. `fetching` can never ride any app key at all,
+// and neither word is even in the door's request vocabulary
+// (RelayCapabilitySchema), so an app asking for one is refused before anything
+// runs.
+const DOOR_NEVER = ["fetching", "web"];
 
 function SubscriptionDoorPanel() {
+  const { lang } = useI18n();
   const [panel, setPanel] = useState<RelayPanelData | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [originDraft, setOriginDraft] = useState("");
@@ -9381,25 +9869,38 @@ function SubscriptionDoorPanel() {
               </button>
             </div>
             <div className="door-capabilities">
-              {DOOR_CAPABILITIES.map((capability) => (
-                <span
-                  className={
-                    state?.capabilities.includes(capability.id as never)
-                      ? "door-capability"
-                      : "door-capability off"
+              {/* Not one of the seven and deliberately outside the list: plain
+                  text is the door itself, which is why it has no switch and no
+                  drawing anywhere else in the app either. */}
+              <span className="door-capability">
+                {lang === "zh" ? "文字" : "Text"}
+              </span>
+              {CAPABILITY_META.map((meta) => (
+                <CapabilityChip
+                  available={
+                    !DOOR_NEVER.includes(meta.id) &&
+                    (state?.capabilities as string[] | undefined)?.includes(
+                      meta.id,
+                    ) === true
                   }
-                  key={capability.id}
-                >
-                  {capability.name}
-                </span>
+                  id={meta.id}
+                  key={meta.id}
+                  lang={lang}
+                  showName
+                />
               ))}
             </div>
           </div>
         );
       })}
-      {/* Said once, in a line, instead of five times inside the chips. */}
+      {/* Said once, in a line, instead of seven times inside the chips — and
+          both reasons are given, because a chip dimmed for "this subscription
+          cannot" and one dimmed for "never, through any key" are two different
+          answers with two different futures. */}
       <p className="door-legend">
-        Dimmed = not something these two subscriptions can do.
+        {lang === "zh"
+          ? "变淡的 = 这两个订阅做不到的事。「取文件」和「上网」这两项,这道门永远不给:打开本机文件是任何 app 钥匙都拿不到的,而这道门的请求里根本没有这两个词。"
+          : "Dimmed = not something these two subscriptions can do. Fetching and Web are never handed out here at all: opening files on this machine is out of reach of every app key, and neither word is in what this door will accept."}
       </p>
 
       <h3 className="door-subhead">Address for your apps</h3>
@@ -9793,10 +10294,11 @@ const SETUP_ROWS = new Set([
 // Two of these spend the Owner's own money on their own account, and finding
 // that out afterwards is how a Test button becomes one nobody dares press.
 //
-// A row missing from this table gets no Test button at all — Hearing and
-// Speaking, the two that cannot be tested by machine without pretending
-// (there is no recording to feed one, and nothing here can listen to the
-// other). Their drawers say so in words instead.
+// A row missing from this table gets no Test button at all, and nothing is
+// missing: all seven are here. Hearing and Speaking are the two the SERVER
+// cannot test without pretending — there is no recording to feed one and
+// nothing there can listen to the other — so this device does them instead, in
+// the browser, which is why they have a cost line like the rest.
 const TEST_COST: Record<string, { en: string; zh: string }> = {
   hearing: {
     en: "Records three seconds from this device's microphone and sends it to the engine on this row. Say anything — what comes back is what it heard. The recording is not kept.",
@@ -9828,7 +10330,40 @@ const TEST_COST: Record<string, { en: string; zh: string }> = {
   },
 };
 
-function CapabilitiesPanel() {
+// THE TWO THAT ARE EXPLAINED BEFORE THEY ARE USED (copy pack N1/N2). Not the
+// two most powerful — the two whose consequence nobody guesses. Web sends words
+// this machine did not write to a company nobody chose; Fetching puts the
+// CONTENTS of the Owner's own file into whatever model answers. The other five
+// do on screen exactly what their name says.
+const CAPABILITY_NOTICE_KEYS = {
+  web: "legal.notice.capability.web",
+  fetching: "legal.notice.capability.fetching",
+} as const;
+
+function capabilityNoticeKey(id: string): string | null {
+  if (id === "web") return CAPABILITY_NOTICE_KEYS.web;
+  if (id === "fetching") return CAPABILITY_NOTICE_KEYS.fetching;
+  return null;
+}
+
+function CapabilitiesPanel({
+  // The voice download, held by the Settings page above both cards. The
+  // Speaking row STARTS one (picking a voice that is not here yet) and so has
+  // to see it move; the poll that makes it move lives up there, where nothing
+  // this card can close will take it away.
+  localTts,
+  onLocalTtsChanged,
+  // Bumped by the Models card whenever a backend is connected, removed or made
+  // the main model. The two cards are siblings, so nothing else tells this one
+  // that the list it is choosing from just changed — and since the Cloudflare
+  // token and the local voice moved over there, a connect on that card is now
+  // what fills a row here.
+  refreshKey,
+}: {
+  localTts: LocalTtsStatus | null;
+  onLocalTtsChanged: (next: LocalTtsStatus) => void;
+  refreshKey: number;
+}) {
   const { lang, t } = useI18n();
   const [global, setGlobal] = useState<Record<string, boolean> | null>(null);
   // Told apart from "not loaded yet", because the two need different sentences.
@@ -9847,16 +10382,7 @@ function CapabilitiesPanel() {
   // Everything below belongs to the setup drawers — what used to be a separate
   // card of its own.
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
-  const [imageEngine, setImageEngine] = useState<VisionStatus | null>(null);
-  const [cloudflareToken, setCloudflareToken] = useState("");
-  // A Workers AI-template token cannot name its own account (verified
-  // 2026-07-27), so the id has its own always-visible field.
-  const [cfAccountId, setCfAccountId] = useState("");
-  const [imageError, setImageError] = useState<string | null>(null);
   const [outputVoice, setOutputVoice] = useState("Kore");
-  const [localTts, setLocalTts] = useState<LocalTtsStatus | null>(null);
-  // Deleting the local voice throws away a 150 MB download — ask first.
-  const [confirmRemoveLocal, setConfirmRemoveLocal] = useState(false);
   const [localEnVoice, setLocalEnVoice] = useState("en_US-amy-medium");
   const [localZhVoice, setLocalZhVoice] = useState("zh_CN-huayan-medium");
   const [outputError, setOutputError] = useState<string | null>(null);
@@ -9875,6 +10401,16 @@ function CapabilitiesPanel() {
   const [testResults, setTestResults] = useState<
     Record<string, CapabilityTestResult>
   >({});
+  // The two capabilities that get an explainer before they are used (copy pack
+  // N1/N2), and what the Owner has already been shown. `null` means the
+  // acknowledgement list has not been read yet — told apart from "read, and
+  // nothing is recorded", because only the second may open a window.
+  const [noticeSeen, setNoticeSeen] = useState<Set<string> | null>(null);
+  const [capabilityNotice, setCapabilityNotice] = useState<string | null>(null);
+  // Closed with × or Escape rather than answered. Nothing is recorded and the
+  // notice comes back next visit — but not immediately, which would be a window
+  // that cannot be closed.
+  const [noticePutOff, setNoticePutOff] = useState<Set<string>>(new Set());
   // The folders "Files on this machine" may look in, and the one being typed.
   const [folders, setFolders] = useState<string[]>([]);
   const [folderDraft, setFolderDraft] = useState("");
@@ -9896,8 +10432,10 @@ function CapabilitiesPanel() {
         setImplemented(result.implemented);
         setCeilingUnread(false);
         // The speak buttons on the chat page read this too, and they are a
-        // different component tree that will not re-fetch on its own.
-        noteSpeakingOn(result.global);
+        // different component tree that will not re-fetch on its own. They get
+        // the SESSION's ceiling, not this card's: this card writes the machine's
+        // switches, and a speak button obeys the mode as well.
+        noteSpeakingOn(result.session);
       })
       .catch(() => setCeilingUnread(true));
     void fetchVoiceStatus()
@@ -9918,16 +10456,10 @@ function CapabilitiesPanel() {
       .then((status) => setVisionEngineState(status.provider ?? "none"))
       .catch(() => undefined);
     void fetchImageEngine()
-      .then((status) => {
-        setImageEngine(status);
-        setDrawingEngine(status.provider ?? "none");
-      })
+      .then((status) => setDrawingEngine(status.provider ?? "none"))
       .catch(() => undefined);
     void fetchModelProviders()
       .then((result) => setProviders(result.providers))
-      .catch(() => undefined);
-    void fetchLocalTts()
-      .then(setLocalTts)
       .catch(() => undefined);
     void fetchFreePicks()
       .then(setFreePicks)
@@ -9937,7 +10469,39 @@ function CapabilitiesPanel() {
       .catch(() => undefined);
   }, []);
 
-  useEffect(reload, [reload]);
+  useEffect(reload, [reload, refreshKey]);
+
+  // Which explainers this Owner has already answered (copy pack N1/N2). Read
+  // once on mount and never again — deliberately NOT part of `reload`, which
+  // re-runs whenever a model is connected: what has been read is not part of
+  // what is connected, and re-reading it there would be a request per connect
+  // for an answer that cannot have changed.
+  //
+  // Presence of the key is enough, with no version floor: these are notices,
+  // and re-interrupting somebody because a word was reworded is how a notice
+  // becomes a reflex click. A MATERIAL rewrite would add a floor here
+  // deliberately (copy pack clause 6.4).
+  //
+  // A failed read leaves this null, which shows nothing: a window that opens
+  // because the app could not tell whether it had opened before is worse than
+  // one that arrives a visit late.
+  useEffect(() => {
+    void fetchLegalAcks()
+      .then((acks) => setNoticeSeen(new Set(acks.map((ack) => ack.keyName))))
+      .catch(() => undefined);
+  }, []);
+
+  // WEB SHIPS ON, so the explainer cannot wait for a switch to be flipped — the
+  // Owner may never touch it and would then never be told what leaves this
+  // machine when their model looks something up. First sight of the card counts
+  // as the moment (copy pack N1 behaviour).
+  useEffect(() => {
+    if (capabilityNotice || !noticeSeen || !global) return;
+    if (global.web !== true) return;
+    if (noticeSeen.has(CAPABILITY_NOTICE_KEYS.web)) return;
+    if (noticePutOff.has("web")) return;
+    setCapabilityNotice("web");
+  }, [capabilityNotice, global, noticePutOff, noticeSeen]);
 
   // A "Set It Up" jump from a routine chat parked an intent: land scrolled to
   // this card (where the tool gets switched on and set up), then clear the flag
@@ -9953,30 +10517,13 @@ function CapabilitiesPanel() {
     }
   }, []);
 
-  // While the 150 MB local-voice download runs, poll for progress; the moment
-  // it lands, switch the engine over (that is what the download was for).
-  // This lives on the card and NOT inside the drawer: a drawer that is closed
-  // is unmounted, and an unmounted interval means a finished download that
-  // never switches anything on.
-  useEffect(() => {
-    if (localTts?.status !== "downloading") return;
-    const timer = window.setInterval(() => {
-      void fetchLocalTts()
-        .then((next) => {
-          setLocalTts(next);
-          if (next.installed && next.status === "ready") {
-            void connectVoiceOutput({ engine: "local" })
-              .then((applied) => {
-                setOutput(applied);
-                setSpeakingEngine(applied.engine ?? "none");
-              })
-              .catch(() => undefined);
-          }
-        })
-        .catch(() => undefined);
-    }, 2000);
-    return () => window.clearInterval(timer);
-  }, [localTts?.status]);
+  // The 150 MB download's progress poll used to live here, beside the button
+  // that started it. Both moved to the Models card (Oskar, 2026-08-01):
+  // installing a voice onto this machine is connecting a model, and the poll
+  // has to stay in the same component as the button or one can be moved
+  // without the other. It is still card-level and never inside a drawer — a
+  // closed drawer is unmounted, and an unmounted interval means a finished
+  // download that switches nothing on.
 
   // Ask the main model what is free right now. This is the "Update Free
   // Options" button the old Model keys card had, restored to one press from
@@ -10163,65 +10710,18 @@ function CapabilitiesPanel() {
     }
   }
 
-  async function saveWorkersAiToken() {
-    setSetupBusy(true);
-    setImageError(null);
-    try {
-      const status = await setImageEngineChoice(
-        "workersai",
-        cloudflareToken.trim(),
-        cfAccountId.trim() || undefined,
-      );
-      setImageEngine(status);
-      // The row's chooser has to move the instant the token saves, or the two
-      // halves of one decision disagree on the same screen.
-      setDrawingEngine(status.provider ?? "none");
-      setCloudflareToken("");
-    } catch (nextError) {
-      setImageError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Could not change the picture engine.",
-      );
-    } finally {
-      setSetupBusy(false);
-    }
-  }
-
-  async function startLocalDownload() {
-    setOutputError(null);
-    try {
-      setLocalTts(await installLocalTts());
-    } catch {
-      setOutputError("Could not start the download.");
-    }
-  }
-
-  // Pick a local voice for its language slot; a not-yet-downloaded voice
-  // starts its ~60 MB download and the status poll shows the progress.
+  // Pick a local voice for its language slot; a not-yet-downloaded voice starts
+  // its ~60 MB download. The answer goes UP to the Settings page rather than
+  // into this card: that is what starts the one poll watching it, so the bar
+  // below moves and the two pickers come back on their own.
   async function pickLocalVoice(id: string, slotLang: "zh" | "en") {
     setOutputError(null);
     if (slotLang === "en") setLocalEnVoice(id);
     else setLocalZhVoice(id);
     try {
-      setLocalTts(await setLocalVoice(id));
+      onLocalTtsChanged(await setLocalVoice(id));
     } catch {
       setOutputError("Could not change the local voice.");
-    }
-  }
-
-  async function removeLocalVoice() {
-    setSetupBusy(true);
-    setOutputError(null);
-    try {
-      setLocalTts(await removeLocalTtsDownload());
-      const current = await fetchVoiceOutput();
-      setOutput(current);
-      setSpeakingEngine(current.engine ?? "none");
-    } catch {
-      setOutputError("Could not remove the download.");
-    } finally {
-      setSetupBusy(false);
     }
   }
 
@@ -10297,7 +10797,6 @@ function CapabilitiesPanel() {
         const status = await setImageEngineChoice(
           next as "none" | "workersai" | "gemini" | "openai" | "zhipu",
         );
-        setImageEngine(status);
         setDrawingEngine(status.provider ?? "none");
       },
       value: drawingEngine,
@@ -10384,7 +10883,9 @@ function CapabilitiesPanel() {
       const next = await updateCapabilities({ [id]: on }, lang);
       setGlobal(next);
       // Switching Speaking back on has to bring the chat page's speak buttons
-      // back without a reload, and switching it off has to take them away.
+      // back without a reload, and switching it off has to take them away. The
+      // machine's answer is the session's answer here: this write is refused
+      // inside a mode altogether, so nothing can be narrowing it.
       noteSpeakingOn(next);
       // The row shows a model the moment you switch it on, so that model has to
       // be the one really wired up — otherwise the display is a promise the
@@ -10404,6 +10905,15 @@ function CapabilitiesPanel() {
       if (on && engine && (unset === "none" || unset === "") && engine.value) {
         await engine.set(engine.value);
       }
+      // Two of the seven say what they really do before they do it (copy pack
+      // N1/N2). The switch has already moved by the time this opens, on purpose:
+      // the window's own "Switch it off" is the undo, so the Owner reads an
+      // explanation of a state the machine is actually in rather than one it is
+      // asking permission to enter.
+      const noticeKey = capabilityNoticeKey(id);
+      if (on && noticeKey && noticeSeen && !noticeSeen.has(noticeKey)) {
+        setCapabilityNotice(id);
+      }
     } catch (error) {
       showErrorToast(
         error instanceof Error
@@ -10415,6 +10925,29 @@ function CapabilitiesPanel() {
     } finally {
       setBusy(null);
     }
+  }
+
+  // The Owner answered one of the two explainers. Either answer is recorded —
+  // the record is what stops the window coming back, and a decline that left no
+  // trace would be indistinguishable from never having been asked.
+  async function answerCapabilityNotice(id: string, keepItOn: boolean) {
+    const keyName = capabilityNoticeKey(id);
+    if (!keyName) return;
+    setCapabilityNotice(null);
+    setNoticeSeen((current) => new Set(current ?? []).add(keyName));
+    try {
+      await recordLegalAck({
+        keyName,
+        copyVersion: LEGAL_COPY_VERSION,
+        language: lang === "zh" ? "zh" : "en",
+        choice: keepItOn ? "keep" : "off",
+      });
+    } catch {
+      // The record did not land. Nothing here is a permission — the capability
+      // is doing whatever the switch says — so the only cost is being told
+      // again next visit, which is the safe direction to fail in.
+    }
+    if (!keepItOn) await flip(id, false);
   }
 
   // Speaking's voice list belongs to the Gemini connection, so choosing one
@@ -10461,8 +10994,8 @@ function CapabilitiesPanel() {
         <>
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "转写在这一行选的那个服务上做,录音发过去,回来的是文字。"
-              : "The transcribing happens at whichever service this row is set to: the recording goes there, words come back."}
+              ? "转写在这一行选的那个服务上做,录音发过去,回来的是文字。它的 key 在下面的 Models 里粘。"
+              : "The transcribing happens at whichever service this row is set to: the recording goes there, words come back. Its key is pasted below, in Models."}
           </p>
           <FreePick
             href="https://console.groq.com"
@@ -10490,111 +11023,56 @@ function CapabilitiesPanel() {
   }
 
   function speakingSetup() {
-    return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh" ? "回复念出来。" : "Replies read aloud."}
-        </p>
-      ),
-      settings: (
+    // WHICH voice speaks is how this job behaves, so it stays on the row. What
+    // PUTS a voice on this machine — the 150 MB download, its progress and its
+    // removal — is connecting a model, so it moved to the Models card (Oskar,
+    // 2026-08-01: 所有添加模型都應該在模型那邊添加,然後 capability 這邊只是選擇模型).
+    // Both engines' voice lists sit here together, so "change the voice" is one
+    // place whatever happens to be speaking.
+    //
+    // `installed` is not just belt-and-braces: this card's copy of the status
+    // arrives a moment after the first paint, and the server refuses to set
+    // this engine at all until the download is there — so an uninstalled
+    // "local" is only ever the half-second before the answer lands, and half a
+    // second of the wrong sentence is worse than half a second of nothing.
+    const voiceChoice =
+      outputEngine === "local" && localTts?.installed ? (
         <>
-        {/* Always reachable, not revealed by first choosing "local" in the
-            row's chooser (Oskar, 2026-07-31): the download IS the setup, and
-            setup you can only reach by first choosing the thing you have not
-            set up is a trap. */}
-        {localTts ? (
-          localTts.installed ? (
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "回复是哪种语言,就用哪个音色。"
+              : "The right voice is used per reply, by the language it is written in."}
+          </p>
+          <div className="field-pair">
+            <div className="chat-font-field">
+              <span>{lang === "zh" ? "英文音色" : "English Voice"}</span>
+              <Picker
+                ariaLabel={lang === "zh" ? "英文音色" : "English voice"}
+                disabled={setupBusy || localTts.status === "downloading"}
+                onChange={(next) => void pickLocalVoice(next, "en")}
+                options={localVoiceOptions("en")}
+                value={localEnVoice}
+              />
+            </div>
+            <div className="chat-font-field">
+              <span>{lang === "zh" ? "中文音色" : "Chinese Voice"}</span>
+              <Picker
+                ariaLabel={lang === "zh" ? "中文音色" : "Chinese voice"}
+                disabled={setupBusy || localTts.status === "downloading"}
+                onChange={(next) => void pickLocalVoice(next, "zh")}
+                options={localVoiceOptions("zh")}
+                value={localZhVoice}
+              />
+            </div>
+          </div>
+          {/* Picking a voice that is not on the machine yet fetches its own
+              ~60 MB, so the wait it causes is shown where it was caused. The
+              first 150 MB install is a different thing, started and shown on
+              the Models card — one poll, up on the Settings page, feeds both. */}
+          {localTts.status === "downloading" ? (
             <>
               <p className="settings-card-copy">
-                {lang === "zh"
-                  ? "语音在这台电脑上生成 —— 什么都不出去,也没有每次的费用。回复是哪种语言,就用哪个音色。"
-                  : "Speech is generated on this computer — nothing leaves it and there is no per-use cost. The right voice is used per reply by its language."}
-              </p>
-              <div className="field-pair">
-                <div className="chat-font-field">
-                  <span>{lang === "zh" ? "英文音色" : "English Voice"}</span>
-                  <Picker
-                    ariaLabel={lang === "zh" ? "英文音色" : "English voice"}
-                    disabled={setupBusy || localTts.status === "downloading"}
-                    onChange={(next) => void pickLocalVoice(next, "en")}
-                    options={localVoiceOptions("en")}
-                    value={localEnVoice}
-                  />
-                </div>
-                <div className="chat-font-field">
-                  <span>{lang === "zh" ? "中文音色" : "Chinese Voice"}</span>
-                  <Picker
-                    ariaLabel={lang === "zh" ? "中文音色" : "Chinese voice"}
-                    disabled={setupBusy || localTts.status === "downloading"}
-                    onChange={(next) => void pickLocalVoice(next, "zh")}
-                    options={localVoiceOptions("zh")}
-                    value={localZhVoice}
-                  />
-                </div>
-              </div>
-              {localTts.status === "downloading" ? (
-                <>
-                  <p className="settings-card-copy">
-                    {lang === "zh" ? "下载中… " : "Downloading… "}
-                    {localTts.progress}%
-                    {localTts.detail ? ` · ${localTts.detail}` : ""}
-                  </p>
-                  <progress
-                    className="local-tts-progress"
-                    max={100}
-                    value={localTts.progress}
-                  />
-                </>
-              ) : null}
-              <div className="model-card-actions">
-                {/* The test plays whatever engine is live, so it only belongs
-                    here while the local one IS live — otherwise pressing it
-                    beside the local voices would sound a different engine. */}
-                {outputEngine === "local" ? (
-                  <>
-                  </>
-                ) : null}
-                {confirmRemoveLocal ? (
-                  <>
-                    <button
-                      className="text-button danger"
-                      disabled={setupBusy}
-                      onClick={() => {
-                        setConfirmRemoveLocal(false);
-                        void removeLocalVoice();
-                      }}
-                      type="button"
-                    >
-                      {lang === "zh"
-                        ? "确认删除(150 MB)"
-                        : "Really Remove (150 MB)"}
-                    </button>
-                    <button
-                      className="text-button"
-                      onClick={() => setConfirmRemoveLocal(false)}
-                      type="button"
-                    >
-                      {lang === "zh" ? "留着" : "Keep"}
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="text-button"
-                    disabled={setupBusy}
-                    onClick={() => setConfirmRemoveLocal(true)}
-                    type="button"
-                  >
-                    {lang === "zh" ? "删除下载" : "Remove Download"}
-                  </button>
-                )}
-              </div>
-            </>
-          ) : localTts.status === "downloading" ? (
-            <>
-              <p className="settings-card-copy">
-                {lang === "zh"
-                  ? "正在下载语音引擎和两个音色(约 150 MB)—— 只下载这一次。 "
-                  : "Downloading the speech engine and two voices (about 150 MB) — this happens once. "}
+                {lang === "zh" ? "下载中… " : "Downloading… "}
                 {localTts.progress}%
                 {localTts.detail ? ` · ${localTts.detail}` : ""}
               </p>
@@ -10604,79 +11082,58 @@ function CapabilitiesPanel() {
                 value={localTts.progress}
               />
             </>
-          ) : (
-            <>
-              <p className="settings-card-copy">
-                {lang === "zh"
-                  ? "下载一次(约 150 MB),这台电脑上就有了一个神经网络语音:完全离线,永久免费,不用 key。中文和英文音色都在里面,按回复的语言自动选。"
-                  : "A one-time download (about 150 MB) puts a neural voice on this computer: fully offline, free forever, no key. Chinese and English voices are included; the right one is picked per reply."}
-              </p>
-              {localTts.status === "error" && localTts.detail ? (
-                <p className="form-error">{localTts.detail}</p>
-              ) : null}
-              <div className="model-card-actions">
-                <button
-                  className="primary-button"
-                  disabled={setupBusy}
-                  onClick={() => void startLocalDownload()}
-                  type="button"
-                >
-                  {lang === "zh"
-                    ? "下载本机语音(150 MB)"
-                    : "Download Local Voice (150 MB)"}
-                </button>
-              </div>
-            </>
-          )
-        ) : null}
-        {/* Independent of the block above, not its `else` — the two describe
-            different engines, and the old chain hid these behind a local-voice
-            status that is present on every healthy machine. */}
-        {outputEngine === "gemini" ? (
-          <>
-            <div className="chat-font-field">
-              <span>{lang === "zh" ? "音色" : "Voice"}</span>
-              <Picker
-                ariaLabel={lang === "zh" ? "Gemini 音色" : "Gemini voice"}
-                disabled={setupBusy}
-                onChange={(next) => void applyGeminiVoice(next)}
-                options={GEMINI_TTS_VOICES.map((option) => ({
-                  label: option.label,
-                  value: option.id,
-                }))}
-                value={outputVoice}
-              />
-            </div>
-            <div className="model-card-actions">
-            </div>
-          </>
-        ) : null}
-        {outputEngine === "browser" ? (
-          <>
+          ) : null}
+        </>
+      ) : outputEngine === "gemini" ? (
+        <div className="chat-font-field">
+          <span>{lang === "zh" ? "音色" : "Voice"}</span>
+          <Picker
+            ariaLabel={lang === "zh" ? "Gemini 音色" : "Gemini voice"}
+            disabled={setupBusy}
+            onChange={(next) => void applyGeminiVoice(next)}
+            options={GEMINI_TTS_VOICES.map((option) => ({
+              label: option.label,
+              value: option.id,
+            }))}
+            value={outputVoice}
+          />
+        </div>
+      ) : null;
+    return drawer({
+      what: (
+        <p className="settings-card-copy">
+          {lang === "zh" ? "回复念出来。" : "Replies read aloud."}
+        </p>
+      ),
+      // An engine with no voice to choose from leaves this part out entirely,
+      // rather than printing a heading with nothing under it.
+      settings: voiceChoice ? (
+        <>
+          {voiceChoice}
+          {outputError ? <p className="form-error">{outputError}</p> : null}
+        </>
+      ) : null,
+      who: (
+        <>
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "跟这一行选的引擎走。本机语音在这台电脑上生成,什么都不出去、也没有每次的费用;Gemini 那种是发出去合成的,声音更自然。本机语音在下面的 Models 里装。"
+              : "Whichever engine this row is set to. The voice on this machine is generated here — nothing leaves and there is no per-use cost; Gemini and the like synthesise it away from here and sound more natural. The voice on this machine is installed below, in Models."}
+          </p>
+          {outputEngine === "browser" ? (
             <p className="settings-card-copy">
               {lang === "zh"
-                ? "用的是这台设备自带的语音。Gemini TTS 或本机语音听起来自然得多。"
-                : "Using the device's built-in voice. Gemini TTS or the local voice sound much more natural."}
+                ? "现在用的是这台设备自带的语音。Gemini TTS 或本机语音听起来自然得多。"
+                : "Right now that is the device's own built-in voice. Gemini TTS or the voice on this machine sound much more natural."}
             </p>
-            <div className="model-card-actions">
-            </div>
-          </>
-        ) : null}
-        {outputError ? <p className="form-error">{outputError}</p> : null}
-        <FreePick pick={freePicks?.items.voiceOut}>
-          {lang === "zh"
-            ? "本机语音 —— 永久免费,离线可用。"
-            : "Local Voice — free forever, works offline."}
-        </FreePick>
-        {freeAnswerLine(freePicks?.items.voiceOut)}
+          ) : null}
+          <FreePick pick={freePicks?.items.voiceOut}>
+            {lang === "zh"
+              ? "本机语音 —— 永久免费,离线可用。"
+              : "Local Voice — free forever, works offline."}
+          </FreePick>
+          {freeAnswerLine(freePicks?.items.voiceOut)}
         </>
-      ),
-      who: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "跟这一行选的引擎走。本机语音在这台电脑上生成,什么都不出去、也没有每次的费用;Gemini 那种是发出去合成的,声音更自然。"
-            : "Whichever engine this row is set to. The voice on this machine is generated here — nothing leaves and there is no per-use cost; Gemini and the like synthesise it away from here and sound more natural."}
-        </p>
       ),
     });
   }
@@ -10694,8 +11151,8 @@ function CapabilitiesPanel() {
         <>
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "照片直接发给这一行选的模型。有的模型自己就会看图,有的得靠别人先描述一遍 —— 这一行选的就是真正看图的那个。"
-              : "The photo goes to the model this row is set to. Some models look at a picture first-hand; this row is the one that actually does the looking."}
+              ? "照片直接发给这一行选的模型。有的模型自己就会看图,有的得靠别人先描述一遍 —— 这一行选的就是真正看图的那个。它的 key 在下面的 Models 里粘。"
+              : "The photo goes to the model this row is set to. Some models look at a picture first-hand; this row is the one that actually does the looking. Its key is pasted below, in Models."}
           </p>
           <FreePick
             href="https://aistudio.google.com/apikey"
@@ -10712,6 +11169,14 @@ function CapabilitiesPanel() {
   }
 
   function drawingSetup() {
+    // This row has no settings of its own any more. The Cloudflare token and
+    // account id were typed here because pictures are the one thing a household
+    // adds Cloudflare for — but a token is a key, and a key belongs to the model
+    // rather than to the job it was bought for (Oskar, 2026-08-01: 所有添加模型
+    // 都應該在模型那邊添加,然後 capability 這邊只是選擇模型). Both fields moved to
+    // the Models card, which is also the honest home for them: the same Workers
+    // AI connection can answer chats, not only draw. The row picks the engine
+    // and nothing else, so the drawer leaves the settings part out entirely.
     return drawer({
       what: (
         <p className="settings-card-copy">
@@ -10720,103 +11185,23 @@ function CapabilitiesPanel() {
             : "Ask in chat and a picture is made. Off means Vaenyx will not try."}
         </p>
       ),
-      settings: (
-        <>
-        {/* Cloudflare's token is typed HERE rather than under Models: it is the
-            one engine a household adds solely to make pictures, and sending
-            them to a different page to paste it is how a working setting turns
-            into an abandoned one. */}
-        {!imageEngine?.connected ? (
-          <>
-            <div className="chat-font-field">
-              <span>
-                {lang === "zh" ? "Workers AI 令牌" : "Workers AI Token"}
-              </span>
-              <input
-                autoCapitalize="off"
-                autoComplete="off"
-                className="key-input"
-                disabled={setupBusy}
-                onChange={(event) => setCloudflareToken(event.target.value)}
-                placeholder={
-                  lang === "zh"
-                    ? "粘贴 Cloudflare 那边的令牌"
-                    : "Paste the token from Cloudflare"
-                }
-                spellCheck={false}
-                type="text"
-                value={cloudflareToken}
-              />
-            </div>
-            {cloudflareToken.trim().length > 0 &&
-            cloudflareToken.trim().length < 40 ? (
-              <p className="settings-card-copy text-faint">
-                {lang === "zh"
-                  ? "这比 Cloudflare 的令牌短(应该是 40 个字符)—— 确认整段都复制到了。"
-                  : "That looks shorter than a Cloudflare token (40 characters) — make sure the whole value was copied."}
-              </p>
-            ) : null}
-            {/* Always visible, not revealed-on-error: "where do I paste the id"
-                must never be a puzzle (Oskar, 2026-07-27). A broad token can
-                leave it empty; a Workers AI-template token needs it. */}
-            <div className="chat-font-field">
-              <span>{lang === "zh" ? "账户 ID" : "Account ID"}</span>
-              <input
-                autoCapitalize="off"
-                autoComplete="off"
-                className="key-input"
-                disabled={setupBusy}
-                onChange={(event) => setCfAccountId(event.target.value)}
-                placeholder={
-                  lang === "zh" ? "32 位字母和数字" : "32 letters and digits"
-                }
-                spellCheck={false}
-                type="text"
-                value={cfAccountId}
-              />
-            </div>
-            <button
-              className="primary-button"
-              disabled={setupBusy || cloudflareToken.trim().length === 0}
-              onClick={() => void saveWorkersAiToken()}
-              type="button"
-            >
-              {lang === "zh" ? "保存令牌" : "Save Token"}
-            </button>
-            <p className="settings-card-copy text-faint">
-              {lang === "zh"
-                ? "Cloudflare 控制台 → My Profile → API Tokens → Create Token → Workers AI 模板。登录后地址栏里就有账户 ID —— dash.cloudflare.com/<那串长码>。用模板做出来的令牌说不出自己属于哪个账户,所以两个都要粘。"
-                : "Cloudflare dashboard → My Profile → API Tokens → Create Token → Workers AI template. The Account ID is in the address bar once you are signed in — dash.cloudflare.com/<that long code>. A token made from the template cannot tell us its account, so paste both."}
-            </p>
-            {/* F5, not F1: the generic cloud notice claims memories, profile and
-                attachments go to the provider, which is NOT true of an image
-                provider — one English prompt goes. The real disclosure is the
-                other way round: the main model WRITES that prompt and can see
-                context, so it can word things the Owner never typed — which is
-                why the sent prompt is shown beside every generated picture. */}
-            <p className="context-disclaimer">
-              {t("legal.notice.modelConnect.pictures")}
-            </p>
-          </>
-        ) : null}
-        <FreePick
-          href="https://dash.cloudflare.com/profile/api-tokens"
-          pick={freePicks?.items.image}
-        >
-          {lang === "zh"
-            ? "Cloudflare Workers AI —— 免费,一天大约 170 张。"
-            : "Cloudflare Workers AI — free, about 170 pictures a day."}
-        </FreePick>
-        {freeAnswerLine(freePicks?.items.image)}
-        {imageError ? <p className="form-error">{imageError}</p> : null}
-        </>
-      ),
       who: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "跟这一行选的引擎走,跟看图的那个是两回事 —— 会看图的模型不一定会画。Cloudflare Workers AI 和智谱是免费的。"
-            : "Whichever engine this row is set to, which is a different thing from the one that looks at pictures — a model that can see one cannot necessarily make one. Cloudflare Workers AI and Zhipu are free."}
-        </p>
+        <>
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "跟这一行选的引擎走,跟看图的那个是两回事 —— 会看图的模型不一定会画。Cloudflare Workers AI 和智谱都是免费的,在下面的 Models 里连。"
+              : "Whichever engine this row is set to, which is a different thing from the one that looks at pictures — a model that can see one cannot necessarily make one. Cloudflare Workers AI and Zhipu are both free, and both are connected below, in Models."}
+          </p>
+          <FreePick
+            href="https://dash.cloudflare.com/profile/api-tokens"
+            pick={freePicks?.items.image}
+          >
+            {lang === "zh"
+              ? "Cloudflare Workers AI —— 免费,一天大约 170 张。"
+              : "Cloudflare Workers AI — free, about 170 pictures a day."}
+          </FreePick>
+          {freeAnswerLine(freePicks?.items.image)}
+        </>
       ),
     });
   }
@@ -11111,15 +11496,74 @@ function CapabilitiesPanel() {
           ? "只有「上网」还差一步:关掉它,Method 和 app 钥匙就不能搜了,但普通聊天还是会去查。"
           : "Web is the one that is not all the way there yet: switching it off stops Methods and app keys from searching, but an ordinary chat still looks things up."}
       </p>
-      {/* The fact the old Model keys card opened with, and it belongs wherever
-          keys are typed: they are not four separate accounts. Without it the
-          Owner has no way to know that connecting Gemini on the Speaking row
-          also connected it for Vision. */}
+      {/* The fact the old Model keys card opened with: these are not seven
+          separate accounts. It used to read "a key added on any row" — true
+          when two rows took a key of their own, and false since both moved to
+          Models (Oskar, 2026-08-01). What it has to say now is why a row can
+          offer a model the Owner never set up on that row. */}
       <p className="settings-card-copy">
         {lang === "zh"
-          ? "key 加在哪一行都一样,进的是同一个池子:一个服务商连一次,凡是它能干的活,每一行都能挑它。"
-          : "A key added on any row joins one shared pool: connect a provider once and every row that provider can serve may choose it."}
+          ? "一个服务商在下面的 Models 里连一次,进的就是同一个池子:凡是它能干的活,每一行都能挑它。"
+          : "Connect a provider once, below in Models, and it joins one shared pool: every row that provider can serve may choose it."}
       </p>
+      {/* N5 — the answer to "what does one call cost", which the app could not
+          give anywhere except in the title of a Test button. Above the switches
+          because that is where somebody is deciding whether to switch one on,
+          and persistent rather than behind a press: burying the answer one tap
+          deep is the same as not having it. No prices — those are the
+          provider's, they go stale, and a stale number of ours is worse than
+          none. */}
+      <div className="capability-cost">
+        <p className="drawer-head">{t("legal.notice.capability.cost.title")}</p>
+        {t("legal.notice.capability.cost")
+          .split("\n\n")
+          .map((paragraph) => (
+            <p className="settings-card-copy" key={paragraph.slice(0, 24)}>
+              {paragraph}
+            </p>
+          ))}
+      </div>
+      {/* N1/N2 — said once, before the capability is used, and both buttons are
+          real: "Switch it off" really switches it off, so this is a decision
+          rather than a wall to click past. Closing it without answering records
+          nothing and it comes back next visit. */}
+      {capabilityNotice ? (
+        <Modal
+          onClose={() => {
+            setNoticePutOff((current) => new Set(current).add(capabilityNotice));
+            setCapabilityNotice(null);
+          }}
+          title={t(`legal.notice.capability.${capabilityNotice}.title`)}
+        >
+          {t(`legal.notice.capability.${capabilityNotice}`)
+            .split("\n\n")
+            .map((paragraph) => (
+              <p className="settings-card-copy" key={paragraph.slice(0, 24)}>
+                {paragraph}
+              </p>
+            ))}
+          <div className="modal-actions">
+            <button
+              className="secondary-button"
+              onClick={() =>
+                void answerCapabilityNotice(capabilityNotice, true)
+              }
+              type="button"
+            >
+              {t("legal.notice.capability.keep")}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() =>
+                void answerCapabilityNotice(capabilityNotice, false)
+              }
+              type="button"
+            >
+              {t("legal.notice.capability.turnOff")}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
       {showFree ? (
         <FreeModelsModal
           lang={lang}
@@ -11128,9 +11572,9 @@ function CapabilitiesPanel() {
         />
       ) : null}
       {/* A failed read greys the switches and says so, rather than removing the
-          card: this is now the only place a key can be added, and a card that
-          silently disappears looks like a finished page instead of a broken
-          one. */}
+          card: this is the only place a capability can be switched off at all,
+          and a card that silently disappears looks like a finished page instead
+          of a broken one. */}
       {ceilingUnread ? (
         <p className="form-error">
           {lang === "zh"
@@ -11234,8 +11678,22 @@ function CapabilitiesPanel() {
   );
 }
 
-function ModelsPanel() {
-  const { t } = useI18n();
+function ModelsPanel({
+  // The voice download, held by the Settings page above both cards — this one
+  // starts the 150 MB engine install, the Speaking row starts an extra voice,
+  // and both watch the same answer move.
+  localTts,
+  // Called after anything that changes what is connected. The Capabilities card
+  // above chooses among these backends and cannot hear about a connect on its
+  // own, so every path that adds, removes or re-points one says so out loud.
+  onConnectionsChanged,
+  onLocalTtsChanged,
+}: {
+  localTts: LocalTtsStatus | null;
+  onConnectionsChanged: () => void;
+  onLocalTtsChanged: (next: LocalTtsStatus) => void;
+}) {
+  const { lang, t } = useI18n();
   const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
   const [drafts, setDrafts] = useState<
     Record<string, { apiKey: string; baseUrl: string; model: string }>
@@ -11255,6 +11713,25 @@ function ModelsPanel() {
   // pastes back from claude.com. The official binary holds the whole flow.
   const [claudeLoginUrl, setClaudeLoginUrl] = useState<string | null>(null);
   const [claudeLoginCode, setClaudeLoginCode] = useState("");
+  // Cloudflare's Workers AI is connected with a token and an account id rather
+  // than a base URL, so it has its own form below (Oskar, 2026-08-01). These
+  // two fields used to sit in the Drawing row's drawer, back when the only
+  // reason to add Cloudflare was pictures. They are a key, so they live here.
+  const [cloudflareToken, setCloudflareToken] = useState("");
+  // A Workers AI-template token cannot name its own account (verified
+  // 2026-07-27), so the id has its own always-visible field.
+  const [cfAccountId, setCfAccountId] = useState("");
+  // Deleting the local voice throws away a 150 MB download — ask first.
+  const [confirmRemoveLocal, setConfirmRemoveLocal] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+
+  // Anything that changes the connected set is written through here, so the
+  // Capabilities card can never be left showing a list that no longer matches.
+  function applyProviders(next: ModelProviderInfo[]) {
+    setProviders(next);
+    onConnectionsChanged();
+  }
 
   async function beginClaudeLogin() {
     setBusy("claude-sub");
@@ -11279,7 +11756,7 @@ function ModelsPanel() {
     setError(null);
     try {
       const result = await submitClaudeLoginCode(claudeLoginCode.trim());
-      setProviders(result.providers);
+      applyProviders(result.providers);
       setClaudeLoginUrl(null);
       setClaudeLoginCode("");
       setAddTargetId("");
@@ -11343,7 +11820,7 @@ function ModelsPanel() {
         ...(provider.needsBaseUrl ? { baseUrl: draft.baseUrl } : {}),
         ...(draft.model.trim() ? { model: draft.model.trim() } : {}),
       });
-      setProviders(result.providers);
+      applyProviders(result.providers);
       patchDraft(provider.id, { apiKey: "" });
       setAddTargetId("");
       setEditingId(null);
@@ -11359,7 +11836,7 @@ function ModelsPanel() {
     setError(null);
     try {
       const result = await disconnectModelProvider(provider.id);
-      setProviders(result.providers);
+      applyProviders(result.providers);
     } catch {
       setError(`Could not disconnect ${provider.name}.`);
     } finally {
@@ -11372,7 +11849,7 @@ function ModelsPanel() {
     setError(null);
     try {
       const result = await setDefaultModelProvider(provider.id);
-      setProviders(result.providers);
+      applyProviders(result.providers);
     } catch {
       setError(`Could not set ${provider.name} as the default.`);
     } finally {
@@ -11407,6 +11884,9 @@ function ModelsPanel() {
         setProviders(result.providers);
         if (result.providers.find((p) => p.id === "codex")?.healthy) {
           setCodexLoginUrl(null);
+          // Only the attempt that succeeded is worth telling the other card
+          // about; the forty that were still waiting changed nothing.
+          onConnectionsChanged();
           break;
         }
       }
@@ -11414,6 +11894,74 @@ function ModelsPanel() {
       setError("Could not start the ChatGPT sign-in.");
     } finally {
       setCodexWaiting(false);
+    }
+  }
+
+  // Cloudflare answers with the one message that says what to fix ("check the
+  // token was copied whole", "that account id is not 32 characters"), so it is
+  // printed inside its own form rather than in the card's error line at the
+  // top — a fix belongs beside the field it is about.
+  const [cfError, setCfError] = useState<string | null>(null);
+  // CONNECTING, and only connecting. This used to post the picture-engine
+  // choice, so saving a token also made Workers AI the one that draws — over
+  // whatever the Owner had chosen on the Drawing row, and again every time they
+  // opened Edit and saved. Which model draws is that row's answer; this form
+  // stores a key. An empty Drawing row still fills itself, server-side, the way
+  // the voice and vision rows always have.
+  async function saveWorkersAiToken() {
+    setBusy("workersai");
+    setCfError(null);
+    try {
+      // Either field may be blank on a connected card — the stored value stands
+      // in — so an account id can be corrected on its own.
+      const result = await connectWorkersAi(
+        cloudflareToken.trim() || undefined,
+        cfAccountId.trim() || undefined,
+      );
+      // The token is cleared because it is a secret and the field has done its
+      // job; the account id stays, because it is not one and it is the field
+      // somebody comes back to check.
+      setCloudflareToken("");
+      applyProviders(result.providers);
+      setAddTargetId("");
+      setEditingId(null);
+    } catch (nextError) {
+      setCfError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Could not connect Workers AI.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function startLocalDownload() {
+    setVoiceError(null);
+    try {
+      onLocalTtsChanged(await installLocalTts());
+    } catch {
+      setVoiceError(
+        lang === "zh" ? "下载没能开始。" : "Could not start the download.",
+      );
+    }
+  }
+
+  async function removeLocalVoice() {
+    setVoiceBusy(true);
+    setVoiceError(null);
+    try {
+      onLocalTtsChanged(await removeLocalTtsDownload());
+      // Removing it can leave Speaking pointing at a voice that is gone, and
+      // the server decides what it falls back to — so the row is told to look
+      // again rather than being handed an answer from here.
+      onConnectionsChanged();
+    } catch {
+      setVoiceError(
+        lang === "zh" ? "删不掉这个下载。" : "Could not remove the download.",
+      );
+    } finally {
+      setVoiceBusy(false);
     }
   }
 
@@ -11520,6 +12068,131 @@ function ModelsPanel() {
               </button>
             </details>
           ) : null}
+        </div>
+      );
+    }
+    // Workers AI: a token plus an account id, never a hand-typed base URL. The
+    // endpoint embeds the account id, so asking for the URL asked the Owner to
+    // assemble it themselves — this form takes the two things Cloudflare
+    // actually shows you and builds the rest, and the server checks the pair
+    // with a real call before it saves anything.
+    //
+    // It is written in both languages while the rest of this card is not: it
+    // arrived from the Drawing drawer bilingual, and dropping a language to
+    // match its new neighbours would be losing something in a move.
+    if (provider.id === "workersai") {
+      return (
+        <div className="model-connect-form">
+          <p className="library-note">
+            {lang === "zh"
+              ? "免费额度:每天 10,000 Neurons —— 大约 170 张图。同一个令牌也能用来聊天。"
+              : "Free tier: 10,000 Neurons a day — about 170 pictures. The same token can answer chats too."}
+          </p>
+          <a
+            className="model-key-link"
+            href="https://dash.cloudflare.com/profile/api-tokens"
+            rel="noreferrer"
+            target="_blank"
+          >
+            {lang === "zh" ? "去 Cloudflare 建令牌 ↗" : "Make a token ↗"}
+          </a>
+          <div className="chat-font-field">
+            <span>{lang === "zh" ? "Workers AI 令牌" : "Workers AI Token"}</span>
+            <input
+              autoCapitalize="off"
+              autoComplete="off"
+              className="key-input"
+              disabled={busy === provider.id}
+              onChange={(event) => setCloudflareToken(event.target.value)}
+              placeholder={
+                lang === "zh"
+                  ? "粘贴 Cloudflare 那边的令牌"
+                  : "Paste the token from Cloudflare"
+              }
+              spellCheck={false}
+              type="text"
+              value={cloudflareToken}
+            />
+          </div>
+          {cloudflareToken.trim().length > 0 &&
+          cloudflareToken.trim().length < 40 ? (
+            <p className="settings-card-copy text-faint">
+              {lang === "zh"
+                ? "这比 Cloudflare 的令牌短(应该是 40 个字符)—— 确认整段都复制到了。"
+                : "That looks shorter than a Cloudflare token (40 characters) — make sure the whole value was copied."}
+            </p>
+          ) : null}
+          {/* Always visible, not revealed-on-error: "where do I paste the id"
+              must never be a puzzle (Oskar, 2026-07-27). A broad token can
+              leave it empty; a Workers AI-template token needs it. */}
+          <div className="chat-font-field">
+            <span>{lang === "zh" ? "账户 ID" : "Account ID"}</span>
+            <input
+              autoCapitalize="off"
+              autoComplete="off"
+              className="key-input"
+              disabled={busy === provider.id}
+              onChange={(event) => setCfAccountId(event.target.value)}
+              placeholder={
+                lang === "zh" ? "32 位字母和数字" : "32 letters and digits"
+              }
+              spellCheck={false}
+              type="text"
+              value={cfAccountId}
+            />
+          </div>
+          <p className="settings-card-copy text-faint">
+            {lang === "zh"
+              ? "Cloudflare 控制台 → My Profile → API Tokens → Create Token → Workers AI 模板。登录后地址栏里就有账户 ID —— dash.cloudflare.com/<那串长码>。用模板做出来的令牌说不出自己属于哪个账户,所以两个都要粘。"
+              : "Cloudflare dashboard → My Profile → API Tokens → Create Token → Workers AI template. The Account ID is in the address bar once you are signed in — dash.cloudflare.com/<that long code>. A token made from the template cannot tell us its account, so paste both."}
+          </p>
+          {/* F5, not F1: the generic cloud notice claims memories, profile and
+              attachments go to the provider, which is NOT true of the picture
+              path — one English prompt goes. This is the notice this connection
+              shipped with and it stays with the fields it belongs to; chat use
+              carries its own notice at the point of use. The real disclosure is
+              the other way round: the main model WRITES that prompt and can see
+              context, so it can word things the Owner never typed — which is
+              why the sent prompt is shown beside every generated picture. */}
+          <p className="context-disclaimer">
+            {t("legal.notice.modelConnect.pictures")}
+          </p>
+          {cfError ? <p className="form-error">{cfError}</p> : null}
+          <div className="model-card-actions">
+            {/* Either field is enough once this card is connected: the stored
+                value stands in for whichever is blank, so a wrong Account ID
+                can be fixed without going back to Cloudflare for the token
+                again. Nothing at all typed, and there is nothing to save. */}
+            <button
+              className="primary-button"
+              disabled={
+                busy === provider.id ||
+                (cloudflareToken.trim().length === 0 &&
+                  (!provider.connected || cfAccountId.trim().length === 0))
+              }
+              onClick={() => void saveWorkersAiToken()}
+              type="button"
+            >
+              {busy === provider.id
+                ? lang === "zh"
+                  ? "保存中…"
+                  : "Saving…"
+                : lang === "zh"
+                  ? "保存令牌"
+                  : "Save Token"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setAddTargetId("");
+                setEditingId(null);
+                setCfError(null);
+              }}
+              type="button"
+            >
+              {lang === "zh" ? "取消" : "Cancel"}
+            </button>
+          </div>
         </div>
       );
     }
@@ -11760,26 +12433,35 @@ function ModelsPanel() {
       {availableProviders.length > 0 ? (
         <>
           <div className="settings-card-divider" />
-          <h3 className="settings-subhead">Add a Model</h3>
-          <select
-            aria-label="Add a model"
-            className="task-select"
-            onChange={(event) => setAddTargetId(event.target.value)}
+          <h3 className="settings-subhead">
+            {lang === "zh" ? "添加模型" : "Add a Model"}
+          </h3>
+          {/* Our own drop-down, not the browser's. This is now the ONLY way to
+              connect a model — the Cloudflare token moved here off the Drawing
+              row — so the one control every household has to get through was
+              also the one still painting a white popup on a dark page
+              (picker.tsx). */}
+          <Picker
+            ariaLabel={lang === "zh" ? "添加模型" : "Add a model"}
+            onChange={setAddTargetId}
+            options={[
+              {
+                label: lang === "zh" ? "选一个提供方…" : "Choose a provider…",
+                value: "",
+              },
+              ...availableProviders.map((provider) => ({
+                // claude-sub has a connect note but is NOT a free tier — its
+                // usage comes out of the Owner's own Claude plan.
+                label:
+                  MODEL_FREE_TIER_NOTES[provider.id] &&
+                  provider.id !== "claude-sub"
+                    ? `${provider.name}${lang === "zh" ? " —— 免费额度" : " — Free Tier"}`
+                    : provider.name,
+                value: provider.id,
+              })),
+            ]}
             value={addTargetId}
-          >
-            <option value="">Choose a provider…</option>
-            {availableProviders.map((provider) => (
-              <option key={provider.id} value={provider.id}>
-                {provider.name}
-                {/* claude-sub has a connect note but is NOT a free tier —
-                    its usage comes out of the Owner's own Claude plan. */}
-                {MODEL_FREE_TIER_NOTES[provider.id] &&
-                provider.id !== "claude-sub"
-                  ? " — Free Tier"
-                  : ""}
-              </option>
-            ))}
-          </select>
+          />
           {addTarget ? (
             <div
               className={
@@ -11796,6 +12478,126 @@ function ModelsPanel() {
               {renderConnectForm(addTarget)}
             </div>
           ) : null}
+        </>
+      ) : null}
+      {/* The one model you do not sign in to — you download it. It moved off
+          the Speaking row (Oskar, 2026-08-01: 所有添加模型都應該在模型那邊添加,
+          然後 capability 這邊只是選擇模型), and it sits outside the "Add a Model"
+          block on purpose: that block disappears once every provider is
+          connected, and a 150 MB download in progress must never disappear
+          with it. WHICH of its voices reads a reply stays on the Speaking row,
+          because that is how the job behaves rather than what is installed.
+
+          Nothing shows until the status has been read: offering a 150 MB
+          download to someone who already has it, for the half-second before
+          the answer lands, is worse than showing nothing for that half-second. */}
+      {localTts ? (
+        <>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">
+            {lang === "zh" ? "本机语音" : "A Voice On This Machine"}
+          </h3>
+          {localTts.installed ? (
+            <div className="model-card">
+              <div className="model-card-head">
+                <strong>{lang === "zh" ? "本机语音" : "Local Voice"}</strong>
+                <span className="library-chip chip-published">
+                  {lang === "zh" ? "已安装" : "Installed"}
+                </span>
+              </div>
+              <p className="settings-card-copy">
+                {lang === "zh"
+                  ? "语音在这台电脑上生成 —— 什么都不出去,也没有每次的费用。中文和英文音色都在里面;念哪个音色,在上面 Capabilities 的「念」那一行选。"
+                  : "Speech is generated on this computer — nothing leaves it and there is no per-use cost. Chinese and English voices are both included; which one reads a reply is chosen on the Speaking row above."}
+              </p>
+              {/* Installed and still downloading can only mean an EXTRA voice,
+                  and that one was started on the Speaking row. A second bar for
+                  one download is a look-alike control; a sentence saying what is
+                  happening and where to watch it is not — and it is why Remove
+                  is greyed out while it runs. */}
+              {localTts.status === "downloading" ? (
+                <p className="settings-card-copy">
+                  {lang === "zh"
+                    ? "正在下载另一个音色 —— 进度在上面 Capabilities 的「念」那一行。"
+                    : "Another voice is downloading — the progress is on the Speaking row above."}
+                </p>
+              ) : null}
+              <div className="model-card-actions">
+                {confirmRemoveLocal ? (
+                  <>
+                    <button
+                      className="text-button danger"
+                      disabled={voiceBusy}
+                      onClick={() => {
+                        setConfirmRemoveLocal(false);
+                        void removeLocalVoice();
+                      }}
+                      type="button"
+                    >
+                      {lang === "zh"
+                        ? "确认删除(150 MB)"
+                        : "Really Remove (150 MB)"}
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() => setConfirmRemoveLocal(false)}
+                      type="button"
+                    >
+                      {lang === "zh" ? "留着" : "Keep"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="text-button"
+                    disabled={voiceBusy}
+                    onClick={() => setConfirmRemoveLocal(true)}
+                    type="button"
+                  >
+                    {lang === "zh" ? "删除下载" : "Remove Download"}
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : localTts.status === "downloading" ? (
+            <div className="model-card">
+              <p className="settings-card-copy">
+                {lang === "zh"
+                  ? "正在下载语音引擎和两个音色(约 150 MB)—— 只下载这一次。 "
+                  : "Downloading the speech engine and two voices (about 150 MB) — this happens once. "}
+                {localTts.progress}%
+                {localTts.detail ? ` · ${localTts.detail}` : ""}
+              </p>
+              <progress
+                className="local-tts-progress"
+                max={100}
+                value={localTts.progress}
+              />
+            </div>
+          ) : (
+            <div className="model-card">
+              <p className="settings-card-copy">
+                {lang === "zh"
+                  ? "下载一次(约 150 MB),这台电脑上就有了一个神经网络语音:完全离线,永久免费,不用 key。中文和英文音色都在里面,按回复的语言自动选。下好了,「念」那一行会自己用上它。"
+                  : "A one-time download (about 150 MB) puts a neural voice on this computer: fully offline, free forever, no key. Chinese and English voices are included, picked per reply by its language. When it lands, the Speaking row switches over by itself."}
+              </p>
+              {localTts.status === "error" && localTts.detail ? (
+                <p className="form-error">{localTts.detail}</p>
+              ) : null}
+              <div className="model-card-actions">
+                <button
+                  className="primary-button"
+                  disabled={voiceBusy}
+                  onClick={() => void startLocalDownload()}
+                  type="button"
+                >
+                  {lang === "zh"
+                    ? "下载本机语音(150 MB)"
+                    : "Download Local Voice (150 MB)"}
+                </button>
+              </div>
+            </div>
+          )}
+          {voiceError ? <p className="form-error">{voiceError}</p> : null}
         </>
       ) : null}
     </section>
@@ -12331,6 +13133,24 @@ function SettingsPanel({
   const [chatFontFamily, setChatFontFamily] = useState(
     readStoredChatFontFamily,
   );
+  // Counts connects, disconnects and main-model changes made on the Models
+  // card. Capabilities is a sibling card that chooses among those backends and
+  // has no other way to hear it — and since the Cloudflare token and the local
+  // voice moved to Models, a change there is now what fills a row here.
+  const [modelsChanged, setModelsChanged] = useState(0);
+  // THE VOICE DOWNLOAD LIVES HERE, above both cards that touch it, because two
+  // cards can start one. Models starts the 150 MB engine install; the Speaking
+  // row starts a ~60 MB extra voice when the Owner picks one they do not have.
+  // Owned by either card, the OTHER card's copy goes stale, and the card that
+  // started the download can be the stale one — which is exactly what happened
+  // when the poll moved to Models and the Speaking row froze at 0%.
+  //
+  // One state, one poll, both cards reading the same answer. It cannot freeze:
+  // this component is the Settings page itself, so nothing inside a drawer, a
+  // tab or an "Add a Model" dropdown can unmount the thing doing the watching —
+  // switching to another Settings tab keeps it running. Leaving Settings stops
+  // it, and the next visit re-reads the status and picks a download back up.
+  const [localTts, setLocalTts] = useState<LocalTtsStatus | null>(null);
   const [testingForge, setTestingForge] = useState(false);
   const [forgeTestResult, setForgeTestResult] =
     useState<ForgeConnectionTestResult | null>(null);
@@ -12425,6 +13245,35 @@ function SettingsPanel({
   }
 
   const providerConnected = settings.providerConnection === "chatgpt-connected";
+
+  // Read once when Settings opens, so a download already running elsewhere is
+  // picked up rather than discovered by accident.
+  useEffect(() => {
+    void fetchLocalTts()
+      .then(setLocalTts)
+      .catch(() => undefined);
+  }, []);
+
+  // The only timer watching that download. It runs while the status says
+  // "downloading" and stops the moment it does not, so an idle Settings page
+  // polls nothing. When the engine install lands, Speaking is switched over —
+  // that is what the 150 MB was for — and both cards are told to re-read.
+  useEffect(() => {
+    if (localTts?.status !== "downloading") return undefined;
+    const timer = window.setInterval(() => {
+      void fetchLocalTts()
+        .then((next) => {
+          setLocalTts(next);
+          if (next.installed && next.status === "ready") {
+            void connectVoiceOutput({ engine: "local" })
+              .then(() => setModelsChanged((count) => count + 1))
+              .catch(() => undefined);
+          }
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [localTts?.status]);
 
   useEffect(() => {
     if (!testingChat || chatStartedAt === null) return undefined;
@@ -13080,8 +13929,20 @@ function SettingsPanel({
         </details>
       </section>
       ) : null}
-      {activeTab === "ai" ? <CapabilitiesPanel /> : null}
-      {activeTab === "ai" ? <ModelsPanel /> : null}
+      {activeTab === "ai" ? (
+        <CapabilitiesPanel
+          localTts={localTts}
+          onLocalTtsChanged={setLocalTts}
+          refreshKey={modelsChanged}
+        />
+      ) : null}
+      {activeTab === "ai" ? (
+        <ModelsPanel
+          localTts={localTts}
+          onConnectionsChanged={() => setModelsChanged((count) => count + 1)}
+          onLocalTtsChanged={setLocalTts}
+        />
+      ) : null}
       {activeTab === "ai" ? <SubscriptionDoorPanel /> : null}
       {activeTab === "tools" ? <ToolsPanel /> : null}
       {activeTab === "notifications" ? <NotificationsPanel /> : null}
@@ -14102,12 +14963,16 @@ function PublishSignIn({ state }: { state: PublishState }) {
 }
 
 function MethodPublishCard({ method }: { method: LibraryMethod }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [state, setState] = useState<PublishState | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // The capabilities this Method needs and Vaenyx has not built. Set when the
+  // publish comes back refused; cleared the moment the Owner answers, either
+  // way (copy pack N3).
+  const [wanted, setWanted] = useState<string[] | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -14137,9 +15002,10 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
   async function publish(acceptance: PublishAcceptance) {
     setConfirming(false);
     setError(null);
+    setWanted(null);
     setBusy(true);
     try {
-      await publishMethodToCommunity(method.id, acceptance);
+      await publishMethodToCommunity(method.id, acceptance, lang);
       setDone(true);
       setState(await fetchPublishState());
     } catch (nextError) {
@@ -14148,8 +15014,44 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
           ? nextError.message
           : "Vaenyx could not publish this method.",
       );
+      // The one refusal that asks a question back. The names arrive as data
+      // rather than inside the sentence, because the sentence is translated and
+      // a screen that read the names out of it would break in Chinese.
+      const missing =
+        nextError instanceof VaenyxRequestError
+          ? nextError.body.missingCapabilities
+          : null;
+      if (Array.isArray(missing) && missing.length > 0) {
+        setWanted(missing.map((name) => String(name)));
+      }
     } finally {
       setBusy(false);
+    }
+  }
+
+  // N3 — the counter is written only here, only after a yes. A decline is
+  // recorded too: "was asked and said no" and "was never asked" are different
+  // facts, and only one of them means the question is settled for that attempt.
+  async function answerWanted(count: boolean) {
+    const capabilities = wanted ?? [];
+    setWanted(null);
+    try {
+      await recordLegalAck({
+        keyName: "legal.consent.capability.wanted",
+        copyVersion: LEGAL_COPY_VERSION,
+        language: lang === "zh" ? "zh" : "en",
+        choice: count ? "count" : "decline",
+      });
+    } catch {
+      // The choice did not record. Nothing is counted on a failure here, which
+      // is the safe direction: a missing record is a question that gets asked
+      // again, and a count nobody agreed to cannot be taken back.
+    }
+    if (!count) return;
+    try {
+      await recordCapabilityWanted(capabilities, lang === "zh" ? "zh" : "en");
+    } catch {
+      // The request already popped its own error toast.
     }
   }
 
@@ -14216,6 +15118,40 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
           onCancel={() => setConfirming(false)}
           onConfirm={(acceptance) => void publish(acceptance)}
         />
+      ) : null}
+      {/* N3 — asked BEFORE anything is written down. The refusal used to count
+          the attempt on its way past and then announce that it had; a record
+          made and reported afterwards is not a choice. Closing the window
+          without answering counts nothing, exactly like saying no. */}
+      {wanted ? (
+        <Modal
+          onClose={() => setWanted(null)}
+          title={t("legal.consent.capability.wanted.title")}
+        >
+          {t("legal.consent.capability.wanted")
+            .split("\n\n")
+            .map((paragraph) => (
+              <p className="settings-card-copy" key={paragraph.slice(0, 24)}>
+                {paragraph}
+              </p>
+            ))}
+          <div className="modal-actions">
+            <button
+              className="secondary-button"
+              onClick={() => void answerWanted(true)}
+              type="button"
+            >
+              {t("legal.consent.capability.wanted.accept")}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => void answerWanted(false)}
+              type="button"
+            >
+              {t("legal.consent.capability.wanted.decline")}
+            </button>
+          </div>
+        </Modal>
       ) : null}
     </section>
   );
@@ -14871,7 +15807,7 @@ function MethodDetail({
   onBack: () => void;
   onChanged: (method: LibraryMethod) => void;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const communityVersions = useCommunityVersions();
   const [inputText, setInputText] = useState(() =>
     JSON.stringify(buildInputSkeleton(method.inputSchema), null, 2),
@@ -14969,7 +15905,7 @@ function MethodDetail({
 
     setRunning(true);
     try {
-      setResult(await testRunMethod(method.id, parsed));
+      setResult(await testRunMethod(method.id, parsed, lang));
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -15175,6 +16111,15 @@ function MethodDetail({
                 ? "Output matches the schema"
                 : "Output did not match the schema"}
             </strong>
+            {/* A Method that declared four capabilities and got three still
+                runs — without the fourth. Said here, because a run that never
+                looked at the picture and a run that looked and answered badly
+                are indistinguishable on the output alone. */}
+            {result.capabilityRefusals?.map((refusal) => (
+              <p className="library-note" key={refusal.capability}>
+                {refusal.message}
+              </p>
+            ))}
             <pre className="library-result-json">
               {result.output === null
                 ? "(no JSON output)"
@@ -15467,7 +16412,12 @@ function CreateRoutinePanel({
 // 2.9 → 3.0, skipping 2.10 on purpose (private, 2026-07-29): a version
 // compared as a decimal would read "2.10" as 2.1 and place it BELOW 2.9. The
 // comparisons are dotted-numeric now, but the pack keeps the safe numbering.
-const LEGAL_COPY_VERSION = "3.0";
+// 3.0 → 3.1 (2026-08-01): the pack gains Part N — the two capability explainers
+// (N1 web, N2 fetching), the waiting-list consent (N3), the one degradation
+// wording (N4) and the cost note (N5). All ADDITIONS; no existing string
+// changed, and the one new consent string has nobody's answer recorded against
+// it yet, so LEGAL_CONSENT_FLOOR stays where it is and nobody is re-asked.
+const LEGAL_COPY_VERSION = "3.1";
 
 // The K3 activation floor: a recorded activation below this is treated as not
 // given — re-opening sharing walks through K3 again instead of silently
@@ -15593,8 +16543,10 @@ const MODEL_FREE_TIER_NOTES: Record<string, string> = {
     "GLM Flash models are free (rate allocated per account). Strong Chinese; image/PDF understanding.",
   mistral:
     "Free tier requires OPTING IN to your data being used for training — read the terms before connecting. The paid tier keeps data private.",
-  workersai:
-    "Free: 10,000 Neurons/day. Base URL needs your account id: https://api.cloudflare.com/client/v4/accounts/<account-id>/ai/v1",
+  // Workers AI has its own connect form (token + account id), so this entry is
+  // only read for the "— Free Tier" mark beside its name in the Add a Model
+  // list; the form prints its own bilingual version of this line.
+  workersai: "Free: 10,000 Neurons/day — about 170 pictures.",
 };
 
 // Backends whose chat endpoint reads images directly (Phase B) — must mirror

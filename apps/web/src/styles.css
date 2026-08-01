@@ -1142,6 +1142,28 @@ textarea::placeholder {
    pile of unrelated announcements (Oskar, 2026-07-30). Note the explicit sizes
    on every input: the global rule is `input { height: 46px; width: 100% }`,
    which turns a checkbox into a large grey square. */
+/* What one call costs (copy pack N5). It sits above the switches because that
+   is where the decision is made, so it has to be readable without being the
+   loudest thing on the card: boxed and set faint, so the eye takes it as a note
+   and comes back to it when the question actually arises. */
+.capability-cost {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+}
+
+.capability-cost > .drawer-head {
+  margin-top: 0;
+}
+
+.capability-cost > .settings-card-copy {
+  margin: var(--space-1) 0 0;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+
 /* The capability table: one row per capability — the drawing, the word, the old
    wording in brackets, and the switch. */
 .capability-rows {
@@ -1503,26 +1525,25 @@ textarea::placeholder {
   color: #df938a;
 }
 
+/* The seven drawn chips plus the plain Text pill sit on one line together, so
+   they are centred against each other rather than stretched to the tallest. */
 .door-capabilities {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-1);
   margin-top: var(--space-2);
 }
 
+/* Only "Text" now — the door itself, which is not one of the seven and has no
+   drawing anywhere in the app. The rest are CapabilityChip, so this card cannot
+   drift into a second spelling of a capability again. */
 .door-capability {
-  padding: 2px 8px;
+  padding: 3px 8px;
   border: 0.5px solid var(--border);
   border-radius: 999px;
+  color: var(--text-muted);
   font-size: var(--fs-label);
-}
-
-/* Shown, never hidden: the Owner should see that it is there and cannot do
-   this, rather than wonder where it went. */
-.door-capability.off {
-  border-color: transparent;
-  color: var(--text-faint);
-  opacity: 0.5;
 }
 
 .door-legend {
@@ -5631,6 +5652,28 @@ select {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: #1c1b19;
+}
+
+/* "What it may do", inside the card of whatever it belongs to — a mode on the
+   Modes screen, an app key on the Token screen. ONE window for both, because
+   they are the same question asked of two different things and a second look
+   would read as a second feature.
+   Deliberately the SAME window as the supervision view above it on a mode card.
+   The rows themselves are `.capability-row`, shared verbatim with AI Settings:
+   the seven are one table wherever they are shown, so the drawing and the
+   wording can never drift between the screens. Only the trailing margin of the
+   rows grid is taken back, since this window supplies its own. */
+.capability-window {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.capability-window .capability-rows {
+  margin: 0;
 }
 
 /* Supervision view window inside a mode card (M4). */

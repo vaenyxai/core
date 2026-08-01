@@ -36,13 +36,16 @@ import type { CapabilityTestResult } from "@vaenyx/contracts";
 import type { DatabaseHandle } from "../../db/database.js";
 import type { ModelProvider } from "../models/provider.js";
 import { providerDisplayName } from "../models/provider-settings.js";
-import type { Capability, CapabilityLanguage } from "./capabilities.js";
+import {
+  type Capability,
+  type CapabilityLanguage,
+  backendCannotMessage,
+} from "./capabilities.js";
 import {
   DOCUMENT_NATIVE_PROVIDER_IDS,
   extractDocumentText,
 } from "./documents.js";
 import {
-  FETCHING_CAPABLE_PROVIDER_IDS,
   FetchRefusedError,
   MAX_FETCH_BYTES,
   grantFetchAccess,
@@ -378,6 +381,9 @@ async function probeDrawing(
         context.secretsDirectory,
         scratch,
         "A plain red square on a white background. Flat colour, no text, no shading.",
+        // No mode: /v1/capability-test refuses any session that is in one, so
+        // a Test only ever runs as the Owner in User Mode.
+        null,
       ),
       lang,
     );
@@ -498,13 +504,27 @@ async function probeReading(
             : "opened the test document but could not read the words off it — reading PDFs on this machine is broken.",
       };
     }
+    // A green tick that did not say WHO read it would be the quiet substitution
+    // this sentence exists to prevent: the test passed, and the model the Owner
+    // is talking to never opened the file.
     return {
       status: "ok",
       engine,
-      detail:
+      detail: `${
         lang === "zh"
-          ? `读出了那份一页测试文档上的编号。${provider.name} 拿到的是这些文字 —— 它自己打不开 PDF,所以图、表格和排版它看不到。`
-          : `read the code off the one-page test document. ${provider.name} is handed those words — it does not open the PDF itself, so drawings, tables and layout do not reach it.`,
+          ? "读出了那份一页测试文档上的编号。"
+          : "read the code off the one-page test document. "
+      }${backendCannotMessage(
+        provider.name,
+        "reading",
+        lang === "zh"
+          ? { by: "这台机器 (pdf.js)", cost: "图、表格和排版到不了模型那里" }
+          : {
+              by: "this machine (pdf.js)",
+              cost: "drawings, tables and layout do not reach the model",
+            },
+        lang,
+      )}`,
     };
   } catch (error) {
     return {
@@ -527,10 +547,14 @@ async function probeWeb(
     return {
       status: "not-implemented",
       engine: provider.name,
-      detail:
+      // The standing sentence, then who CAN. Nothing stands in for a search, so
+      // the honest half is that the answer came out of the model's memory —
+      // which is the thing an Owner reading a confident reply cannot see.
+      detail: `${backendCannotMessage(provider.name, "web", null, lang)} ${
         lang === "zh"
-          ? "Vaenyx 还没有给这个后台做联网搜索。今天能搜的是 Codex CLI (ChatGPT) 和 Claude(订阅)这两个。"
-          : "Vaenyx has not built web search for this backend. Codex CLI (ChatGPT) and Claude (Subscription) are the two that can search today.",
+          ? "今天能搜的是 Codex CLI (ChatGPT) 和 Claude(订阅)这两个。"
+          : "Codex CLI (ChatGPT) and Claude (Subscription) are the two that can search today."
+      }`,
     };
   }
   // Today's date, which this machine already knows: an answer we can check
@@ -601,24 +625,19 @@ async function probeWeb(
   };
 }
 
+// The one probe that asks NOTHING of a model, and it is not an omission. Vaenyx
+// opens the file itself, against the folders the Owner named, and hands over the
+// words (ask-vaenyx.ts) — so what there is to test is the whitelist, the size
+// cap and the real open, none of which a backend takes part in. This used to
+// refuse outright unless the main model was Claude, which was true of an older
+// design and stopped being true the day the open moved to this side; the row's
+// own drawer, its tooltip and both manuals all said so while the button did not.
+// A backend check here would only be a green tick in front of somebody else's
+// work, and a missing-main-model check would fail a test that would have passed.
 async function probeFetching(
   context: CapabilityProbeContext,
 ): Promise<CapabilityTestResult> {
-  const { lang, provider } = context;
-  if (!provider) return noMainModel(lang);
-  // Asked first, and answered without spending anything: with any other main
-  // model this capability does nothing at all, however the folders are set, so
-  // testing the folders would only be a green tick in front of a dead feature.
-  if (!FETCHING_CAPABLE_PROVIDER_IDS.includes(provider.id)) {
-    return {
-      status: "not-implemented",
-      engine: provider.name,
-      detail:
-        lang === "zh"
-          ? "Vaenyx 用这个后台打不开文件。今天只有 Claude(订阅)能做到。"
-          : "Vaenyx cannot open files with this backend. Claude (Subscription) is the only one that can today.",
-    };
-  }
+  const { lang } = context;
   const access = grantFetchAccess(context.database, {
     actorId: context.owner.id,
     actorName: context.owner.name,

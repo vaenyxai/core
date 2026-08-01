@@ -171,9 +171,16 @@ describe("reading", () => {
     );
     expect(result.status).toBe("ok");
     // The two halves of the fork must never be reported as one thing: this
-    // machine read the PDF, and the model was only handed words.
+    // machine read the PDF, and the model was only handed words. The three
+    // parts the standing sentence exists to carry (copy pack N4) are asserted
+    // one by one rather than as a phrase, so a rewording cannot pass while a
+    // missing half quietly does not.
     expect(result.engine).toBe("This machine (pdf.js)");
-    expect(result.detail).toContain("does not open the PDF itself");
+    expect(result.detail).toContain("Stub gemini");
+    expect(result.detail).toContain("this machine (pdf.js) did it instead");
+    expect(result.detail).toContain(
+      "drawings, tables and layout do not reach the model",
+    );
   });
 });
 
@@ -259,15 +266,31 @@ describe("web", () => {
 });
 
 describe("fetching", () => {
-  it("says plainly that a backend cannot open files, before anything else", async () => {
+  // It used to answer "not built" here, which was true of an older design where
+  // one backend's own file tool did the opening. Vaenyx opens the file now, so
+  // the backend has no part in it — and a Test that named one was contradicting
+  // the row's own drawer, its tooltip and both manuals.
+  it("opens the file whichever main model is set, and with none set at all", async () => {
     const database = createTestDatabase();
+    const home = temporaryDirectory("vaenyx-probe-any-backend-");
+    writeFileSync(join(home, "notes.txt"), "the secret is 42\n", "utf8");
     writeGlobalCapabilities(database, { fetching: true });
-    const result = await runCapabilityProbe(
+    writeFetchFolders(database, [home], []);
+
+    const onCodex = await runCapabilityProbe(
       "fetching",
       probeContext(database, stubProvider("codex", () => ({ answer: "" }))),
     );
-    expect(result.status).toBe("not-implemented");
-    expect(result.detail).toContain("Claude (Subscription)");
+    expect(onCodex.status).toBe("ok");
+    expect(onCodex.detail).toContain("notes.txt");
+
+    // No main model either: nothing here asks one anything, so a missing model
+    // would have failed a test that was going to pass.
+    const withNoModel = await runCapabilityProbe(
+      "fetching",
+      probeContext(database, null),
+    );
+    expect(withNoModel.status).toBe("ok");
   });
 
   it("fails while no folder has been named", async () => {

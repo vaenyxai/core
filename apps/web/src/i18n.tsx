@@ -158,7 +158,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "routine.confirm.onePerLine": "One per line",
     "routine.confirm.run": "Looks right — run",
     "routine.confirm.cancel": "Cancel",
-    "legal.copyVersion": "2.6",
+    // The editorial version of the copy pack (clause 6.4). It had drifted to
+    // 2.6 here while the app recorded 3.0 against every acknowledgement, so a
+    // record said one thing and this table another; both now say 3.1, which is
+    // the version that ships Part N.
+    "legal.copyVersion": "3.1",
     "legal.disclaimer.aiGeneral.composer":
       "AI can make mistakes. Check important information.",
     "legal.disclaimer.community.browse":
@@ -357,6 +361,32 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "This address is on your local network — it may be another machine, not this one. Vaenyx sends chats for this backend only to that address. Make sure the machine it points at is one you control.",
     "legal.notice.modelConnect.local.unverified":
       "Vaenyx sends chats for this backend only to the address you entered. Make sure it points at your own machine — a remote address means your chats leave this device.",
+    // Copy pack Part N, verbatim. Paragraphs are separated by \n\n and rendered
+    // as separate lines; the renderer strips ** the way the M1 gate does.
+    "legal.notice.capability.cost.title": "What one call costs",
+    "legal.notice.capability.cost":
+      "Vaenyx charges nothing, and never will. What gets spent is your own model connection.\n\nA subscription you already pay for — Codex CLI (ChatGPT), Claude (Subscription) — costs nothing extra per call. You are using the allowance you already bought, and it runs out rather than billing you.\n\nA metered API key — OpenAI, Anthropic, Gemini, Groq and the rest — bills you per call, by how much went through it. Looking at a photo and reading a document cost the most: pictures are dearer than words, and a document is read as pictures too.\n\nNothing at all — the voice on this machine, opening files on this machine, and any local model — because those run here.\n\nNo prices are printed here. They are the provider's, they change, and a number of ours that has gone stale is worse than none. Only the provider's own pricing page is right.",
+    "legal.notice.capability.web.title": "Before Vaenyx searches the web",
+    // "never sees" was in the first draft and is not sayable: with the Claude
+    // backend the search runs inside an SDK stream that passes through this
+    // process, so not reading it is a choice in code rather than a structural
+    // fact. Vaenyx making no request of its own to a search company IS
+    // structural, and is what the Owner actually needs to know.
+    "legal.notice.capability.web":
+      "With this on, your main model can look things up while it answers. What leaves this machine is the words it searches for: they go out through that model's own backend, and a search company on the far end receives them. Vaenyx does not choose that company and never contacts it itself. The model writes those words, so they can say things you did not type. Only the Codex CLI (ChatGPT) and Claude (Subscription) backends really search today; the rest answer from memory whether this is on or off.",
+    "legal.notice.capability.fetching.title":
+      "Before Vaenyx opens your files",
+    "legal.notice.capability.fetching":
+      "Vaenyx can open text files from folders you name here, and nowhere else. Vaenyx opens them, not the model — the model is never given a tool that can touch a disk.\n\nBut what it reads is handed to whichever model is answering. The words in that file go to that model exactly like anything you type into a chat, and if that model is a cloud one they leave this machine.\n\nIt reads nothing until you name a folder. And no app key can ever be given this, whatever it asks for.",
+    // One pair of buttons for both notices: the decline really switches the
+    // capability off, so neither is a wall to click past (pack N1 behaviour).
+    "legal.notice.capability.keep": "Leave it on",
+    "legal.notice.capability.turnOff": "Switch it off",
+    "legal.consent.capability.wanted.title": "Vaenyx cannot do this yet",
+    "legal.consent.capability.wanted":
+      "This Method needs something Vaenyx cannot do yet, so it cannot be shared. It stays here and keeps working for you.\n\nVaenyx can write down that it was wanted. What gets written down is the name of the missing capability and a count — nothing about this Method, nothing about its recipe, nothing else from this computer — and it stays on this machine. When an update finally brings that capability, this machine knows it was waiting and tells you.\n\nSay no and nothing is written down. Nothing else changes either way.",
+    "legal.consent.capability.wanted.accept": "Write it down",
+    "legal.consent.capability.wanted.decline": "No, don't",
   },
   zh: {
     "title.ask-vaenyx": "Vaenyx 门户",
@@ -488,7 +518,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "routine.confirm.onePerLine": "一行一个",
     "routine.confirm.run": "没问题,运行",
     "routine.confirm.cancel": "取消",
-    "legal.copyVersion": "2.6",
+    "legal.copyVersion": "3.1",
     "legal.disclaimer.aiGeneral.composer": "AI 可能出错,重要信息请自行核对。",
     "legal.disclaimer.community.browse":
       "社区 Method 与 Routine 由社区成员制作,Vaenyx 不为其背书,也不构成专业建议;'Verified' 仅表示已通过自动检查。",
@@ -668,6 +698,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "该地址位于你的本地网络——可能指向另一台机器,而非本机。Vaenyx 只会把此后端的聊天发送到该地址。请确认它指向的是你自己掌控的机器。",
     "legal.notice.modelConnect.local.unverified":
       "Vaenyx 只会把此后端的聊天发送到你填写的地址。请确认该地址指向你自己的机器——若是远程地址,你的聊天将离开本设备。",
+    "legal.notice.capability.cost.title": "问一次到底花多少钱",
+    "legal.notice.capability.cost":
+      "Vaenyx 自己不收费,以后也不会收。花出去的,是你自己的模型连接。\n\n你已经在付的订阅 —— Codex CLI (ChatGPT)、Claude(订阅)—— 每次调用不额外花钱。你用的是已经买下的额度,用完就是用完,不会另外向你收费。\n\n按量计费的 API key —— OpenAI、Anthropic、Gemini、Groq 等等 —— 按次计费,按走过去的量算。看图和读文档最贵:图比文字贵,而文档也是当成图来读的。\n\n完全不花钱 —— 本机语音、打开这台机器上的文件、以及任何本地模型 —— 因为它们就在这里跑。\n\n这里不写价格。价格是服务商的,会变,而我们写下的一个过期数字比不写更糟。只有服务商自己的价格页面是准的。",
+    "legal.notice.capability.web.title": "在 Vaenyx 上网搜索之前",
+    "legal.notice.capability.web":
+      "开着这一项,主模型在回答时可以上网查。离开这台机器的,是它拿去搜的那几个词:它们经由该模型自己的后台发出去,最终由另一端的一家搜索公司收到。这家公司不是 Vaenyx 选的,Vaenyx 自己也不会去联系它。这几个词是模型自己写的,所以里面可能出现你并没有打出来的内容。今天真的会搜的只有 Codex CLI (ChatGPT) 和 Claude(订阅);其余的模型开不开都只能凭记忆回答。",
+    "legal.notice.capability.fetching.title": "在 Vaenyx 打开你的文件之前",
+    "legal.notice.capability.fetching":
+      "Vaenyx 只能打开你在这里点名的文件夹里的文字文件,别处一律不行。打开文件的是 Vaenyx 自己,不是模型 —— 模型手上从来没有能碰硬盘的工具。\n\n但读到的东西会交给正在回答的那个模型。文件里的字会送到那个模型那里,和你自己在聊天里打进去的内容一模一样;如果那是云端模型,它们就离开了这台机器。\n\n在你点名文件夹之前,它一个字也读不到。而且任何 app 钥匙都永远拿不到这一项,不管它怎么要。",
+    "legal.notice.capability.keep": "就这样开着",
+    "legal.notice.capability.turnOff": "把它关掉",
+    "legal.consent.capability.wanted.title": "这一项 Vaenyx 还做不到",
+    "legal.consent.capability.wanted":
+      "这个 Method 需要 Vaenyx 还做不到的东西,所以没法分享出去。它会留在这里,照常给你用。\n\nVaenyx 可以把「有人要过这一项」记下来。记下的只有那项能力的名字和一个次数 —— 不包括这个 Method 的任何内容、不包括它的配方、也不包括这台电脑上的任何别的东西 —— 而且只留在本机。等哪次更新真的把这项能力做出来了,这台机器知道它一直在等,会告诉你一声。\n\n你说不,就什么都不记。不管选哪个,别的都不会有任何变化。",
+    "legal.consent.capability.wanted.accept": "记下来",
+    "legal.consent.capability.wanted.decline": "不用记",
   },
 };
 

@@ -1,0 +1,31 @@
+-- Every key that already exists keeps what it already had.
+--
+-- `capabilities` arrived in 0055 and has never been written by anything, so
+-- every key on a running instance reads back as an empty list. That was
+-- harmless while the only reader was the Method run — a Method Token was
+-- already narrowed by this column before today. It stops being harmless the
+-- moment the Subscription Door starts consulting it: an app that has been
+-- knocking with an App Token and sending a photo would, on the next restart,
+-- be refused RELAY_CAPABILITY_NOT_GRANTED at somebody else's end, with nobody
+-- here to see it happen. A new gate must not take away what was working.
+--
+-- 🔴 The list below is what that door GENUINELY served, taken from
+-- ENGINE_CAPABILITIES in core/relay.ts, not from what a key might one day be
+-- allowed:
+--   openai-cli → text, vision      claude-cli → text, vision, reading
+-- `text` is the door itself and is never gated. `hearing`, `speaking` and
+-- `drawing` are named in RELAY_CAPABILITIES but no engine offers them, so a
+-- call asking for one has always died at RELAY_CAPABILITY_UNSUPPORTED before
+-- any grant was consulted — seeding those would hand out something that never
+-- worked. `fetching` can never ride a token at all, and `web` is the one
+-- capability the code insists the Owner approve on its own (see
+-- NEEDS_OWN_TOKEN_APPROVAL): a migration is precisely the side effect that
+-- rule exists to forbid, so neither is seeded here.
+--
+-- Only rows that have never been written are touched, so re-running against a
+-- database where the Owner has since ticked a key cannot undo their choice.
+-- Keys made AFTER this migration start at nothing, which is the rule the
+-- Token screen was built on: a key gains reach only when somebody ticks it.
+UPDATE app_profiles
+   SET capabilities = '["vision","reading"]'
+ WHERE capabilities IS NULL;

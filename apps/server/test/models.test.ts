@@ -295,6 +295,30 @@ describe("provider-settings", () => {
       setDefaultModelProvider({ secretsDirectory: dir }, "openai"),
     ).toThrow();
   });
+
+  // 🔴 Connecting adds a backend; it never re-points a row the Owner has
+  // already answered. The picture slot learnt this the hard way — it used to be
+  // written straight from the Cloudflare form, so saving a token switched
+  // Drawing to Workers AI over the Owner's own choice, every single time.
+  it("fills an empty engine slot on connect and never overwrites a chosen one", () => {
+    const dir = mkdtempSync(resolve(tmpdir(), "vaenyx-models-"));
+    temporaryDirectories.push(dir);
+    const stored = () =>
+      JSON.parse(readFileSync(resolve(dir, "model-providers.json"), "utf8")) as {
+        imageOutput?: { provider?: string };
+        vision?: { provider?: string };
+      };
+
+    connectModelProvider({ secretsDirectory: dir }, "zhipu", { apiKey: "sk-z" });
+    expect(stored().imageOutput?.provider).toBe("zhipu");
+    expect(stored().vision?.provider).toBe("zhipu");
+
+    // A second capable backend arrives. Both slots are answered already, so
+    // both stay where the Owner left them.
+    connectModelProvider({ secretsDirectory: dir }, "openai", { apiKey: "sk-o" });
+    expect(stored().imageOutput?.provider).toBe("zhipu");
+    expect(stored().vision?.provider).toBe("zhipu");
+  });
 });
 
 describe("resolveProvider (per-chat pinning)", () => {

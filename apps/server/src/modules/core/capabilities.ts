@@ -286,9 +286,15 @@ export function noticeArrivedCapabilities(database: DatabaseHandle): Capability[
 
 // ── The three layers ─────────────────────────────────────────────────────────
 //
-//   global switch (one per capability)     ← the ceiling
-//     ∩ mode switch (Owner sets per mode)  ← may only be stricter
+//   global switch (one per capability)      ← the ceiling
+//     ∩ mode switch (Owner sets per mode)   ← may only be stricter
+//     ∩ app key grant (Owner sets per key)  ← may only be stricter
 //       ∩ what the Method declared          ← may only be stricter
+//
+// The middle two never meet: a browser session is in a mode and has no key, a
+// call arriving on a key has no session and so no mode. One or the other sits
+// under the ceiling, and the Method's own declaration sits under whichever it
+// was.
 //
 // 🔴 A lower layer may only ever NARROW. A capability switched off globally is
 // out of reach of every mode, every Method and every Token, whatever they say
@@ -315,17 +321,15 @@ export function readGlobalCapabilities(
   return out;
 }
 
-// The ceiling asked about ONE capability, at the door of the code that is
-// about to do the thing. Everywhere that describes a photo, transcribes a
-// recording, speaks, draws or reads a document calls this first — the card the
-// Owner reads says an off switch is "out of reach of every Method, every mode
-// and every app key", and for a long time that was true only of the two Method
-// routes. A ceiling nothing consults is decoration.
+// The ceiling asked about ONE capability where there is no session to be in a
+// mode — an outside app calling the relay, a Test the Owner pressed in User
+// Mode. Anything that DOES have a session must ask `capabilityRefusedBy`
+// instead and pass its mode, or the middle layer is skipped.
 export function capabilityOff(
   database: DatabaseHandle,
   capability: Capability,
 ): boolean {
-  return readGlobalCapabilities(database)[capability] !== true;
+  return capabilityRefusedBy(database, capability, null) !== null;
 }
 
 export function writeGlobalCapabilities(
@@ -350,6 +354,9 @@ export function writeGlobalCapabilities(
 
 // A mode's own list. NULL/absent means "this mode adds no restriction", which is
 // deliberately different from an empty list ("this mode allows nothing").
+//
+// Every mode created before the Owner had a screen to narrow one sits at NULL,
+// so nothing they already made changes behaviour the day this arrives.
 export function readModeCapabilities(
   database: DatabaseHandle,
   modeId: string | null,
@@ -368,10 +375,24 @@ export function readModeCapabilities(
   }
 }
 
-export interface CapabilityDecision {
+// WHICH layer said no. A session can only ever meet the first two — it has a
+// mode or it does not — so it gets its own narrower type: nothing reading a
+// session's refusal should have to handle a reason a session can never carry.
+export type SessionRefusalReason = "global" | "mode";
+export type CapabilityRefusalReason =
+  | SessionRefusalReason
+  | "token"
+  | "never-via-token";
+
+export interface SessionCapabilityDecision {
   allowed: Capability[];
   /** Why each declared capability was refused — the Owner needs the reason. */
-  refused: { capability: Capability; reason: "global" | "mode" }[];
+  refused: { capability: Capability; reason: SessionRefusalReason }[];
+}
+
+export interface CapabilityDecision {
+  allowed: Capability[];
+  refused: { capability: Capability; reason: CapabilityRefusalReason }[];
 }
 
 // Intersect the three layers. Everything the Method declared is checked against
@@ -380,11 +401,11 @@ export function decideCapabilities(
   database: DatabaseHandle,
   declared: Capability[],
   modeId: string | null,
-): CapabilityDecision {
+): SessionCapabilityDecision {
   const global = readGlobalCapabilities(database);
   const mode = readModeCapabilities(database, modeId);
   const allowed: Capability[] = [];
-  const refused: CapabilityDecision["refused"] = [];
+  const refused: SessionCapabilityDecision["refused"] = [];
   for (const capability of declared) {
     if (!global[capability]) {
       refused.push({ capability, reason: "global" });
@@ -397,6 +418,81 @@ export function decideCapabilities(
     allowed.push(capability);
   }
   return { allowed, refused };
+}
+
+// The three layers asked about ONE capability, at the door of the code that is
+// about to do the thing. Everywhere that describes a photo, transcribes a
+// recording, speaks, draws or reads a document calls this first — the card the
+// Owner reads says an off switch is "out of reach of every Method, every mode
+// and every app key", and a ceiling nothing consults is decoration.
+//
+// It answers WHICH layer said no, because the two refusals have two different
+// fixes and telling somebody inside a mode to go and change a setting they
+// cannot reach is worse than saying nothing.
+export function capabilityRefusedBy(
+  database: DatabaseHandle,
+  capability: Capability,
+  modeId: string | null,
+): SessionRefusalReason | null {
+  return (
+    decideCapabilities(database, [capability], modeId).refused[0]?.reason ??
+    null
+  );
+}
+
+// 🔴 A mode may only ever NARROW, so switching one of these ON for a capability
+// the instance has switched off is not a narrowing and is REFUSED rather than
+// stored. Storing it quietly would put a tick on the Owner's screen that means
+// nothing — a switch that looks set and does nothing is exactly the state the
+// three layers exist to prevent, and it would come alive by itself the day the
+// global switch went back on.
+export class ModeAboveCeilingError extends Error {
+  readonly capabilities: Capability[];
+  constructor(capabilities: Capability[]) {
+    super(`MODE_ABOVE_CEILING:${capabilities.join(",")}`);
+    this.name = "ModeAboveCeilingError";
+    this.capabilities = capabilities;
+  }
+}
+
+// Write a mode's own list. The body is a CHANGE SET rather than the whole list,
+// for the same reason `writeGlobalCapabilities` takes one: the screen sends the
+// switch that was just flipped, and a full list from a screen that went stale
+// would silently undo whatever changed underneath it.
+export function writeModeCapabilities(
+  database: DatabaseHandle,
+  modeId: string,
+  changes: Partial<Record<Capability, boolean>>,
+): Capability[] {
+  const global = readGlobalCapabilities(database);
+  const aboveCeiling = CAPABILITIES.filter(
+    (capability) => changes[capability] === true && !global[capability],
+  );
+  if (aboveCeiling.length > 0) throw new ModeAboveCeilingError(aboveCeiling);
+
+  // NULL so far means "adds no restriction of its own", so the starting point
+  // is everything — everything the CEILING allows, which is the whole point of
+  // the filter. Seeding from all seven would quietly write down capabilities
+  // the instance currently refuses, and the mode would then be handed them by
+  // itself the day that global switch went back on. Narrowing is sticky: a
+  // mode gains a capability only when the Owner ticks it here, looking at it.
+  //
+  // From the first switch the Owner touches, this mode carries an explicit list
+  // and keeps one, so a mode somebody deliberately narrowed also never gains a
+  // capability that is added to the vocabulary later.
+  const current =
+    readModeCapabilities(database, modeId) ??
+    CAPABILITIES.filter((capability) => global[capability]);
+  const next = CAPABILITIES.filter((capability) =>
+    typeof changes[capability] === "boolean"
+      ? changes[capability] === true
+      : current.includes(capability),
+  );
+  const result = database.sqlite
+    .prepare("UPDATE modes SET capabilities = ?, updated_at = ? WHERE id = ?")
+    .run(JSON.stringify(next), new Date().toISOString(), modeId);
+  if (result.changes === 0) throw new Error("MODE_NOT_FOUND");
+  return next;
 }
 
 // ── What a Method Token may carry ────────────────────────────────────────────
@@ -419,6 +515,11 @@ export function tokenGrantable(declared: Capability[]): Capability[] {
 
 // global ∩ what this token was granted ∩ what the Method declared — and no mode
 // layer, because a token call has no conversation to be in a mode.
+//
+// Every refusal is REPORTED, including the two that used to drop out silently.
+// A call that quietly comes back without having looked at the picture is the
+// worst of the three outcomes: the app cannot tell a refusal from a bad answer,
+// and neither can the person reading it.
 export function decideTokenCapabilities(
   database: DatabaseHandle,
   declared: Capability[],
@@ -426,13 +527,98 @@ export function decideTokenCapabilities(
 ): CapabilityDecision {
   const base = decideCapabilities(database, declared, null);
   const allowed: Capability[] = [];
-  const refused = [...base.refused];
+  const refused: CapabilityDecision["refused"] = [...base.refused];
   for (const capability of base.allowed) {
-    if (NEVER_VIA_TOKEN.includes(capability)) continue; // never, silently
-    if (!granted.includes(capability)) continue; // not granted to this token
+    if (NEVER_VIA_TOKEN.includes(capability)) {
+      refused.push({ capability, reason: "never-via-token" });
+      continue;
+    }
+    if (!granted.includes(capability)) {
+      refused.push({ capability, reason: "token" });
+      continue;
+    }
     allowed.push(capability);
   }
   return { allowed, refused };
+}
+
+// 🔴 What a key may not be handed, refused at the WRITE and not only at the
+// read. The read already strips `fetching` and meets the ceiling, so nothing
+// unsafe would run either way — but a grant that is stored and then ignored is
+// a tick the Owner can never see on the screen and never take back, and the
+// write is the door a future bug reaches first.
+export type TokenGrantRefusal = "never" | "ceiling" | "approval";
+
+export class TokenGrantRefusedError extends Error {
+  readonly capabilities: Capability[];
+  readonly refusal: TokenGrantRefusal;
+  constructor(capabilities: Capability[], refusal: TokenGrantRefusal) {
+    super(`TOKEN_GRANT_REFUSED:${refusal}:${capabilities.join(",")}`);
+    this.name = "TokenGrantRefusedError";
+    this.capabilities = capabilities;
+    this.refusal = refusal;
+  }
+}
+
+// Write what the Owner granted ONE app key. A change set, like the other two
+// layers: the screen sends the tick that was just made, so a screen that went
+// stale cannot silently undo a grant it never showed.
+//
+// 🔴 A key starts at NOTHING and only ever gains what the Owner ticks, which is
+// the opposite direction from a mode (which starts at everything the ceiling
+// allows and narrows). That asymmetry is deliberate: a mode is this machine
+// wearing a smaller hat, a key is somebody else's program holding a door open.
+// It also means every key issued before this screen existed carries nothing,
+// rather than quietly gaining reach the day the feature arrived.
+export function writeProfileCapabilities(
+  database: DatabaseHandle,
+  profileId: string,
+  changes: Partial<Record<Capability, boolean>>,
+  // The capabilities the Owner approved as their own separate act. Anything in
+  // NEEDS_OWN_TOKEN_APPROVAL has to appear here as well as in `changes`, so
+  // granting it can never be a side effect of ticking something else.
+  approved: Capability[] = [],
+): Capability[] {
+  const turningOn = CAPABILITIES.filter(
+    (capability) => changes[capability] === true,
+  );
+
+  const never = turningOn.filter((capability) =>
+    NEVER_VIA_TOKEN.includes(capability),
+  );
+  if (never.length > 0) throw new TokenGrantRefusedError(never, "never");
+
+  // A tick above the ceiling would show as "off for the whole machine" on the
+  // very screen that just accepted it — invisible, unremovable, and alive again
+  // the day the global switch moved. Refused, exactly like a mode's.
+  const global = readGlobalCapabilities(database);
+  const aboveCeiling = turningOn.filter((capability) => !global[capability]);
+  if (aboveCeiling.length > 0) {
+    throw new TokenGrantRefusedError(aboveCeiling, "ceiling");
+  }
+
+  const unapproved = turningOn.filter(
+    (capability) =>
+      NEEDS_OWN_TOKEN_APPROVAL.includes(capability) &&
+      !approved.includes(capability),
+  );
+  if (unapproved.length > 0) {
+    throw new TokenGrantRefusedError(unapproved, "approval");
+  }
+
+  const current = readProfileCapabilities(database, profileId);
+  const next = tokenGrantable(
+    CAPABILITIES.filter((capability) =>
+      typeof changes[capability] === "boolean"
+        ? changes[capability] === true
+        : current.includes(capability),
+    ),
+  );
+  const result = database.sqlite
+    .prepare("UPDATE app_profiles SET capabilities = ? WHERE id = ?")
+    .run(JSON.stringify(next), profileId);
+  if (result.changes === 0) throw new Error("APP_PROFILE_NOT_FOUND");
+  return next;
 }
 
 // What the Owner granted this particular token. Absent = nothing beyond the
@@ -522,23 +708,151 @@ const PLAIN_WORDS: Record<CapabilityLanguage, Record<Capability, string>> = {
 };
 
 // Never "unsupported" — that reads as broken and sends the Owner looking for a
-// fault that is not there. The two real reasons need two different sentences,
-// because they have two different fixes.
+// fault that is not there. Each layer gets its own sentence, because each has
+// its own fix: a switch in Settings, a mode nobody in it can change, a tick on
+// a key — and one that has no fix at all.
 export function refusedCapabilityMessage(
   capability: Capability,
-  reason: "global" | "mode",
+  reason: CapabilityRefusalReason,
   language: CapabilityLanguage = "en",
 ): string {
   const plain = PLAIN_WORDS[language][capability];
   if (language === "zh") {
-    return reason === "global"
-      ? `这需要${plain},而你把这一项关掉了。要用的话,到设置里打开。`
-      : `这需要${plain},而你当前所在的模式不允许。`;
+    if (reason === "global") {
+      return `这需要${plain},而你把这一项关掉了。要用的话,到设置里打开。`;
+    }
+    if (reason === "mode") return `这需要${plain},而你当前所在的模式不允许。`;
+    if (reason === "token") {
+      return `这需要${plain},而这把 app key 没有拿到这一项。要给的话,在这把钥匙上勾一下。`;
+    }
+    return `这需要${plain},而任何 app key 都拿不到这一项。`;
   }
-  return reason === "global"
-    ? `This needs to ${plain}, and you have that switched off. Turn it on in Settings to use it.`
-    : `This needs to ${plain}, and the mode you are in does not allow it.`;
+  if (reason === "global") {
+    return `This needs to ${plain}, and you have that switched off. Turn it on in Settings to use it.`;
+  }
+  if (reason === "mode") {
+    return `This needs to ${plain}, and the mode you are in does not allow it.`;
+  }
+  // The two token layers, and they need two sentences: one names something the
+  // Owner can go and tick, the other names something nobody can tick at all.
+  // Telling an app to ask for a grant that cannot exist is worse than silence.
+  if (reason === "token") {
+    return `This needs to ${plain}, and this app key was not given that. The Owner can tick it on the key.`;
+  }
+  return `This needs to ${plain}, and no app key can ever be given that.`;
 }
+
+// The refusal the Owner meets when a Method they built will not go out. It is
+// the first sentence of the N3 flow, and the window that follows it is in both
+// languages — so this one has to be too, or a Chinese-reading household is told
+// in English why their own work cannot be shared.
+//
+// The capabilities are named in the Owner's own words rather than by their code
+// names: "fetching" in a sentence is the implementation showing through.
+export function cannotShareMessage(
+  capabilities: Capability[],
+  language: CapabilityLanguage = "en",
+): string {
+  const plain = capabilities.map(
+    (capability) => PLAIN_WORDS[language][capability],
+  );
+  return language === "zh"
+    ? `这个 Method 需要 Vaenyx 还做不到的事(${plain.join("、")}),所以分享不出去。它留在这里,照样能用。`
+    : `This Method needs something Vaenyx cannot do yet (${plain.join(", ")}), so it cannot be shared. It is saved here and keeps working for you.`;
+}
+
+// Why a mode would not take a capability the Owner just tried to switch on for
+// it. It names the fix — the global switch, one card up — because the alternative
+// is a switch that springs back with no explanation.
+export function modeAboveCeilingMessage(
+  capabilities: Capability[],
+  language: CapabilityLanguage = "en",
+): string {
+  const plain = capabilities.map(
+    (capability) => PLAIN_WORDS[language][capability],
+  );
+  return language === "zh"
+    ? `整台机器现在都不能${plain.join("、")},模式里当然也开不了。要开的话,先在上面的「能力」里打开。`
+    : `This machine cannot ${plain.join(" or ")} at all right now, so a mode cannot be allowed to either. Switch it on in Capabilities first.`;
+}
+
+// Why a key would not take a capability the Owner just ticked for it. Three
+// refusals, three sentences, because they have three different answers: one is
+// never possible, one is a switch one card away, and one is simply a second
+// deliberate press.
+export function tokenGrantRefusedMessage(
+  capabilities: Capability[],
+  refusal: TokenGrantRefusal,
+  language: CapabilityLanguage = "en",
+): string {
+  const plain = capabilities.map(
+    (capability) => PLAIN_WORDS[language][capability],
+  );
+  if (language === "zh") {
+    if (refusal === "never") {
+      return `app key 永远不能${plain.join("、")}。这不是一个开关,是钥匙本身带不了的东西。`;
+    }
+    if (refusal === "ceiling") {
+      return `整台机器现在都不能${plain.join("、")},钥匙自然也给不了。要给的话,先在「能力」里打开。`;
+    }
+    return `让一把钥匙${plain.join("、")}是单独的一件事:它可以把这台机器变成别人上网的通道。要给的话,单独确认一次。`;
+  }
+  if (refusal === "never") {
+    return `An app key can never ${plain.join(" or ")}. That is not a setting — it is what a key cannot carry.`;
+  }
+  if (refusal === "ceiling") {
+    return `This machine cannot ${plain.join(" or ")} at all right now, so a key cannot be given it either. Switch it on in Capabilities first.`;
+  }
+  return `Letting a key ${plain.join(" or ")} is its own decision — it can turn this machine into somebody else's way onto the internet. Approve that on its own.`;
+}
+
+// ── The one sentence for a backend that cannot ───────────────────────────────
+//
+// A refusal above is the Owner's own switch saying no. THIS is the other kind
+// of no: the switch is on, the Owner asked, and the backend they happen to be
+// using cannot do it. Three of those live in the probes and two more in the
+// chat turn, and they were five separately worded sentences — which is five
+// sentences that drift, until one of them is quietly wrong about what happened.
+//
+// 🔴 The rule the wording exists to keep: WHEN SOMETHING ELSE DOES THE JOB, IT
+// IS NAMED, and what that costs is named with it. A stand-in that nobody
+// mentions is the failure mode here — the Owner reads an answer about their
+// PDF and never learns that the drawings in it reached nobody.
+//
+// "Vaenyx cannot … with X" rather than "X cannot …" on purpose: sometimes the
+// backend genuinely cannot (a model with no eyes), and sometimes Vaenyx has
+// simply not wired it up for that backend (web search). Both are true from the
+// Owner's seat, and only one of them is true about the backend, so the sentence
+// claims the one that is always true.
+export interface BackendStandIn {
+  /** What did the job instead. Named, never "something else". */
+  by: string;
+  /** What using the stand-in costs, in the Owner's own words. */
+  cost: string;
+}
+
+export function backendCannotMessage(
+  backend: string,
+  capability: Capability,
+  standIn: BackendStandIn | null,
+  language: CapabilityLanguage = "en",
+): string {
+  const plain = PLAIN_WORDS[language][capability];
+  if (language === "zh") {
+    return standIn
+      ? `用${backend},Vaenyx 不能${plain},所以这件事改由${standIn.by}来做 —— ${standIn.cost}。`
+      : `用${backend},Vaenyx 不能${plain},也没有拿别的东西顶上。`;
+  }
+  return standIn
+    ? `Vaenyx cannot ${plain} with ${backend}, so ${standIn.by} did it instead — ${standIn.cost}.`
+    : `Vaenyx cannot ${plain} with ${backend}, and nothing was put in its place.`;
+}
+
+// The tail that turns the note above into something the OWNER hears. The two
+// chat-turn sites talk to the model, not to the person, so without this the
+// stand-in is named to the only party that already knew about it.
+export const SAY_THE_STAND_IN =
+  "Tell the Owner this in your own reply wherever it could change the answer. Never let a stand-in pass as the real thing.";
 
 // The message the Owner sees when a Method reaches for something it never
 // declared. Naming the capability matters: "this Method wants the web but never

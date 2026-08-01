@@ -11,6 +11,7 @@ import type { FastifyRequest } from "fastify";
 
 import type { DatabaseHandle } from "../../db/database.js";
 
+import { readProfileCapabilities } from "./capabilities.js";
 import { loadMethod } from "./methods.js";
 import { loadRoutine } from "./routines.js";
 import { decryptAppToken, encryptAppToken } from "./token-vault.js";
@@ -158,6 +159,10 @@ function toAppProfile(database: DatabaseHandle, row: AppProfileRow): AppProfile 
     allowedRoutineId: row.routine_id,
     allowedSkillIds: allowedSkillIds(database, row.id),
     allowedMethodIds: allowedMethodIds(database, row.id),
+    // What this key may DO, as opposed to which Methods it may call. Read
+    // through the same function the run path uses, so the card can never claim
+    // a capability the run would strip — `fetching` above all.
+    capabilities: readProfileCapabilities(database, row.id),
     fetchRecipe: Boolean(row.fetch_recipe),
     sendFeedback: Boolean(row.send_feedback),
     outputFormat: row.output_format,

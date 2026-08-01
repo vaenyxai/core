@@ -19,6 +19,11 @@ import {
   listGalleryItems,
   listJournalEntries,
 } from "../src/modules/core/routine-storage.js";
+import {
+  decideTokenCapabilities,
+  readProfileCapabilities,
+  writeProfileCapabilities,
+} from "../src/modules/core/capabilities.js";
 import { createMethod, loadMethod } from "../src/modules/core/methods.js";
 import {
   createRoutineFromPlan,
@@ -247,6 +252,86 @@ describe("routine run engine", () => {
       const gallery = listGalleryItems(database, id);
       expect(gallery).toHaveLength(1);
       expect(gallery[0]?.output).toEqual({ text: "s:s:hello" });
+    } finally {
+      database.close();
+    }
+  });
+
+  // A Routine Token is an app key like any other, and a Routine is several
+  // Method runs in a row — so the three layers have to narrow every step. Until
+  // they did, a Routine Token ran on each step's own manifest alone: a grant
+  // ticked on the key changed nothing, and the global switch was not consulted
+  // at all.
+  it("narrows every step by what the app key was granted", async () => {
+    const database = createTestDatabase();
+    const libDir = mkdtempSync(resolve(tmpdir(), "vaenyx-routine-caps-lib-"));
+    tempDirectories.push(libDir);
+    const method = createMethod(libDir, {
+      name: "Looker",
+      description: "Looks at things.",
+      recipe: "Look at it.",
+      inputSchema: { type: "object" },
+      outputSchema: { type: "object" },
+      tags: [],
+    });
+    // createMethod writes the old empty-permissions manifest; this Method
+    // declares two capabilities, which is what gives the layers something to
+    // narrow.
+    writeFileSync(
+      join(libDir, method.id, "manifest.json"),
+      JSON.stringify({ capabilities: ["vision", "web"] }),
+      "utf8",
+    );
+    const { dir, id } = writeTempRoutine({
+      name: "Look",
+      owner: "test",
+      version: "1.0.0",
+      tags: [],
+      mode: "one-shot",
+      storage: { journal: false, gallery: false },
+      deps: [{ methodId: method.id, version: "1.0.0" }],
+      flow: [{ id: "a", methodId: method.id, from: "journal" }],
+    });
+
+    database.sqlite
+      .prepare(
+        "INSERT INTO app_profiles (id, name, token_hash, token_prefix) VALUES (?, ?, ?, ?)",
+      )
+      .run("key-1", "Quote app", "hash-key-1", "vaenyx_app_");
+    writeProfileCapabilities(database, "key-1", { vision: true });
+
+    try {
+      const seen: string[][] = [];
+      await runRoutine(
+        database,
+        dir,
+        libDir,
+        id,
+        { text: "hello" },
+        new AbortController().signal,
+        {
+          stateless: true,
+          narrow: (declared) =>
+            decideTokenCapabilities(
+              database,
+              declared,
+              readProfileCapabilities(database, "key-1"),
+            ).allowed,
+          runStep: (_method, _input, _signal, allowed) => {
+            seen.push([...allowed]);
+            return Promise.resolve({
+              output: {},
+              outputValid: true,
+              raw: "",
+              webSearchUsed: false,
+            });
+          },
+        },
+      );
+
+      // The Method declared both; the key was only ever given one. `web` was
+      // never granted, so the step runs without it rather than quietly with it.
+      expect(seen).toEqual([["vision"]]);
     } finally {
       database.close();
     }

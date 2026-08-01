@@ -238,6 +238,27 @@ export function fillEngineDefaults(
     changed = true;
   }
 
+  // The fourth slot, and it behaves like the other three: EMPTY fills, a set
+  // one is never overwritten. It used to be written straight from the Cloudflare
+  // connect form instead, which meant pasting a token — or opening Edit on a
+  // connected card and saving again — silently re-pointed Drawing at Workers AI
+  // over whatever the Owner had chosen on that row. "Vaenyx does not quietly
+  // switch to another model" is a promise both manuals make; connecting a
+  // backend adds one, and which one draws stays the Drawing row's answer.
+  const imageProvider = connections.imageOutput?.provider;
+  if (!imageProvider) {
+    const pick = IMAGE_CAPABLE_PROVIDERS.find(hasKey);
+    if (pick) {
+      connections.imageOutput = { provider: pick };
+      changed = true;
+    }
+  } else if (!hasKey(imageProvider)) {
+    const pick = IMAGE_CAPABLE_PROVIDERS.find(hasKey);
+    if (pick) connections.imageOutput = { provider: pick };
+    else delete connections.imageOutput;
+    changed = true;
+  }
+
   return changed;
 }
 

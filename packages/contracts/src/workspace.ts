@@ -780,6 +780,26 @@ export const UpdateModeRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// WHAT A MODE MAY DO — the middle of the three capability layers
+// (global ∩ mode ∩ what the Method declared). `global` and `implemented` ride
+// along with the mode's own list because the screen has to show a capability
+// the INSTANCE has switched off as unavailable rather than as a switch that
+// would do nothing: a mode can only ever narrow, so its rows are meaningless
+// without the ceiling they are measured against.
+export const ModeCapabilitiesSchema = Type.Object(
+  {
+    modeId: Type.String(),
+    modeName: Type.String(),
+    /** One entry per capability: what this mode allows, before the ceiling. */
+    capabilities: Type.Record(Type.String(), Type.Boolean()),
+    /** False until the Owner narrows this mode at all (the stored column is NULL). */
+    narrowed: Type.Boolean(),
+    global: Type.Record(Type.String(), Type.Boolean()),
+    implemented: Type.Record(Type.String(), Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
 // A paired device and the mode it opens into (null = User Mode).
 export const DeviceModeSchema = Type.Object(
   {
@@ -891,6 +911,12 @@ export const AppProfileSchema = Type.Object(
     allowedRoutineId: Type.Union([Type.String(), Type.Null()]),
     allowedSkillIds: Type.Array(Type.String()),
     allowedMethodIds: Type.Array(Type.String()),
+    // THE THIRD LAYER (global ∩ what this key was granted ∩ what the Method
+    // declared). What this key may DO, as opposed to which Methods it may
+    // call: this key may look at pictures, that one may not draw. Empty is the
+    // starting point and the honest answer for every key issued before the
+    // Owner had a screen to tick one — a key never gains reach by itself.
+    capabilities: Type.Array(Type.String()),
     // Mode B: may this app fetch a method's recipe (instructions + schemas +
     // examples) to run on its own model, instead of only Vaenyx running it?
     fetchRecipe: Type.Boolean(),
@@ -938,6 +964,23 @@ export const CreateAppProfileResponseSchema = Type.Object(
   {
     profile: AppProfileSchema,
     token: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+// What one app key may DO. A CHANGE SET, like the other two capability layers:
+// the screen sends the tick that was just made, so a screen that went stale
+// cannot silently undo a grant it never showed.
+//
+// 🔴 `approve` is not decoration. Anything the code says needs its own approval
+// — `web` today, because a key that may reach the internet can turn this
+// machine into somebody else's way onto it — has to be named here as well as
+// ticked in `changes`. That makes granting it a separate deliberate act at the
+// wire, not only in the screen that happens to be in front of the Owner.
+export const UpdateAppProfileCapabilitiesRequestSchema = Type.Object(
+  {
+    changes: Type.Record(Type.String(), Type.Boolean()),
+    approve: Type.Optional(Type.Array(Type.String())),
   },
   { additionalProperties: false },
 );
@@ -1918,6 +1961,23 @@ export const RunMethodResponseSchema = Type.Object(
     outputValid: Type.Boolean(),
     raw: Type.String(),
     webSearchUsed: Type.Boolean(),
+    // What the Method declared and the run was NOT allowed to reach for, and
+    // which of the three layers said no. A run that quietly came back without
+    // having looked at the picture is the worst outcome there is: the caller
+    // cannot tell a refusal from a bad answer, and neither can the person
+    // reading it. Absent means nothing was refused.
+    capabilityRefusals: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            capability: Type.String(),
+            reason: Type.String(),
+            message: Type.String(),
+          },
+          { additionalProperties: false },
+        ),
+      ),
+    ),
   },
   { additionalProperties: false },
 );
@@ -2260,6 +2320,7 @@ export type SetLocalVoiceRequest = Static<typeof SetLocalVoiceRequestSchema>;
 export type Mode = Static<typeof ModeSchema>;
 export type CreateModeRequest = Static<typeof CreateModeRequestSchema>;
 export type UpdateModeRequest = Static<typeof UpdateModeRequestSchema>;
+export type ModeCapabilities = Static<typeof ModeCapabilitiesSchema>;
 export type DeviceMode = Static<typeof DeviceModeSchema>;
 export type SetDeviceModeRequest = Static<typeof SetDeviceModeRequestSchema>;
 export type SwitchModeRequest = Static<typeof SwitchModeRequestSchema>;
@@ -2331,6 +2392,9 @@ export type UpdateAppProfileRequest = Static<
 >;
 export type UpdateAppProfileResponse = Static<
   typeof UpdateAppProfileResponseSchema
+>;
+export type UpdateAppProfileCapabilitiesRequest = Static<
+  typeof UpdateAppProfileCapabilitiesRequestSchema
 >;
 export type RenameMethodRequest = Static<typeof RenameMethodRequestSchema>;
 export type DraftMethodRequest = Static<typeof DraftMethodRequestSchema>;
