@@ -981,17 +981,49 @@ export async function createAskVaenyxMessage(
             protectedPaths: [options.dataDirectory, options.secretsDirectory],
           })
         : null;
-    // 🔴 Degrade BY NAME, never silently. Only the Claude subscription channel
-    // has a real tool loop — every other backend answers in one shot with
-    // nowhere to put a request for a file. Left unsaid, the Owner would see the
-    // switch on, the folders listed, and a model cheerfully answering about a
-    // file it never opened. That is exactly the shape `allowWeb` had while it
-    // was a silent no-op on four backends.
+    // Which model the Owner picked must not decide whether their own folders
+    // can be read (Oskar, 2026-08-01: "不应该限制到claude"). Tying this to one
+    // backend was the implementation showing through the product — it was built
+    // on that backend's file tool, so only that backend could do it.
+    //
+    // The other way round works everywhere: VAENYX opens the file, against the
+    // same whitelist, and hands over the words. A backend with a real tool loop
+    // still gets one, because it can go and look a second time when the first
+    // file was the wrong one. Everything else gets the listing up front and the
+    // named file already opened — which covers what a household actually does
+    // ("what does quote-march.txt say"), and hands the model no tool that can
+    // reach a disk at all.
     const canFetch =
       fetchAccess !== null &&
       FETCHING_CAPABLE_PROVIDER_IDS.includes(provider.id);
     if (fetchAccess && !canFetch) {
-      projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner has switched on "Files on this machine" and named folders for it, but ${provider.name} cannot open files — it answers in one round and has no way to ask for one. If they ask about a file, say plainly that ${provider.name} cannot open files on this machine and that the Claude subscription backend is the one that can. Never guess at what a file contains.`;
+      const entries = fetchAccess.list().slice(0, 200);
+      const names = entries.map((entry) => entry.name);
+      // Longest first: "notes.txt" must not win over "notes.txt.bak" when the
+      // Owner named the second one.
+      const asked = [...names]
+        .sort((left, right) => right.length - left.length)
+        .find((name) =>
+          trimmedContent.toLowerCase().includes(name.toLowerCase()),
+        );
+      let opened: string | null = null;
+      if (asked) {
+        try {
+          const file = fetchAccess.open(asked);
+          opened = `The Owner named ${asked}, so it was opened for you and its contents are below, between the markers. Answer from it; do not guess at anything it does not say.\n---begin ${asked}---\n${file.text}\n---end ${asked}---`;
+        } catch (error) {
+          // A refusal here is the whitelist doing its job, and saying which file
+          // and why beats a model inventing an answer about it.
+          opened = `The Owner named ${asked}, but it could not be opened: ${error instanceof Error ? error.message : "refused"}. Say so plainly rather than guessing what it contains.`;
+        }
+      }
+      const listing =
+        names.length > 0
+          ? `Files the Owner has made available on this machine: ${names.join(", ")}. You cannot open these yourself — name one in your reply and the Owner can ask again for it, or ask them which one they mean. Never guess at what any of them contains.`
+          : `The Owner has switched on "Files on this machine" but the folders they named hold no readable files.`;
+      projectContext = [projectContext, listing, opened]
+        .filter((part) => part && part.length > 0)
+        .join("\n\n");
     }
 
     // A document fed to this turn. A backend that reads PDFs natively gets the

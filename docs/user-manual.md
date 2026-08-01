@@ -295,5 +295,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.83** · last updated 2026-08-01.
+Manual for **v0.3.1-dev.84** · last updated 2026-08-01.
 Keep this file up to date whenever a feature changes.

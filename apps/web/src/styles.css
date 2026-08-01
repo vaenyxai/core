@@ -1629,6 +1629,20 @@ textarea::placeholder {
   margin-bottom: var(--space-2);
 }
 
+/* The three headings every drawer has, in the same order on every row. */
+.drawer-head {
+  margin: var(--space-4) 0 var(--space-1);
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.capability-setup > .drawer-head:first-child {
+  margin-top: 0;
+}
+
 /* The Test button sits ON the row, beside the model it tests. */
 .capability-row-test {
   flex: none;

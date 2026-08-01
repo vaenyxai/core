@@ -10449,34 +10449,33 @@ function CapabilitiesPanel() {
   }
 
   function hearingSetup() {
-    return (
-      <>
+    return drawer({
+      what: (
         <p className="settings-card-copy">
           {lang === "zh"
             ? "麦克风按钮 —— 你说的话变成文字。"
             : "The mic button — what you say becomes text."}
         </p>
-        <FreePick
-          href="https://console.groq.com"
-          pick={freePicks?.items.voiceIn}
-        >
-          {lang === "zh"
-            ? "Groq —— 免费 key,不用绑卡。"
-            : "Groq — free key, no card."}
-        </FreePick>
-        {freeAnswerLine(freePicks?.items.voiceIn)}
-        {/* The one row with no Test button, and the reason is worth saying out
-            loud rather than leaving as a gap: a real test needs a real
-            recording of a real voice, and there is none on this machine to
-            send. Making one with the voice on the row above would tie two
-            engines together, so a failure could not be pinned on either. */}
-        <p className="settings-card-copy text-faint">
-          {lang === "zh"
-            ? "这一项 Vaenyx 自己测不了 —— 它得有一段真人说话的录音。到聊天里按一下麦克风说几句:你说的话应该变成文字出现。"
-            : "Vaenyx cannot test this one for you — it would need a real recording of a real voice. Press the microphone in a chat and say a few words: what you said should come back as text."}
-        </p>
-      </>
-    );
+      ),
+      who: (
+        <>
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "转写在这一行选的那个服务上做,录音发过去,回来的是文字。"
+              : "The transcribing happens at whichever service this row is set to: the recording goes there, words come back."}
+          </p>
+          <FreePick
+            href="https://console.groq.com"
+            pick={freePicks?.items.voiceIn}
+          >
+            {lang === "zh"
+              ? "Groq —— 免费 key,不用绑卡。"
+              : "Groq — free key, no card."}
+          </FreePick>
+          {freeAnswerLine(freePicks?.items.voiceIn)}
+        </>
+      ),
+    });
   }
 
   function localVoiceOptions(voiceLang: "zh" | "en"): PickerOption[] {
@@ -10491,11 +10490,14 @@ function CapabilitiesPanel() {
   }
 
   function speakingSetup() {
-    return (
-      <>
+    return drawer({
+      what: (
         <p className="settings-card-copy">
           {lang === "zh" ? "回复念出来。" : "Replies read aloud."}
         </p>
+      ),
+      settings: (
+        <>
         {/* Always reachable, not revealed by first choosing "local" in the
             row's chooser (Oskar, 2026-07-31): the download IS the setup, and
             setup you can only reach by first choosing the thing you have not
@@ -10667,39 +10669,59 @@ function CapabilitiesPanel() {
             : "Local Voice — free forever, works offline."}
         </FreePick>
         {freeAnswerLine(freePicks?.items.voiceOut)}
-      </>
-    );
+        </>
+      ),
+      who: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "跟这一行选的引擎走。本机语音在这台电脑上生成,什么都不出去、也没有每次的费用;Gemini 那种是发出去合成的,声音更自然。"
+            : "Whichever engine this row is set to. The voice on this machine is generated here — nothing leaves and there is no per-use cost; Gemini and the like synthesise it away from here and sound more natural."}
+        </p>
+      ),
+    });
   }
 
   function visionSetup() {
-    return (
-      <>
+    return drawer({
+      what: (
         <p className="settings-card-copy">
           {lang === "zh"
             ? "相机按钮 —— 一张照片变成文字。"
             : "The camera button — a photo becomes words."}
         </p>
-        <FreePick
-          href="https://aistudio.google.com/apikey"
-          pick={freePicks?.items.vision}
-        >
-          {lang === "zh"
-            ? "Gemini —— Google AI Studio 的免费 key。"
-            : "Gemini — free Google AI Studio key."}
-        </FreePick>
-        {freeAnswerLine(freePicks?.items.vision)}
-      </>
-    );
+      ),
+      who: (
+        <>
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "照片直接发给这一行选的模型。有的模型自己就会看图,有的得靠别人先描述一遍 —— 这一行选的就是真正看图的那个。"
+              : "The photo goes to the model this row is set to. Some models look at a picture first-hand; this row is the one that actually does the looking."}
+          </p>
+          <FreePick
+            href="https://aistudio.google.com/apikey"
+            pick={freePicks?.items.vision}
+          >
+            {lang === "zh"
+              ? "Gemini —— Google AI Studio 的免费 key。"
+              : "Gemini — free Google AI Studio key."}
+          </FreePick>
+          {freeAnswerLine(freePicks?.items.vision)}
+        </>
+      ),
+    });
   }
 
   function drawingSetup() {
-    return (
-      <>
+    return drawer({
+      what: (
         <p className="settings-card-copy">
           {lang === "zh"
             ? "在聊天里说一句,就画出一张图。关掉,Vaenyx 就不会去画。"
             : "Ask in chat and a picture is made. Off means Vaenyx will not try."}
         </p>
+      ),
+      settings: (
+        <>
         {/* Cloudflare's token is typed HERE rather than under Models: it is the
             one engine a household adds solely to make pictures, and sending
             them to a different page to paste it is how a working setting turns
@@ -10787,8 +10809,16 @@ function CapabilitiesPanel() {
         </FreePick>
         {freeAnswerLine(freePicks?.items.image)}
         {imageError ? <p className="form-error">{imageError}</p> : null}
-      </>
-    );
+        </>
+      ),
+      who: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "跟这一行选的引擎走,跟看图的那个是两回事 —— 会看图的模型不一定会画。Cloudflare Workers AI 和智谱是免费的。"
+            : "Whichever engine this row is set to, which is a different thing from the one that looks at pictures — a model that can see one cannot necessarily make one. Cloudflare Workers AI and Zhipu are free."}
+        </p>
+      ),
+    });
   }
 
   // Every refusal has a different fix, so each one gets its own sentence. A
@@ -10841,13 +10871,16 @@ function CapabilitiesPanel() {
   }
 
   function fetchingSetup() {
-    return (
-      <>
+    return drawer({
+      what: (
         <p className="settings-card-copy">
           {lang === "zh"
             ? "只有你在下面点名的文件夹,Vaenyx 才能打开里面的文字文件。没有点名之前,就算开关是开的,它也一个字都读不到。"
             : "Vaenyx can open text files from the folders you name here, and nowhere else. Until you name one, the switch on its own reads nothing at all."}
         </p>
+      ),
+      settings: (
+        <>
         <DoorList
           addLabel={lang === "zh" ? "加上" : "Add"}
           draft={folderDraft}
@@ -10860,43 +10893,62 @@ function CapabilitiesPanel() {
           }
           setDraft={setFolderDraft}
         />
-        {/* Who opens the file matters more than which model answers, so it is
-            said here rather than left to be inferred from the row's chooser. */}
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "开文件的是 Vaenyx 自己,不是模型 —— 模型拿到的只是文字,它没有任何能碰到硬盘的工具。所以主模型是哪个都行。文档和扫描件走聊天里的附件按钮,那是「读文档」。"
-            : "Vaenyx opens the file, not the model — the model is handed words and never gets a tool that can touch a disk. So it works with whichever main model you use. Documents and scans go through the chat's attach button instead — that is Reading."}
-        </p>
         {folderErrors.map((line) => (
           <p className="form-error" key={line}>
             {line}
           </p>
         ))}
-      </>
-    );
+        </>
+      ),
+      who: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "开文件的是 Vaenyx 自己,不是模型 —— 模型拿到的只是文字,它没有任何能碰到硬盘的工具。所以主模型是哪个都行。文档和扫描件走聊天里的附件按钮,那是「读文档」。"
+            : "Vaenyx opens the file, not the model — the model is handed words and never gets a tool that can touch a disk. So it works with whichever main model you use. Documents and scans go through the chat's attach button instead — that is Reading."}
+        </p>
+      ),
+    });
   }
 
   // Reading and Web have no key and no engine of their own — they ride the main
   // model — so their drawers hold the one thing that was missing: what the row
   // actually means on this machine, and a way to try it.
   function readingSetup() {
-    return (
-      <p className="settings-card-copy">
-        {lang === "zh"
-          ? "在聊天里用附件按钮丢进来的 PDF。怎么读要看主模型:Claude 会把每一页当图片和文字一起读;别的模型只拿到本机抠出来的文字,图和表格它看不见。"
-          : "A PDF you attach in a chat. How it gets read depends on your main model: Claude takes every page as picture and text; every other model is handed words pulled out of the PDF here, so drawings and tables never reach it."}
-      </p>
-    );
+    return drawer({
+      what: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "在聊天里用附件按钮丢进来的 PDF 或文档。"
+            : "A PDF or document you attach in a chat with the attach button."}
+        </p>
+      ),
+      who: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "跟主模型走,但怎么读不一样:Claude 把每一页当图片和文字一起读;别的模型只拿到本机抠出来的文字,图和表格它看不见。超过十页会先问你,因为那是真花钱的。"
+            : "It rides the main model, but how it reads differs: Claude takes every page as picture and text; every other model is handed words pulled out of the file here, so drawings and tables never reach it. Over ten pages you are asked first, because that costs real money."}
+        </p>
+      ),
+    });
   }
 
   function webSetup() {
-    return (
-      <p className="settings-card-copy">
-        {lang === "zh"
-          ? "回答的时候上网查。今天只有 Codex CLI (ChatGPT) 和 Claude(订阅)这两个后台真的会去搜;别的模型只能用它训练时记住的东西回答。"
-          : "Looking things up on the internet while it answers. Only the Codex CLI (ChatGPT) and Claude (Subscription) backends really search today; every other model answers from what it memorised when it was trained."}
-      </p>
-    );
+    return drawer({
+      what: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "回答的时候上网查一下,而不是只用它记住的东西。"
+            : "Looking something up on the internet while it answers, instead of answering only from memory."}
+        </p>
+      ),
+      who: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "跟主模型走。今天只有 Codex CLI (ChatGPT) 和 Claude(订阅)真的会去搜;别的模型只能用训练时记住的东西回答,而且答错的时候一样自信 —— 所以这一项默认是开的。"
+            : "It rides the main model. Only the Codex CLI (ChatGPT) and Claude (Subscription) backends really search today; every other model answers from what it memorised when it was trained, and sounds just as certain when that is out of date — which is why this one ships on."}
+        </p>
+      ),
+    });
   }
 
   // Three outcomes, never merged: it worked, it failed in the failing side's
@@ -10941,6 +10993,40 @@ function CapabilitiesPanel() {
       <p className={`capability-test-result ${result.status}`}>
         {`${mark} ${result.engine ? `${result.engine}${lang === "zh" ? ":" : ": "}` : ""}${result.detail}`}
       </p>
+    );
+  }
+
+  // Every drawer is the same three parts, in the same order (Oskar: 抽屉内容做到
+  //完全统一). A drawer that is laid out differently on each row makes you read
+  // each row from scratch; laid out the same, you learn it once and then you
+  // are only reading the words that changed. The parts answer the three
+  // questions in the order they get asked: what IS this, what do I set, and
+  // what actually does it.
+  function drawer(parts: {
+    /** What the capability is, in one line. */
+    what: ReactNode;
+    /** Its own settings, if it has any of its own. */
+    settings?: ReactNode;
+    /** Who really performs it, and what happens when nothing can. */
+    who: ReactNode;
+  }) {
+    return (
+      <>
+        <p className="drawer-head">{lang === "zh" ? "这是什么" : "What it is"}</p>
+        {parts.what}
+        {parts.settings ? (
+          <>
+            <p className="drawer-head">
+              {lang === "zh" ? "它自己的设置" : "Its own settings"}
+            </p>
+            {parts.settings}
+          </>
+        ) : null}
+        <p className="drawer-head">
+          {lang === "zh" ? "谁真的在做" : "What actually does it"}
+        </p>
+        {parts.who}
+      </>
     );
   }
 
