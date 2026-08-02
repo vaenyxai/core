@@ -78,14 +78,17 @@ Backup Password）。
 
 1. **重新连模型。****Settings → AI Settings → Models** —— 用 ChatGPT 登录，或者
    粘贴一个 API key。没连模型之前什么都跑不起来。
-2. **确认自启只在新机上。** 新机是安装时注册好的，旧机在上面第 5 步已经移除。
-3. **重设备份设置。** Backup Folder、Keep Most Recent、Automatic Backup、Backup
+2. **东西都拷完之后,把 `Vaenyx-Setup.cmd` 再跑一次。**复制或移动过来的文件夹会
+   带着或继承原来位置的权限,把这台电脑上其他 Windows 账号挡在 `userdata\` 外面的
+   那把锁不会跟着文件走 —— 重跑一次安装脚本就补回去了。
+3. **确认自启只在新机上。** 新机是安装时注册好的，旧机在上面第 5 步已经移除。
+4. **重设备份设置。** Backup Folder、Keep Most Recent、Automatic Backup、Backup
    Password 在新机上都是空的。旧的 Backup Folder 如果指向一个这台机器上不存在的
    盘符，请重新设一个。
-4. **手机访问要重做（如果你之前配过）。** Tailscale 是按机器配的：在新电脑上装好
+5. **手机访问要重做（如果你之前配过）。** Tailscale 是按机器配的：在新电脑上装好
    官方客户端，再运行一次 `Vaenyx-Connect-Tailscale.cmd`。
-5. **在新电脑上重新做一次备份**，让这台机器上的第一份备份是你有意做的。
-6. 以上全部跑通之后，再去清理旧电脑的 Vaenyx 文件夹 —— 记住删文件夹 = 连里面的
+6. **在新电脑上重新做一次备份**，让这台机器上的第一份备份是你有意做的。
+7. 以上全部跑通之后，再去清理旧电脑的 Vaenyx 文件夹 —— 记住删文件夹 = 连里面的
    数据一起删掉。
 
 ## 出问题时

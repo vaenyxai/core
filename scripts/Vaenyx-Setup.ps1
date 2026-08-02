@@ -78,6 +78,9 @@ $Messages = @{
   "build.ok"        = @{ en = "Ready to run."; zh = "已准备就绪。" }
   "log.at"          = @{ en = "The full log is at"; zh = "完整日志在" }
   "auto.skipped"    = @{ en = "Skipped (asked for with -SkipAutostart)."; zh = "已跳过(使用了 -SkipAutostart)。" }
+  "acl.doing"       = @{ en = "Locking the userdata folder to this Windows account, so other accounts on this computer cannot open your chats, backups and sign-ins."; zh = "把 userdata 文件夹锁定到当前 Windows 账号 —— 这台电脑上的其他账号将打不开你的聊天、备份和登录信息。" }
+  "acl.ok"          = @{ en = "userdata is locked to this account (plus Windows itself and Administrators)."; zh = "userdata 已锁定:只有当前账号、管理员和 Windows 系统能打开。" }
+  "acl.fail"        = @{ en = "Could not lock the userdata folder. Vaenyx still works, but other accounts on this computer can open it."; zh = "userdata 没锁上。Vaenyx 照常可用,但这台电脑上的其他账号能打开它。" }
   "auto.missing"    = @{ en = "Vaenyx-Service-Run.cmd is missing; skipping the autostart step."; zh = "缺少 Vaenyx-Service-Run.cmd,跳过自启设置。" }
   "auto.ask"        = @{ en = "Windows will ask for permission once - this is the only step that needs it."; zh = "Windows 会请求一次授权 —— 整个安装只有这一步需要。" }
   "auto.why"        = @{ en = "It registers Vaenyx to start with the computer and restart itself if it stops."; zh = "用于让 Vaenyx 随电脑启动,并在意外退出时自动拉起。" }
@@ -501,6 +504,40 @@ try {
     throw "build failed"
   }
   Write-Good (Say "build.ok")
+
+  # Lock userdata to this Windows account. Out of the box the folder inherits
+  # BUILTIN\Users:RX + Authenticated Users:M — on a shared family PC every
+  # OTHER Windows account can read the database, the chats, the backups and
+  # the model sign-in tokens, and write to them. Three principals keep full
+  # access: SYSTEM (the watchdog runs the server as SYSTEM), Administrators,
+  # and the account installing. This blocks other ACCOUNTS on this computer;
+  # it does not restrict anything running AS this account — that is a process
+  # sandboxing question, which an ACL cannot answer.
+  #
+  # No elevation needed: this account created userdata, and an owner may
+  # rewrite its ACL. Runs before the autostart step because schtasks /Run
+  # starts the server immediately.
+  #
+  # 🔴 ORDER MATTERS: the reset must target userdata\* (the children only),
+  # never the userdata folder itself. Resetting the folder re-inherits the
+  # parent's wide ACL and wipes out the grant line above it — first attempt
+  # did exactly that, 9,240 files failed.
+  $userdataDirectory = Join-Path $root "userdata"
+  if (-not (Test-Path $userdataDirectory)) {
+    New-Item -ItemType Directory -Path $userdataDirectory -Force | Out-Null
+  }
+  Write-Info (Say "acl.doing")
+  & icacls $userdataDirectory /inheritance:r /grant:r `
+    "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "$($env:USERNAME):(OI)(CI)F" | Out-Null
+  $aclGrantCode = $LASTEXITCODE
+  # Children re-inherit from the now-locked folder. userdata is never empty
+  # here (logs\ and config\ were created above), so the glob always matches.
+  & icacls "$userdataDirectory\*" /reset /T /C | Out-Null
+  if ($aclGrantCode -eq 0 -and $LASTEXITCODE -eq 0) {
+    Write-Good (Say "acl.ok")
+  } else {
+    Write-Warn (Say "acl.fail")
+  }
 
   # -- 4. Autostart ----
   Write-Head (Say "step5")

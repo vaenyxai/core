@@ -92,17 +92,21 @@ keep your documents, and delete it from the USB stick once the move is done.
 
 1. **Reconnect your models.** **Settings → AI Settings → Models** — sign in with
    ChatGPT, or paste an API key. Nothing works until a model is connected.
-2. **Check autostart is on the new machine only.** It was registered during
+2. **Run `Vaenyx-Setup.cmd` once more after everything is copied in.** A folder
+   moved or copied here keeps or inherits its old permissions, so the lock that
+   keeps other Windows accounts on this computer out of `userdata\` does not
+   travel with your files — re-running setup puts it back.
+3. **Check autostart is on the new machine only.** It was registered during
    setup here, and you removed it on the old PC in step 5 above.
-3. **Redo your Backup settings.** Backup Folder, Keep Most Recent, Automatic
+4. **Redo your Backup settings.** Backup Folder, Keep Most Recent, Automatic
    Backup and Backup Password all start empty on a new machine. If your old
    Backup Folder pointed at a drive letter that does not exist here, set a new
    one.
-4. **Redo phone access if you had it.** Tailscale is per machine: install the
+5. **Redo phone access if you had it.** Tailscale is per machine: install the
    official client on the new PC and run `Vaenyx-Connect-Tailscale.cmd` again.
-5. **Make a fresh backup** on the new PC, so the first backup here is one you
+6. **Make a fresh backup** on the new PC, so the first backup here is one you
    made on purpose.
-6. Only once all of that works, wipe the old PC's Vaenyx folder — and remember
+7. Only once all of that works, wipe the old PC's Vaenyx folder — and remember
    deleting the folder deletes the data in it.
 
 ## If Something Goes Wrong
