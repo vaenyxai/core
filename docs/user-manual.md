@@ -461,5 +461,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.90** · last updated 2026-08-06.
+Manual for **v0.3.1-dev.91** · last updated 2026-08-06.
 Keep this file up to date whenever a feature changes.

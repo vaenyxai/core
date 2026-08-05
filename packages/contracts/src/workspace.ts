@@ -2590,9 +2590,6 @@ export const RelayHealthSchema = Type.Object(
 export const RelaySettingsSchema = Type.Object(
   {
     enabled: Type.Boolean(),
-    allowedOrigins: Type.Array(Type.String({ maxLength: 300 }), {
-      maxItems: 20,
-    }),
     fileHosts: Type.Array(Type.String({ maxLength: 200 }), { maxItems: 20 }),
     maxFiles: Type.Integer({ minimum: 0, maximum: 20 }),
     maxFileBytes: Type.Integer({ minimum: 0 }),

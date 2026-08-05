@@ -81,8 +81,9 @@ Practical consequences for an app:
 
 ## Endpoints
 
-All under the same CORS policy as `/v1/ai/*`: the `Origin` must be in the
-door's `allowedOrigins` list — configured per app origin, never `*`.
+CORS on the door routes reflects the request origin (the per-origin allowlist
+retired with the shared key, 2026-08-06): CORS was never the door's wall — the
+key and the tailnet gate are — and nothing here rides cookies.
 Auth header on every call: `Authorization: Bearer vaenyx_app_…`.
 
 `GET /v1/ai/health` answers for the CALLING key's own profile: `signedIn`

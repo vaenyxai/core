@@ -1363,16 +1363,53 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
-/* The composer's tools. On a wide screen there is room, so they simply sit in
-   the row and the toggle is not rendered at all — display:contents keeps the
-   grouping wrapper out of the layout entirely. */
-.composer-tools,
-.composer-tools-row {
-  display: contents;
+/* The composer's tools, folded behind ONE "+" on every screen size (Oskar,
+   2026-08-06: "除了 send 以外的其他所有按钮合并成一个按钮"). Tapping it opens
+   the tools UPWARD, over the conversation, so the message box never changes
+   size — the row used to widen and shrink as tools came and went, and a box
+   that moves under your thumbs is worse than a second tap. */
+.composer-tools {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
 }
 
 .composer-tools-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: rgba(240, 238, 229, 0.08);
+  color: inherit;
+  cursor: pointer;
+}
+
+.composer-tools-toggle .line-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.composer-tools-row {
   display: none;
+}
+
+.composer-tools[data-open="true"] .composer-tools-row {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
 }
 
 .door-switch {
@@ -1963,19 +2000,20 @@ textarea::placeholder {
   font-size: var(--fs-label);
 }
 
+/* Chip and its switch sit together as one unit (Oskar, 2026-08-06: the old
+   space-between stretch left every switch floating mid-card, visually owned
+   by nothing). */
 .door-app-caps {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 2px var(--space-4);
-  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-3);
 }
 
 .door-app-cap {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  padding: 3px 0;
 }
 
 .door-add-input {
@@ -6903,44 +6941,6 @@ select {
     scroll-margin-bottom: 230px;
   }
 
-  /* On a phone, four buttons plus Send leave nothing to type in. They fold
-     behind one control (Oskar, 2026-07-30); tapping it opens the row in place,
-     tapping again closes it. */
-  .composer-tools {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .composer-tools-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border: 0.5px solid var(--border);
-    border-radius: 999px;
-    background: rgba(240, 238, 229, 0.08);
-    color: inherit;
-    cursor: pointer;
-  }
-
-  .composer-tools-toggle .line-icon {
-    width: 18px;
-    height: 18px;
-  }
-
-  .composer-tools-row {
-    display: none;
-  }
-
-  .composer-tools[data-open="true"] .composer-tools-row {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
   /* The header is two rows on a phone, not four (Oskar, 2026-07-30). The chips
      stay ON the title's row and the title gives way instead: a name that has
      run out of room says so with an ellipsis, which is far easier to read past
@@ -7002,6 +7002,15 @@ select {
 }
 
 @media (max-width: 560px) {
+  /* The task header's Last/Next line goes on a narrow screen (Oskar,
+     2026-08-06): the same times are one tap away on the Scheduled list, and
+     on a phone that line was the difference between the header fitting and
+     the conversation starting below the fold. History stays — it is the only
+     door to past runs. */
+  .task-next {
+    display: none;
+  }
+
   .auth-shell {
     padding: 18px 12px;
   }

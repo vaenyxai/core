@@ -1862,9 +1862,9 @@ function DocumentButton({
 // months, and a new chat had no document button until today. A button added
 // here appears everywhere by construction.
 //
-// On a phone they fold behind one control, because four buttons plus Send
-// leave no room to type ("send 左边的 4 个按钮合成一个折叠按钮"). On a wide
-// screen there is room, so they simply show.
+// Folded behind ONE "+" on every screen (Oskar, 2026-08-06 — previously only
+// on phones): the tools open UPWARD over the conversation, so the message box
+// keeps its size whether two tools exist or five.
 function ComposerTools({
   canAttachPhoto = true,
   disabled,
@@ -6216,6 +6216,21 @@ function AskVaenyxPanel({
 
   useEffect(() => {
     if (view !== "chat") return;
+    if (!loadingMessages && messages.length > 0) {
+      const cutoff = consumeUnreadCutoff();
+      if (cutoff) {
+        const first = messages.find((message) => message.createdAt > cutoff);
+        if (first) {
+          // Zeroed, not stamped: the photo re-anchor must not drag the view
+          // back to the bottom while the Owner is reading from here.
+          lastAnchorAtRef.current = 0;
+          document
+            .getElementById(`message-${first.id}`)
+            ?.scrollIntoView({ block: "start" });
+          return;
+        }
+      }
+    }
     lastAnchorAtRef.current = Date.now();
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [
@@ -6233,6 +6248,21 @@ function AskVaenyxPanel({
   // 2026-07-30). Every change of what is showing re-anchors.
   useEffect(() => {
     if (view !== "task") return;
+    if (!loadingTaskMessages && taskMessages.length > 0) {
+      const cutoff = consumeUnreadCutoff();
+      if (cutoff) {
+        const first = taskMessages.find(
+          (message) => message.createdAt > cutoff,
+        );
+        if (first) {
+          lastAnchorAtRef.current = 0;
+          document
+            .getElementById(`message-${first.id}`)
+            ?.scrollIntoView({ block: "start" });
+          return;
+        }
+      }
+    }
     lastAnchorAtRef.current = Date.now();
     taskEndRef.current?.scrollIntoView({ block: "end" });
   }, [
@@ -8261,6 +8291,7 @@ function AskVaenyxPanel({
             messages.map((message, index) => (
               <article
                 className={`ask-vaenyx-message ${message.role} ${message.status}`}
+                id={`message-${message.id}`}
                 key={message.id}
               >
                 {/* Name only: the time lives at the bottom of the message,
@@ -8886,6 +8917,7 @@ function AskVaenyxPanel({
               visibleTaskMessages.map((message, index) => (
                 <article
                   className={`ask-vaenyx-message ${message.role} ${message.status}`}
+                  id={`message-${message.id}`}
                   key={message.id}
                 >
                   <div className="ask-vaenyx-message-head">
@@ -9735,7 +9767,6 @@ function localBackendNoticeKey(
 function SubscriptionDoorPanel() {
   const { lang } = useI18n();
   const [panel, setPanel] = useState<RelayPanelData | null>(null);
-  const [originDraft, setOriginDraft] = useState("");
   const [hostDraft, setHostDraft] = useState("");
   const [usage, setUsage] = useState<RelayUsageResponse | null>(null);
   // THE APPS (2026-08-02): each app has its own relay key, listed and managed
@@ -9875,7 +9906,6 @@ function SubscriptionDoorPanel() {
 
   if (!panel) return null;
   const { settings, calls } = panel;
-  const loopback = `http://127.0.0.1:${window.location.port || "3000"}`;
 
   return (
     <section className="settings-card">
@@ -9899,7 +9929,12 @@ function SubscriptionDoorPanel() {
         />
       </div>
 
-      <h3 className="door-subhead">Address for your apps</h3>
+      <h3 className="door-subhead">
+        {lang === "zh" ? "给 app 填的地址" : "Address for your apps"}
+      </h3>
+      {/* One line: what gets pasted into an app's settings next to its key.
+          The loopback twin was noise — an app on another device can never
+          reach 127.0.0.1 here (Oskar, 2026-08-06). */}
       <div className="door-address">
         <code>{window.location.origin}</code>
         <button
@@ -9911,18 +9946,11 @@ function SubscriptionDoorPanel() {
         >
           Copy
         </button>
-        <span>use this one</span>
-      </div>
-      <div className="door-address">
-        <code>{loopback}</code>
-        <button
-          className="door-copy"
-          onClick={() => void navigator.clipboard?.writeText(loopback)}
-          type="button"
-        >
-          Copy
-        </button>
-        <span>on this machine only</span>
+        <span>
+          {lang === "zh"
+            ? "跟钥匙一起填进 app 的设置里"
+            : "goes into the app's settings beside its key"}
+        </span>
       </div>
 
       <h3 className="door-subhead">Your apps</h3>
@@ -10059,24 +10087,20 @@ function SubscriptionDoorPanel() {
         </div>
       ))}
 
-      <h3 className="door-subhead">Who and where</h3>
+      <h3 className="door-subhead">
+        {lang === "zh" ? "文件可以来自" : "Files may come from"}
+      </h3>
+      {/* The one list that stays (Oskar, 2026-08-06: the rest of "who and
+          where" retired with the shared key). This one is a real wall: it is
+          the only thing stopping a stolen key from making this machine
+          download from anywhere on the internet. */}
       <div className="door-field">
         <span className="door-field-label">
-          Pages allowed to call in
-          <em>your own apps</em>
-        </span>
-        <DoorList
-          items={settings.allowedOrigins}
-          onChange={(allowedOrigins) => void save({ allowedOrigins })}
-          placeholder="https://your-app.pages.dev"
-          draft={originDraft}
-          setDraft={setOriginDraft}
-        />
-      </div>
-      <div className="door-field">
-        <span className="door-field-label">
-          Files may come from
-          <em>apps send a link, never the file; it is used and deleted</em>
+          <em>
+            {lang === "zh"
+              ? "app 发的是链接,不是文件本身;用完即删。"
+              : "apps send a link, never the file; it is used and deleted"}
+          </em>
         </span>
         <DoorList
           items={settings.fileHosts}
@@ -18891,6 +18915,27 @@ const THREAD_LIST_STEP = 10;
 
 // A folder's chat list, capped so a long folder (e.g. Unsorted) shows the first
 // few and reveals more in steps via "Show more".
+// OPENING AN UNREAD CHAT LANDS AT THE FIRST UNREAD MESSAGE, not the bottom
+// (Oskar, 2026-08-06: "只要是未读的信息…自动从 reply start 的地方开始"). The
+// shell notices the thread was unread BEFORE it marks it read and leaves the
+// old watermark here; the chat view consumes it once, right after the messages
+// load, and scrolls the first message newer than the watermark to the top.
+// Freshness-scoped rather than id-matched: the note is written in the same
+// breath as the open, and a stale one (nothing consumed it within a few
+// seconds) is dropped rather than yanking some later conversation around.
+let pendingUnreadCutoff: { cutoff: string; at: number } | null = null;
+
+export function noteUnreadOpen(cutoff: string): void {
+  pendingUnreadCutoff = { cutoff, at: Date.now() };
+}
+
+function consumeUnreadCutoff(): string | null {
+  if (!pendingUnreadCutoff) return null;
+  const { cutoff, at } = pendingUnreadCutoff;
+  pendingUnreadCutoff = null;
+  return Date.now() - at < 8000 ? cutoff : null;
+}
+
 // Per-device read tracking for the sidebar's unread dots (Oskar, 2026-07-28):
 // a thread is unread when its last activity is newer than the last time THIS
 // device had it open. Device-local on purpose — read state is a property of
@@ -19176,10 +19221,14 @@ function SidebarThreadTree({
     );
     if (!thread) return;
     if ((threadSeen[thread.id] ?? "") >= thread.updatedAt) return;
+    // Unread until this very moment: keep the old watermark so the view can
+    // open at the first message the Owner has not seen, instead of the bottom.
+    const cutoff = threadSeen[thread.id] ?? seenSince;
+    if (cutoff) noteUnreadOpen(cutoff);
     const next = { ...threadSeen, [thread.id]: thread.updatedAt };
     setThreadSeen(next);
     writeThreadSeen(next);
-  }, [selectedThreadId, workspace.threads, threadSeen]);
+  }, [selectedThreadId, workspace.threads, threadSeen, seenSince]);
 
   const unreadIds: ReadonlySet<string> = new Set(
     workspace.threads

@@ -70,9 +70,6 @@ const ENGINE_CAPABILITIES: Record<RelayEngine, RelayCapability[]> = {
 
 export interface RelayConfig {
   enabled: boolean;
-  // Web pages allowed to call in. The door is only ever reachable from inside
-  // the private network, and this narrows it further to his own apps.
-  allowedOrigins: string[];
   // Hosts a download link may point at. Without this, anyone holding a token
   // could make this machine fetch any address it can reach.
   fileHosts: string[];
@@ -84,7 +81,6 @@ export interface RelayConfig {
 
 export const DEFAULT_RELAY_CONFIG: RelayConfig = {
   enabled: false,
-  allowedOrigins: [],
   fileHosts: [],
   maxFiles: 5,
   maxFileBytes: 25 * 1024 * 1024,
@@ -112,13 +108,6 @@ export function writeRelayConfig(
   changes: Partial<RelayConfig>,
 ): RelayConfig {
   const next: RelayConfig = { ...readRelayConfig(database), ...changes };
-  next.allowedOrigins = [
-    ...new Set(
-      next.allowedOrigins
-        .map((origin) => origin.trim().replace(/\/+$/, ""))
-        .filter(Boolean),
-    ),
-  ];
   next.fileHosts = [
     ...new Set(
       next.fileHosts.map((host) => host.trim().toLowerCase()).filter(Boolean),

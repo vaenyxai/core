@@ -4276,14 +4276,19 @@ export async function registerGatewayRoutes(
   // the call comes from the page in the Owner's own browser, which is on that
   // network. That is also what makes "cannot reach it" a real gate: someone
   // else's phone does not find this door at all.
+  // CORS on the door routes reflects any origin (Oskar, 2026-08-06: the
+  // origin list retired with the shared key). CORS was never the door's
+  // security — a curl ignores it entirely; the key and the tailnet gate are
+  // the walls — and nothing here rides cookies, so reflecting the origin
+  // hands a stranger's website nothing it could use without also holding an
+  // app's own key. What the list actually did, in practice, was break every
+  // NEW app until somebody remembered this screen existed.
   function allowRelayOrigin(
     request: FastifyRequest,
     reply: FastifyReply,
   ): void {
     const origin = request.headers.origin;
     if (!origin) return;
-    const allowed = readRelayConfig(context.database).allowedOrigins;
-    if (!allowed.includes(origin.replace(/\/+$/, ""))) return;
     reply.header("access-control-allow-origin", origin);
     reply.header("vary", "origin");
     reply.header("access-control-allow-headers", "authorization,content-type");
