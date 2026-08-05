@@ -30,8 +30,16 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import type { DatabaseHandle } from "../../db/database.js";
-import { getCodexStatus, runCodexRelay } from "../harness/codex.js";
-import { claudeMachineLogin } from "../models/claude-login.js";
+import {
+  codexLoginConnectedAt,
+  codexProfileSignedIn,
+  getCodexStatus,
+  runCodexRelay,
+} from "../harness/codex.js";
+import {
+  claudeLoginConnectedAt,
+  claudeMachineLogin,
+} from "../models/claude-login.js";
 import { claudeSubscriptionRelay } from "../models/claude-subscription-provider.js";
 
 import {
@@ -39,6 +47,7 @@ import {
   decideTokenCapabilities,
   readProfileCapabilities,
 } from "./capabilities.js";
+import { recordEngineUsage } from "./relay-usage.js";
 
 export const RELAY_ENGINES = ["openai-cli", "claude-cli"] as const;
 export type RelayEngine = (typeof RELAY_ENGINES)[number];
@@ -379,6 +388,77 @@ async function fetchLinkedFiles(
   return fetched;
 }
 
+// Which identity a profile's calls ride (Relay Profiles v1).
+//
+// "shared-door" is the legacy path: the door's own credentials, exactly what
+// every app got before profiles existed — nothing breaks on upgrade. A profile
+// flips to "dedicated" the moment its app completes its OWN sign-in, and never
+// flips back: from then on an engine it has not connected is a clear
+// "not connected" error. The one thing this must never do is quietly slide
+// back onto the Owner's account when an app's login lapses — an account switch
+// nobody chose, billed to somebody who did not choose it.
+export function profileLoginMode(
+  database: DatabaseHandle,
+  profileId: string,
+): "shared-door" | "dedicated" {
+  const row = database.sqlite
+    .prepare("SELECT dedicated_login FROM app_profiles WHERE id = ?")
+    .get(profileId) as { dedicated_login: 0 | 1 } | undefined;
+  return row?.dedicated_login === 1 ? "dedicated" : "shared-door";
+}
+
+export function markProfileDedicated(
+  database: DatabaseHandle,
+  profileId: string,
+): void {
+  database.sqlite
+    .prepare("UPDATE app_profiles SET dedicated_login = 1 WHERE id = ?")
+    .run(profileId);
+}
+
+// What one profile's door looks like from the app's side. No credential, no
+// token, no export of any kind — connected or not, the account file's own
+// timestamp, and which identity mode the profile is in. A leaked app key must
+// not be exchangeable for anything that signs in somewhere else.
+export interface RelayProfileEngineStatus {
+  id: RelayEngine;
+  connected: boolean;
+  connectedAt: string | null;
+  capabilities: RelayCapability[];
+}
+
+export function relayProfileEngineStatus(
+  database: DatabaseHandle,
+  profileId: string,
+): { mode: "shared-door" | "dedicated"; engines: RelayProfileEngineStatus[] } {
+  const mode = profileLoginMode(database, profileId);
+  return {
+    mode,
+    engines: [
+      {
+        id: "openai-cli",
+        connected:
+          mode === "dedicated"
+            ? codexProfileSignedIn(profileId)
+            : codexSignedInCached(Date.now()),
+        connectedAt:
+          mode === "dedicated" ? codexLoginConnectedAt(profileId) : null,
+        capabilities: ENGINE_CAPABILITIES["openai-cli"],
+      },
+      {
+        id: "claude-cli",
+        connected:
+          mode === "dedicated"
+            ? claudeMachineLogin(profileId)
+            : claudeMachineLogin(),
+        connectedAt:
+          mode === "dedicated" ? claudeLoginConnectedAt(profileId) : null,
+        capabilities: ENGINE_CAPABILITIES["claude-cli"],
+      },
+    ],
+  };
+}
+
 export async function runRelay(
   database: DatabaseHandle,
   secretsDirectory: string,
@@ -430,6 +510,15 @@ export async function runRelay(
     }
   }
 
+  // Which identity this call rides. A profile in dedicated mode uses its own
+  // login and nothing else; everything else (door key, legacy profiles) rides
+  // the door's shared credentials as it always has.
+  const profileKey =
+    request.appProfileId &&
+    profileLoginMode(database, request.appProfileId) === "dedicated"
+      ? request.appProfileId
+      : "core";
+
   const started = Date.now();
   const scratch = resolve(tmpdir(), "vaenyx-relay", randomUUID());
   mkdirSync(scratch, { recursive: true });
@@ -443,6 +532,14 @@ export async function runRelay(
       throw new Error("RELAY_NO_FILE");
     }
 
+    // Counted before the engine answers: a failed call still hit the
+    // subscription, and "which app spent this" must include the failures.
+    recordEngineUsage(
+      database,
+      request.appProfileId ?? "door",
+      request.engine,
+    );
+
     const text =
       request.engine === "claude-cli"
         ? await claudeSubscriptionRelay(
@@ -451,6 +548,7 @@ export async function runRelay(
             attachment
               ? { base64: attachment.base64, mediaType: attachment.mediaType }
               : undefined,
+            profileKey,
           )
         : await runCodexRelay(
             request.prompt,
@@ -460,6 +558,7 @@ export async function runRelay(
             attachment && attachment.mediaType.startsWith("image/")
               ? attachment.path
               : undefined,
+            profileKey,
           );
 
     return {
@@ -485,12 +584,15 @@ export function recordRelayCall(
     ms: number;
     ok: boolean;
     failure: string | null;
+    // Which app made the call: an app_profiles.id, or "door" for the shared
+    // key. WHO belongs in the log; what was said still never does.
+    appId?: string | null;
   },
 ): void {
   database.sqlite
     .prepare(
-      `INSERT INTO relay_calls (id, task, engine, capability, ms, ok, failure)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO relay_calls (id, task, engine, capability, ms, ok, failure, app_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       randomUUID(),
@@ -500,6 +602,7 @@ export function recordRelayCall(
       entry.ms,
       entry.ok ? 1 : 0,
       entry.failure?.slice(0, 200) ?? null,
+      entry.appId ?? "door",
     );
   database.sqlite
     .prepare(

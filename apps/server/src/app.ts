@@ -15,6 +15,7 @@ import { reconcileInterruptedTasks, runDueTasks } from "./modules/core/tasks.js"
 import { runScheduledBackupIfDue } from "./modules/core/backup-schedule.js";
 import { autoScanVaenyxMe } from "./modules/core/vaenyx-me.js";
 import { runDueModeDigests } from "./modules/core/modes.js";
+import { bindUsageDatabase } from "./modules/core/relay-usage.js";
 import { sweepFlywheel } from "./modules/core/flywheel-send.js";
 import { registerGatewayRoutes } from "./modules/gateway/routes.js";
 import { renewSessionOnUse } from "./modules/guard/auth.js";
@@ -44,6 +45,9 @@ export async function buildApp(
   initPushService(config);
 
   const database = createDatabase(config);
+  // Usage bookkeeping (who spent what, by month): the model providers have no
+  // database handle, so the sink is bound here once.
+  bindUsageDatabase(database);
 
   // Fresh install: copy the shipped demo seed into the runtime library so a new
   // user does not open an empty "Library". First-run only (marker-guarded);

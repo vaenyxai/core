@@ -174,6 +174,8 @@ import {
   runCapabilityTest,
   VaenyxRequestError,
   fetchRelay,
+  fetchRelayUsage,
+  type RelayUsageResponse,
   updateRelaySettings,
   testRelayEngine,
   setRelayToken,
@@ -9764,6 +9766,13 @@ function SubscriptionDoorPanel() {
   // moves on. There is nowhere else it exists.
   const [minted, setMinted] = useState<string | null>(null);
   const [keyBusy, setKeyBusy] = useState(false);
+  const [usage, setUsage] = useState<RelayUsageResponse | null>(null);
+
+  useEffect(() => {
+    void fetchRelayUsage()
+      .then(setUsage)
+      .catch(() => undefined);
+  }, []);
 
   async function changeKey(action: "new" | "revoke") {
     setKeyBusy(true);
@@ -10078,6 +10087,49 @@ function SubscriptionDoorPanel() {
           />
         </label>
       </div>
+
+      {/* Who spent what, this month (Oskar asked for exactly this page): a nod
+          that keeps costing money must keep being visible, or the Owner only
+          sees a bill that grew and cannot say which app grew it. Token counts
+          appear only when an engine really reported them — the Claude SDK
+          does, the Codex CLI does not — never estimated. */}
+      <h3 className="door-subhead">This month</h3>
+      {!usage || usage.rows.length === 0 ? (
+        <p className="door-legend">
+          {lang === "zh" ? "这个月还没有调用。" : "No calls yet this month."}
+        </p>
+      ) : (
+        <ul className="door-usage">
+          {usage.rows.map((row) => (
+            <li key={`${row.appId}-${row.engine}`}>
+              <span className="door-usage-app">
+                {row.appId === "core"
+                  ? lang === "zh"
+                    ? "Vaenyx 自己"
+                    : "Vaenyx itself"
+                  : row.appId === "door"
+                    ? lang === "zh"
+                      ? "门钥匙"
+                      : "Door key"
+                    : row.appName}
+              </span>
+              <span className="door-usage-engine">
+                {row.engine === "claude-cli" ? "Claude" : "OpenAI"}
+              </span>
+              <span className="door-usage-calls">
+                {row.calls.toLocaleString()}
+                {lang === "zh" ? " 次" : row.calls === 1 ? " call" : " calls"}
+              </span>
+              {typeof row.outputTokens === "number" ? (
+                <span className="door-usage-tokens">
+                  {((row.inputTokens ?? 0) + row.outputTokens).toLocaleString()}{" "}
+                  tokens
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <h3 className="door-subhead">Recent calls</h3>
       {calls.length === 0 ? (

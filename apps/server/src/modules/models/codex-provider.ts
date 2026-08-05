@@ -7,6 +7,7 @@ import {
   runAskVaenyxChat,
   runCodexMethodOffline,
 } from "../harness/codex.js";
+import { noteCoreUsage } from "../core/relay-usage.js";
 
 import type {
   ModelChatMessage,
@@ -29,6 +30,10 @@ export class CodexProvider implements ModelProvider {
     // web-search flag — the tool is absent, not discouraged. Enforcement has to
     // live in every backend, or the guarantee is only as strong as the one
     // nobody checked.
+    // Counted whichever branch runs: both hit the same subscription. The CLI
+    // reports no token counts, so Codex rows on the usage page carry calls
+    // only — never an estimate.
+    noteCoreUsage("openai-cli");
     if (options?.allowWeb === false) {
       const answer = await runCodexMethodOffline(
         [projectContext, messages.map((m) => m.content).join("\n\n")]

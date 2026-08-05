@@ -21,6 +21,7 @@ import { join } from "node:path";
 
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
+import { noteCoreUsage } from "../core/relay-usage.js";
 import { claudeMachineLogin, getClaudeHomeDirectory } from "./claude-login.js";
 import { readProviderConnections } from "./connections.js";
 import {
@@ -96,7 +97,15 @@ function formatTranscript(messages: ModelChatMessage[]): string {
 // at the Vaenyx claude-home so the SDK child reads the in-app sign-in's
 // credentials natively; a pasted setup token (when present) rides the
 // dedicated env var and takes precedence.
-function cleanChildEnvironment(token: string | null): Record<string, string> {
+//
+// `profileKey` (Relay Profiles): an app profile's calls read the profile's own
+// claude-home and NOTHING else — the token parameter must be null for them,
+// because the pasted setup token is the Owner's and would silently bill the
+// Owner's account for an app that lost its own login.
+function cleanChildEnvironment(
+  token: string | null,
+  profileKey: string = "core",
+): Record<string, string> {
   const environment: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
@@ -109,7 +118,7 @@ function cleanChildEnvironment(token: string | null): Record<string, string> {
     }
     environment[key] = value;
   }
-  environment.CLAUDE_CONFIG_DIR = getClaudeHomeDirectory();
+  environment.CLAUDE_CONFIG_DIR = getClaudeHomeDirectory(profileKey);
   if (token) environment.CLAUDE_CODE_OAUTH_TOKEN = token;
   return environment;
 }
@@ -169,6 +178,8 @@ export async function claudeSubscriptionVision(
   let answer = "";
   for await (const message of stream) {
     if (message.type === "result") {
+      // A vision call is Vaenyx's own spend, same as chat.
+      noteCoreUsage("claude-cli");
       if (message.subtype === "success") answer = message.result;
       else throw new Error(`VISION_DESCRIBE_FAILED:claude-sub:${message.subtype}`);
     }
@@ -185,10 +196,22 @@ export async function claudeSubscriptionRelay(
   secretsDirectory: string,
   promptText: string,
   attachment?: { base64: string; mediaType: string },
+  profileKey: string = "core",
 ): Promise<string> {
-  const auth = resolveClaudeSubscriptionAuth(secretsDirectory);
-  if (!auth.token && !auth.machineLogin) {
-    throw new Error("RELAY_NOT_SIGNED_IN:claude-cli");
+  // Two identities, never blended (Relay Profiles): "core" is the shared door
+  // riding Vaenyx's own login or the Owner's pasted setup token; a profile
+  // rides ONLY what its own sign-in wrote to its own claude-home. No token
+  // env, no reading the Owner's directory — an app whose login lapsed gets a
+  // clear "not connected", never the Owner's account by accident.
+  let token: string | null = null;
+  if (profileKey === "core") {
+    const auth = resolveClaudeSubscriptionAuth(secretsDirectory);
+    if (!auth.token && !auth.machineLogin) {
+      throw new Error("RELAY_NOT_SIGNED_IN:claude-cli");
+    }
+    token = auth.token;
+  } else if (!claudeMachineLogin(profileKey)) {
+    throw new Error("RELAY_PROFILE_NOT_CONNECTED:claude-cli");
   }
 
   const jail = join(tmpdir(), "vaenyx-claude-jail", randomUUID());
@@ -233,7 +256,7 @@ export async function claudeSubscriptionRelay(
       allowedTools: [],
       disallowedTools: DENIED_TOOLS,
       cwd: jail,
-      env: cleanChildEnvironment(auth.token),
+      env: cleanChildEnvironment(token, profileKey),
       maxTurns: 1,
       mcpServers: {},
       settingSources: [],
@@ -449,6 +472,22 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           }
         }
         if (message.type === "result") {
+          // The SDK reports real token counts on the result message; the
+          // Codex CLI reports none — so Claude rows on the usage page carry
+          // tokens and Codex rows do not, which is the honest asymmetry.
+          const usage = (
+            message as unknown as {
+              usage?: { input_tokens?: number; output_tokens?: number };
+            }
+          ).usage;
+          noteCoreUsage("claude-cli", {
+            ...(typeof usage?.input_tokens === "number"
+              ? { input: usage.input_tokens }
+              : {}),
+            ...(typeof usage?.output_tokens === "number"
+              ? { output: usage.output_tokens }
+              : {}),
+          });
           if (message.subtype === "success") {
             answer = message.result;
           } else if (

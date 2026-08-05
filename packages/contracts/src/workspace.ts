@@ -2634,6 +2634,112 @@ export const RelayPanelSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// ── Relay Profiles v1: a per-app subscription identity, spoken to by the app
+// itself with its own key. The key IS the identity: no request carries an
+// appId, so no client can name a profile that is not its own. Status never
+// carries a credential of any kind — connected or not, timestamps, the key's
+// version and prefix, nothing a thief could sign in with.
+export const RelayProfileStatusSchema = Type.Object(
+  {
+    // "shared-door": the legacy path, riding the door's own credentials.
+    // "dedicated": this profile signed in itself and rides only that.
+    mode: Type.Union([
+      Type.Literal("shared-door"),
+      Type.Literal("dedicated"),
+    ]),
+    engines: Type.Array(
+      Type.Object(
+        {
+          id: RelayEngineSchema,
+          connected: Type.Boolean(),
+          connectedAt: Type.Union([Type.String(), Type.Null()]),
+          capabilities: Type.Array(RelayCapabilitySchema),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    key: Type.Object(
+      {
+        version: Type.Integer(),
+        createdAt: Type.String(),
+        rotatedAt: Type.Union([Type.String(), Type.Null()]),
+        hint: Type.String(),
+      },
+      { additionalProperties: false },
+    ),
+    capabilities: Type.Array(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayProfileLoginStartRequestSchema = Type.Object(
+  { engine: RelayEngineSchema },
+  { additionalProperties: false },
+);
+
+export const RelayProfileLoginStartResponseSchema = Type.Object(
+  {
+    // claude-cli always returns a URL; openai-cli may finish without one (its
+    // browser flow hosts its own callback) and may return a detail line when
+    // the CLI could not start.
+    url: Type.Union([Type.String(), Type.Null()]),
+    detail: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayProfileLoginCompleteRequestSchema = Type.Object(
+  {
+    engine: RelayEngineSchema,
+    // claude-cli: the code claude.com showed after sign-in. openai-cli has no
+    // code — complete just confirms whether the browser flow landed.
+    code: Type.Optional(Type.String({ minLength: 1, maxLength: 400 })),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayProfileLoginCompleteResponseSchema = Type.Object(
+  { connected: Type.Boolean() },
+  { additionalProperties: false },
+);
+
+export const RelayProfileDisconnectRequestSchema = Type.Object(
+  { engine: RelayEngineSchema },
+  { additionalProperties: false },
+);
+
+// Rotation, from the app itself: the new key is returned this once and never
+// again, the old key stopped working before this response was written.
+export const RelayRotateKeyResponseSchema = Type.Object(
+  {
+    token: Type.String(),
+    keyVersion: Type.Integer(),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayUsageResponseSchema = Type.Object(
+  {
+    month: Type.String(),
+    rows: Type.Array(
+      Type.Object(
+        {
+          appId: Type.String(),
+          appName: Type.String(),
+          engine: Type.String(),
+          calls: Type.Integer(),
+          // NULL when the engine never reported token counts — shown as
+          // absent, never estimated.
+          inputTokens: Type.Union([Type.Integer(), Type.Null()]),
+          outputTokens: Type.Union([Type.Integer(), Type.Null()]),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 // A Test result keeps the three outcomes apart on purpose: it worked, it failed
 // (with the other side's own words), or this path is not built yet. A green
 // tick that means "probably" and a red cross for something we never wrote are
@@ -2683,3 +2789,21 @@ export type RelayTokenResponse = Static<typeof RelayTokenResponseSchema>;
 export type RelayPanel = Static<typeof RelayPanelSchema>;
 export type RelayTestResult = Static<typeof RelayTestResultSchema>;
 export type CapabilityTestResult = Static<typeof CapabilityTestResultSchema>;
+export type RelayProfileStatus = Static<typeof RelayProfileStatusSchema>;
+export type RelayProfileLoginStartRequest = Static<
+  typeof RelayProfileLoginStartRequestSchema
+>;
+export type RelayProfileLoginStartResponse = Static<
+  typeof RelayProfileLoginStartResponseSchema
+>;
+export type RelayProfileLoginCompleteRequest = Static<
+  typeof RelayProfileLoginCompleteRequestSchema
+>;
+export type RelayProfileLoginCompleteResponse = Static<
+  typeof RelayProfileLoginCompleteResponseSchema
+>;
+export type RelayProfileDisconnectRequest = Static<
+  typeof RelayProfileDisconnectRequestSchema
+>;
+export type RelayRotateKeyResponse = Static<typeof RelayRotateKeyResponseSchema>;
+export type RelayUsageResponse = Static<typeof RelayUsageResponseSchema>;

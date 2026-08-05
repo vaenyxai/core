@@ -7,6 +7,7 @@ import {
   ApproveVaenyxMeCandidateRequestSchema,
   AgentProfileSchema,
   AppProfileSchema,
+  type AppProfile,
   AuditEventSchema,
   BootstrapStatusSchema,
   ChatConnectionTestRequestSchema,
@@ -214,6 +215,17 @@ import {
   RelayTestResultSchema,
   CapabilityTestResultSchema,
   UpdateRelaySettingsRequestSchema,
+  RelayProfileStatusSchema,
+  RelayProfileLoginStartRequestSchema,
+  RelayProfileLoginStartResponseSchema,
+  RelayProfileLoginCompleteRequestSchema,
+  RelayProfileLoginCompleteResponseSchema,
+  RelayProfileDisconnectRequestSchema,
+  RelayRotateKeyResponseSchema,
+  RelayUsageResponseSchema,
+  type RelayProfileLoginStartRequest,
+  type RelayProfileLoginCompleteRequest,
+  type RelayProfileDisconnectRequest,
   type RelayEngine,
   type RelayRunRequest,
   type UpdateRelaySettingsRequest,
@@ -250,6 +262,7 @@ import {
   getAppProfileMethodLock,
   getAppProfileRoutineLock,
   listAppProfiles,
+  appProfileKeyInfo,
   regenerateAppProfileToken,
   revealAppProfileToken,
   updateAppProfile,
@@ -429,6 +442,7 @@ import {
 } from "../models/provider-settings.js";
 import {
   cancelClaudeLogin,
+  disconnectClaudeProfile,
   startClaudeLogin,
   submitClaudeLoginCode,
 } from "../models/claude-login.js";
@@ -496,6 +510,8 @@ import {
   updateInstanceSettings,
 } from "../core/settings.js";
 import {
+  codexProfileSignedIn,
+  disconnectCodexProfile,
   runCodexChatTest,
   runForgeReadOnly,
   startCodexLogin,
@@ -554,16 +570,19 @@ import { readFetchFolders, writeFetchFolders } from "../core/fetching.js";
 import {
   forgetRelayEngineStatus,
   listRelayCalls,
+  markProfileDedicated,
   newRelayToken,
   readRelayConfig,
   recordRelayCall,
   relayHealth,
+  relayProfileEngineStatus,
   relayTokenAccepted,
   revokeRelayToken,
   runRelay,
   testRelayEngine,
   writeRelayConfig,
 } from "../core/relay.js";
+import { listMonthUsage, usageMonth } from "../core/relay-usage.js";
 
 interface GatewayContext {
   config: AppConfig;
@@ -4379,6 +4398,7 @@ export async function registerGatewayRoutes(
           ms: result.ms,
           ok: true,
           failure: null,
+          appId: knocker.profileId,
         });
         return result;
       } catch (error) {
@@ -4392,6 +4412,7 @@ export async function registerGatewayRoutes(
           ms: Date.now() - started,
           ok: false,
           failure: code,
+          appId: knocker.profileId,
         });
         // The door answers calling apps in codes, not sentences, so this one
         // stays a code too — it names the capability, which is what an app
@@ -4427,7 +4448,12 @@ export async function registerGatewayRoutes(
         const status =
           code === "RELAY_NOT_OWNER"
             ? 403
-            : code === "RELAY_OFF" || code.startsWith("RELAY_NOT_SIGNED_IN")
+            : code === "RELAY_OFF" ||
+                code.startsWith("RELAY_NOT_SIGNED_IN") ||
+                // The profile's OWN login is missing — a different fix from the
+                // door not being signed in: this app must sign in again, and
+                // its error says so by name.
+                code.startsWith("RELAY_PROFILE_NOT_CONNECTED")
               ? 503
               : code.startsWith("RELAY_CAPABILITY_UNSUPPORTED") ||
                   code.startsWith("RELAY_HOST_NOT_ALLOWED") ||
@@ -4438,6 +4464,261 @@ export async function registerGatewayRoutes(
                 : 502;
         return reply.code(status).send({ error: code });
       }
+    },
+  );
+
+  // ── Relay Profiles v1: the app's own side of the door. ─────────────────────
+  //
+  // Every endpoint here authenticates with the APP'S OWN KEY, and the key IS
+  // the identity: the profile is looked up from the token, no request names an
+  // appId, so one app is physically unable to reach another's profile — the
+  // isolation is machine-kept, not a rule anyone has to remember. The door's
+  // shared key deliberately does not work here: it has no profile to act on.
+  //
+  // Nothing on these routes ever returns a credential in any form. Status is
+  // connected-or-not, timestamps, the key's version and prefix. A leaked app
+  // key must not be exchangeable for a subscription login.
+  function knockingProfile(request: FastifyRequest): AppProfile | null {
+    return authenticateAppProfile(context.database, request);
+  }
+
+  for (const path of [
+    "/v1/relay/profile",
+    "/v1/relay/profile/login/start",
+    "/v1/relay/profile/login/complete",
+    "/v1/relay/profile/disconnect",
+    "/v1/relay/profile/key/rotate",
+  ]) {
+    app.options(path, async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      return reply.code(204).send();
+    });
+  }
+
+  app.get(
+    "/v1/relay/profile",
+    {
+      schema: {
+        response: { 200: RelayProfileStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      const profile = knockingProfile(request);
+      if (!profile) {
+        return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
+      }
+      const status = relayProfileEngineStatus(context.database, profile.id);
+      return {
+        mode: status.mode,
+        engines: status.engines,
+        key: appProfileKeyInfo(context.database, profile.id),
+        capabilities: profile.capabilities,
+      };
+    },
+  );
+
+  app.post<{ Body: RelayProfileLoginStartRequest }>(
+    "/v1/relay/profile/login/start",
+    {
+      schema: {
+        body: RelayProfileLoginStartRequestSchema,
+        response: {
+          200: RelayProfileLoginStartResponseSchema,
+          401: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      const profile = knockingProfile(request);
+      if (!profile) {
+        return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
+      }
+      // Signing in is a bigger power than asking questions, so it gets its own
+      // audit trail: who started it, for which engine, before it can succeed.
+      recordAudit(context.database, {
+        actorType: "app",
+        actorId: profile.id,
+        actorName: profile.name,
+        action: "relay.profile.login.start",
+        decision: "allowed",
+        reason: `The app began a ${request.body.engine} sign-in for its own profile.`,
+        resourceType: "relay_profile",
+        resourceId: profile.id,
+      });
+      try {
+        if (request.body.engine === "claude-cli") {
+          const { url } = await startClaudeLogin(profile.id);
+          return { url, detail: null };
+        }
+        return await startCodexLogin(profile.id);
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "RELAY_LOGIN_FAILED";
+        // One codex login at a time across the machine (its browser flow hosts
+        // a local callback port); "busy" is a retry, not a failure.
+        return reply
+          .code(code === "CODEX_LOGIN_BUSY" ? 409 : 502)
+          .send({ error: code });
+      }
+    },
+  );
+
+  app.post<{ Body: RelayProfileLoginCompleteRequest }>(
+    "/v1/relay/profile/login/complete",
+    {
+      schema: {
+        body: RelayProfileLoginCompleteRequestSchema,
+        response: {
+          200: RelayProfileLoginCompleteResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      const profile = knockingProfile(request);
+      if (!profile) {
+        return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
+      }
+      try {
+        if (request.body.engine === "claude-cli") {
+          if (!request.body.code?.trim()) {
+            return reply.code(400).send({ error: "RELAY_LOGIN_CODE_REQUIRED" });
+          }
+          await submitClaudeLoginCode(request.body.code, profile.id);
+        } else if (!codexProfileSignedIn(profile.id)) {
+          // Codex has no code to feed: its official flow completes itself, so
+          // "complete" is the app asking whether it landed.
+          return { connected: false };
+        }
+        // The first completed sign-in flips the profile to its own identity,
+        // permanently: from here on, this profile's calls ride this login and
+        // an expired login is a named error, never a quiet slide back onto the
+        // Owner's account.
+        markProfileDedicated(context.database, profile.id);
+        recordAudit(context.database, {
+          actorType: "app",
+          actorId: profile.id,
+          actorName: profile.name,
+          action: "relay.profile.login.complete",
+          decision: "allowed",
+          reason: `The app completed a ${request.body.engine} sign-in; the profile now rides its own login.`,
+          resourceType: "relay_profile",
+          resourceId: profile.id,
+        });
+        return { connected: true };
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "RELAY_LOGIN_FAILED";
+        return reply.code(502).send({ error: code });
+      }
+    },
+  );
+
+  app.post<{ Body: RelayProfileDisconnectRequest }>(
+    "/v1/relay/profile/disconnect",
+    {
+      schema: {
+        body: RelayProfileDisconnectRequestSchema,
+        response: {
+          200: RelayProfileLoginCompleteResponseSchema,
+          401: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      const profile = knockingProfile(request);
+      if (!profile) {
+        return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
+      }
+      try {
+        if (request.body.engine === "claude-cli") {
+          disconnectClaudeProfile(profile.id);
+        } else {
+          disconnectCodexProfile(profile.id);
+        }
+        recordAudit(context.database, {
+          actorType: "app",
+          actorId: profile.id,
+          actorName: profile.name,
+          action: "relay.profile.disconnect",
+          decision: "allowed",
+          reason: `The app disconnected its own ${request.body.engine} login.`,
+          resourceType: "relay_profile",
+          resourceId: profile.id,
+        });
+        return { connected: false };
+      } catch (error) {
+        const code =
+          error instanceof Error ? error.message : "RELAY_DISCONNECT_FAILED";
+        return reply.code(502).send({ error: code });
+      }
+    },
+  );
+
+  // Rotate, from the app itself: no trip into Vaenyx's Settings. The old key
+  // stops working before the response carrying the new one is written, and the
+  // new key is bound to the same profile by construction — it is an UPDATE of
+  // this profile's row, and the request named no profile to redirect.
+  app.post(
+    "/v1/relay/profile/key/rotate",
+    {
+      schema: {
+        response: {
+          200: RelayRotateKeyResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      const profile = knockingProfile(request);
+      if (!profile) {
+        return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
+      }
+      const rotated = regenerateAppProfileToken(
+        context.database,
+        profile.id,
+        context.config.secretsDirectory,
+      );
+      recordAudit(context.database, {
+        actorType: "app",
+        actorId: profile.id,
+        actorName: profile.name,
+        action: "relay.profile.key.rotate",
+        decision: "allowed",
+        reason: "The app rotated its own key; the previous key is dead.",
+        resourceType: "relay_profile",
+        resourceId: profile.id,
+      });
+      return {
+        token: rotated.token,
+        keyVersion: appProfileKeyInfo(context.database, profile.id).version,
+      };
+    },
+  );
+
+  // This month's spend, per app × engine — the Owner's page, not the apps'.
+  // The promise it keeps: a nod that keeps costing money keeps being visible.
+  app.get(
+    "/v1/relay/usage",
+    {
+      schema: {
+        response: { 200: RelayUsageResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return { month: usageMonth(), rows: listMonthUsage(context.database) };
     },
   );
 

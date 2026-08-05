@@ -1,6 +1,13 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
@@ -135,7 +142,35 @@ function findCodexCommand(): CodexExecutable {
 // profile. On first use, an existing ~/.codex/auth.json is copied over so the
 // Owner does not have to sign in again.
 let codexHomeDirectory: string | null = null;
-function getCodexHomeDirectory(): string {
+function getCodexHomeDirectory(profileKey: string = "core"): string {
+  // Relay Profiles (2026-08-02): an app profile gets its own Codex home under
+  // userdata/profiles/<id>/, same mechanism, different directory. The
+  // ~/.codex/auth.json convenience copy is CORE-ONLY and deliberately so — it
+  // exists to spare the Owner a second sign-in on their own instance, and
+  // applying it to a profile would hand every app the machine's personal
+  // login, which is the exact inheritance the profile design forbids.
+  if (profileKey !== "core") {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        profileKey,
+      )
+    ) {
+      throw new Error("RELAY_PROFILE_INVALID");
+    }
+    const home = resolve(
+      loadConfig().dataDirectory,
+      "..",
+      "profiles",
+      profileKey,
+      "codex-home",
+    );
+    try {
+      mkdirSync(home, { recursive: true });
+    } catch {
+      // Best-effort: codex itself reports clearly when the home is unusable.
+    }
+    return home;
+  }
   if (codexHomeDirectory) return codexHomeDirectory;
   const home = process.env.VAENYX_CODEX_HOME
     ? resolve(process.env.VAENYX_CODEX_HOME)
@@ -154,10 +189,47 @@ function getCodexHomeDirectory(): string {
   return home;
 }
 
+// Signed in, for a PROFILE, without spawning anything: the official CLI keeps
+// its login in auth.json inside CODEX_HOME, so the file existing in the
+// profile's own home IS the answer. (Core keeps the slower two-process
+// `codex login status` check, which also distinguishes ChatGPT from API-key
+// logins; a profile home only ever holds what the in-app flow wrote.)
+export function codexProfileSignedIn(profileKey: string): boolean {
+  return existsSync(resolve(getCodexHomeDirectory(profileKey), "auth.json"));
+}
+
+export function codexLoginConnectedAt(profileKey: string): string | null {
+  try {
+    return statSync(
+      resolve(getCodexHomeDirectory(profileKey), "auth.json"),
+    ).mtime.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+// Wipe a profile's Codex login. rmSync on the whole home rather than the one
+// file, so session caches the CLI keeps beside it go too — and the profile's
+// live relay session is killed with it, because that child read its
+// credentials at spawn and would keep answering on the login the app just
+// revoked.
+export function disconnectCodexProfile(profileKey: string): void {
+  if (profileKey === "core") throw new Error("RELAY_PROFILE_INVALID");
+  endCodexRelaySession(profileKey);
+  rmSync(getCodexHomeDirectory(profileKey), { force: true, recursive: true });
+}
+
+export function endCodexRelaySession(profileKey: string): void {
+  const lane = relaySessions.get(profileKey);
+  if (lane?.session && !lane.session.closed) lane.session.end();
+  relaySessions.delete(profileKey);
+}
+
 function codexEnvironment(
   base: NodeJS.ProcessEnv = process.env,
+  profileKey: string = "core",
 ): NodeJS.ProcessEnv {
-  return { ...base, CODEX_HOME: getCodexHomeDirectory() };
+  return { ...base, CODEX_HOME: getCodexHomeDirectory(profileKey) };
 }
 
 function runCodexCommand(args: string[]): ReturnType<typeof spawnSync> {
@@ -172,8 +244,10 @@ function runCodexCommand(args: string[]): ReturnType<typeof spawnSync> {
   });
 }
 
-function createForgeEnvironment(): NodeJS.ProcessEnv {
-  const environment = codexEnvironment();
+function createForgeEnvironment(
+  profileKey: string = "core",
+): NodeJS.ProcessEnv {
+  const environment = codexEnvironment(process.env, profileKey);
   if (process.platform !== "win32") return environment;
 
   const pathKey =
@@ -232,16 +306,30 @@ export function getCodexStatus(): CodexStatus {
 // OAuth callback), so it is left running and unref'd — this call only waits
 // briefly for the URL. Vaenyx never sees the password or the tokens; the
 // official CLI stores its own credentials, exactly as a manual login does.
-export function startCodexLogin(): Promise<{
+// One codex login at a time, across ALL profiles — not a style choice: the
+// official flow hosts a local OAuth callback on a fixed port, so two children
+// would fight over the socket and both would lose confusingly. Claude logins
+// have no port and run concurrently; only this one queues, with its own error
+// code so the second app is told "try again shortly", not "broken".
+let codexLoginInFlight: string | null = null;
+
+export function startCodexLogin(profileKey: string = "core"): Promise<{
   url: string | null;
   detail: string | null;
 }> {
   if (process.env.NODE_ENV === "test" && !process.env.VAENYX_CODEX_COMMAND) {
     return Promise.resolve({ url: null, detail: null });
   }
+  if (codexLoginInFlight && codexLoginInFlight !== profileKey) {
+    return Promise.reject(new Error("CODEX_LOGIN_BUSY"));
+  }
+  codexLoginInFlight = profileKey;
+  setTimeout(() => {
+    if (codexLoginInFlight === profileKey) codexLoginInFlight = null;
+  }, 5 * 60_000).unref?.();
   const executable = findCodexCommand();
   const child = spawn(executable.command, [...executable.args, "login"], {
-    env: codexEnvironment(),
+    env: codexEnvironment(process.env, profileKey),
     shell: executable.shell,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -272,6 +360,7 @@ export function startCodexLogin(): Promise<{
     });
     child.once("exit", (code) => {
       clearTimeout(timer);
+      if (codexLoginInFlight === profileKey) codexLoginInFlight = null;
       if (code === 0) {
         // Already signed in (or the flow finished instantly): no URL needed.
         settle(null);
@@ -560,14 +649,16 @@ class CodexChatSession {
   #stderr = "";
   #turn: PendingChatTurn | undefined;
 
-  constructor() {
+  constructor(profileKey: string = "core") {
     const executable = findCodexCommand();
     this.#child = spawn(
       executable.command,
       [...executable.args, "app-server", "--stdio"],
       {
         cwd: this.#cwd,
-        env: createForgeEnvironment(),
+        // The whole of per-profile identity, on this path, is which CODEX_HOME
+        // the child reads its login from.
+        env: createForgeEnvironment(profileKey),
         shell: executable.shell,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
@@ -604,6 +695,18 @@ class CodexChatSession {
     this.#lines.on("line", (line) => {
       this.#handleLine(line);
     });
+  }
+
+  // Kill the child and mark the session dead. Used when a profile disconnects:
+  // a running child read its credentials at spawn, so it would keep answering
+  // on a login the app just revoked.
+  end(): void {
+    this.#close(new Error("CODEX_SESSION_ENDED"));
+    try {
+      this.#child.kill();
+    } catch {
+      // Already gone.
+    }
   }
 
   get closed(): boolean {
@@ -855,36 +958,54 @@ export async function runCodexChatTest(request: string): Promise<string> {
   }
 }
 
-// One-shot call for the SUBSCRIPTION DOOR (/v1/ai/run). Its own session, kept
+// One-shot call for the SUBSCRIPTION DOOR (/v1/ai/run). Its own sessions, kept
 // apart from the smoke test and from the Owner's chat, and every run opens a
 // fresh ephemeral thread — an outside app's request never joins a conversation.
-let relaySession: CodexChatSession | undefined;
-let relaySessionQueue: Promise<void> = Promise.resolve();
+//
+// One session PER PROFILE (Relay Profiles, 2026-08-02): a session is a child
+// process whose CODEX_HOME is fixed at spawn, so two identities cannot share
+// one. "core" is the shared-door session every legacy caller still rides.
+const relaySessions = new Map<
+  string,
+  { session: CodexChatSession | undefined; queue: Promise<void> }
+>();
 
 export async function runCodexRelay(
   request: string,
   imagePath?: string,
+  profileKey: string = "core",
 ): Promise<string> {
-  const status = getCodexStatus();
-  if (!status.installed || !status.loggedIn) {
-    throw new Error("RELAY_NOT_SIGNED_IN:openai-cli");
+  if (profileKey === "core") {
+    const status = getCodexStatus();
+    if (!status.installed || !status.loggedIn) {
+      throw new Error("RELAY_NOT_SIGNED_IN:openai-cli");
+    }
+    if (status.authMethod !== "chatgpt") {
+      throw new Error("RELAY_NOT_SIGNED_IN:openai-cli");
+    }
+  } else if (!codexProfileSignedIn(profileKey)) {
+    // The profile's own home answers for the profile — never the door's.
+    throw new Error("RELAY_PROFILE_NOT_CONNECTED:openai-cli");
   }
-  if (status.authMethod !== "chatgpt") {
-    throw new Error("RELAY_NOT_SIGNED_IN:openai-cli");
+
+  let lane = relaySessions.get(profileKey);
+  if (!lane) {
+    lane = { session: undefined, queue: Promise.resolve() };
+    relaySessions.set(profileKey, lane);
   }
 
   let releaseQueue: () => void = () => undefined;
-  const previous = relaySessionQueue;
-  relaySessionQueue = new Promise<void>((resolveQueue) => {
+  const previous = lane.queue;
+  lane.queue = new Promise<void>((resolveQueue) => {
     releaseQueue = resolveQueue;
   });
   await previous;
 
   try {
-    if (!relaySession || relaySession.closed) {
-      relaySession = new CodexChatSession();
+    if (!lane.session || lane.session.closed) {
+      lane.session = new CodexChatSession(profileKey);
     }
-    return await relaySession.run(request, {
+    return await lane.session.run(request, {
       instructions:
         "You answer one request from a calling application and stop. Do not inspect or modify files, call tools, use the network, or request elevated permissions.",
       imagePath,

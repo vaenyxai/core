@@ -1937,6 +1937,43 @@ textarea::placeholder {
   font-size: var(--fs-label);
 }
 
+/* This month's spend: app, engine, count, tokens when truly reported. */
+.door-usage {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.door-usage li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 4px 0;
+  font-size: var(--fs-sm);
+}
+
+.door-usage-app {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.door-usage-engine {
+  color: var(--text-muted);
+}
+
+.door-usage-calls {
+  font-variant-numeric: tabular-nums;
+}
+
+.door-usage-tokens {
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  font-variant-numeric: tabular-nums;
+}
+
 .door-calls {
   display: grid;
   gap: var(--space-1);

@@ -340,6 +340,15 @@ Read this inside the app: **Settings → Manual**.
   fetches it only from the hosts you listed, uses it, and deletes it.
 - **What is written down** — time, kind of job, which subscription, how long,
   worked or not. **Never** the prompt, the file, or the answer.
+- **This month** — the same card shows who spent what this month, per app and
+  per subscription: your apps, the door key, and Vaenyx itself. Call counts are
+  always real; token counts appear only where an engine truly reports them —
+  never estimated.
+- **An app can use its own account** — an app of yours can sign in with its own
+  ChatGPT or Claude subscription, from inside that app. From then on its calls
+  ride its own account, and if that login expires the app gets a clear "not
+  connected" — it never silently falls back onto yours. Until an app does this,
+  everything works exactly as before, on the door's own sign-ins.
 - **Test** — a Test button per subscription sends a real request. Green means it
   really worked.
 - **Prerequisite** — the app's device must be on your private network. If it is
@@ -446,5 +455,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.85** · last updated 2026-08-01.
+Manual for **v0.3.1-dev.86** · last updated 2026-08-02.
 Keep this file up to date whenever a feature changes.

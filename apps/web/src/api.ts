@@ -3,6 +3,7 @@ import type {
   AskVaenyxConversation,
   AskVaenyxMessage,
   RelayPanel,
+  RelayUsageResponse,
   RelaySettings,
   RelayTestResult,
   RelayTokenResponse,
@@ -94,6 +95,7 @@ export type {
   ModeCapabilities,
   DeviceMode,
   UpdateStatus,
+  RelayUsageResponse,
 } from "@vaenyx/contracts";
 
 import { showErrorToast, showSavedToast } from "./toast.js";
@@ -1672,6 +1674,12 @@ export function runCapabilityTest(
 
 // THE SUBSCRIPTION DOOR. The Owner's own view of it: what it is set to, whether
 // each subscription is signed in, and what it has been asked to do lately.
+// This month's spend, per app and engine — the page that answers "which app
+// grew the bill". Owner-only.
+export function fetchRelayUsage(): Promise<RelayUsageResponse> {
+  return requestJson<RelayUsageResponse>("/v1/relay/usage");
+}
+
 export function fetchRelay(): Promise<RelayPanel> {
   return requestJson<RelayPanel>("/v1/relay");
 }

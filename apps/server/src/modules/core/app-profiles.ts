@@ -433,14 +433,22 @@ export function regenerateAppProfileToken(
   const token = `vaenyx_app_${randomBytes(32).toString("base64url")}`;
   const tokenPrefix = `${token.slice(0, 18)}...`;
 
+  // key_version counts every rotation, wherever it came from (the Owner's
+  // Settings or the app's own rotate call): the app can display "key v3" and
+  // the Owner can see that a key has been moving. The old key stops working
+  // the instant this runs — same UPDATE, same hash column.
   const result = database.sqlite
     .prepare(
-      "UPDATE app_profiles SET token_hash = ?, token_prefix = ?, token_cipher = ? WHERE id = ?",
+      `UPDATE app_profiles
+       SET token_hash = ?, token_prefix = ?, token_cipher = ?,
+           key_version = key_version + 1, key_rotated_at = ?
+       WHERE id = ?`,
     )
     .run(
       hashAppToken(token),
       tokenPrefix,
       encryptAppToken(secretsDirectory, token),
+      new Date().toISOString(),
       profileId,
     );
 
@@ -455,6 +463,41 @@ export function regenerateAppProfileToken(
   }
 
   return { profile, token };
+}
+
+// The key's own passport, for the app that holds it: version, dates, the last
+// four characters (enough to recognise which key is in its settings, never
+// enough to use). No cipher, no hash, no full secret — a status answer must
+// stay worthless to a thief.
+export function appProfileKeyInfo(
+  database: DatabaseHandle,
+  profileId: string,
+): {
+  version: number;
+  createdAt: string;
+  rotatedAt: string | null;
+  hint: string;
+} {
+  const row = database.sqlite
+    .prepare(
+      `SELECT key_version, key_rotated_at, created_at, token_prefix
+       FROM app_profiles WHERE id = ?`,
+    )
+    .get(profileId) as
+    | {
+        key_version: number;
+        key_rotated_at: string | null;
+        created_at: string;
+        token_prefix: string;
+      }
+    | undefined;
+  if (!row) throw new Error("APP_PROFILE_NOT_FOUND");
+  return {
+    version: row.key_version,
+    createdAt: row.created_at,
+    rotatedAt: row.key_rotated_at,
+    hint: row.token_prefix,
+  };
 }
 
 // Re-view an existing Token (Owner-only, display purposes). Null when the
