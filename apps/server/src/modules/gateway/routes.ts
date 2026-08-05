@@ -208,11 +208,9 @@ import {
   type UpdateVaenyxThreadTitleRequest,
   RelayHealthSchema,
   RelayPanelSchema,
-  RelayTokenResponseSchema,
   RelayRunRequestSchema,
   RelayRunResponseSchema,
   RelaySettingsSchema,
-  RelayTestResultSchema,
   CapabilityTestResultSchema,
   UpdateRelaySettingsRequestSchema,
   RelayProfileStatusSchema,
@@ -226,7 +224,6 @@ import {
   type RelayProfileLoginStartRequest,
   type RelayProfileLoginCompleteRequest,
   type RelayProfileDisconnectRequest,
-  type RelayEngine,
   type RelayRunRequest,
   type UpdateRelaySettingsRequest,
 } from "@vaenyx/contracts";
@@ -568,17 +565,12 @@ import {
 import { runCapabilityProbe } from "../core/capability-probe.js";
 import { readFetchFolders, writeFetchFolders } from "../core/fetching.js";
 import {
-  forgetRelayEngineStatus,
   listRelayCalls,
-  newRelayToken,
   readRelayConfig,
   recordRelayCall,
   relayHealth,
   relayProfileEngineStatus,
-  relayTokenAccepted,
-  revokeRelayToken,
   runRelay,
-  testRelayEngine,
   writeRelayConfig,
 } from "../core/relay.js";
 import { listMonthUsage, usageMonth } from "../core/relay-usage.js";
@@ -4336,26 +4328,18 @@ export async function registerGatewayRoutes(
     return typeof login !== "string" || login.length === 0;
   }
 
-  // Who may knock, since the key split (2026-08-02): the door's own key
-  // (until phase two retires it) or a RELAY key. A Method/Routine Token is a
-  // real key for a different product — it authenticates, and is then refused
-  // with its own code, because "wrong kind of key" and "no key" are fixed
-  // differently: the first means "issue this app a relay key on the Door
-  // panel", the second means "the key is missing or dead".
+  // Who may knock (phase two, 2026-08-06): a RELAY key, nothing else. The
+  // shared door key is retired — every caller is an app with its own identity.
+  // A Method/Routine Token is a real key for a different product: it
+  // authenticates, and is then refused with its own code, because "wrong kind
+  // of key" and "no key" are fixed differently.
   function knocking(
     request: FastifyRequest,
-  ):
-    | { doorKey: true; profileId: null }
-    | { doorKey: false; profileId: string }
-    | "wrong-kind"
-    | null {
-    if (relayTokenAccepted(context.database, request.headers.authorization)) {
-      return { doorKey: true, profileId: null };
-    }
+  ): { profileId: string } | "wrong-kind" | null {
     const profile = authenticateAppProfile(context.database, request);
     if (!profile) return null;
     if (profile.kind !== "relay") return "wrong-kind";
-    return { doorKey: false, profileId: profile.id };
+    return { profileId: profile.id };
   }
 
   for (const path of ["/v1/ai/run", "/v1/ai/health"]) {
@@ -4391,7 +4375,7 @@ export async function registerGatewayRoutes(
       if (!knocker) {
         return reply.code(401).send({ error: "A valid App Token is required." });
       }
-      return relayHealth(context.database);
+      return relayHealth(context.database, knocker.profileId);
     },
   );
 
@@ -4460,7 +4444,6 @@ export async function registerGatewayRoutes(
             prompt: request.body.prompt,
             engine: request.body.engine,
             capability: request.body.capability,
-            caller: request.body.caller,
             files: request.body.files ?? [],
             appProfileId: knocker.profileId,
           },
@@ -5413,7 +5396,6 @@ export async function registerGatewayRoutes(
       }
       return {
         settings: readRelayConfig(context.database),
-        health: relayHealth(context.database),
         calls: listRelayCalls(context.database),
       };
     },
@@ -5432,12 +5414,7 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      // The key is not a setting the browser may write: it is minted and
-      // revoked through its own route, which is the only place it exists.
-      const { tokenHint, tokenCreatedAt, ...writable } = request.body;
-      void tokenHint;
-      void tokenCreatedAt;
-      const settings = writeRelayConfig(context.database, writable);
+      const settings = writeRelayConfig(context.database, request.body);
       recordAudit(context.database, {
         actorType: "owner",
         actorName: owner.name,
@@ -5454,90 +5431,10 @@ export async function registerGatewayRoutes(
   // working the instant this returns, which is how an app is cut off without
   // closing the door on the others. The plain text is returned exactly once and
   // stored nowhere — only its hash and its last four characters are kept.
-  app.post<{ Body: { action: "new" | "revoke" } }>(
-    "/v1/relay/token",
-    {
-      schema: {
-        body: Type.Object(
-          {
-            action: Type.Union([
-              Type.Literal("new"),
-              Type.Literal("revoke"),
-            ]),
-          },
-          { additionalProperties: false },
-        ),
-        response: {
-          200: RelayTokenResponseSchema,
-          401: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const owner = requireOwner(request);
-      if (!owner) {
-        return reply.code(401).send({ error: "Owner login required." });
-      }
-      const minted =
-        request.body.action === "new" ? newRelayToken(context.database) : null;
-      if (!minted) revokeRelayToken(context.database);
-      recordAudit(context.database, {
-        actorType: "owner",
-        actorName: owner.name,
-        action: "relay.token",
-        decision: "allowed",
-        reason: minted
-          ? "A new door key was issued; the previous one stopped working."
-          : "The door key was revoked.",
-        resourceType: "relay_settings",
-      });
-      return { token: minted, settings: readRelayConfig(context.database) };
-    },
-  );
-
+  
   // The Test button sends a REAL request down the engine the Owner is looking
   // at. It never reads a config file, never trusts a vendor page, and never
   // asks the model whether it works.
-  app.post<{ Body: { engine: RelayEngine } }>(
-    "/v1/relay/test",
-    {
-      schema: {
-        body: Type.Object(
-          {
-            engine: Type.Union([
-              Type.Literal("openai-cli"),
-              Type.Literal("claude-cli"),
-            ]),
-          },
-          { additionalProperties: false },
-        ),
-        response: {
-          200: RelayTestResultSchema,
-          401: ErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const owner = requireOwner(request);
-      if (!owner) {
-        return reply.code(401).send({ error: "Owner login required." });
-      }
-      forgetRelayEngineStatus();
-      try {
-        const answer = await testRelayEngine(
-          context.config.secretsDirectory,
-          request.body.engine,
-        );
-        return { status: "ok" as const, detail: answer.slice(0, 200) };
-      } catch (error) {
-        return {
-          status: "failed" as const,
-          detail: (error instanceof Error ? error.message : "Unknown failure")
-            .slice(0, 300),
-        };
-      }
-    },
-  );
 
   app.post<{ Body: AppAskRequest }>(
     "/v1/app/ask",

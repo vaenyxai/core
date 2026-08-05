@@ -321,8 +321,9 @@ Read this inside the app: **Settings → Manual**.
 - **Switch it on** — the toggle. It starts closed.
 - **Give an app the address** — the top one (this page's own address). Copy
   button beside it.
-- **Who gets in** — only the email addresses you list. Everyone else is refused
-  and their app falls back to a free model.
+- **Who gets in** — only an app holding a key you issued here, calling from a
+  device on your private network. There is no address list to keep: the key is
+  the identity.
 - **What it can do** — text, and reading a picture or PDF. The same seven
   capabilities as AI Settings are listed under each subscription, and what it
   cannot do is dimmed rather than left out: these two subscriptions do no voice
@@ -350,8 +351,8 @@ Read this inside the app: **Settings → Manual**.
   it works: an engine it has not connected gets a clear "not connected", never
   your account by accident. Each app's row here carries its capability ticks,
   a Rotate and a Revoke.
-- **The old shared key still works** during the changeover and retires once
-  every app carries its own.
+- **The old shared key is retired.** Every app carries its own key; a call on
+  the old one is simply refused.
 - **Prerequisite** — the app's device must be on your private network, and now
   the door itself checks: a request from outside the tailnet is refused with a
   clear answer (RELAY_TAILNET_REQUIRED), **even with a correct key**. A leaked
@@ -453,12 +454,12 @@ Read this inside the app: **Settings → Manual**.
 | "no app key can ever be given that" | Fetching, and no key can hold it — not a setting, a rule. Do that job from a chat instead. |
 | Photo comes back with no marks | The Vision row has no engine or is switched off, or the model found nothing to mark. |
 | A PDF asks about pages first | Over ten pages, on purpose. It is telling you the cost before spending it. |
-| Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the address is not on the owner list. |
+| Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the app has not signed in to a subscription yet. |
 | Your app gets `RELAY_CAPABILITY_NOT_GRANTED` | It knocked with its own Token, and that capability is not ticked on the key. Library → Token → that key → What It May Do — or give the app the door's own key, which has no list of its own. |
 | A scheduled run failed overnight | The computer slept. The failure and its reason stay on the run. |
 | An update banner will not go away | Press it, then Restart. |
 
 ---
 
-Manual for **v0.3.1-dev.89** · last updated 2026-08-02.
+Manual for **v0.3.1-dev.90** · last updated 2026-08-06.
 Keep this file up to date whenever a feature changes.

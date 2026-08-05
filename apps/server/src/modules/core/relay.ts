@@ -19,12 +19,7 @@
 //   * Files arrive as short-lived links and are fetched here, used, and deleted.
 //     Nothing a customer sent is left on this machine, and the log keeps only
 //     what happened, never what was in it.
-import {
-  createHash,
-  randomBytes,
-  randomUUID,
-  timingSafeEqual,
-} from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -33,7 +28,6 @@ import type { DatabaseHandle } from "../../db/database.js";
 import {
   codexLoginConnectedAt,
   codexProfileSignedIn,
-  getCodexStatus,
   runCodexRelay,
 } from "../harness/codex.js";
 import {
@@ -76,17 +70,6 @@ const ENGINE_CAPABILITIES: Record<RelayEngine, RelayCapability[]> = {
 
 export interface RelayConfig {
   enabled: boolean;
-  // The door's own key. ONE key, not one per subscription: a key says which app
-  // is knocking, and which subscription to use is named in each request. Stored
-  // as a hash — the plain text is shown once, when it is made, and never again.
-  // `tokenHint` is the last four characters, enough to recognise which key is
-  // in an app's settings without being enough to use it.
-  tokenHash: string | null;
-  tokenHint: string | null;
-  tokenCreatedAt: string | null;
-  // Who counts as Oskar. A list, never one address: he has several work
-  // mailboxes and all of them are him. Empty = nobody, which is the safe start.
-  ownerEmails: string[];
   // Web pages allowed to call in. The door is only ever reachable from inside
   // the private network, and this narrows it further to his own apps.
   allowedOrigins: string[];
@@ -101,10 +84,6 @@ export interface RelayConfig {
 
 export const DEFAULT_RELAY_CONFIG: RelayConfig = {
   enabled: false,
-  tokenHash: null,
-  tokenHint: null,
-  tokenCreatedAt: null,
-  ownerEmails: [],
   allowedOrigins: [],
   fileHosts: [],
   maxFiles: 5,
@@ -133,11 +112,6 @@ export function writeRelayConfig(
   changes: Partial<RelayConfig>,
 ): RelayConfig {
   const next: RelayConfig = { ...readRelayConfig(database), ...changes };
-  next.ownerEmails = [
-    ...new Set(
-      next.ownerEmails.map((email) => email.trim().toLowerCase()).filter(Boolean),
-    ),
-  ];
   next.allowedOrigins = [
     ...new Set(
       next.allowedOrigins
@@ -171,86 +145,6 @@ export function writeRelayConfig(
   return next;
 }
 
-const DOOR_TOKEN_PREFIX = "vaenyx_door_";
-
-function hashDoorToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-// Make a new key and forget the old one in the same breath. Regenerating is how
-// an app is cut off: the previous key stops working the instant this returns.
-// The plain text is returned ONCE — nothing stores it, here or anywhere.
-export function newRelayToken(database: DatabaseHandle): string {
-  const token = `${DOOR_TOKEN_PREFIX}${randomBytes(24).toString("hex")}`;
-  writeRelayConfig(database, {
-    tokenHash: hashDoorToken(token),
-    tokenHint: token.slice(-4),
-    tokenCreatedAt: new Date().toISOString(),
-  });
-  return token;
-}
-
-export function revokeRelayToken(database: DatabaseHandle): void {
-  writeRelayConfig(database, {
-    tokenHash: null,
-    tokenHint: null,
-    tokenCreatedAt: null,
-  });
-}
-
-// Does this Authorization header carry the door's key? A missing key means the
-// door is shut to apps whatever the switch says — there is nothing to guess.
-export function relayTokenAccepted(
-  database: DatabaseHandle,
-  authorization: string | undefined,
-): boolean {
-  const config = readRelayConfig(database);
-  if (!config.tokenHash) return false;
-  if (!authorization?.startsWith("Bearer ")) return false;
-  const token = authorization.slice("Bearer ".length).trim();
-  if (!token.startsWith(DOOR_TOKEN_PREFIX)) return false;
-  const offered = Buffer.from(hashDoorToken(token));
-  const stored = Buffer.from(config.tokenHash);
-  return offered.length === stored.length && timingSafeEqual(offered, stored);
-}
-
-// Asking the Codex CLI whether it is signed in costs two child processes, which
-// is far too slow for a health check a caller times out in three seconds. The
-// answer is kept and refreshed in the background: callers get the last known
-// state immediately, and only the very first call after a restart waits.
-let codexSignedIn: { at: number; value: boolean } | null = null;
-let codexRefreshing = false;
-const CODEX_STATUS_TTL_MS = 60_000;
-
-function readCodexSignedIn(): boolean {
-  const status = getCodexStatus();
-  return status.installed && status.loggedIn && status.authMethod === "chatgpt";
-}
-
-function codexSignedInCached(now: number): boolean {
-  if (!codexSignedIn) {
-    codexSignedIn = { at: now, value: readCodexSignedIn() };
-    return codexSignedIn.value;
-  }
-  if (now - codexSignedIn.at > CODEX_STATUS_TTL_MS && !codexRefreshing) {
-    codexRefreshing = true;
-    setTimeout(() => {
-      try {
-        codexSignedIn = { at: Date.now(), value: readCodexSignedIn() };
-      } finally {
-        codexRefreshing = false;
-      }
-    }, 0).unref?.();
-  }
-  return codexSignedIn.value;
-}
-
-// Only for tests and for the settings page's own refresh: forget the cache so
-// the next read asks the CLI again.
-export function forgetRelayEngineStatus(): void {
-  codexSignedIn = null;
-}
-
 export interface RelayHealth {
   on: boolean;
   engines: {
@@ -266,9 +160,14 @@ export interface RelayHealth {
   };
 }
 
+// Health answers for the CALLING key's own profile (phase two, 2026-08-06):
+// "signed in" used to mean Vaenyx's machine logins, which since the fallback
+// was removed have no bearing on any app's calls — a health check that lights
+// a button the run would refuse is worse than none. Cheap by construction:
+// both checks are a file-stat in the profile's own directory.
 export function relayHealth(
   database: DatabaseHandle,
-  now = Date.now(),
+  profileId: string,
 ): RelayHealth {
   const config = readRelayConfig(database);
   return {
@@ -276,12 +175,12 @@ export function relayHealth(
     engines: [
       {
         id: "openai-cli",
-        signedIn: codexSignedInCached(now),
+        signedIn: codexProfileSignedIn(profileId),
         capabilities: ENGINE_CAPABILITIES["openai-cli"],
       },
       {
         id: "claude-cli",
-        signedIn: claudeMachineLogin(),
+        signedIn: claudeMachineLogin(profileId),
         capabilities: ENGINE_CAPABILITIES["claude-cli"],
       },
     ],
@@ -304,12 +203,14 @@ export interface RelayRunRequest {
   prompt: string;
   engine: RelayEngine;
   capability: RelayCapability;
-  caller: string;
+  // Self-declared and IGNORED since phase two: the key is the identity, and a
+  // field anyone can type is not. Still accepted on the wire so a v1 client
+  // keeps working unchanged.
+  caller?: string;
   files: RelayFileRequest[];
-  // Which app key knocked, when the caller used one instead of the door's own
-  // key. REQUIRED, and null is a real answer rather than a shortcut: null means
-  // "the door key, which has no list of its own", never "skip the check".
-  appProfileId: string | null;
+  // Which app key knocked. Always set — the shared door key retired in phase
+  // two, so there is no callerless path left.
+  appProfileId: string;
 }
 
 export interface RelayRunResult {
@@ -436,10 +337,6 @@ export async function runRelay(
   const config = readRelayConfig(database);
   if (!config.enabled) throw new Error("RELAY_OFF");
 
-  const caller = request.caller.trim().toLowerCase();
-  if (!caller || !config.ownerEmails.includes(caller)) {
-    throw new Error("RELAY_NOT_OWNER");
-  }
   if (!ENGINE_CAPABILITIES[request.engine].includes(request.capability)) {
     throw new Error(
       `RELAY_CAPABILITY_UNSUPPORTED:${request.engine}:${request.capability}`,
@@ -451,24 +348,15 @@ export async function runRelay(
   // switched off should not pull the customer's file onto this disk at all.
   // `text` is not one of the seven — it is the door itself.
   //
-  // The global switch is the ONLY layer here, and deliberately, on both
-  // counts. A relay call arrives from another program over the network with an
-  // owner email on it, not from a browser session, so there is no mode it
-  // could be inside. And this door has ONE key for every app rather than a key
-  // per app — the per-key lists on the Token screen belong to app_profiles,
-  // and nothing in this file has a profile to read. Anything that wants a list
-  // of its own has to become a per-app key first; until then, honouring the
-  // ceiling is the whole of what this door can honour.
+  // Two layers here: the machine's ceiling, then the key's own grant list. No
+  // mode layer, deliberately — a relay call arrives from another program over
+  // the network, not from a browser session, so there is no mode it could be
+  // inside.
   if (request.capability !== "text") {
     if (capabilityOff(database, request.capability)) {
       throw new Error(`RELAY_CAPABILITY_OFF:${request.capability}`);
     }
-    // The third layer, where it applies: this door also accepts an app key,
-    // and a key that was never granted `vision` must not be able to get it by
-    // knocking here instead of running a Method. A key's list would be worth
-    // nothing if another endpoint handed out the same capability.
     if (
-      request.appProfileId &&
       !decideTokenCapabilities(
         database,
         [request.capability],
@@ -479,11 +367,10 @@ export async function runRelay(
     }
   }
 
-  // Which identity this call rides: an app key rides ITS profile's login,
-  // always — there is no fallback onto Vaenyx's own credentials. Only the
-  // door's shared key (appProfileId null) still uses the door's own login,
-  // and that key retires in phase two.
-  const profileKey = request.appProfileId ?? "core";
+  // The call rides the profile's own login, nothing else. The shared door
+  // key — the last path that used Vaenyx's own credentials here — retired in
+  // phase two.
+  const profileKey = request.appProfileId;
 
   const started = Date.now();
   const scratch = resolve(tmpdir(), "vaenyx-relay", randomUUID());
@@ -500,11 +387,7 @@ export async function runRelay(
 
     // Counted before the engine answers: a failed call still hit the
     // subscription, and "which app spent this" must include the failures.
-    recordEngineUsage(
-      database,
-      request.appProfileId ?? "door",
-      request.engine,
-    );
+    recordEngineUsage(database, request.appProfileId, request.engine);
 
     const text =
       request.engine === "claude-cli"
@@ -605,14 +488,3 @@ export function listRelayCalls(database: DatabaseHandle): {
   return rows.map((row) => ({ ...row, ok: row.ok === 1 }));
 }
 
-// Used by the settings page's Test button: the smallest real call there is, on
-// the engine the Owner is actually looking at. Reads nothing, assumes nothing.
-export async function testRelayEngine(
-  secretsDirectory: string,
-  engine: RelayEngine,
-): Promise<string> {
-  const prompt = "Reply with the single word: ready";
-  return engine === "claude-cli"
-    ? await claudeSubscriptionRelay(secretsDirectory, prompt)
-    : await runCodexRelay(prompt);
-}

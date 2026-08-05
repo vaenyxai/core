@@ -133,27 +133,21 @@ describe("relay profiles", () => {
     const bodyTwo = statusTwo.json() as { key: { hint: string } };
     expect(bodyTwo.key.hint).not.toBe(bodyOne.key.hint);
 
-    // No token, wrong token, and the DOOR's own key all bounce: these routes
-    // exist only for a key that names a profile.
+    // No token bounces, and the retired door key's mint route is gone for
+    // good — a stale client asking for one gets a plain 404, not a new key.
     const anonymous = await app.inject({
       method: "GET",
       url: "/v1/relay/profile",
       headers: { "tailscale-user-login": "owner@example.com" },
     });
     expect(anonymous.statusCode).toBe(401);
-    const doorKeyResponse = await app.inject({
+    const mintGone = await app.inject({
       method: "POST",
       url: "/v1/relay/token",
       headers: { cookie },
       payload: { action: "new" },
     });
-    const doorToken = (doorKeyResponse.json() as { token: string }).token;
-    const viaDoor = await app.inject({
-      method: "GET",
-      url: "/v1/relay/profile",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${doorToken}` },
-    });
-    expect(viaDoor.statusCode).toBe(401);
+    expect(mintGone.statusCode).toBe(404);
   });
 
   it("outside the tailnet is refused with its OWN code, before any key check", async () => {
@@ -272,7 +266,7 @@ describe("relay profiles", () => {
       method: "PUT",
       url: "/v1/relay/settings",
       headers: { cookie },
-      payload: { enabled: true, ownerEmails: ["owner@example.com"] },
+      payload: { enabled: true },
     });
     expect(enable.statusCode).toBe(200);
     const run = await app.inject({

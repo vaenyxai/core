@@ -6,7 +6,6 @@ import type {
   RelayUsageResponse,
   RelaySettings,
   RelayTestResult,
-  RelayTokenResponse,
   CapabilityTestResult,
   ReasoningEffort,
   ClassifyRoutineResponse,
@@ -1690,18 +1689,6 @@ export function updateRelaySettings(
   return requestJson<RelaySettings>("/v1/relay/settings", {
     method: "PUT",
     body: JSON.stringify(changes),
-  });
-}
-
-// Mint or revoke the door's key. Minting replaces: whatever an app is holding
-// stops working at once. The plain text comes back exactly once — if it is not
-// copied now it cannot be recovered, only replaced.
-export function setRelayToken(
-  action: "new" | "revoke",
-): Promise<RelayTokenResponse> {
-  return requestJson<RelayTokenResponse>("/v1/relay/token", {
-    method: "POST",
-    body: JSON.stringify({ action }),
   });
 }
 

@@ -317,8 +317,6 @@ export {
   RelaySettingsSchema,
   UpdateRelaySettingsRequestSchema,
   RelayCallSchema,
-  RelayTokenResponseSchema,
-  type RelayTokenResponse,
   RelayPanelSchema,
   RelayTestResultSchema,
   type RelayEngine,

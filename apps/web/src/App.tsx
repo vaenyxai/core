@@ -176,7 +176,6 @@ import {
   fetchRelayUsage,
   type RelayUsageResponse,
   updateRelaySettings,
-  setRelayToken,
   fetchManual,
   type FreePicksState,
   withdrawFlywheelItem,
@@ -9736,13 +9735,8 @@ function localBackendNoticeKey(
 function SubscriptionDoorPanel() {
   const { lang } = useI18n();
   const [panel, setPanel] = useState<RelayPanelData | null>(null);
-  const [emailDraft, setEmailDraft] = useState("");
   const [originDraft, setOriginDraft] = useState("");
   const [hostDraft, setHostDraft] = useState("");
-  // The freshly minted key, held only in this screen's memory until the page
-  // moves on. There is nowhere else it exists.
-  const [minted, setMinted] = useState<string | null>(null);
-  const [keyBusy, setKeyBusy] = useState(false);
   const [usage, setUsage] = useState<RelayUsageResponse | null>(null);
   // THE APPS (2026-08-02): each app has its own relay key, listed and managed
   // here and nowhere else — the Tokens screen filters this kind out, and this
@@ -9757,10 +9751,6 @@ function SubscriptionDoorPanel() {
     token: string;
   } | null>(null);
   const [appBusy, setAppBusy] = useState<string | null>(null);
-  const [approvingApp, setApprovingApp] = useState<{
-    profileId: string;
-    capability: string;
-  } | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
   const [ceiling, setCeiling] = useState<{
     global: Record<string, boolean>;
@@ -9859,7 +9849,6 @@ function SubscriptionDoorPanel() {
       setApps((current) =>
         current.map((entry) => (entry.id === profileId ? profile : entry)),
       );
-      setApprovingApp(null);
     } catch (error) {
       showErrorToast(
         error instanceof Error
@@ -9870,23 +9859,6 @@ function SubscriptionDoorPanel() {
       );
     } finally {
       setAppBusy(null);
-    }
-  }
-
-  async function changeKey(action: "new" | "revoke") {
-    setKeyBusy(true);
-    try {
-      const result = await setRelayToken(action);
-      setMinted(result.token);
-      setPanel((current) =>
-        current ? { ...current, settings: result.settings } : current,
-      );
-    } catch (error) {
-      showErrorToast(
-        error instanceof Error ? error.message : "Could not change the key.",
-      );
-    } finally {
-      setKeyBusy(false);
     }
   }
 
@@ -10042,49 +10014,26 @@ function SubscriptionDoorPanel() {
               </span>
             </div>
           ) : null}
-          {/* The key's capability grants, managed HERE for relay keys (the
-              Tokens screen owns the Method/Routine kind). Same four states as
-              every capability surface: never through a key, not built, off for
-              the machine, or a tick — and the web takes its own approval. */}
+          {/* Only what the door actually serves (Oskar, 2026-08-06: 图一大半
+              不需要). Its engines do text + these two; hearing, speaking and
+              drawing exist on no door engine, and web and fetching are not
+              even in the door's request vocabulary — seven rows here were five
+              rows of noise. The full seven-row grant surface stays where the
+              other kinds of key live, on the Tokens screen. */}
           {ceiling ? (
             <div className="door-app-caps">
-              {CAPABILITY_META.map((meta) => {
-                const never = ceiling.neverViaToken.includes(meta.id);
-                const built = ceiling.implemented[meta.id] !== false;
+              {CAPABILITY_META.filter((meta) =>
+                ["vision", "reading"].includes(meta.id),
+              ).map((meta) => {
                 const machineOn = ceiling.global[meta.id] === true;
                 const granted = appProfile.capabilities.includes(meta.id);
-                const ownApproval = ceiling.needsOwnTokenApproval.includes(
-                  meta.id,
-                );
                 return (
                   <div className="door-app-cap" key={meta.id}>
                     <CapabilityChip id={meta.id} lang={lang} showName />
-                    {never ? (
-                      <span className="capability-row-pending">
-                        {lang === "zh" ? "永远不给" : "never"}
-                      </span>
-                    ) : !built ? (
-                      <span className="capability-row-pending">
-                        {lang === "zh" ? "还没做出来" : "not built"}
-                      </span>
-                    ) : !machineOn ? (
+                    {!machineOn ? (
                       <span className="capability-row-pending">
                         {lang === "zh" ? "整机关着" : "machine off"}
                       </span>
-                    ) : ownApproval && !granted ? (
-                      <button
-                        className="door-copy"
-                        disabled={appBusy === appProfile.id}
-                        onClick={() =>
-                          setApprovingApp({
-                            profileId: appProfile.id,
-                            capability: meta.id,
-                          })
-                        }
-                        type="button"
-                      >
-                        {lang === "zh" ? "单独批准" : "Approve"}
-                      </button>
                     ) : (
                       <input
                         aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
@@ -10107,111 +10056,10 @@ function SubscriptionDoorPanel() {
               })}
             </div>
           ) : null}
-          {approvingApp?.profileId === appProfile.id ? (
-            <div className="token-reset-confirm">
-              <span>
-                {lang === "zh"
-                  ? "把「上网」给这把钥匙?拿着它的程序就能通过这台机器上网。随时可以收回。"
-                  : "Give this key the web? Whatever holds it can then reach the internet through this machine. You can take it back at any time."}
-              </span>
-              <button
-                className="secondary-button"
-                disabled={appBusy === appProfile.id}
-                onClick={() =>
-                  void grantAppCapability(
-                    appProfile.id,
-                    approvingApp.capability,
-                    true,
-                    [approvingApp.capability],
-                  )
-                }
-                type="button"
-              >
-                {lang === "zh" ? "批准" : "Approve"}
-              </button>
-              <button
-                className="secondary-button"
-                onClick={() => setApprovingApp(null)}
-                type="button"
-              >
-                {lang === "zh" ? "不了" : "Not now"}
-              </button>
-            </div>
-          ) : null}
         </div>
       ))}
 
-      <h3 className="door-subhead">
-        {lang === "zh" ? "旧的共享钥匙(将退役)" : "Shared key (retiring)"}
-      </h3>
-      <p className="door-legend">
-        {lang === "zh"
-          ? "过渡期用的老钥匙,还能用。等每个 app 都换上自己的钥匙,它就作废。"
-          : "The old transition key, still working. Once every app carries its own key, it goes away."}
-      </p>
-      {minted ? (
-        // The one moment it is readable. Nothing stores it, so this is the only
-        // chance to copy it — said plainly rather than discovered later.
-        <div className="door-address door-key-new">
-          <code>{minted}</code>
-          <button
-            className="door-copy"
-            onClick={() => void navigator.clipboard?.writeText(minted)}
-            type="button"
-          >
-            Copy
-          </button>
-          <span>copy it now — it is never shown again</span>
-        </div>
-      ) : null}
-      <div className="door-address">
-        {settings.tokenHint ? (
-          <>
-            <code>…{settings.tokenHint}</code>
-            <span>
-              made{" "}
-              {settings.tokenCreatedAt
-                ? new Date(settings.tokenCreatedAt).toLocaleDateString()
-                : "earlier"}
-            </span>
-          </>
-        ) : (
-          <span>No key yet — an app cannot get in until you make one.</span>
-        )}
-        <button
-          className="door-copy"
-          disabled={keyBusy}
-          onClick={() => void changeKey("new")}
-          type="button"
-        >
-          {settings.tokenHint ? "Replace" : "Make a key"}
-        </button>
-        {settings.tokenHint ? (
-          <button
-            className="door-copy"
-            disabled={keyBusy}
-            onClick={() => void changeKey("revoke")}
-            type="button"
-          >
-            Revoke
-          </button>
-        ) : null}
-      </div>
-
       <h3 className="door-subhead">Who and where</h3>
-      <div className="door-field">
-        <span className="door-field-label">
-          Your addresses
-          <em>only these get in — everyone else falls back to a free model</em>
-        </span>
-        <DoorList
-          items={settings.ownerEmails}
-          onChange={(ownerEmails) => void save({ ownerEmails })}
-          placeholder="name@company.com"
-          draft={emailDraft}
-          setDraft={setEmailDraft}
-        />
-      </div>
       <div className="door-field">
         <span className="door-field-label">
           Pages allowed to call in

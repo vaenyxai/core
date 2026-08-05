@@ -961,23 +961,26 @@ describe("the capability ceiling below the routes", () => {
     databases.push(database);
     writeRelayConfig(database, {
       enabled: true,
-      ownerEmails: ["owner@example.com"],
       fileHosts: ["files.example.com"],
     });
 
-    // A link the Owner never allowed: it fails at the door's own host check,
-    // which sits AFTER the ceiling and before anything is fetched. So the
-    // same call proves both halves without touching the network.
+    // Every call carries a key since the shared one retired; this one is
+    // granted vision, so the sequence proves the ceiling first, then the
+    // door's own host check — nothing is fetched either way.
+    const relayProfileId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    database.sqlite
+      .prepare(
+        `INSERT INTO app_profiles (id, name, token_hash, token_prefix, kind, capabilities)
+         VALUES (?, 'gate-test', 'x', 'vaenyx_app_gate...', 'relay', ?)`,
+      )
+      .run(relayProfileId, JSON.stringify(["vision", "reading"]));
     const call = {
       task: "quote-analysis",
       prompt: "What is in this picture?",
       engine: "claude-cli" as const,
       capability: "vision" as const,
-      caller: "owner@example.com",
       files: [{ name: "a.png", url: "https://evil.example.net/a.png" }],
-      // The door's own key: one key for every app, so there is no per-key list
-      // to intersect and the ceiling is the only layer.
-      appProfileId: null,
+      appProfileId: relayProfileId,
     };
 
     writeGlobalCapabilities(database, { vision: false });
@@ -1003,7 +1006,6 @@ describe("the capability ceiling below the routes", () => {
     databases.push(database);
     writeRelayConfig(database, {
       enabled: true,
-      ownerEmails: ["owner@example.com"],
       fileHosts: ["files.example.com"],
     });
     database.sqlite

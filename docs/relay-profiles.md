@@ -14,9 +14,8 @@ is no second registry: an app's key is its identity everywhere in Vaenyx.
 **The key is the identity.** Every profile endpoint authenticates with the
 app's own `vaenyx_app_…` key and acts on the profile that key belongs to. No
 request carries an `appId`; a client cannot name a profile, so one app is
-physically unable to reach another's credentials, login, or key. The door's
-shared `vaenyx_door_…` key does not work on these endpoints — it has no
-profile.
+physically unable to reach another's credentials, login, or key. The old shared
+`vaenyx_door_…` key is retired entirely (2026-08-06): it works nowhere.
 
 **No credential ever leaves.** Status answers are connected-or-not, timestamps,
 the key's version and prefix. There is no export, no reveal, no refresh-token
@@ -56,8 +55,9 @@ not choose it, is the one failure this design refuses to allow.
 The `mode` field in `GET /v1/relay/profile` is always `"dedicated"` now; it
 survives only so a v1 parser does not break, and goes away in v2.
 
-The old shared `vaenyx_door_` key still works during the transition and will
-be retired once every app carries its own key.
+The shared `vaenyx_door_` key retired on 2026-08-06. The `caller` field on
+`/v1/ai/run` is accepted but ignored — the key is the identity; there is no
+owner-email list any more.
 
 ## Network prerequisite — the tailnet gate
 
@@ -84,6 +84,9 @@ Practical consequences for an app:
 All under the same CORS policy as `/v1/ai/*`: the `Origin` must be in the
 door's `allowedOrigins` list — configured per app origin, never `*`.
 Auth header on every call: `Authorization: Bearer vaenyx_app_…`.
+
+`GET /v1/ai/health` answers for the CALLING key's own profile: `signedIn`
+means *this app's* logins, not Vaenyx's.
 
 ### `GET /v1/relay/profile`
 
@@ -158,9 +161,7 @@ Call counts always; token counts only where an engine truly reports them
 | Vaenyx unreachable | network error / timeout — fall back to your free model |
 | Key rejected or revoked | `401` `RELAY_PROFILE_REQUIRED` (profile routes) / `401` on `/v1/ai/run` |
 | Wrong KIND of key (a Method/Routine Token) | `403` `RELAY_KEY_WRONG_KIND` — issue this app a relay key on the Door panel |
-| Owner not in allowed list | `403` `RELAY_NOT_OWNER` |
 | Door switched off | `503` `RELAY_OFF` |
-| Door's own login missing (door-key calls only; retires with it) | `503` `RELAY_NOT_SIGNED_IN:<engine>` |
 | This profile's login missing | `503` `RELAY_PROFILE_NOT_CONNECTED:<engine>` — start a sign-in |
 | Capability off on the machine | `403` `RELAY_CAPABILITY_OFF:<capability>` |
 | Capability not granted to this key | `403` `RELAY_CAPABILITY_NOT_GRANTED:<capability>` |

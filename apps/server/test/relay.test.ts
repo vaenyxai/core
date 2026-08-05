@@ -14,10 +14,7 @@ import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import {
   DEFAULT_RELAY_CONFIG,
   listRelayCalls,
-  newRelayToken,
   readRelayConfig,
-  relayTokenAccepted,
-  revokeRelayToken,
   recordRelayCall,
   relayHealth,
   runRelay,
@@ -55,47 +52,48 @@ afterEach(() => {
 
 const OPEN_DOOR = {
   enabled: true,
-  ownerEmails: ["owner@example.com"],
   fileHosts: ["files.example.com"],
 };
+
+// Every call carries an app profile since the shared key retired; the row is
+// planted straight into the table with the grants the door serves.
+const TEST_PROFILE = "11111111-2222-4333-8444-555555555555";
+
+function plantProfile(database: DatabaseHandle): void {
+  database.sqlite
+    .prepare(
+      `INSERT OR IGNORE INTO app_profiles (id, name, token_hash, token_prefix, kind, capabilities)
+       VALUES (?, 'relay-test', 'x', 'vaenyx_app_test...', 'relay', ?)`,
+    )
+    .run(TEST_PROFILE, JSON.stringify(["vision", "reading"]));
+}
 
 function runOnce(
   database: DatabaseHandle,
   changes: Partial<Parameters<typeof runRelay>[2]>,
 ) {
+  plantProfile(database);
   return runRelay(database, resolve(tmpdir(), "vaenyx-relay-no-secrets"), {
     task: "quote-analysis",
     prompt: "Summarise this.",
     engine: "claude-cli",
     capability: "text",
-    caller: "owner@example.com",
     files: [],
-    // The door's own key by default: it has no per-key list, so the ceiling is
-    // the only layer. An app key knocking instead passes its own id.
-    appProfileId: null,
+    appProfileId: TEST_PROFILE,
     ...changes,
   });
 }
 
 describe("the subscription door", () => {
-  it("starts shut, with nobody on the owner list", () => {
+  it("starts shut", () => {
     const database = createTestDatabase();
     expect(readRelayConfig(database)).toEqual(DEFAULT_RELAY_CONFIG);
     expect(DEFAULT_RELAY_CONFIG.enabled).toBe(false);
-    expect(DEFAULT_RELAY_CONFIG.ownerEmails).toEqual([]);
-  });
-
-  it("keeps the owner list tidy: lower case, no repeats, no blanks", () => {
-    const database = createTestDatabase();
-    const saved = writeRelayConfig(database, {
-      ownerEmails: ["Oskar@Example.com", "  oskar@example.com ", "", "b@x.com"],
-    });
-    expect(saved.ownerEmails).toEqual(["oskar@example.com", "b@x.com"]);
   });
 
   it("offers the same words a Method declares, and says so about the rest", () => {
     const database = createTestDatabase();
-    const health = relayHealth(database);
+    const health = relayHealth(database, TEST_PROFILE);
     expect(health.on).toBe(false);
     expect(health.engines.map((engine) => engine.id)).toEqual([
       "openai-cli",
@@ -114,18 +112,15 @@ describe("the subscription door", () => {
     await expect(runOnce(database, {})).rejects.toThrow("RELAY_OFF");
   });
 
-  it("refuses a caller who is not the owner", async () => {
+  it("ignores the self-declared caller field: the key is the identity", async () => {
     const database = createTestDatabase();
     writeRelayConfig(database, OPEN_DOOR);
-    await expect(
-      runOnce(database, { caller: "colleague@example.com" }),
-    ).rejects.toThrow("RELAY_NOT_OWNER");
-    // The same address in different case and spacing IS the owner: this one
-    // gets past the door and is stopped by the NEXT gate instead. Checked that
-    // way round on purpose — a test must never reach a real subscription.
+    // Any caller value, or none, changes nothing — the request is stopped by
+    // the NEXT gate either way. Checked that way round on purpose: a test must
+    // never reach a real subscription.
     await expect(
       runOnce(database, {
-        caller: " Owner@Example.com ",
+        caller: "anyone@example.com",
         capability: "hearing",
       }),
     ).rejects.toThrow("RELAY_CAPABILITY_UNSUPPORTED");
@@ -173,29 +168,12 @@ describe("the subscription door", () => {
     ).rejects.toThrow("RELAY_TOO_MANY_FILES");
   });
 
-  it("has no key until one is made, and never stores the key itself", () => {
+  it("an engine the profile has not connected refuses by name", async () => {
     const database = createTestDatabase();
-    expect(relayTokenAccepted(database, "Bearer vaenyx_door_anything")).toBe(
-      false,
+    writeRelayConfig(database, OPEN_DOOR);
+    await expect(runOnce(database, {})).rejects.toThrow(
+      "RELAY_PROFILE_NOT_CONNECTED:claude-cli",
     );
-    const key = newRelayToken(database);
-    expect(key.startsWith("vaenyx_door_")).toBe(true);
-    expect(relayTokenAccepted(database, `Bearer ${key}`)).toBe(true);
-    // What is kept is a hash and the last four characters — not the key.
-    const stored = JSON.stringify(readRelayConfig(database));
-    expect(stored).not.toContain(key);
-    expect(readRelayConfig(database).tokenHint).toBe(key.slice(-4));
-  });
-
-  it("cuts the old key off the moment a new one is made", () => {
-    const database = createTestDatabase();
-    const first = newRelayToken(database);
-    const second = newRelayToken(database);
-    expect(first).not.toBe(second);
-    expect(relayTokenAccepted(database, `Bearer ${first}`)).toBe(false);
-    expect(relayTokenAccepted(database, `Bearer ${second}`)).toBe(true);
-    revokeRelayToken(database);
-    expect(relayTokenAccepted(database, `Bearer ${second}`)).toBe(false);
   });
 
   it("logs what happened and never what was in it", () => {
