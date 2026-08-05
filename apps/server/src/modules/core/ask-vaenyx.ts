@@ -38,6 +38,7 @@ import {
   DOCUMENT_GATE_PAGES,
   DOCUMENT_NATIVE_PROVIDER_IDS,
   extractDocumentText,
+  isPdfDocument,
   inspectDocument,
   readDocument,
 } from "./documents.js";
@@ -1088,7 +1089,13 @@ export async function createAskVaenyxMessage(
       } else {
         const file = readDocument(options.dataDirectory, options.documentId);
         if (file) {
-          if (DOCUMENT_NATIVE_PROVIDER_IDS.includes(provider.id)) {
+          // Native document blocks are a PDF thing; a text file goes as words
+          // on EVERY backend, including the native ones — there is nothing in
+          // it that the picture path would preserve.
+          if (
+            DOCUMENT_NATIVE_PROVIDER_IDS.includes(provider.id) &&
+            isPdfDocument(file)
+          ) {
             documentBase64 = file.toString("base64");
           } else {
             try {

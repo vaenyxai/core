@@ -57,7 +57,9 @@ Read this inside the app: **Settings → Manual**.
   marks on and off.
 - **Look closer** — tap a photo for fullscreen; pinch to zoom. The marks and the
   layers button come with it.
-- **Send a document** — the document button. PDFs only for now.
+- **Send a document** — the document button. It takes PDFs and plain-text
+  files (.txt, .md); one button, and Vaenyx sorts out how each kind is read.
+  Word documents are not readable yet — save as PDF and send that.
   - Over ten pages, Vaenyx asks first and tells you the page count, because long
     documents cost real money on a paid model.
   - With **Reading** switched off (AI Settings → Capabilities) the file is
@@ -461,5 +463,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.91** · last updated 2026-08-06.
+Manual for **v0.3.1-dev.92** · last updated 2026-08-06.
 Keep this file up to date whenever a feature changes.

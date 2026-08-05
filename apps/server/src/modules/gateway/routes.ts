@@ -7000,7 +7000,7 @@ export async function registerGatewayRoutes(
       const name = (
         typeof rawName === "string" && rawName.trim()
           ? decodeURIComponent(rawName).trim()
-          : "document.pdf"
+          : "document"
       ).slice(0, 200);
 
       let pages: number;
@@ -7026,7 +7026,7 @@ export async function registerGatewayRoutes(
         }
         return reply.code(400).send({
           error:
-            "That file could not be read as a PDF. If it opens in a PDF viewer, try re-saving it and sending the new copy.",
+            "That file could not be read. Vaenyx takes PDFs and plain-text files (.txt, .md); a Word document is neither yet — save it as PDF and send that.",
         });
       }
 

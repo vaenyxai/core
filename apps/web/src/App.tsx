@@ -1821,7 +1821,7 @@ function DocumentButton({
   return (
     <>
       <input
-        accept="application/pdf,.pdf"
+        accept="application/pdf,.pdf,.txt,.md,.markdown,text/plain,text/markdown"
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -8304,7 +8304,7 @@ function AskVaenyxPanel({
                   <div className="message-document">
                     <IconDocument />
                     <span className="composer-document-name">
-                      {message.documentName ?? "document.pdf"}
+                      {message.documentName ?? "document"}
                     </span>
                     {message.documentPages ? (
                       <span className="text-faint">

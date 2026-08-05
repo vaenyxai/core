@@ -146,7 +146,7 @@ describe("document reading", () => {
     await app.close();
   });
 
-  it("refuses a file that is not a readable PDF, in words", async () => {
+  it("refuses a binary that is neither PDF nor text, in words", async () => {
     const app = await buildApp(createTestConfig());
     const setup = await app.inject({
       method: "POST",
@@ -156,15 +156,48 @@ describe("document reading", () => {
     const cookie = String(setup.headers["set-cookie"]);
     await switchReadingOn(app, cookie);
 
+    // Plain prose stopped being junk the day text files became documents; the
+    // honest junk is a binary, which no pipeline here can read.
     const junk = await app.inject({
       method: "POST",
       url: "/v1/documents/upload",
       headers: { cookie, "content-type": "application/pdf" },
-      payload: Buffer.from("this is not a pdf at all", "utf8"),
+      payload: Buffer.concat([
+        Buffer.from([0x00, 0x01, 0xff, 0xfe]),
+        Buffer.from("scrambled"),
+      ]),
     });
     expect(junk.statusCode).toBe(400);
     expect(String(junk.json().error)).toContain("PDF");
 
     await app.close();
+  });
+});
+
+describe("text documents (one button, several kinds)", () => {
+  it("takes a plain-text file as a one-page document and hands back its own words", async () => {
+    const { inspectDocument, extractDocumentText, isPdfDocument } =
+      await import("../src/modules/core/documents.js");
+    const file = Buffer.from("Meeting notes\nBring the ladder on Tuesday.\n");
+    expect(isPdfDocument(file)).toBe(false);
+    const facts = await inspectDocument(file);
+    // No pages means it can never trip the page-cost gate, which exists for
+    // PDFs read as pictures — words are the cheap path.
+    expect(facts.pages).toBe(1);
+    const text = await extractDocumentText(file);
+    expect(text).toContain("Bring the ladder on Tuesday.");
+  });
+
+  it("still refuses a binary wearing a text name", async () => {
+    const { inspectDocument } = await import(
+      "../src/modules/core/documents.js"
+    );
+    const binary = Buffer.concat([
+      Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe]),
+      Buffer.from("not really text"),
+    ]);
+    await expect(inspectDocument(binary)).rejects.toThrow(
+      "DOCUMENT_UNREADABLE",
+    );
   });
 });

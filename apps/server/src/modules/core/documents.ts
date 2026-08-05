@@ -87,12 +87,37 @@ export interface DocumentFacts {
   pages: number;
 }
 
+// One attach button, several kinds behind it (Oskar, 2026-08-06): the split
+// lives HERE, not in the UI — a PDF and a text file are different pipelines,
+// not different buttons.
+export function isPdfDocument(file: Buffer): boolean {
+  return file.subarray(0, 5).toString("latin1") === "%PDF-";
+}
+
+// Plain text, decided by content rather than extension (a renamed file must
+// not sneak a binary through): no NUL byte in the head, and the bytes decode
+// as UTF-8 without drowning in replacement characters.
+export function isTextDocument(file: Buffer): boolean {
+  const head = file.subarray(0, 4096);
+  if (head.includes(0)) return false;
+  const decoded = head.toString("utf8");
+  const bad = (decoded.match(/�/g) ?? []).length;
+  return decoded.length > 0 && bad / decoded.length < 0.05;
+}
+
 // Read the facts the gate needs. Every failure mode gets its own code so the
 // Owner is told what is actually wrong — a password-protected file must never
 // look like "something went wrong".
 export async function inspectDocument(file: Buffer): Promise<DocumentFacts> {
   if (file.length > MAX_DOCUMENT_BYTES) {
     throw new Error("DOCUMENT_TOO_LARGE");
+  }
+  // A text file has no pages, so it can never trip the page-cost gate — which
+  // is right: the gate exists because a PDF is read as pictures on a paid
+  // model, and words alone are the cheap path.
+  if (!isPdfDocument(file)) {
+    if (isTextDocument(file)) return { pages: 1 };
+    throw new Error("DOCUMENT_UNREADABLE");
   }
   const pdfjs = await loadPdfJs();
   let doc: PdfDoc;
@@ -122,6 +147,11 @@ export async function extractDocumentText(
   file: Buffer,
   maxPages = 40,
 ): Promise<string> {
+  // A text file IS its own extraction. Capped so a huge log file cannot crowd
+  // the whole conversation out of the model's window.
+  if (!isPdfDocument(file)) {
+    return file.toString("utf8").slice(0, 200_000);
+  }
   const pdfjs = await loadPdfJs();
   const doc = await pdfjs.getDocument({
     data: new Uint8Array(file),
