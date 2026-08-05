@@ -4309,6 +4309,34 @@ export async function registerGatewayRoutes(
   // thing: an App Token carries its own capability list and the door's own key
   // does not have one. A door that could not tell them apart would let a key
   // that was granted nothing take whatever the machine allows.
+  // THE TAILNET GATE (2026-08-02). The whole app rides one port, and that port
+  // is on Funnel — public internet — so until now the only thing between
+  // anyone on earth and Oskar's subscriptions was a Bearer key. A leaked key
+  // meant a stranger burning his paid quota from anywhere.
+  //
+  // Tailscale itself is the boundary: `serve` (tailnet traffic) injects
+  // Tailscale-User-Login and strips any client-supplied copy; `funnel`
+  // (public traffic) strips it and injects nothing. VERIFIED against reality
+  // on 2026-08-02, not read off documentation — probed all three paths
+  // (tailnet: header present; local: absent; public funnel: absent) AND
+  // confirmed a forged header sent through the funnel arrives stripped.
+  //
+  // So the door requires the header. The key still does the authenticating —
+  // this header only answers "did this arrive through the tailnet", never who
+  // is asking (a process already on this machine could write it, but such a
+  // process can read the database beside it anyway, and it still needs the
+  // key — two doors, both locked). UI routes are deliberately NOT gated: the
+  // phone-browser-without-Tailscale convenience stands.
+  //
+  // 🔴 Its own error code, never shared with "key invalid": an app showing
+  // "connect to Tailscale" for one and "key rejected" for the other is the
+  // whole reason the two are distinguishable — their fixes are different
+  // people doing different things.
+  function outsideTailnet(request: FastifyRequest): boolean {
+    const login = request.headers["tailscale-user-login"];
+    return typeof login !== "string" || login.length === 0;
+  }
+
   function knocking(
     request: FastifyRequest,
   ): { doorKey: true; profileId: null } | { doorKey: false; profileId: string } | null {
@@ -4333,11 +4361,18 @@ export async function registerGatewayRoutes(
     "/v1/ai/health",
     {
       schema: {
-        response: { 200: RelayHealthSchema, 401: ErrorResponseSchema },
+        response: {
+          200: RelayHealthSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
       },
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
       if (!knocking(request)) {
         return reply.code(401).send({ error: "A valid App Token is required." });
       }
@@ -4363,6 +4398,18 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        recordAudit(context.database, {
+          actorType: "system",
+          actorName: "Vaenyx Guard",
+          action: "relay.run",
+          decision: "denied",
+          reason:
+            "A relay request arrived from outside the tailnet (no Tailscale identity), so it was refused before any key was checked.",
+          resourceType: "relay_request",
+        });
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
       const knocker = knocking(request);
       if (!knocker) {
         recordAudit(context.database, {
@@ -4499,11 +4546,18 @@ export async function registerGatewayRoutes(
     "/v1/relay/profile",
     {
       schema: {
-        response: { 200: RelayProfileStatusSchema, 401: ErrorResponseSchema },
+        response: {
+          200: RelayProfileStatusSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
       },
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
       const profile = knockingProfile(request);
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
@@ -4526,6 +4580,7 @@ export async function registerGatewayRoutes(
         response: {
           200: RelayProfileLoginStartResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           409: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
@@ -4533,6 +4588,9 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
       const profile = knockingProfile(request);
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
@@ -4575,12 +4633,16 @@ export async function registerGatewayRoutes(
           200: RelayProfileLoginCompleteResponseSchema,
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
       const profile = knockingProfile(request);
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
@@ -4627,12 +4689,16 @@ export async function registerGatewayRoutes(
         response: {
           200: RelayProfileLoginCompleteResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
       const profile = knockingProfile(request);
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
@@ -4673,11 +4739,15 @@ export async function registerGatewayRoutes(
         response: {
           200: RelayRotateKeyResponseSchema,
           401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
       allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
       const profile = knockingProfile(request);
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });

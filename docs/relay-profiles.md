@@ -50,6 +50,26 @@ silently falls back to the door's account: an account switch nobody chose,
 billed to somebody who did not choose it, is the one failure this design
 refuses to allow.
 
+## Network prerequisite — the tailnet gate
+
+Every door endpoint (`/v1/ai/*` and `/v1/relay/profile*`) requires the request
+to arrive **through the tailnet**. Vaenyx sits behind Tailscale; `serve`
+(tailnet traffic) injects a `Tailscale-User-Login` header and strips any
+client-supplied copy, `funnel` (public traffic) strips it and injects nothing
+— verified against the live machine on 2026-08-02, including that a forged
+header sent through the public path arrives stripped.
+
+Practical consequences for an app:
+
+- The calling **device** must be on the Owner's tailnet. A device that is not
+  gets `403 RELAY_TAILNET_REQUIRED` — a real HTTP answer, **not** a connection
+  failure. Show "connect to Tailscale", not "Vaenyx is down" and not "key
+  rejected"; all three have different fixes.
+- A correct key from the public internet is still refused: the gate runs
+  before any key is read. A leaked key alone can no longer reach the door.
+- The Vaenyx web UI itself is NOT gated — a phone browser without Tailscale
+  still opens the app. Only the door is tailnet-only.
+
 ## Endpoints
 
 All under the same CORS policy as `/v1/ai/*`: the `Origin` must be in the
@@ -125,6 +145,7 @@ Call counts always; token counts only where an engine truly reports them
 
 | Situation | How it looks |
 |---|---|
+| Device not on the tailnet | `403` `RELAY_TAILNET_REQUIRED` — an answer, not a timeout |
 | Vaenyx unreachable | network error / timeout — fall back to your free model |
 | Key rejected or revoked | `401` `RELAY_PROFILE_REQUIRED` (profile routes) / `401` on `/v1/ai/run` |
 | Owner not in allowed list | `403` `RELAY_NOT_OWNER` |

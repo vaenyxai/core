@@ -351,8 +351,12 @@ Read this inside the app: **Settings → Manual**.
   everything works exactly as before, on the door's own sign-ins.
 - **Test** — a Test button per subscription sends a real request. Green means it
   really worked.
-- **Prerequisite** — the app's device must be on your private network. If it is
-  not, it cannot even find this door, and falls back on its own.
+- **Prerequisite** — the app's device must be on your private network, and now
+  the door itself checks: a request from outside the tailnet is refused with a
+  clear answer (RELAY_TAILNET_REQUIRED), **even with a correct key**. A leaked
+  key alone can no longer reach your subscriptions from the internet. The
+  Vaenyx web page itself is not affected — a phone browser without Tailscale
+  still opens it.
 
 ## 11. Using it away from the computer
 
@@ -455,5 +459,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.86** · last updated 2026-08-02.
+Manual for **v0.3.1-dev.88** · last updated 2026-08-02.
 Keep this file up to date whenever a feature changes.
