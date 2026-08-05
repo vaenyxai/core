@@ -570,7 +570,6 @@ import { readFetchFolders, writeFetchFolders } from "../core/fetching.js";
 import {
   forgetRelayEngineStatus,
   listRelayCalls,
-  markProfileDedicated,
   newRelayToken,
   readRelayConfig,
   recordRelayCall,
@@ -4337,14 +4336,26 @@ export async function registerGatewayRoutes(
     return typeof login !== "string" || login.length === 0;
   }
 
+  // Who may knock, since the key split (2026-08-02): the door's own key
+  // (until phase two retires it) or a RELAY key. A Method/Routine Token is a
+  // real key for a different product — it authenticates, and is then refused
+  // with its own code, because "wrong kind of key" and "no key" are fixed
+  // differently: the first means "issue this app a relay key on the Door
+  // panel", the second means "the key is missing or dead".
   function knocking(
     request: FastifyRequest,
-  ): { doorKey: true; profileId: null } | { doorKey: false; profileId: string } | null {
+  ):
+    | { doorKey: true; profileId: null }
+    | { doorKey: false; profileId: string }
+    | "wrong-kind"
+    | null {
     if (relayTokenAccepted(context.database, request.headers.authorization)) {
       return { doorKey: true, profileId: null };
     }
     const profile = authenticateAppProfile(context.database, request);
-    return profile ? { doorKey: false, profileId: profile.id } : null;
+    if (!profile) return null;
+    if (profile.kind !== "relay") return "wrong-kind";
+    return { doorKey: false, profileId: profile.id };
   }
 
   for (const path of ["/v1/ai/run", "/v1/ai/health"]) {
@@ -4373,7 +4384,11 @@ export async function registerGatewayRoutes(
       if (outsideTailnet(request)) {
         return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
       }
-      if (!knocking(request)) {
+      const knocker = knocking(request);
+      if (knocker === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
+      if (!knocker) {
         return reply.code(401).send({ error: "A valid App Token is required." });
       }
       return relayHealth(context.database);
@@ -4411,6 +4426,18 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
       }
       const knocker = knocking(request);
+      if (knocker === "wrong-kind") {
+        recordAudit(context.database, {
+          actorType: "system",
+          actorName: "Vaenyx Guard",
+          action: "relay.run",
+          decision: "denied",
+          reason:
+            "A Method/Routine Token knocked on the Subscription Door; the door takes relay keys only.",
+          resourceType: "relay_request",
+        });
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
       if (!knocker) {
         recordAudit(context.database, {
           actorType: "system",
@@ -4525,8 +4552,14 @@ export async function registerGatewayRoutes(
   // Nothing on these routes ever returns a credential in any form. Status is
   // connected-or-not, timestamps, the key's version and prefix. A leaked app
   // key must not be exchangeable for a subscription login.
-  function knockingProfile(request: FastifyRequest): AppProfile | null {
-    return authenticateAppProfile(context.database, request);
+  function knockingProfile(
+    request: FastifyRequest,
+  ): AppProfile | "wrong-kind" | null {
+    const profile = authenticateAppProfile(context.database, request);
+    if (!profile) return null;
+    // Only a relay key has a subscription identity to manage. A Method/Routine
+    // Token here gets its own refusal, never a confusing "no key".
+    return profile.kind === "relay" ? profile : "wrong-kind";
   }
 
   for (const path of [
@@ -4559,10 +4592,13 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
       }
       const profile = knockingProfile(request);
+      if (profile === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
       }
-      const status = relayProfileEngineStatus(context.database, profile.id);
+      const status = relayProfileEngineStatus(profile.id);
       return {
         mode: status.mode,
         engines: status.engines,
@@ -4592,6 +4628,9 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
       }
       const profile = knockingProfile(request);
+      if (profile === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
       }
@@ -4644,6 +4683,9 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
       }
       const profile = knockingProfile(request);
+      if (profile === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
       }
@@ -4658,11 +4700,6 @@ export async function registerGatewayRoutes(
           // "complete" is the app asking whether it landed.
           return { connected: false };
         }
-        // The first completed sign-in flips the profile to its own identity,
-        // permanently: from here on, this profile's calls ride this login and
-        // an expired login is a named error, never a quiet slide back onto the
-        // Owner's account.
-        markProfileDedicated(context.database, profile.id);
         recordAudit(context.database, {
           actorType: "app",
           actorId: profile.id,
@@ -4700,6 +4737,9 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
       }
       const profile = knockingProfile(request);
+      if (profile === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
       }
@@ -4749,6 +4789,9 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
       }
       const profile = knockingProfile(request);
+      if (profile === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
       }

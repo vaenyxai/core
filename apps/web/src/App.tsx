@@ -61,7 +61,6 @@ import type {
   Workspace,
   RelayPanel as RelayPanelData,
   RelaySettings,
-  RelayTestResult,
   CapabilityTestResult,
 } from "@vaenyx/contracts";
 
@@ -177,7 +176,6 @@ import {
   fetchRelayUsage,
   type RelayUsageResponse,
   updateRelaySettings,
-  testRelayEngine,
   setRelayToken,
   fetchManual,
   type FreePicksState,
@@ -9735,44 +9733,145 @@ function localBackendNoticeKey(
 // which subscription is signed in, the address to give an app, who counts as
 // him, the limits, and what it has been asked to do lately — without ever
 // showing what was in any of it.
-const DOOR_ENGINES = [
-  { id: "openai-cli" as const, name: "ChatGPT subscription (Codex CLI)" },
-  { id: "claude-cli" as const, name: "Claude subscription" },
-];
-// 🔴 ONE VOCABULARY, and this card is drawn from it rather than keeping a copy.
-// The copy it used to keep had drifted to a third spelling of one row ("Reading
-// (PDF)" where the Capabilities card says "Reading" and the manual agrees with
-// the card), no drawn icons, and two capabilities missing altogether — so an
-// Owner reading this card could not line it up against the one two cards up.
-// CAPABILITY_META is the list; a word only ever changes there.
-//
-// The two that are simply not on offer here are SHOWN and refused, never left
-// out: a row that is missing reads as an oversight, and the Owner goes looking
-// for the switch somewhere else. `fetching` can never ride any app key at all,
-// and neither word is even in the door's request vocabulary
-// (RelayCapabilitySchema), so an app asking for one is refused before anything
-// runs.
-const DOOR_NEVER = ["fetching", "web"];
-
 function SubscriptionDoorPanel() {
   const { lang } = useI18n();
   const [panel, setPanel] = useState<RelayPanelData | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [originDraft, setOriginDraft] = useState("");
   const [hostDraft, setHostDraft] = useState("");
-  const [testing, setTesting] = useState<string | null>(null);
-  const [results, setResults] = useState<Record<string, RelayTestResult>>({});
   // The freshly minted key, held only in this screen's memory until the page
   // moves on. There is nowhere else it exists.
   const [minted, setMinted] = useState<string | null>(null);
   const [keyBusy, setKeyBusy] = useState(false);
   const [usage, setUsage] = useState<RelayUsageResponse | null>(null);
+  // THE APPS (2026-08-02): each app has its own relay key, listed and managed
+  // here and nowhere else — the Tokens screen filters this kind out, and this
+  // panel never shows a Method/Routine Token. One key pipeline underneath;
+  // two products on top, kept apart on both screens.
+  const [apps, setApps] = useState<AppProfile[]>([]);
+  const [newAppName, setNewAppName] = useState("");
+  const [addBusy, setAddBusy] = useState(false);
+  // {profileId, token}: the one moment an app's key is readable.
+  const [mintedApp, setMintedApp] = useState<{
+    profileId: string;
+    token: string;
+  } | null>(null);
+  const [appBusy, setAppBusy] = useState<string | null>(null);
+  const [approvingApp, setApprovingApp] = useState<{
+    profileId: string;
+    capability: string;
+  } | null>(null);
+  const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
+  const [ceiling, setCeiling] = useState<{
+    global: Record<string, boolean>;
+    implemented: Record<string, boolean>;
+    neverViaToken: string[];
+    needsOwnTokenApproval: string[];
+  } | null>(null);
 
   useEffect(() => {
     void fetchRelayUsage()
       .then(setUsage)
       .catch(() => undefined);
+    void fetchAppProfiles()
+      .then((all) => setApps(all.filter((profile) => profile.kind === "relay")))
+      .catch(() => undefined);
+    void fetchCapabilities()
+      .then((result) =>
+        setCeiling({
+          global: result.global,
+          implemented: result.implemented,
+          neverViaToken: result.neverViaToken,
+          needsOwnTokenApproval: result.needsOwnTokenApproval,
+        }),
+      )
+      .catch(() => setCeiling(null));
   }, []);
+
+  async function addApp() {
+    const name = newAppName.trim();
+    if (!name) return;
+    setAddBusy(true);
+    try {
+      const created = await createAppProfile({ name, kind: "relay" });
+      setApps((current) => [created.profile, ...current]);
+      setMintedApp({ profileId: created.profile.id, token: created.token });
+      setNewAppName("");
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error ? error.message : "Could not add the app.",
+      );
+    } finally {
+      setAddBusy(false);
+    }
+  }
+
+  async function rotateApp(profileId: string) {
+    setAppBusy(profileId);
+    try {
+      const result = await regenerateAppProfileToken(profileId);
+      setApps((current) =>
+        current.map((entry) =>
+          entry.id === profileId ? result.profile : entry,
+        ),
+      );
+      setMintedApp({ profileId, token: result.token });
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error ? error.message : "Could not rotate the key.",
+      );
+    } finally {
+      setAppBusy(null);
+    }
+  }
+
+  async function revokeApp(profileId: string) {
+    setAppBusy(profileId);
+    try {
+      await deleteAppProfile(profileId);
+      setApps((current) => current.filter((entry) => entry.id !== profileId));
+      setConfirmRevoke(null);
+      // The ledger keeps this app's spent months as "Removed app": money that
+      // went out stays answerable after the key is gone.
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error ? error.message : "Could not revoke the key.",
+      );
+    } finally {
+      setAppBusy(null);
+    }
+  }
+
+  async function grantAppCapability(
+    profileId: string,
+    capability: string,
+    on: boolean,
+    approve: string[] = [],
+  ) {
+    setAppBusy(profileId);
+    try {
+      const { profile } = await updateAppProfileCapabilities(
+        profileId,
+        { [capability]: on },
+        approve,
+        lang,
+      );
+      setApps((current) =>
+        current.map((entry) => (entry.id === profileId ? profile : entry)),
+      );
+      setApprovingApp(null);
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error
+          ? error.message
+          : lang === "zh"
+            ? "改不了。"
+            : "Could not change that.",
+      );
+    } finally {
+      setAppBusy(null);
+    }
+  }
 
   async function changeKey(action: "new" | "revoke") {
     setKeyBusy(true);
@@ -9802,27 +9901,8 @@ function SubscriptionDoorPanel() {
     setPanel((current) => (current ? { ...current, settings } : current));
   }
 
-  async function test(engine: "openai-cli" | "claude-cli") {
-    setTesting(engine);
-    try {
-      const result = await testRelayEngine(engine);
-      setResults((current) => ({ ...current, [engine]: result }));
-    } catch (error) {
-      setResults((current) => ({
-        ...current,
-        [engine]: {
-          status: "failed",
-          detail: error instanceof Error ? error.message : "Test failed.",
-        },
-      }));
-    } finally {
-      // Always back to normal: a button stuck on "Testing…" is a lie too.
-      setTesting(null);
-    }
-  }
-
   if (!panel) return null;
-  const { settings, health, calls } = panel;
+  const { settings, calls } = panel;
   const loopback = `http://127.0.0.1:${window.location.port || "3000"}`;
 
   return (
@@ -9846,71 +9926,6 @@ function SubscriptionDoorPanel() {
           type="checkbox"
         />
       </div>
-
-      {DOOR_ENGINES.map((engine) => {
-        const state = health.engines.find((entry) => entry.id === engine.id);
-        const result = results[engine.id];
-        return (
-          <div className="door-engine" key={engine.id}>
-            <div className="door-engine-head">
-              <div className="door-engine-name">
-                <strong>{engine.name}</strong>
-                <span
-                  className={state?.signedIn ? "door-state on" : "door-state"}
-                >
-                  {state?.signedIn ? "Signed in" : "Not signed in"}
-                </span>
-              </div>
-              {/* Three outcomes, never merged: it worked, it failed in the
-                  other side's own words, or we have not built that path. */}
-              {result ? (
-                <span className={`door-result ${result.status}`}>
-                  {result.status === "ok" ? "✓" : "✗"} {result.detail}
-                </span>
-              ) : null}
-              <button
-                className="door-test"
-                disabled={testing === engine.id}
-                onClick={() => void test(engine.id)}
-                type="button"
-              >
-                {testing === engine.id ? "Testing…" : "Test"}
-              </button>
-            </div>
-            <div className="door-capabilities">
-              {/* Not one of the seven and deliberately outside the list: plain
-                  text is the door itself, which is why it has no switch and no
-                  drawing anywhere else in the app either. */}
-              <span className="door-capability">
-                {lang === "zh" ? "文字" : "Text"}
-              </span>
-              {CAPABILITY_META.map((meta) => (
-                <CapabilityChip
-                  available={
-                    !DOOR_NEVER.includes(meta.id) &&
-                    (state?.capabilities as string[] | undefined)?.includes(
-                      meta.id,
-                    ) === true
-                  }
-                  id={meta.id}
-                  key={meta.id}
-                  lang={lang}
-                  showName
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
-      {/* Said once, in a line, instead of seven times inside the chips — and
-          both reasons are given, because a chip dimmed for "this subscription
-          cannot" and one dimmed for "never, through any key" are two different
-          answers with two different futures. */}
-      <p className="door-legend">
-        {lang === "zh"
-          ? "变淡的 = 这两个订阅做不到的事。「取文件」和「上网」这两项,这道门永远不给:打开本机文件是任何 app 钥匙都拿不到的,而这道门的请求里根本没有这两个词。"
-          : "Dimmed = not something these two subscriptions can do. Fetching and Web are never handed out here at all: opening files on this machine is out of reach of every app key, and neither word is in what this door will accept."}
-      </p>
 
       <h3 className="door-subhead">Address for your apps</h3>
       <div className="door-address">
@@ -9938,11 +9953,201 @@ function SubscriptionDoorPanel() {
         <span>on this machine only</span>
       </div>
 
-      <h3 className="door-subhead">Key for your apps</h3>
+      <h3 className="door-subhead">Your apps</h3>
       <p className="door-legend">
-        One key, whichever subscription an app asks for — it says which app is
-        knocking, not which model to use. Making a new one stops the old one
-        working immediately.
+        {lang === "zh"
+          ? "一个 app 一把钥匙、一个订阅身份:配好钥匙后,app 要在它自己里面完成一次订阅登录才可用 —— 它花的是它登录的那个账号,绝不借用 Vaenyx 自己的。"
+          : "One key and one subscription identity per app: after the key is in place, the app signs in to a subscription from inside itself before it works — it spends the account it signed in with, never Vaenyx's own."}
+      </p>
+      <div className="door-address">
+        <input
+          className="door-add-input"
+          onChange={(event) => setNewAppName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void addApp();
+          }}
+          placeholder={lang === "zh" ? "App 的名字" : "App name"}
+          value={newAppName}
+        />
+        <button
+          className="door-copy"
+          disabled={addBusy || newAppName.trim() === ""}
+          onClick={() => void addApp()}
+          type="button"
+        >
+          {lang === "zh" ? "添加 App" : "Add App"}
+        </button>
+      </div>
+      {apps.map((appProfile) => (
+        <div className="door-app" key={appProfile.id}>
+          <div className="door-app-head">
+            <strong>{appProfile.name}</strong>
+            <span className="door-app-meta">
+              {new Date(appProfile.createdAt).toLocaleDateString()} ·{" "}
+              <code>{appProfile.tokenPrefix}</code>
+            </span>
+            <button
+              className="door-copy"
+              disabled={appBusy === appProfile.id}
+              onClick={() => void rotateApp(appProfile.id)}
+              type="button"
+            >
+              {lang === "zh" ? "换钥匙" : "Rotate"}
+            </button>
+            {confirmRevoke === appProfile.id ? (
+              <>
+                <button
+                  className="door-copy danger"
+                  disabled={appBusy === appProfile.id}
+                  onClick={() => void revokeApp(appProfile.id)}
+                  type="button"
+                >
+                  {lang === "zh" ? "确认吊销" : "Really revoke"}
+                </button>
+                <button
+                  className="door-copy"
+                  onClick={() => setConfirmRevoke(null)}
+                  type="button"
+                >
+                  {lang === "zh" ? "算了" : "Keep it"}
+                </button>
+              </>
+            ) : (
+              <button
+                className="door-copy"
+                disabled={appBusy === appProfile.id}
+                onClick={() => setConfirmRevoke(appProfile.id)}
+                type="button"
+              >
+                {lang === "zh" ? "吊销" : "Revoke"}
+              </button>
+            )}
+          </div>
+          {mintedApp?.profileId === appProfile.id ? (
+            <div className="door-address door-key-new">
+              <code>{mintedApp.token}</code>
+              <button
+                className="door-copy"
+                onClick={() =>
+                  void navigator.clipboard?.writeText(mintedApp.token)
+                }
+                type="button"
+              >
+                Copy
+              </button>
+              <span>
+                {lang === "zh"
+                  ? "现在就复制 —— 之后不再显示"
+                  : "copy it now — it is never shown again"}
+              </span>
+            </div>
+          ) : null}
+          {/* The key's capability grants, managed HERE for relay keys (the
+              Tokens screen owns the Method/Routine kind). Same four states as
+              every capability surface: never through a key, not built, off for
+              the machine, or a tick — and the web takes its own approval. */}
+          {ceiling ? (
+            <div className="door-app-caps">
+              {CAPABILITY_META.map((meta) => {
+                const never = ceiling.neverViaToken.includes(meta.id);
+                const built = ceiling.implemented[meta.id] !== false;
+                const machineOn = ceiling.global[meta.id] === true;
+                const granted = appProfile.capabilities.includes(meta.id);
+                const ownApproval = ceiling.needsOwnTokenApproval.includes(
+                  meta.id,
+                );
+                return (
+                  <div className="door-app-cap" key={meta.id}>
+                    <CapabilityChip id={meta.id} lang={lang} showName />
+                    {never ? (
+                      <span className="capability-row-pending">
+                        {lang === "zh" ? "永远不给" : "never"}
+                      </span>
+                    ) : !built ? (
+                      <span className="capability-row-pending">
+                        {lang === "zh" ? "还没做出来" : "not built"}
+                      </span>
+                    ) : !machineOn ? (
+                      <span className="capability-row-pending">
+                        {lang === "zh" ? "整机关着" : "machine off"}
+                      </span>
+                    ) : ownApproval && !granted ? (
+                      <button
+                        className="door-copy"
+                        disabled={appBusy === appProfile.id}
+                        onClick={() =>
+                          setApprovingApp({
+                            profileId: appProfile.id,
+                            capability: meta.id,
+                          })
+                        }
+                        type="button"
+                      >
+                        {lang === "zh" ? "单独批准" : "Approve"}
+                      </button>
+                    ) : (
+                      <input
+                        aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
+                        checked={granted}
+                        className="door-toggle"
+                        disabled={appBusy === appProfile.id}
+                        onChange={(event) =>
+                          void grantAppCapability(
+                            appProfile.id,
+                            meta.id,
+                            event.target.checked,
+                          )
+                        }
+                        role="switch"
+                        type="checkbox"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          {approvingApp?.profileId === appProfile.id ? (
+            <div className="token-reset-confirm">
+              <span>
+                {lang === "zh"
+                  ? "把「上网」给这把钥匙?拿着它的程序就能通过这台机器上网。随时可以收回。"
+                  : "Give this key the web? Whatever holds it can then reach the internet through this machine. You can take it back at any time."}
+              </span>
+              <button
+                className="secondary-button"
+                disabled={appBusy === appProfile.id}
+                onClick={() =>
+                  void grantAppCapability(
+                    appProfile.id,
+                    approvingApp.capability,
+                    true,
+                    [approvingApp.capability],
+                  )
+                }
+                type="button"
+              >
+                {lang === "zh" ? "批准" : "Approve"}
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => setApprovingApp(null)}
+                type="button"
+              >
+                {lang === "zh" ? "不了" : "Not now"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ))}
+
+      <h3 className="door-subhead">
+        {lang === "zh" ? "旧的共享钥匙(将退役)" : "Shared key (retiring)"}
+      </h3>
+      <p className="door-legend">
+        {lang === "zh"
+          ? "过渡期用的老钥匙,还能用。等每个 app 都换上自己的钥匙,它就作废。"
+          : "The old transition key, still working. Once every app carries its own key, it goes away."}
       </p>
       {minted ? (
         // The one moment it is readable. Nothing stores it, so this is the only
@@ -19409,7 +19614,12 @@ function VaenyxWorkspace({
   useEffect(() => {
     Promise.all([
       fetchAskVaenyxConversations().then(setAskVaenyxConversations),
-      fetchAppProfiles().then(setAppProfiles),
+      // The Tokens screen manages Method/Routine Tokens ONLY. Relay keys are
+      // the Door panel's product (Oskar, 2026-08-02: the two separated), and
+      // the filter lives at the load so no screen downstream can forget it.
+      fetchAppProfiles().then((all) =>
+        setAppProfiles(all.filter((profile) => profile.kind !== "relay")),
+      ),
       fetchMemories().then(setMemories),
       fetchSettings().then(setSettings),
     ]).catch(() => undefined);

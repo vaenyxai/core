@@ -37,18 +37,27 @@ by profile. A profile's calls never read core's directories and never fall back
 to them (see modes below). The `~/.codex/auth.json` convenience copy that core
 performs on first run is core-only — a profile starts signed out, always.
 
-## Login modes and migration
+## Keys and login — the rule since 2026-08-02
 
-Every existing profile starts in **`shared-door`** mode: its calls ride the
-door's own credentials, exactly as before this feature. Nothing breaks on
-upgrade; no client has to change.
+**Relay keys are their own kind.** A key for this door is issued on Vaenyx's
+Subscription Door panel ("Add App": a name, nothing else — no Method, no
+Routine bound). The Tokens screen's Method/Routine Tokens are a different
+product: one of those knocking here is refused with `403 RELAY_KEY_WRONG_KIND`
+— deliberately not the same answer as a missing key, because "get this app a
+relay key" and "the key is dead" are fixed differently.
 
-The first completed sign-in flips the profile to **`dedicated`**, permanently.
-From then on its calls use only its own login, and an engine it has not
-connected answers `RELAY_PROFILE_NOT_CONNECTED:<engine>` (503). It never
-silently falls back to the door's account: an account switch nobody chose,
-billed to somebody who did not choose it, is the one failure this design
-refuses to allow.
+**Sign in first, then it works.** There is no shared fallback: a profile's
+calls ride the profile's OWN login, always. An engine the app has not
+connected answers `503 RELAY_PROFILE_NOT_CONNECTED:<engine>` — show the user
+"connect your subscription", never "key error". It never falls back to the
+Owner's account: an account switch nobody chose, billed to somebody who did
+not choose it, is the one failure this design refuses to allow.
+
+The `mode` field in `GET /v1/relay/profile` is always `"dedicated"` now; it
+survives only so a v1 parser does not break, and goes away in v2.
+
+The old shared `vaenyx_door_` key still works during the transition and will
+be retired once every app carries its own key.
 
 ## Network prerequisite — the tailnet gate
 
@@ -119,7 +128,7 @@ directory. Vaenyx never implements OAuth itself.
 - `openai-cli`: no code exists; this asks whether the browser flow landed.
   `{ "connected": false }` means not yet.
 
-Success flips the profile to `dedicated` and is audited.
+Success is audited; from then on this engine answers with the account the app signed in with.
 
 ### `POST /v1/relay/profile/disconnect` — body `{ "engine" }`
 
@@ -148,10 +157,11 @@ Call counts always; token counts only where an engine truly reports them
 | Device not on the tailnet | `403` `RELAY_TAILNET_REQUIRED` — an answer, not a timeout |
 | Vaenyx unreachable | network error / timeout — fall back to your free model |
 | Key rejected or revoked | `401` `RELAY_PROFILE_REQUIRED` (profile routes) / `401` on `/v1/ai/run` |
+| Wrong KIND of key (a Method/Routine Token) | `403` `RELAY_KEY_WRONG_KIND` — issue this app a relay key on the Door panel |
 | Owner not in allowed list | `403` `RELAY_NOT_OWNER` |
 | Door switched off | `503` `RELAY_OFF` |
-| Door's own login missing (shared-door mode) | `503` `RELAY_NOT_SIGNED_IN:<engine>` |
-| This profile's login missing (dedicated mode) | `503` `RELAY_PROFILE_NOT_CONNECTED:<engine>` — start a sign-in |
+| Door's own login missing (door-key calls only; retires with it) | `503` `RELAY_NOT_SIGNED_IN:<engine>` |
+| This profile's login missing | `503` `RELAY_PROFILE_NOT_CONNECTED:<engine>` — start a sign-in |
 | Capability off on the machine | `403` `RELAY_CAPABILITY_OFF:<capability>` |
 | Capability not granted to this key | `403` `RELAY_CAPABILITY_NOT_GRANTED:<capability>` |
 | Engine cannot do that job | `400` `RELAY_CAPABILITY_UNSUPPORTED:<engine>:<capability>` |

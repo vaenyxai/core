@@ -892,11 +892,17 @@ export const SetTaskScheduleRequestSchema = Type.Object(
 );
 
 // A Token (App Profile) is one of two kinds: a Method Token (1+ Methods the app
-// composes itself) or a Routine Token (one Routine the app calls as a black box,
-// Vaenyx runs it).
+// composes itself), a Routine Token (one Routine the app calls as a black box,
+// Vaenyx runs it), or a Relay key (2026-08-02) — the Subscription Door's own
+// kind: it binds NO Method and NO Routine, because its whole job is the door.
+// The two products separated at Oskar's decision: the Door panel manages relay
+// keys, the Tokens screen manages Method/Routine Tokens, and neither shows the
+// other's. One key pipeline underneath (hashing, cipher, audit, capability
+// grants) — that split would have been two systems to keep honest.
 export const AppProfileKindSchema = Type.Union([
   Type.Literal("method"),
   Type.Literal("routine"),
+  Type.Literal("relay"),
 ]);
 
 export const AppProfileSchema = Type.Object(
@@ -2641,12 +2647,10 @@ export const RelayPanelSchema = Type.Object(
 // version and prefix, nothing a thief could sign in with.
 export const RelayProfileStatusSchema = Type.Object(
   {
-    // "shared-door": the legacy path, riding the door's own credentials.
-    // "dedicated": this profile signed in itself and rides only that.
-    mode: Type.Union([
-      Type.Literal("shared-door"),
-      Type.Literal("dedicated"),
-    ]),
+    // Always "dedicated" since 2026-08-02: a profile rides its own login,
+    // never the door's. The field survives so a v1 client's parser does not
+    // break; it goes away in v2.
+    mode: Type.Literal("dedicated"),
     engines: Type.Array(
       Type.Object(
         {

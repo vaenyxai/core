@@ -69,8 +69,7 @@ describe("relay profiles", () => {
     }
   });
 
-  // A profile needs at least one grant; the seeded "general-ask" skill is the
-  // cheapest one that always exists after buildApp.
+  // The Door's own kind: a relay key binds no Method and no Routine.
   async function makeProfile(name: string): Promise<{
     id: string;
     token: string;
@@ -79,14 +78,30 @@ describe("relay profiles", () => {
       method: "POST",
       url: "/v1/app-profiles",
       headers: { cookie },
-      payload: { name, allowedSkillIds: ["general-ask"] },
+      payload: { name, kind: "relay" },
     });
     expect(response.statusCode).toBe(200);
     const body = response.json() as {
-      profile: { id: string };
+      profile: { id: string; kind: string; capabilities: string[] };
       token: string;
     };
+    // Issued for the door, so it starts with what the door serves.
+    expect(body.profile.kind).toBe("relay");
+    expect(body.profile.capabilities).toEqual(["vision", "reading"]);
     return { id: body.profile.id, token: body.token };
+  }
+
+  // A Method Token — a real key for the OTHER product, used to prove the door
+  // tells it apart from a missing key.
+  async function makeMethodToken(name: string): Promise<{ token: string }> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/app-profiles",
+      headers: { cookie },
+      payload: { name, allowedSkillIds: ["general-ask"] },
+    });
+    expect(response.statusCode).toBe(200);
+    return { token: (response.json() as { token: string }).token };
   }
 
   it("a key reaches only its own profile, and the door key reaches none", async () => {
@@ -108,7 +123,7 @@ describe("relay profiles", () => {
     expect(first.token.startsWith(bodyOne.key.hint.replace("...", ""))).toBe(
       true,
     );
-    expect(bodyOne.mode).toBe("shared-door");
+    expect(bodyOne.mode).toBe("dedicated");
 
     const statusTwo = await app.inject({
       method: "GET",
@@ -220,20 +235,11 @@ describe("relay profiles", () => {
     expect((newKey.json() as { key: { version: number } }).key.version).toBe(2);
   });
 
-  it("dedicated mode refuses by name instead of sliding onto the door's login", async () => {
+  it("a profile answers only for its own logins, and an unconnected engine refuses by name", async () => {
     const profile = await makeProfile("app-dedicated");
-    // Flip to dedicated the way a completed sign-in would, then plant claude
-    // credentials so ONE engine is connected and the other is not.
-    const { markProfileDedicated } = await import(
-      "../src/modules/core/relay.js"
-    );
-    const { getDatabaseForTest } = { getDatabaseForTest: null };
-    void getDatabaseForTest;
-    // Reach the database through a fresh handle onto the same file.
-    const { createDatabase } = await import("../src/db/database.js");
-    const database = createDatabase(config);
-    markProfileDedicated(database, profile.id);
-
+    // Plant claude credentials in THIS profile's home so one engine is
+    // connected and the other is not. There is no shared-door mode to fall
+    // back on: the profile's own directory is the whole answer.
     const claudeHome = resolve(
       config.dataDirectory,
       "..",
@@ -259,7 +265,72 @@ describe("relay profiles", () => {
     expect(claude?.connected).toBe(true);
     expect(claude?.connectedAt).not.toBeNull();
     expect(codex?.connected).toBe(false);
-    database.close();
+
+    // The acceptance case: door open, owner allowed, key valid, engine NOT
+    // connected for this profile -> the named 503, never the door's own login.
+    const enable = await app.inject({
+      method: "PUT",
+      url: "/v1/relay/settings",
+      headers: { cookie },
+      payload: { enabled: true, ownerEmails: ["owner@example.com"] },
+    });
+    expect(enable.statusCode).toBe(200);
+    const run = await app.inject({
+      method: "POST",
+      url: "/v1/ai/run",
+      headers: {
+        "tailscale-user-login": "owner@example.com",
+        authorization: `Bearer ${profile.token}`,
+      },
+      payload: {
+        task: "probe",
+        prompt: "say ready",
+        engine: "openai-cli",
+        capability: "text",
+        caller: "owner@example.com",
+        files: [],
+      },
+    });
+    expect(run.statusCode).toBe(503);
+    expect((run.json() as { error: string }).error).toBe(
+      "RELAY_PROFILE_NOT_CONNECTED:openai-cli",
+    );
+  });
+
+  it("a Method Token is told it is the wrong KIND of key, not a missing one", async () => {
+    const method = await makeMethodToken("app-method-kind");
+    const run = await app.inject({
+      method: "POST",
+      url: "/v1/ai/run",
+      headers: {
+        "tailscale-user-login": "owner@example.com",
+        authorization: `Bearer ${method.token}`,
+      },
+      payload: {
+        task: "probe",
+        prompt: "say ready",
+        engine: "claude-cli",
+        capability: "text",
+        caller: "owner@example.com",
+        files: [],
+      },
+    });
+    expect(run.statusCode).toBe(403);
+    expect((run.json() as { error: string }).error).toBe(
+      "RELAY_KEY_WRONG_KIND",
+    );
+    const status = await app.inject({
+      method: "GET",
+      url: "/v1/relay/profile",
+      headers: {
+        "tailscale-user-login": "owner@example.com",
+        authorization: `Bearer ${method.token}`,
+      },
+    });
+    expect(status.statusCode).toBe(403);
+    expect((status.json() as { error: string }).error).toBe(
+      "RELAY_KEY_WRONG_KIND",
+    );
   });
 
   it("two apps can run a claude sign-in at the same time without stealing each other's session", async () => {
@@ -362,7 +433,11 @@ describe("relay profiles", () => {
         mode: string;
         engines: { id: string; connected: boolean }[];
       };
-      expect(bodyTwo.mode).toBe("shared-door");
+      // The second app never completed a sign-in, so ITS claude stays
+      // disconnected — the first app's landing changed nothing for it.
+      expect(
+        bodyTwo.engines.find((engine) => engine.id === "claude-cli")?.connected,
+      ).toBe(false);
     } finally {
       delete process.env.VAENYX_CLAUDE_LOGIN_COMMAND;
     }

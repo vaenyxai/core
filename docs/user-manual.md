@@ -344,13 +344,14 @@ Read this inside the app: **Settings → Manual**.
   per subscription: your apps, the door key, and Vaenyx itself. Call counts are
   always real; token counts appear only where an engine truly reports them —
   never estimated.
-- **An app can use its own account** — an app of yours can sign in with its own
-  ChatGPT or Claude subscription, from inside that app. From then on its calls
-  ride its own account, and if that login expires the app gets a clear "not
-  connected" — it never silently falls back onto yours. Until an app does this,
-  everything works exactly as before, on the door's own sign-ins.
-- **Test** — a Test button per subscription sends a real request. Green means it
-  really worked.
+- **Every app has its own key and its own account** — press **Add App**, give
+  it a name, and hand the key over; it is shown once. The app then signs in
+  with its own ChatGPT or Claude subscription, from inside that app, **before**
+  it works: an engine it has not connected gets a clear "not connected", never
+  your account by accident. Each app's row here carries its capability ticks,
+  a Rotate and a Revoke.
+- **The old shared key still works** during the changeover and retires once
+  every app carries its own.
 - **Prerequisite** — the app's device must be on your private network, and now
   the door itself checks: a request from outside the tailnet is refused with a
   clear answer (RELAY_TAILNET_REQUIRED), **even with a correct key**. A leaked
@@ -459,5 +460,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.88** · last updated 2026-08-02.
+Manual for **v0.3.1-dev.89** · last updated 2026-08-02.
 Keep this file up to date whenever a feature changes.

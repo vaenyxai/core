@@ -1937,6 +1937,64 @@ textarea::placeholder {
   font-size: var(--fs-label);
 }
 
+/* One app, one key, one row-group: head line, then the capability grants. */
+.door-app {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.door-app-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.door-app-head strong {
+  font-size: var(--fs-md);
+}
+
+.door-app-meta {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+
+.door-app-caps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 2px var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.door-app-cap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 3px 0;
+}
+
+.door-add-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+}
+
+.door-copy.danger {
+  color: var(--err);
+  border-color: var(--err);
+}
+
 /* This month's spend: app, engine, count, tokens when truly reported. */
 .door-usage {
   margin: 0;

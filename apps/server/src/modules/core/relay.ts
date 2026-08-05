@@ -388,38 +388,16 @@ async function fetchLinkedFiles(
   return fetched;
 }
 
-// Which identity a profile's calls ride (Relay Profiles v1).
-//
-// "shared-door" is the legacy path: the door's own credentials, exactly what
-// every app got before profiles existed — nothing breaks on upgrade. A profile
-// flips to "dedicated" the moment its app completes its OWN sign-in, and never
-// flips back: from then on an engine it has not connected is a clear
-// "not connected" error. The one thing this must never do is quietly slide
-// back onto the Owner's account when an app's login lapses — an account switch
-// nobody chose, billed to somebody who did not choose it.
-export function profileLoginMode(
-  database: DatabaseHandle,
-  profileId: string,
-): "shared-door" | "dedicated" {
-  const row = database.sqlite
-    .prepare("SELECT dedicated_login FROM app_profiles WHERE id = ?")
-    .get(profileId) as { dedicated_login: 0 | 1 } | undefined;
-  return row?.dedicated_login === 1 ? "dedicated" : "shared-door";
-}
-
-export function markProfileDedicated(
-  database: DatabaseHandle,
-  profileId: string,
-): void {
-  database.sqlite
-    .prepare("UPDATE app_profiles SET dedicated_login = 1 WHERE id = ?")
-    .run(profileId);
-}
-
 // What one profile's door looks like from the app's side. No credential, no
-// token, no export of any kind — connected or not, the account file's own
-// timestamp, and which identity mode the profile is in. A leaked app key must
-// not be exchangeable for anything that signs in somewhere else.
+// token, no export of any kind — connected or not, and the account file's own
+// timestamp. A leaked app key must not be exchangeable for anything that signs
+// in somewhere else.
+//
+// There is no shared-door mode any more (Oskar, 2026-08-02): a profile's calls
+// ride the profile's own login, full stop. An engine the app has not connected
+// is a clear "not connected" — never Vaenyx's own account by proxy. The `mode`
+// field survives on the wire, always "dedicated", so a client written against
+// v1 does not break parsing; it says one true thing and will go in v2.
 export interface RelayProfileEngineStatus {
   id: RelayEngine;
   connected: boolean;
@@ -427,32 +405,23 @@ export interface RelayProfileEngineStatus {
   capabilities: RelayCapability[];
 }
 
-export function relayProfileEngineStatus(
-  database: DatabaseHandle,
-  profileId: string,
-): { mode: "shared-door" | "dedicated"; engines: RelayProfileEngineStatus[] } {
-  const mode = profileLoginMode(database, profileId);
+export function relayProfileEngineStatus(profileId: string): {
+  mode: "dedicated";
+  engines: RelayProfileEngineStatus[];
+} {
   return {
-    mode,
+    mode: "dedicated",
     engines: [
       {
         id: "openai-cli",
-        connected:
-          mode === "dedicated"
-            ? codexProfileSignedIn(profileId)
-            : codexSignedInCached(Date.now()),
-        connectedAt:
-          mode === "dedicated" ? codexLoginConnectedAt(profileId) : null,
+        connected: codexProfileSignedIn(profileId),
+        connectedAt: codexLoginConnectedAt(profileId),
         capabilities: ENGINE_CAPABILITIES["openai-cli"],
       },
       {
         id: "claude-cli",
-        connected:
-          mode === "dedicated"
-            ? claudeMachineLogin(profileId)
-            : claudeMachineLogin(),
-        connectedAt:
-          mode === "dedicated" ? claudeLoginConnectedAt(profileId) : null,
+        connected: claudeMachineLogin(profileId),
+        connectedAt: claudeLoginConnectedAt(profileId),
         capabilities: ENGINE_CAPABILITIES["claude-cli"],
       },
     ],
@@ -510,14 +479,11 @@ export async function runRelay(
     }
   }
 
-  // Which identity this call rides. A profile in dedicated mode uses its own
-  // login and nothing else; everything else (door key, legacy profiles) rides
-  // the door's shared credentials as it always has.
-  const profileKey =
-    request.appProfileId &&
-    profileLoginMode(database, request.appProfileId) === "dedicated"
-      ? request.appProfileId
-      : "core";
+  // Which identity this call rides: an app key rides ITS profile's login,
+  // always — there is no fallback onto Vaenyx's own credentials. Only the
+  // door's shared key (appProfileId null) still uses the door's own login,
+  // and that key retires in phase two.
+  const profileKey = request.appProfileId ?? "core";
 
   const started = Date.now();
   const scratch = resolve(tmpdir(), "vaenyx-relay", randomUUID());

@@ -196,6 +196,35 @@ export function createAppProfile(
   const tokenCipher = encryptAppToken(secretsDirectory, token);
   const id = randomUUID();
 
+  // ── Relay key: the Subscription Door's own kind. Binds nothing — no Method,
+  // no Routine — because its job is the door, not the Library. It starts with
+  // the two capabilities the door actually serves (vision, reading; text is
+  // the door itself and is not one of the seven), so a freshly issued key
+  // works for what it was issued for instead of failing its first photo.
+  // fetching stays impossible via NEVER_VIA_TOKEN whatever is written here.
+  if (kind === "relay") {
+    database.sqlite
+      .prepare(
+        `INSERT INTO app_profiles (
+          id, name, token_hash, token_prefix, token_cipher, kind, capabilities
+        ) VALUES (?, ?, ?, ?, ?, 'relay', ?)`,
+      )
+      .run(
+        id,
+        input.name.trim(),
+        hashAppToken(token),
+        tokenPrefix,
+        tokenCipher,
+        JSON.stringify(["vision", "reading"]),
+      );
+
+    const profile = listAppProfiles(database).find((item) => item.id === id);
+    if (!profile) {
+      throw new Error("APP_PROFILE_NOT_FOUND");
+    }
+    return { profile, token };
+  }
+
   // ── Routine Token: references exactly one Routine; pin its version. ──────────
   if (kind === "routine") {
     if (!input.allowedRoutineId) {
