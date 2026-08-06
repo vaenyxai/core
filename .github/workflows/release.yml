@@ -148,6 +148,22 @@ jobs:
 
           Optional check: the SHA-256 of each download is in the matching
           ``.sha256`` file.
+
+          ## Code signing policy
+
+          Free code signing provided by [SignPath.io](https://signpath.io),
+          certificate by [SignPath Foundation](https://signpath.org).
+
+          **Roles:**
+          - Committers and reviewers: [vaenyxai organisation members](https://github.com/orgs/vaenyxai/people)
+          - Approvers: [vaenyxai organisation owners](https://github.com/orgs/vaenyxai/people?query=role%3Aowner)
+
+          **Privacy policy:** Vaenyx runs on your own machine. It does not transfer
+          any information to other networked systems unless specifically requested
+          by the user or the person installing or operating it -- see
+          [Privacy Policy](https://github.com/vaenyxai/core/blob/main/docs/legal/privacy-policy.md)
+          for the full statement, including the third-party AI providers you may
+          choose to connect.
           "@
           $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
           Set-Content -Path $notesFile -Value $notes -Encoding utf8

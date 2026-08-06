@@ -86,6 +86,21 @@ npm run check    # lint, typecheck, tests, build
 Stack: React/Vite web app · Fastify server · shared TypeBox contracts ·
 SQLite. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io),
+certificate by [SignPath Foundation](https://signpath.org).
+
+**Roles:**
+- Committers and reviewers: [vaenyxai organisation members](https://github.com/orgs/vaenyxai/people)
+- Approvers: [vaenyxai organisation owners](https://github.com/orgs/vaenyxai/people?query=role%3Aowner)
+
+**Privacy policy:** Vaenyx runs on your own machine. It does not transfer
+any information to other networked systems unless specifically requested
+by the user or the person installing or operating it — see
+[Privacy Policy](docs/legal/privacy-policy.md) for the full statement,
+including the third-party AI providers you may choose to connect.
+
 ## Licence
 
 Code: [MIT](LICENSE). Third-party dependencies:

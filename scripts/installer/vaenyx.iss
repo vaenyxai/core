@@ -49,6 +49,12 @@ AppPublisher=Vaenyx
 AppPublisherURL=https://vaenyx.ai
 AppSupportURL=https://github.com/vaenyxai/core
 VersionInfoVersion={#AppNumericVersion}
+; SignPath's signing validates binary metadata: the product NAME is always
+; plain "Vaenyx", and the product VERSION is the same release number the app,
+; the zip and this installer all read from apps/server/src/config.ts — one
+; source, never a hand-written second copy.
+VersionInfoProductName=Vaenyx
+VersionInfoProductVersion={#AppVersion}
 ; Short path on the system drive, outside Program Files: setup builds the app
 ; in place with npm and keeps the live database under the same folder, and
 ; C:\Vaenyx dodges the cloud-sync, path-length and spaces traps the path
