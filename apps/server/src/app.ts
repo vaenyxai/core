@@ -113,6 +113,37 @@ export async function buildApp(
   );
   vaenyxMeWarmup.unref();
 
+  // Event-loop stall detector. On 2026-08-06 the Owner's instance degraded
+  // after about an hour into answering every second or third request 2.5-4
+  // seconds late — while burning ZERO cpu, with no child process, no
+  // outbound socket, a 1.3 MB database and a disk that read the same files
+  // in 2 ms. A freshly started process on the SAME code and the SAME data
+  // answered in 1-14 ms, so it was the running process that had degraded,
+  // and every artefact that could have explained it (logs, database, memory,
+  // paging, antivirus) had already been ruled out by measurement. What was
+  // missing was a witness INSIDE the process.
+  //
+  // This is that witness: a 500 ms timer that reports how late it actually
+  // fired. Late by more than a second means the loop was blocked (or the
+  // process was not scheduled) for that long, and the line lands in the
+  // ordinary log next to the requests it delayed. Costs two timestamps a
+  // second and says nothing at all while the instance is healthy.
+  const STALL_TICK_MS = 500;
+  const STALL_REPORT_MS = 1_000;
+  let lastTickAt = Date.now();
+  const stallTick = setInterval(() => {
+    const now = Date.now();
+    const late = now - lastTickAt - STALL_TICK_MS;
+    lastTickAt = now;
+    if (late >= STALL_REPORT_MS) {
+      app.log.warn(
+        { stalledForMs: late },
+        "Event loop stalled: something blocked this process. Requests during this window were late by about this long.",
+      );
+    }
+  }, STALL_TICK_MS);
+  stallTick.unref();
+
   // Restart flag: a deploy (or any local tool) touches
   // userdata/config/restart-requested.flag and Vaenyx exits cleanly; the
   // watchdog (Vaenyx-Service-Run.cmd) brings it back on the NEW build within
@@ -144,6 +175,7 @@ export async function buildApp(
     clearInterval(vaenyxMeScanTick);
     clearTimeout(vaenyxMeWarmup);
     clearInterval(restartTick);
+    clearInterval(stallTick);
     database.close();
   });
 
