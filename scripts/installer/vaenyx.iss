@@ -256,9 +256,14 @@ end;
 // ---- Uninstall ----
 
 var
-  // Answered once at the start of uninstall, acted on after the app files are
-  // gone. Defaults to keeping the data.
+  // Answered once at the start of uninstall, acted on before the app files
+  // are removed. Defaults to keeping the data.
   DeleteUserData: Boolean;
+
+function YesNo(Value: Boolean): String;
+begin
+  if Value then Result := 'yes' else Result := 'no';
+end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
@@ -271,6 +276,7 @@ begin
     DeleteUserData := SuppressibleMsgBox(
       FmtMessage(CustomMessage('KeepDataQuestion'), [ExpandConstant('{app}\userdata')]),
       mbConfirmation, MB_YESNO or MB_DEFBUTTON1, IDYES) = IDNO;
+    Log('Vaenyx uninstall: delete userdata = ' + YesNo(DeleteUserData));
     // Remove the boot task, then stop the running server the same way the
     // Stop button does. Both are best-effort: a half-registered task must not
     // block an uninstall.
@@ -278,29 +284,39 @@ begin
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(ExpandConstant('{sys}\schtasks.exe'), '/Delete /TN "VaenyxAutostart" /F',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Log('Vaenyx uninstall: autostart task delete exit code ' + IntToStr(ResultCode));
     StopScript := ExpandConstant('{app}\scripts\Vaenyx-Stop.ps1');
     if FileExists(StopScript) then begin
       Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
         '-NoProfile -ExecutionPolicy Bypass -File "' + StopScript + '"',
         ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, ResultCode);
+      Log('Vaenyx uninstall: stop script exit code ' + IntToStr(ResultCode));
+    end;
+    // What setup BUILT (node_modules and the compiled trees) is not in the
+    // uninstaller's file log, so it is removed here, in the same step, right
+    // after the server stops — this used to sit in usPostUninstall, which in
+    // a silent uninstall was observed never to run these at all, leaving a
+    // gigabyte of build output behind. The personal folders (userdata\, and
+    // private\ with the sign-in secrets) strictly follow the user's choice.
+    Log('Vaenyx uninstall: DelTree node_modules = '
+      + YesNo(DelTree(ExpandConstant('{app}\node_modules'), True, True, True)));
+    Log('Vaenyx uninstall: DelTree apps = '
+      + YesNo(DelTree(ExpandConstant('{app}\apps'), True, True, True)));
+    Log('Vaenyx uninstall: DelTree packages = '
+      + YesNo(DelTree(ExpandConstant('{app}\packages'), True, True, True)));
+    if DeleteUserData then begin
+      Log('Vaenyx uninstall: DelTree userdata = '
+        + YesNo(DelTree(ExpandConstant('{app}\userdata'), True, True, True)));
+      Log('Vaenyx uninstall: DelTree private = '
+        + YesNo(DelTree(ExpandConstant('{app}\private'), True, True, True)));
     end;
   end;
   if CurUninstallStep = usPostUninstall then begin
-    // The uninstaller removed what it installed; what remains under {app} is
-    // what setup built or the app wrote. Derived build output goes either
-    // way; the personal folders (userdata\, and private\ with the sign-in
-    // secrets) follow the user's choice.
-    DelTree(ExpandConstant('{app}\node_modules'), True, True, True);
-    DelTree(ExpandConstant('{app}\apps'), True, True, True);
-    DelTree(ExpandConstant('{app}\packages'), True, True, True);
-    if DeleteUserData then begin
-      DelTree(ExpandConstant('{app}\userdata'), True, True, True);
-      DelTree(ExpandConstant('{app}\private'), True, True, True);
-      RemoveDir(ExpandConstant('{app}'));
-    end else begin
+    if DeleteUserData then
+      RemoveDir(ExpandConstant('{app}'))
+    else
       SuppressibleMsgBox(
         FmtMessage(CustomMessage('DataKept'), [ExpandConstant('{app}\userdata')]),
         mbInformation, MB_OK, IDOK);
-    end;
   end;
 end;
