@@ -487,7 +487,7 @@ export function writeModeCapabilities(
 
   // NULL so far means "adds no restriction of its own", so the starting point
   // is everything — everything the CEILING allows, which is the whole point of
-  // the filter. Seeding from all seven would quietly write down capabilities
+  // the filter. Seeding from all eight would quietly write down capabilities
   // the instance currently refuses, and the mode would then be handed them by
   // itself the day that global switch went back on. Narrowing is sticky: a
   // mode gains a capability only when the Owner ticks it here, looking at it.

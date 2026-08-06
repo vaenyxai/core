@@ -133,7 +133,7 @@ Read this inside the app: **Settings → Manual**.
 - **Let another app use one** — Library → **Token**. A Token is an app key: one
   of your other apps holds it and can then call the Routine or the Methods you
   granted it, and nothing else.
-- **What a key may do** — the key's card, **What It May Do**. The same seven
+- **What a key may do** — the key's card, **What It May Do**. The same eight
   capabilities as AI Settings, in the same order, with a tick each. A new key
   starts with **nothing** ticked — it may run the recipe you granted it and no
   more — and the card says what it may do without opening anything.
@@ -223,7 +223,10 @@ Read this inside the app: **Settings → Manual**.
     Reading together, which is why they are separate switches: with only OCR
     on, a scan becomes text for your own eyes and no model sees it. Dropping a
     scan in with OCR off gets a plain sentence and a turn-it-on button, not a
-    silent empty answer.
+    silent empty answer. Photos work the same way: when OCR is on, the exact
+    words in a photo you attach are machine-read by the same engine and handed
+    to the model alongside the picture, so a photo of a page and a scan of the
+    same page read identically — each photo is one small metered OCR call.
   - **Fetching** *(Files on this machine)* — opening text files from folders you
     name yourself, in that row's own setup. Text files only, and not large ones.
     Vaenyx opens the file itself, so it works with whichever main model you
@@ -238,10 +241,10 @@ Read this inside the app: **Settings → Manual**.
   app keys from searching, but an ordinary chat still looks things up, and the
   card says so on its face.
 - **A mode can be narrower than this, never wider** — each Custom Mode has its
-  own seven switches under Settings → Modes → **What It May Do**, and they can
+  own eight switches under Settings → Modes → **What It May Do**, and they can
   only take away. See *Modes* below.
 - **An app key is narrower still** — every key another app holds has its own
-  seven ticks, under Library → Token → **What It May Do**, and starts with none
+  eight ticks, under Library → Token → **What It May Do**, and starts with none
   of them ticked. Fetching can never be ticked there at all. See *Methods and
   Routines* above.
 - **What is on when you install it** — everything Vaenyx already does on this
@@ -429,7 +432,7 @@ Read this inside the app: **Settings → Manual**.
 - **What it locks** — settings, the chats outside that mode, and — if you say so
   — what Vaenyx may do at all while somebody is inside it.
 - **What this mode may do** — on the mode's card, **What It May Do**. The same
-  seven capabilities as AI Settings, in the same order, with a switch each.
+  eight capabilities as AI Settings, in the same order, with a switch each.
   Switch off what a borrowed device has no business doing: a mode that may not
   draw, may not look at photos, and may never open your files.
   - **Web is the one to be careful with.** It carries exactly the same gap it
@@ -501,5 +504,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.3-dev.1** · last updated 2026-08-06.
+Manual for **v0.3.3-dev.2** · last updated 2026-08-06.
 Keep this file up to date whenever a feature changes.

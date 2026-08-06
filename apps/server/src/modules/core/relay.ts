@@ -344,7 +344,7 @@ export async function runRelay(
   // and an outside app asking this machine to look at a picture is an app key
   // asking. Refused before the linked file is fetched: a capability that is
   // switched off should not pull the customer's file onto this disk at all.
-  // `text` is not one of the seven — it is the door itself.
+  // `text` is not one of the eight — it is the door itself.
   //
   // Two layers here: the machine's ceiling, then the key's own grant list. No
   // mode layer, deliberately — a relay call arrives from another program over

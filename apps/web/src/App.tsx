@@ -3534,8 +3534,8 @@ function AppsPanel({
                 </div>
                 {capsFor === profile.id ? (
                   <div className="capability-window">
-                    {/* Said before the ticks: these seven look exactly like the
-                        seven in AI Settings, and somebody who reads them as a
+                    {/* Said before the ticks: these eight look exactly like the
+                        eight in AI Settings, and somebody who reads them as a
                         second independent set will assume ticking one here can
                         give an outside app something this machine refuses. It
                         cannot. */}
@@ -3624,7 +3624,7 @@ function AppsPanel({
                                   }
                                   checked={granted}
                                   className="door-toggle"
-                                  // All seven wait, not only the one being
+                                  // All eight wait, not only the one being
                                   // written: the answer is the whole key, so two
                                   // ticks in flight would race and the loser
                                   // would silently come back.
@@ -5024,8 +5024,8 @@ function ModesPanel() {
                 </div>
                 {capsFor === mode.id ? (
                   <div className="capability-window">
-                    {/* Said before the switches, not after: these seven look
-                        exactly like the seven in AI Settings, and somebody who
+                    {/* Said before the switches, not after: these eight look
+                        exactly like the eight in AI Settings, and somebody who
                         reads them as a second independent set will assume this
                         screen can hand a shared device something the instance
                         refuses. It cannot. */}
@@ -5079,7 +5079,7 @@ function ModesPanel() {
                                   }
                                   checked={caps.capabilities[meta.id] === true}
                                   className="door-toggle"
-                                  // ALL seven wait, not just the one being
+                                  // ALL eight wait, not just the one being
                                   // written: the answer to a write is the whole
                                   // resulting list, so two flips in flight
                                   // would race and the loser would silently
@@ -7761,7 +7761,7 @@ function AskVaenyxPanel({
     // declares what it plugs into; the app answers with one of three truths —
     // ready, needs setting up (jump to Tools), or "Vaenyx does not have this
     // tool yet" with the suggestion channel. Never a silent failure.
-    // The seven words, and only these (Oskar, 2026-07-31: 所有地方用词统一).
+    // The eight words, and only these (Oskar, 2026-07-31: 所有地方用词统一).
     // The server migrates the old names before they ever reach here, so this
     // map never needs to know what a capability used to be called.
     const knownToolStatus: Record<string, { label: string; ready: boolean }> = {
@@ -10119,8 +10119,8 @@ function SubscriptionDoorPanel() {
           {/* Only what the door actually serves (Oskar, 2026-08-06: 图一大半
               不需要). Its engines do text + these two; hearing, speaking and
               drawing exist on no door engine, and web and fetching are not
-              even in the door's request vocabulary — seven rows here were five
-              rows of noise. The full seven-row grant surface stays where the
+              even in the door's request vocabulary — eight rows here were five
+              rows of noise. The full eight-row grant surface stays where the
               other kinds of key live, on the Tokens screen. */}
           {ceiling ? (
             <div className="door-app-caps">
@@ -10480,7 +10480,7 @@ function FreeModelsModal({
 //
 // Reading and Web have nothing to set up — they ride the main model — but they
 // are on the list because every drawer now also holds that row's TEST, and a
-// capability you cannot try is one you cannot trust. All seven are here: the
+// capability you cannot try is one you cannot trust. All eight are here: the
 // two that cannot be tested by machine say so in their own drawer instead of
 // showing a button that would have to pretend.
 const SETUP_ROWS = new Set([
@@ -10499,7 +10499,7 @@ const SETUP_ROWS = new Set([
 // that out afterwards is how a Test button becomes one nobody dares press.
 //
 // A row missing from this table gets no Test button at all, and nothing is
-// missing: all seven are here. Hearing and Speaking are the two the SERVER
+// missing: all eight are here. Hearing and Speaking are the two the SERVER
 // cannot test without pretending — there is no recording to feed one and
 // nothing there can listen to the other — so this device does them instead, in
 // the browser, which is why they have a cost line like the rest.
@@ -10764,7 +10764,7 @@ function CapabilitiesPanel({
   async function runTest(id: string) {
     setTesting(id);
     try {
-      // Two of the seven cannot be tested by the server, for opposite reasons:
+      // Two of the eight cannot be tested by the server, for opposite reasons:
       // nothing on that side can listen, and nothing on that side can speak.
       // Both are testable HERE, because the browser has ears and a mouth — so
       // every row gets the same button rather than two rows quietly getting an
@@ -11143,7 +11143,7 @@ function CapabilitiesPanel({
       if (on && engine && (unset === "none" || unset === "") && engine.value) {
         await engine.set(engine.value);
       }
-      // Two of the seven say what they really do before they do it (copy pack
+      // Two of the eight say what they really do before they do it (copy pack
       // N1/N2). The switch has already moved by the time this opens, on purpose:
       // the window's own "Switch it off" is the undo, so the Owner reads an
       // explanation of a state the machine is actually in rather than one it is
@@ -11755,7 +11755,7 @@ function CapabilitiesPanel({
           ? "只有「上网」还差一步:关掉它,Method 和 app 钥匙就不能搜了,但普通聊天还是会去查。"
           : "Web is the one that is not all the way there yet: switching it off stops Methods and app keys from searching, but an ordinary chat still looks things up."}
       </p>
-      {/* The fact the old Model keys card opened with: these are not seven
+      {/* The fact the old Model keys card opened with: these are not eight
           separate accounts. It used to read "a key added on any row" — true
           when two rows took a key of their own, and false since both moved to
           Models (Oskar, 2026-08-01). What it has to say now is why a row can

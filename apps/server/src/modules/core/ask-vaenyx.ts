@@ -25,7 +25,7 @@ import {
   FETCHING_TOOL_LOOP_PROVIDER_IDS,
   grantFetchAccess,
 } from "./fetching.js";
-import { runOcr } from "./ocr.js";
+import { ocrEngineConnected, runOcr } from "./ocr.js";
 import { recordEngineUsage } from "./relay-usage.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
@@ -808,7 +808,7 @@ export async function createAskVaenyxMessage(
       }
     | undefined;
 
-  // A chat turn reaches for three of the seven capabilities by itself — it
+  // A chat turn reaches for several of the eight capabilities by itself — it
   // reads documents, looks at photos and draws — so the ceiling is read here
   // and honoured below. The dedicated routes are gated at the gateway; this is
   // the same guarantee for the path that has no route of its own.
@@ -1219,6 +1219,37 @@ export async function createAskVaenyxMessage(
         }
       }
     }
+    // The ocr capability on the PHOTO path — the other half of "a photo of a
+    // page and a scan of the same page behave identically". Whatever else
+    // happens to the picture (seen first-hand, described, or vision-refused),
+    // the exact words printed in it are machine-read by the dedicated OCR
+    // engine, never the main model: a chat model reading unclear ink invents
+    // a plausible character, and on a quote that is a wrong number in fluent
+    // prose. Runs only on the photo attached to THIS message, same as the
+    // description path.
+    let photoOcrText = "";
+    if (
+      options?.imageId &&
+      options.dataDirectory &&
+      options.secretsDirectory &&
+      !capabilityRefusedBy(database, "ocr", conversationModeId) &&
+      ocrEngineConnected(options.secretsDirectory)
+    ) {
+      try {
+        const found = readImage(options.dataDirectory, options.imageId);
+        if (found) {
+          const read = await runOcr(options.secretsDirectory, {
+            base64: found.image.toString("base64"),
+            mediaType: found.mimeType,
+          });
+          recordEngineUsage(database, "core", "mistral-ocr");
+          photoOcrText = read.text.trim();
+        }
+      } catch {
+        // A failed OCR call never costs the turn: the photo is still shown
+        // and vision still runs; only the exact-characters guarantee is lost.
+      }
+    }
     // The photo is kept and shown either way. What changes is how the model
     // gets to read it: a vision-capable backend sees the picture itself; any
     // other backend gets the vision model's description as context. The
@@ -1272,6 +1303,16 @@ export async function createAskVaenyxMessage(
         // No vision model, or it refused: the photo is still attached to the
         // message and visible; the model simply does not get a description.
       }
+    }
+    if (photoOcrText) {
+      // Appended to every branch above — image seen first-hand, described, or
+      // vision refused. In the refused case the pairing is exactly the
+      // capability split: nothing looked at the scene, but the words were
+      // still machine-read, because those are different switches.
+      const exactWords = `The exact words printed in the Owner's photo, machine-read by the dedicated OCR engine (it anchors characters in the picture and does not invent — wherever you quote text or numbers from this photo, use THESE characters, never your own reading of the pixels):\n${photoOcrText}`;
+      photoContext = photoContext
+        ? `${photoContext}\n\n${exactWords}`
+        : `The Owner attached a photo with this message. ${exactWords}`;
     }
     let contextWithPhoto = photoContext
       ? [projectContext, photoContext].filter(Boolean).join("\n\n")

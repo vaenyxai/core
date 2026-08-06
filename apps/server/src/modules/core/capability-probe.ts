@@ -722,7 +722,7 @@ async function probeFetching(
 }
 
 // Hearing and Speaking answer honestly rather than not answering: the route
-// stays total over the seven capabilities, so a client that grows a button
+// stays total over the eight capabilities, so a client that grows a button
 // before this file grows a probe gets "not built", never a red cross.
 // The OCR probe's picture, generated once (320x90 white PNG, black bold
 // "VAENYX 2468") and pinned here: the answer is KNOWN, so the check is exact.

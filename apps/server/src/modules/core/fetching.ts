@@ -1,4 +1,4 @@
-// FETCHING — "Files on this machine", the seventh capability (design:
+// FETCHING — "Files on this machine" (design:
 // private/docs/library-architecture.md §能力).
 //
 // 🔴 THIS IS THE ONLY FILE IN VAENYX THAT HANDS THE OWNER'S DISK TO A MODEL, so
