@@ -180,18 +180,24 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$dir\userdata\config" | Out-Null
           Set-Content -Path "$dir\userdata\config\keep-me.txt" -Value "still here"
 
-          # The uninstaller relaunches itself from TEMP, so the first process
-          # returning proves nothing: completion is the Add/Remove entry
-          # disappearing.
+          # The uninstaller relaunches itself from TEMP (as _iuXXXXX.tmp), so
+          # neither the first process returning nor the Add/Remove entry
+          # disappearing means it is DONE — the entry goes early, while the
+          # DelTree of a built node_modules keeps running for minutes.
+          # Completion is the relaunched process exiting.
           Start-Process -FilePath "$dir\unins000.exe" `
             -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' | Out-Null
-          $gone = $false
-          foreach ($attempt in 1..60) {
-            Start-Sleep -Seconds 3
-            if (-not (Test-Path $reg)) { $gone = $true; break }
+          Start-Sleep -Seconds 10
+          $deadline = (Get-Date).AddMinutes(8)
+          while ((Get-Date) -lt $deadline) {
+            $running = @(Get-Process | Where-Object { $_.ProcessName -like '_iu*' -or $_.ProcessName -like 'unins*' }).Count
+            if ($running -eq 0) { break }
+            Start-Sleep -Seconds 5
           }
-          if (-not $gone) { throw "Add/Remove entry still present 3 minutes after uninstall" }
-          Start-Sleep -Seconds 5
+          if (@(Get-Process | Where-Object { $_.ProcessName -like '_iu*' -or $_.ProcessName -like 'unins*' }).Count -ne 0) {
+            throw "the uninstaller was still running 8 minutes after launch"
+          }
+          if (Test-Path $reg) { throw "Add/Remove entry still present after uninstall" }
 
           schtasks /Query /TN "VaenyxAutostart" 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) { throw "autostart task survived uninstall" }
