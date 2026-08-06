@@ -40,7 +40,7 @@ Read this inside the app: **Settings → Manual**.
 
 - **Check for an update** — Settings → System → **Check for updates**.
 - **Install it** — **Download**, then **Restart**. The version number is in the
-  bottom-left corner; tap it to see what changed.
+  bottom-left corner, and what changed is on the update card itself.
 - **A banner appears at the bottom** when a newer build is ready. It never
   refreshes by itself while you are typing.
 

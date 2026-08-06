@@ -4,6 +4,61 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.3 — 2026-08-07
+
+**Vaenyx is quick again.** On a busy computer it had started answering
+seconds late — the models list could take over a minute, and signing in
+crawled. The cause was the boot entry Vaenyx registers for itself: Windows
+creates those at a low priority, and passes it down to everything they
+start, so Vaenyx was quietly last in the queue for the processor whenever
+anything else wanted it. It now runs at the same priority as everything
+else you use. Two more faults in the same entry are gone with it: Windows
+was killing the piece that keeps Vaenyx alive after three days of uptime,
+and on a laptop off its charger Vaenyx never started at boot at all. If
+something ever does block it again, it now writes down how long for.
+
+**Reading the words in pictures — the new "OCR" switch.** Scans and photos
+turn into text: a scanned PDF that used to come back empty is read
+properly, and the words printed in a photo reach the model exactly as
+written. It runs on an engine built for the job, never the chat model —
+a chat model that cannot make out a character invents a plausible one, and
+on a quote that is a wrong number in a confident sentence. It is a switch
+of its own, because with it on and document reading off, a scan becomes
+text on your machine and no model sees it. Drop a scan in with it off and
+Vaenyx says so, with a button to turn it on.
+
+**What each provider does with your content, beside the choice.** Every
+model connection now carries its provider's own data conditions — quoted
+from their terms, dated, with the source linked. Two are worth knowing
+before you pick: Gemini's free tier and Mistral's free tier both train on
+what you send by default. Vaenyx does not exclude them and does not
+promise anything on a provider's behalf; it puts the facts where the
+decision is made.
+
+**A repeating task stops repeating itself.** A daily news task was
+re-reporting the previous day from the same handful of sources. Each run
+is now shown what the last five already delivered, with one instruction:
+not again. If something has changed it leads with the change; otherwise it
+goes looking for ground the earlier runs missed. On a genuinely quiet day
+it says so in a line instead of padding. What you asked for in the task's
+own chat — format, length, what to leave out — still carries into every
+run.
+
+**Uninstalling really removes it.** Uninstall reported success while
+leaving about a gigabyte of build files behind. It now removes them, keeps
+your data unless you say otherwise, and every release from here is tested
+by installing and uninstalling for real before the download is published.
+
+**On a phone.** Opening a chat or a task lands on the first line of the
+newest answer instead of somewhere in its middle. The header gives the
+title its room back — history moved off the phone, the schedule marker is
+shorter, and the ⋮ sits in the corner where it belongs. The floating
+arrow is one round button just above the message box: down to the newest,
+up to where it starts, gone three seconds after you stop touching the
+screen. Anything that sets Vaenyx working — Run Now, a message, a file —
+takes you to the bottom to watch it. And the "+" folds away when you tap
+anywhere else.
+
 ## v0.3.2 — 2026-08-06
 
 **The first sign-in works on a clean machine.** Pressing "Sign In With
