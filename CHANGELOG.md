@@ -4,6 +4,45 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.1 — 2026-08-06
+
+**A real installer.** One vaenyx-setup.exe: pick a language, pick a folder,
+watch it install, finish with Vaenyx open in the browser and a Vaenyx icon on
+the desktop. Upgrading installs over the top and never touches your data;
+uninstalling asks whether to keep it, and keeps it unless you say otherwise.
+The zip download remains for anyone who prefers it — now just two files at the
+top, the setup and a read-me whose first item walks past the Windows
+SmartScreen box. First installs no longer need a restart: the one bug that made
+a fresh machine say "Vaenyx did not start" until you rebooted is fixed at its
+root.
+
+**Vaenyx on your phone.** The first-run wizard ends with "want it on your
+phone?", and Settings has a permanent Phone access section: three lights that
+really check (private network installed / signed in / tunnel up), each with a
+one-tap fix, then your phone address and a QR code — generated on your own
+machine, never by an outside service. Scan it, sign in, add to the home screen,
+and Vaenyx opens like an app in its own window.
+
+**Word, Excel and PowerPoint.** The attach button now reads .docx, .xlsx and
+.pptx beside PDFs and text files — words only (layout, images and charts are
+not carried over; anything visual is still best saved as PDF). The old
+.doc/.xls/.ppt formats are refused with the same advice, in plain words.
+
+**Each app has its own Model Key.** Your other apps stop sharing one door key:
+each gets its own Model Key from the Subscription Door panel, signs in to its
+own subscription from inside itself, and spends its own account — never
+Vaenyx's. The door now answers only from inside your private network: a leaked
+key alone can no longer reach it from the internet. A This-month table on the
+same panel shows who spent what, per app and per subscription.
+
+**The capability switches mean it.** Anything switched off in AI Settings →
+Capabilities is now really refused everywhere it could happen, in your own
+language, and every refusal is written into the Guard page. Each capability row
+carries its own model choice and a Test button that really performs the thing
+once and reports plainly: it worked, it failed in the other side's own words,
+or it is not built yet. Vaenyx can also open text files from folders you name —
+switched off until you name them, and never available to any app key.
+
 ## v0.3.0 — 2026-07-27
 
 **Pictures.** Ask for a picture in chat, in your own words, and Vaenyx makes
