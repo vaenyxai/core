@@ -90,6 +90,17 @@ const IconFetching = (
   </LineIcon>
 );
 
+// A picture on the left becoming lines of text on the right: the one
+// capability that is a TRANSFORM rather than a sense, drawn as exactly that.
+const IconOcr = (
+  <LineIcon>
+    <rect height="12" rx="1" width="9" x="3" y="6" />
+    <path d="m3 15 2.5-3 2 2.4L9 12.5" />
+    <circle cx="6" cy="9.5" r="0.9" />
+    <path d="M15 8h6M15 12h6M15 16h4" />
+  </LineIcon>
+);
+
 const IconWeb = (
   <LineIcon>
     <circle cx="12" cy="12" r="9" />
@@ -138,6 +149,12 @@ export const CAPABILITY_META: CapabilityMeta[] = [
     icon: IconReading,
     name: { en: "Reading", zh: "读文档" },
     gloss: { en: "Documents, PDF", zh: "多页文档、PDF" },
+  },
+  {
+    id: "ocr",
+    icon: IconOcr,
+    name: { en: "OCR", zh: "图转文" },
+    gloss: { en: "Text in pictures", zh: "图里的字" },
   },
   {
     id: "fetching",

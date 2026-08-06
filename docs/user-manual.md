@@ -216,6 +216,14 @@ Read this inside the app: **Settings → Manual**.
   - **Vision** *(Picture in)* — looking at a photo.
   - **Drawing** *(Picture out)* — making a picture.
   - **Reading** *(Documents, PDF)* — a document you attached.
+  - **OCR** *(Text in pictures)* — turns the words in a scan or a photo into
+    text, on a dedicated OCR engine (Mistral OCR), never the main model — a
+    chat model that cannot make out a character invents a plausible one, and
+    numbers on a quote turn into money. Reading a scanned PDF is OCR plus
+    Reading together, which is why they are separate switches: with only OCR
+    on, a scan becomes text for your own eyes and no model sees it. Dropping a
+    scan in with OCR off gets a plain sentence and a turn-it-on button, not a
+    silent empty answer.
   - **Fetching** *(Files on this machine)* — opening text files from folders you
     name yourself, in that row's own setup. Text files only, and not large ones.
     Vaenyx opens the file itself, so it works with whichever main model you
@@ -321,6 +329,13 @@ Read this inside the app: **Settings → Manual**.
   that come with it, and **picking one you do not have yet starts its own ~60 MB
   download**: the option says so, and the progress shows on the Speaking row
   where you started it.
+
+- **What each provider does with your content** — every model card, and the
+  engine lists, carry the provider's own terms beside the choice: whether it
+  trains on what you send, for how long it keeps it, and a dated link to the
+  source. Copied from their terms, never our judgment — the call stays yours.
+  The one worth knowing cold: the two easiest free options (Gemini's free
+  tier, Mistral's free tier) **both train on what you send them by default**.
 
 ## 10. Subscription Door — lending your subscriptions to your own apps
 
@@ -486,5 +501,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.1-dev.93** · last updated 2026-08-06.
+Manual for **v0.3.2-dev.2** · last updated 2026-08-06.
 Keep this file up to date whenever a feature changes.

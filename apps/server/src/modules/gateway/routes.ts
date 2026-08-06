@@ -544,6 +544,7 @@ import {
 } from "../guard/rate-limit.js";
 import { listAuditEvents, recordAudit } from "../guard/audit.js";
 import {
+  capabilityOff,
   CAPABILITIES,
   CAPABILITY_IMPLEMENTED,
   type Capability,
@@ -584,6 +585,7 @@ import {
   writeRelayConfig,
 } from "../core/relay.js";
 import { listMonthUsage, usageMonth } from "../core/relay-usage.js";
+import { ocrEngineConnected } from "../core/ocr.js";
 
 interface GatewayContext {
   config: AppConfig;
@@ -7140,8 +7142,10 @@ export async function registerGatewayRoutes(
       ).slice(0, 200);
 
       let pages: number;
+      let facts: { pages: number; scanned?: boolean };
       try {
-        pages = (await inspectDocument(file)).pages;
+        facts = await inspectDocument(file);
+        pages = facts.pages;
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
         // The refusals are read by the Owner in the attach flow, so they
@@ -7193,6 +7197,29 @@ export async function registerGatewayRoutes(
             ? "这个文件读不了。Vaenyx 能收 PDF、纯文本文件(.txt、.md)和 Word、Excel、PowerPoint 文件(.docx、.xlsx、.pptx)。如果内容主要是图像 —— 扫描件、图纸 —— 把它另存为 PDF,会按图片来读。"
             : "That file could not be read. Vaenyx takes PDFs, plain-text files (.txt, .md) and Word, Excel or PowerPoint files (.docx, .xlsx, .pptx). If it is mostly visual — a scan, a drawing — save it as PDF, which is read as pictures.",
         });
+      }
+
+      // A scanned PDF is pictures of words: reading it AT ALL means OCR, the
+      // eighth capability. Refused here, at the moment of the drop, with the
+      // fix in the same sentence — the old behaviour was a silent empty
+      // extraction, which read as "Vaenyx is broken" instead of "one switch
+      // is off".
+      if (facts.scanned) {
+        const zhq = request.query.lang === "zh";
+        if (capabilityOff(context.database, "ocr")) {
+          return reply.code(403).send({
+            error: zhq
+              ? "DOCUMENT_NEEDS_OCR:这份是扫描件,里面没有可直接读取的文字。需要打开「图转文」才能读它。"
+              : "DOCUMENT_NEEDS_OCR:This one is a scan — there is no text in it to read directly. Turning images into text (OCR) has to be on to read it.",
+          });
+        }
+        if (!ocrEngineConnected(context.config.secretsDirectory)) {
+          return reply.code(503).send({
+            error: zhq
+              ? "「图转文」开着,但还没有连上它的引擎 —— 到 Models 里给 Mistral 贴上 key。"
+              : "OCR is on, but its engine is not connected yet — paste a Mistral key under Models.",
+          });
+        }
       }
 
       const documentId = saveDocument(context.config.dataDirectory, file);

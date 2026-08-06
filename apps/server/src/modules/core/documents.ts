@@ -91,6 +91,9 @@ interface PdfDoc {
 
 export interface DocumentFacts {
   pages: number;
+  /** A PDF whose pages carry no extractable text: pictures of words. Reading
+   *  it at all means OCR — the eighth capability, kept separate on purpose. */
+  scanned?: boolean;
 }
 
 // One attach button, several kinds behind it (Oskar, 2026-08-06): the split
@@ -166,6 +169,25 @@ export async function inspectDocument(file: Buffer): Promise<DocumentFacts> {
   }
   if (doc.numPages > MAX_DOCUMENT_PAGES) {
     throw new Error("DOCUMENT_TOO_MANY_PAGES");
+  }
+  // A first-page text probe decides "scanned": a page of prose always yields
+  // SOMETHING, a scan yields nothing. Cheap (one page), and honest enough —
+  // a mixed document with a text first page reads as text, which is what the
+  // extraction path would do with it anyway.
+  try {
+    const page = await doc.getPage(1);
+    const content = await page.getTextContent();
+    const probe = content.items
+      .map((item) => item.str ?? "")
+      .join("")
+      .trim();
+    // Strictly EMPTY, not merely short: a real scan's text layer yields
+    // nothing at all, while a genuine one-word page ("PAGE 1", a cover sheet)
+    // yields its word — and calling that a scan would push a readable page
+    // through a paid OCR call for nothing.
+    if (probe.length === 0) return { pages: doc.numPages, scanned: true };
+  } catch {
+    return { pages: doc.numPages, scanned: true };
   }
   return { pages: doc.numPages };
 }

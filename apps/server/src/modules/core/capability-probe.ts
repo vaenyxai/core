@@ -724,12 +724,116 @@ async function probeFetching(
 // Hearing and Speaking answer honestly rather than not answering: the route
 // stays total over the seven capabilities, so a client that grows a button
 // before this file grows a probe gets "not built", never a red cross.
+// The OCR probe's picture, generated once (320x90 white PNG, black bold
+// "VAENYX 2468") and pinned here: the answer is KNOWN, so the check is exact.
+// An open question proves nothing — a model answers it plausibly whether or
+// not the capability worked; a planted sentence either comes back or it does
+// not.
+const OCR_PROBE_PNG_BASE64 =
+  "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";
+
+async function probeOcr(
+  context: CapabilityProbeContext,
+): Promise<CapabilityTestResult> {
+  const { runOcr, OcrNotConnectedError } = await import("./ocr.js");
+  try {
+    const result = await runOcr(context.secretsDirectory, {
+      base64: OCR_PROBE_PNG_BASE64,
+      mediaType: "image/png",
+    });
+    const flat = result.text.replace(/\s+/g, " ").toUpperCase();
+    if (flat.includes("VAENYX") && flat.includes("2468")) {
+      return {
+        status: "ok",
+        engine: "Mistral OCR",
+        detail:
+          context.lang === "zh"
+            ? "认出了内置测试图上的字,一字不差。"
+            : "It read the built-in test picture word for word.",
+      };
+    }
+    return {
+      status: "failed",
+      engine: "Mistral OCR",
+      detail:
+        context.lang === "zh"
+          ? `没认对。测试图上写着 VAENYX 2468,它读到的是:「${result.text.slice(0, 80)}」`
+          : `It misread the picture. The test image says VAENYX 2468; it returned: "${result.text.slice(0, 80)}"`,
+    };
+  } catch (error) {
+    if (error instanceof OcrNotConnectedError) {
+      return {
+        status: "failed",
+        engine: "Mistral OCR",
+        detail:
+          context.lang === "zh"
+            ? "「图转文」的引擎还没连上 —— 到 Models 里给 Mistral 贴上 key。"
+            : "The OCR engine is not connected yet — paste a Mistral key under Models.",
+      };
+    }
+    return {
+      status: "failed",
+      engine: "Mistral OCR",
+      detail: error instanceof Error ? error.message : "OCR_FAILED",
+    };
+  }
+}
+
 const PROBES: Record<Capability, Probe | null> = {
   hearing: null,
   speaking: null,
   vision: probeVision,
   drawing: probeDrawing,
   reading: probeReading,
+  ocr: probeOcr,
   fetching: probeFetching,
   web: probeWeb,
 };

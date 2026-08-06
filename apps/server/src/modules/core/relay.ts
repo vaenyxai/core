@@ -41,6 +41,7 @@ import {
   decideTokenCapabilities,
   readProfileCapabilities,
 } from "./capabilities.js";
+import { runOcr } from "./ocr.js";
 import { recordEngineUsage } from "./relay-usage.js";
 
 export const RELAY_ENGINES = ["openai-cli", "claude-cli"] as const;
@@ -56,6 +57,7 @@ export const RELAY_CAPABILITIES = [
   "speaking",
   "vision",
   "reading",
+  "ocr",
   "drawing",
 ] as const;
 export type RelayCapability = (typeof RELAY_CAPABILITIES)[number];
@@ -326,7 +328,14 @@ export async function runRelay(
   const config = readRelayConfig(database);
   if (!config.enabled) throw new Error("RELAY_OFF");
 
-  if (!ENGINE_CAPABILITIES[request.engine].includes(request.capability)) {
+  // OCR does not ride either subscription: it runs on Vaenyx's dedicated OCR
+  // engine whatever `engine` the caller named, because a chat model used as
+  // OCR invents characters — the engine field still authenticates the caller's
+  // intent, it just is not consulted for this capability.
+  if (
+    request.capability !== "ocr" &&
+    !ENGINE_CAPABILITIES[request.engine].includes(request.capability)
+  ) {
     throw new Error(
       `RELAY_CAPABILITY_UNSUPPORTED:${request.engine}:${request.capability}`,
     );
@@ -368,10 +377,30 @@ export async function runRelay(
     const files = await fetchLinkedFiles(request.files, config, scratch);
     const attachment = files[0];
     if (
-      (request.capability === "vision" || request.capability === "reading") &&
+      (request.capability === "vision" ||
+        request.capability === "reading" ||
+        request.capability === "ocr") &&
       !attachment
     ) {
       throw new Error("RELAY_NO_FILE");
+    }
+
+    // The OCR lane: the linked picture or scan goes to the dedicated engine
+    // and the words come back — no subscription is touched. Granted per key
+    // like everything else (an app sending a scanned quote to be read is a
+    // legitimate ask, unlike fetching, which no key ever gets).
+    if (request.capability === "ocr" && attachment) {
+      const ocr = await runOcr(secretsDirectory, {
+        base64: attachment.base64,
+        mediaType: attachment.mediaType,
+      });
+      recordEngineUsage(database, request.appProfileId, "mistral-ocr");
+      return {
+        text: ocr.text,
+        engine: request.engine,
+        model: "mistral-ocr",
+        ms: Date.now() - started,
+      };
     }
 
     // Counted before the engine answers: a failed call still hit the

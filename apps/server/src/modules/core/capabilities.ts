@@ -27,6 +27,17 @@ export const CAPABILITIES = [
   "vision",
   "drawing",
   "reading",
+  // OCR sits beside reading because they compose: a scanned PDF is OCR (the
+  // page becomes text, near-free) + reading (the text reaches a model, paid).
+  // 🔴 DELIBERATELY ITS OWN CAPABILITY, never folded into reading (Oskar,
+  // 2026-08-06) — the combination of the two switches carries meaning a merged
+  // one cannot: OCR on + reading off = "turn my scans into text on this
+  // machine, for my own eyes, and send them to no model". Same yardstick that
+  // split vision from reading: different cost class, different promise.
+  // The name is also a DELIBERATE exception to the no-industry-jargon rule:
+  // "OCR" is a household word by now, and the Chinese chip 「图转文」explains
+  // itself entirely.
+  "ocr",
   "fetching",
   "web",
 ] as const;
@@ -90,6 +101,9 @@ export const CAPABILITY_DEFAULT_ON: Record<Capability, boolean> = {
   // opening the Owner's own folders, and that has to be a decision somebody
   // made rather than a default they inherited.
   fetching: false,
+  // On: reactive (it only ever runs when the Owner hands over a scan or a
+  // photo of text) and near-free on the dedicated engine.
+  ocr: true,
   // On (Oskar, 2026-08-01: "web我觉得要一直打开,不然根本拿不到最新的信息"). A
   // model that cannot look anything up answers today's question with what it
   // memorised a year ago and sounds equally sure either way — being wrong
@@ -189,6 +203,7 @@ export const CAPABILITY_IMPLEMENTED: Record<Capability, boolean> = {
   vision: true,
   drawing: true,
   reading: true,
+  ocr: true,
   web: true,
   // Built 2026-08-01 (core/fetching.ts): a whitelist of folders the Owner
   // names, empty until they do, and only text files up to a size cap. Not yet
@@ -693,6 +708,7 @@ const PLAIN_WORDS: Record<CapabilityLanguage, Record<Capability, string>> = {
     vision: "look at pictures",
     drawing: "make pictures",
     reading: "read documents",
+    ocr: "turn pictures into text",
     fetching: "open files on this machine",
     web: "use the web",
   },
@@ -702,6 +718,7 @@ const PLAIN_WORDS: Record<CapabilityLanguage, Record<Capability, string>> = {
     vision: "看图片",
     drawing: "画图",
     reading: "读文档",
+    ocr: "图转文",
     fetching: "打开这台机器上的文件",
     web: "上网",
   },

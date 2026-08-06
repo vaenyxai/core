@@ -438,6 +438,20 @@ textarea::placeholder {
   font-size: var(--fs-md);
 }
 
+/* The provider's data conditions, quoted from its terms: quiet, but on the
+   card — the label belongs beside the choice. */
+.model-data-facts {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+}
+
+.model-data-facts a {
+  color: var(--text-muted);
+}
+
 .model-card-model {
   color: var(--text-faint);
   font-size: var(--fs-label);

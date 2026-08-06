@@ -269,6 +269,7 @@ import {
   capabilityMeta,
 } from "./capability-chips.js";
 import { Picker, type PickerOption } from "./picker.js";
+import { PROVIDER_DATA_FACTS, dataFactsBadge } from "./data-facts.js";
 import { CAPABILITIES } from "./capabilities.js";
 import {
   getCodexAuthCopy,
@@ -1825,10 +1826,48 @@ function DocumentButton({
 }) {
   const { lang, t } = useI18n();
   const [busy, setBusy] = useState(false);
+  // The scanned-file moment: the server refused the upload because OCR is
+  // off, and the fix is one switch. The sentence and the button live in one
+  // small window — a toast cannot carry a button, and sending somebody to
+  // Settings to hunt for a row they have never heard of is how a feature
+  // stays "broken" for a month.
+  const [needsOcr, setNeedsOcr] = useState<string | null>(null);
+  const [ocrFlipBusy, setOcrFlipBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <>
+      {needsOcr ? (
+        <Modal
+          onClose={() => setNeedsOcr(null)}
+          title={lang === "zh" ? "这份是扫描件" : "This one is a scan"}
+        >
+          <p className="settings-card-copy">{needsOcr}</p>
+          <div className="modal-actions">
+            <button
+              className="primary-button"
+              disabled={ocrFlipBusy}
+              onClick={() => {
+                setOcrFlipBusy(true);
+                void updateCapabilities({ ocr: true }, lang)
+                  .then(() => {
+                    setNeedsOcr(null);
+                    showErrorToast(
+                      lang === "zh"
+                        ? "「图转文」打开了 —— 再发一次那份文件。"
+                        : "OCR is on — send that file again.",
+                    );
+                  })
+                  .catch(() => undefined)
+                  .finally(() => setOcrFlipBusy(false));
+              }}
+              type="button"
+            >
+              {lang === "zh" ? "打开图转文" : "Turn on OCR"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
       <input
         accept="application/pdf,.pdf,.txt,.md,.markdown,text/plain,text/markdown,.docx,.xlsx,.pptx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
         hidden
@@ -1839,8 +1878,13 @@ function DocumentButton({
           setBusy(true);
           void uploadDocument(file, lang)
             .then(onPicked)
-            .catch(() => {
-              // uploadDocument already raised the toast with the reason.
+            .catch((error: unknown) => {
+              const message = error instanceof Error ? error.message : "";
+              if (message.startsWith("DOCUMENT_NEEDS_OCR:")) {
+                setNeedsOcr(message.slice("DOCUMENT_NEEDS_OCR:".length));
+                return;
+              }
+              // Every other reason already raised the toast.
             })
             .finally(() => setBusy(false));
         }}
@@ -10081,7 +10125,7 @@ function SubscriptionDoorPanel() {
           {ceiling ? (
             <div className="door-app-caps">
               {CAPABILITY_META.filter((meta) =>
-                ["vision", "reading"].includes(meta.id),
+                ["vision", "reading", "ocr"].includes(meta.id),
               ).map((meta) => {
                 const machineOn = ceiling.global[meta.id] === true;
                 const granted = appProfile.capabilities.includes(meta.id);
@@ -10445,6 +10489,7 @@ const SETUP_ROWS = new Set([
   "vision",
   "drawing",
   "reading",
+  "ocr",
   "fetching",
   "web",
 ]);
@@ -10474,6 +10519,10 @@ const TEST_COST: Record<string, { en: string; zh: string }> = {
   fetching: {
     en: "Looks inside the folders you named and really opens one text file from them. No model is used, nothing is sent anywhere, and the file's contents are not shown.",
     zh: "到你点名的文件夹里看一眼,并真的打开里面的一个文字文件。不用模型,什么都不发出去,文件内容也不会显示出来。",
+  },
+  ocr: {
+    en: "Sends a tiny built-in picture with known words to the OCR engine and checks it reads them exactly. One metered call, a fraction of a cent.",
+    zh: "把一张内置的、字已知的小图发给图转文引擎,核对一字不差。按量计费一次,几厘钱。",
   },
   reading: {
     en: "Reads a one-page test document. If your main model reads PDFs itself, that is one small request to it; otherwise nothing leaves this machine.",
@@ -10904,11 +10953,20 @@ function CapabilitiesPanel({
     // Connected but not able to do THIS job stays in the list, greyed
     // (AI-CONNECT): you should see that it is there and cannot do this here,
     // not wonder where it went.
-    const options: PickerOption[] = connected.map((provider) => ({
-      disabled: !provider.capabilities.includes(slot),
-      label: provider.isDefault ? `${provider.name} ${mainNote}` : provider.name,
-      value: provider.id,
-    }));
+    const options: PickerOption[] = connected.map((provider) => {
+      // The training badge rides the picker label: the moment of choosing an
+      // engine is the moment the fact matters, and nobody opens a second
+      // screen to check.
+      const badge = dataFactsBadge(provider.id, lang);
+      const name = provider.isDefault
+        ? `${provider.name} ${mainNote}`
+        : provider.name;
+      return {
+        disabled: !provider.capabilities.includes(slot),
+        label: badge ? `${name} · ${badge}` : name,
+        value: provider.id,
+      };
+    });
     return [...options, ...extra];
   }
   // No "off" in any of these lists (Oskar): off is what the switch on the right
@@ -11008,6 +11066,27 @@ function CapabilitiesPanel({
       value: visionEngine,
     },
     fetching: { options: mainOnly, set: async () => undefined, value: "" },
+    // 🔴 OCR's engine is NEVER the main model, and the list says so by
+    // holding only dedicated engines: a chat model asked to read unclear ink
+    // generates a plausible character instead of admitting it cannot see —
+    // fluent wrong numbers on a quote. A dedicated engine fails as visible
+    // garbage. (Measured no-invention rates: dedicated ~93%, GPT-5.5 78%.)
+    ocr: {
+      options: [
+        providers.find((entry) => entry.id === "mistral" && entry.connected)
+          ? { label: "Mistral OCR", value: "mistral" }
+          : {
+              disabled: true,
+              label:
+                lang === "zh"
+                  ? "Mistral OCR —— key 在 Models 里贴"
+                  : "Mistral OCR — key goes under Models",
+              value: "mistral",
+            },
+      ],
+      set: async () => undefined,
+      value: "mistral",
+    },
     web: { options: mainOnly, set: async () => undefined, value: "" },
   };
   for (const entry of Object.values(engines)) {
@@ -11476,6 +11555,25 @@ function CapabilitiesPanel({
     });
   }
 
+  function ocrSetup() {
+    return drawer({
+      what: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "把图里的字变成文字:扫描件、照片上的字都是它认。读一份扫描 PDF = 图转文 + 读文档两个能力搭在一起 —— 所以可以只开这一个:扫描件在本机变成文字给你自己看,不送任何模型。"
+            : "Turns the words in a picture into text: scans, and text in photos. Reading a scanned PDF is OCR plus Reading working together — which is why they are separate switches: with only this one on, a scan becomes text on this machine for your own eyes, and no model sees it."}
+        </p>
+      ),
+      who: (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "专用 OCR 引擎(Mistral OCR),故意不用主模型:聊天模型看不清一个字时会编一个「看着合理」的 —— 报价单上的数字是要进钱的。专用引擎读不出就吐乱码,错得看得见。近乎免费(约每千页 $2–4)。备选 Google Cloud Vision(每月一千页免费但要绑卡)还没接。"
+            : "A dedicated OCR engine (Mistral OCR), deliberately never the main model: a chat model that cannot make out a character writes a plausible one instead — and numbers on a quote turn into money. A dedicated engine fails as visible garbage. Near-free (about $2-4 per thousand pages). Google Cloud Vision (1000 free pages a month, card required) is the documented alternative, not yet wired."}
+        </p>
+      ),
+    });
+  }
+
   function webSetup() {
     return drawer({
       what: (
@@ -11586,6 +11684,8 @@ function CapabilitiesPanel({
               ? drawingSetup()
               : id === "reading"
                 ? readingSetup()
+                : id === "ocr"
+                  ? ocrSetup()
                 : id === "fetching"
                   ? fetchingSetup()
                   : id === "web"
@@ -12490,6 +12590,20 @@ function ModelsPanel({
             {provider.model ? (
               <small className="model-card-model">{provider.model}</small>
             ) : null}
+            {/* The provider's own data conditions, copied from its terms and
+                dated — the label beside the choice, never our judgment. */}
+            {(() => {
+              const facts = PROVIDER_DATA_FACTS[provider.id];
+              if (!facts) return null;
+              return (
+                <small className="model-data-facts">
+                  {facts.en}{" "}
+                  <a href={facts.sourceUrl} rel="noreferrer" target="_blank">
+                    source, {facts.checkedAt}
+                  </a>
+                </small>
+              );
+            })()}
             {!provider.healthy ? (
               <small className="model-card-model">{provider.detail}</small>
             ) : null}

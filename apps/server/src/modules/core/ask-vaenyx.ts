@@ -18,12 +18,15 @@ import {
   type Capability,
   SAY_THE_STAND_IN,
   backendCannotMessage,
+  capabilityOff,
   capabilityRefusedBy,
 } from "./capabilities.js";
 import {
   FETCHING_TOOL_LOOP_PROVIDER_IDS,
   grantFetchAccess,
 } from "./fetching.js";
+import { runOcr } from "./ocr.js";
+import { recordEngineUsage } from "./relay-usage.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
 import { schedulePresenceAwarePush } from "./push.js";
@@ -1103,9 +1106,31 @@ export async function createAskVaenyxMessage(
             try {
               documentText = await extractDocumentText(file);
             } catch {
-              // Unreadable here means the upload check already passed but the
-              // text layer is unusable (a scan): the reply says so plainly.
               documentText = "";
+            }
+            // No text layer = a scan. The upload door only lets a scan in
+            // when OCR is on, so this is where the capability actually runs:
+            // the dedicated engine turns the pages into text HERE, and the
+            // model is handed words — the model itself never plays OCR,
+            // because a chat model asked to read unclear ink invents a
+            // plausible character instead of admitting it cannot see.
+            if (
+              !documentText.trim() &&
+              isPdfDocument(file) &&
+              !capabilityOff(database, "ocr")
+            ) {
+              try {
+                const ocr = await runOcr(options.secretsDirectory ?? "", {
+                  base64: file.toString("base64"),
+                  mediaType: "application/pdf",
+                });
+                documentText = ocr.text;
+                recordEngineUsage(database, "core", "mistral-ocr");
+              } catch {
+                // The reply's stand-in already says the text could not be
+                // read; a failed OCR call must not fail the whole turn.
+                documentText = "";
+              }
             }
           }
         }

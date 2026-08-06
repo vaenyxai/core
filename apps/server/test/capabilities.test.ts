@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CAPABILITIES,
   backendCannotMessage,
+  currentCapabilityName,
   CAPABILITY_DEFAULT_ON,
   capabilityRefusedBy,
   chargeToken,
@@ -88,16 +89,22 @@ afterEach(() => {
 });
 
 describe("capabilities", () => {
-  it("is a closed vocabulary of seven", () => {
+  it("is a closed vocabulary of eight, in Oskar's order", () => {
+    // What comes in, what goes out, then what it goes and gets — with `ocr`
+    // beside `reading` because the two compose (a scanned PDF = OCR + reading)
+    // and are deliberately separate switches.
     expect([...CAPABILITIES]).toEqual([
       "hearing",
       "speaking",
       "vision",
       "drawing",
       "reading",
+      "ocr",
       "fetching",
       "web",
     ]);
+    expect(currentCapabilityName("ocr")).toBe("ocr");
+    expect(currentCapabilityName("scanning")).toBeNull();
   });
 
   it("starts on for everything but reaching into the Owner's own folders", () => {

@@ -416,6 +416,7 @@ consent for it is sought at that point.
 - **EN:** "You're connecting a third-party AI provider. Your messages — plus any context Vaenyx adds, like saved memories, your profile, project summaries and attached files — will be sent to the provider you choose, under its terms, privacy policy and any fees it charges. Vaenyx doesn't control that provider."
 - **ZH:** "你正在连接第三方 AI 服务商。你的消息,连同 Vaenyx 添加的上下文(如已保存的记忆、你的档案、项目摘要与附件),将发送给你所选的服务商,受其条款、隐私政策及其收费约束。Vaenyx 无法控制该服务商。"
 - **Behaviour:** Point-of-action (every new provider connection); proceeding past the screen is recorded per provider. The context-injection disclosure is mandatory: describing the outbound flow as "prompts only" would understate it.
+- **Concretisation (2026-08-06, informational — not a consent change):** F1's "under its terms" is now made specific beside each provider: the Models card and every engine list carry that provider's own data conditions (trains-on-content or not, retention, free-vs-paid difference), quoted from the provider's published terms with a dated source link, never paraphrased into our judgment. Where a free tier trains on submissions by default (currently Gemini's free tier and Mistral's free tier), the flag is printed on the label itself. Disclosure-class copy under clause 6.7; it does not trigger re-acceptance.
 
 **F5 — `legal.notice.modelConnect.pictures`** *(the image-provider slot — a variant is needed, and not for the reason you would guess)*
 

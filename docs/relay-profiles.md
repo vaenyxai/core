@@ -177,6 +177,7 @@ Call counts always; token counts only where an engine truly reports them
 | Capability off on the machine | `403` `RELAY_CAPABILITY_OFF:<capability>` |
 | Capability not granted to this key | `403` `RELAY_CAPABILITY_NOT_GRANTED:<capability>` |
 | Engine cannot do that job | `400` `RELAY_CAPABILITY_UNSUPPORTED:<engine>:<capability>` |
+| OCR (`capability: "ocr"`) | Runs on Vaenyx's dedicated OCR engine whatever `engine` was named; needs the `ocr` grant on the Model Key and a linked file. |
 | Another sign-in mid-flight (Codex) | `409` `CODEX_LOGIN_BUSY` |
 | Claude sign-in not started / code wrong | `502` `CLAUDE_LOGIN_NOT_STARTED` / `CLAUDE_LOGIN_CODE_REJECTED` |
 

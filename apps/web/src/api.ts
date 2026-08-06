@@ -147,7 +147,12 @@ async function requestJson<T>(
     // checks stay quiet — background polls and the login flow handle their
     // own states.
     const method = (options.method ?? "GET").toUpperCase();
-    if (method !== "GET" && response.status !== 401) {
+    // A "CODE:sentence" error is one a screen handles with its own richer UI
+    // (today: DOCUMENT_NEEDS_OCR opens a window with the fix button in it).
+    // The global toast stays quiet for those, or the same words would fire
+    // twice — once as a vanishing toast, once as the window.
+    const handledElsewhere = /^[A-Z_]+:/.test(message);
+    if (method !== "GET" && response.status !== 401 && !handledElsewhere) {
       showErrorToast(message);
     }
     throw new VaenyxRequestError(

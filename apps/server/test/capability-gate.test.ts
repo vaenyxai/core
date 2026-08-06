@@ -96,6 +96,22 @@ const TINY_PDF = Buffer.from(
     "%PDF-1.4",
     "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj",
     "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj",
+    "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj",
+    "4 0 obj<</Length 40>>stream\nBT /F1 12 Tf 20 100 Td (QUOTE WORDS) Tj ET\nendstream endobj",
+    "5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj",
+    "trailer<</Root 1 0 R>>",
+  ].join("\n"),
+  "latin1",
+);
+
+// The page with NO text at all: how a scan looks to the extractor. The upload
+// door classifies by content, so this must be guided to OCR, never silently
+// read as empty.
+const SCANNED_PDF = Buffer.from(
+  [
+    "%PDF-1.4",
+    "1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj",
+    "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj",
     "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj",
     "trailer<</Root 1 0 R>>",
   ].join("\n"),
@@ -294,6 +310,44 @@ describe("the capability ceiling on the routes that perform a capability", () =>
     });
     expect(allowed.statusCode).toBe(200);
     expect(allowed.json()).toMatchObject({ pages: 1 });
+
+    await app.close();
+  });
+
+  it("a scan is guided to OCR instead of silently reading as empty", async () => {
+    const { app, cookie } = await startWithOwner();
+
+    // OCR off: the refusal carries the fix in its own sentence, as a coded
+    // error the client turns into a window with the switch-on button.
+    await switchCapability(app, cookie, "ocr", false);
+    const refused = await app.inject({
+      method: "POST",
+      url: "/v1/documents/upload",
+      headers: {
+        cookie,
+        "content-type": "application/pdf",
+        "x-document-name": "scan.pdf",
+      },
+      payload: SCANNED_PDF,
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(String(refused.json().error)).toContain("DOCUMENT_NEEDS_OCR:");
+
+    // OCR on but no engine key in this sandbox: its own sentence pointing at
+    // Models — never a silent empty extraction.
+    await switchCapability(app, cookie, "ocr", true);
+    const unconnected = await app.inject({
+      method: "POST",
+      url: "/v1/documents/upload",
+      headers: {
+        cookie,
+        "content-type": "application/pdf",
+        "x-document-name": "scan.pdf",
+      },
+      payload: SCANNED_PDF,
+    });
+    expect(unconnected.statusCode).toBe(503);
+    expect(String(unconnected.json().error)).toContain("Mistral");
 
     await app.close();
   });
