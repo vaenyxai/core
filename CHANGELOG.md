@@ -4,6 +4,23 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.4 — 2026-08-07
+
+**Installing on a new computer works.** Every version until now could fail
+partway through "Downloading what Vaenyx needs" on a computer that had
+never installed it — after the download had actually finished. npm prints
+an ordinary notice while it works; the installer was treating anything npm
+said on that channel as a fatal error and stopping on it. Nothing was
+wrong with the download, and nothing was wrong with your computer. It only
+ever happened on a first install, which is why it survived this long: a
+machine that has installed Vaenyx once never sees the notice again.
+
+**That step now shows it is alive.** It downloads about 500 MB in 18,000
+files, which on a slow connection is ten to twenty minutes of a window
+that used to sit there saying nothing. It now says how big the download
+is, then reports every ten seconds how much has arrived and how long it
+has been going.
+
 ## v0.3.3 — 2026-08-07
 
 **Vaenyx is quick again.** On a busy computer it had started answering
