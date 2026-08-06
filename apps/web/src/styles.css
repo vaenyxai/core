@@ -7110,9 +7110,11 @@ select {
     display: grid;
     gap: 12px;
     min-height: 48px;
-    /* Clear the sticky hamburger (top-left) and fixed Hard Refresh (top-right)
-       so the title never sits under them when the header is stuck to the top. */
-    padding: 8px 52px 10px;
+    /* Left keeps clearing the sticky hamburger. The right used to reserve the
+       same 52px for a floating Hard Refresh button — which was removed on
+       2026-07-27, and the empty strip it left behind is what pushed the ⋮ in
+       off the corner and squeezed the title (Oskar, 2026-08-07). */
+    padding: 8px 14px 10px 52px;
   }
 
   .simple-compose-shell {
@@ -7239,6 +7241,15 @@ select {
   .ask-vaenyx-chat.focused-chat .ask-vaenyx-chat-header h2,
   .focused-task-panel .ask-vaenyx-chat-header h2 {
     max-width: 100%;
+  }
+
+  /* History is a desktop affordance. On a phone it was a third header row
+     spending a whole line on a way back to runs the Owner rarely reopens —
+     and the header's job here is to get out of the answer's way (Oskar,
+     2026-08-07: "最上面那个 history 手机版不要了"). Still one tap away on a
+     wider screen. */
+  .task-toolbar .task-runs {
+    display: none;
   }
 
   .ask-vaenyx-message {

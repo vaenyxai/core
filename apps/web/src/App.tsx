@@ -6261,6 +6261,29 @@ function AskVaenyxPanel({
   // window re-anchors to the true end.
   const lastAnchorAtRef = useRef(0);
 
+  // Opening a conversation lands on the START of its newest message, not at
+  // the bottom: a long answer opened at the bottom drops the Owner into its
+  // middle, and finding the first line is their job (Oskar, 2026-08-07 —
+  // "打开不在最新信息开头地方"). Only the OPENING is anchored this way; once
+  // the Owner is in, a growing answer keeps following the end as before.
+  //
+  // Both landings go through here, because `block: "start"` puts the line
+  // under the sticky header — the reason the unread jump felt off by a
+  // header's height too.
+  const openedThreadRef = useRef("");
+
+  function scrollToMessageStart(element: Element | null): void {
+    if (!element) return;
+    const header = document.querySelector(".ask-vaenyx-chat-header");
+    const offset = (header?.getBoundingClientRect().height ?? 90) + 12;
+    window.scrollTo({
+      top: Math.max(
+        0,
+        window.scrollY + element.getBoundingClientRect().top - offset,
+      ),
+    });
+  }
+
   function reanchorAfterImageLoad() {
     if (Date.now() - lastAnchorAtRef.current > 3000) return;
     const target = view === "task" ? taskEndRef.current : chatEndRef.current;
@@ -6277,16 +6300,29 @@ function AskVaenyxPanel({
           // Zeroed, not stamped: the photo re-anchor must not drag the view
           // back to the bottom while the Owner is reading from here.
           lastAnchorAtRef.current = 0;
-          document
-            .getElementById(`message-${first.id}`)
-            ?.scrollIntoView({ block: "start" });
+          openedThreadRef.current = `chat:${activeConversationId ?? ""}`;
+          scrollToMessageStart(document.getElementById(`message-${first.id}`));
           return;
         }
+      }
+      // First settle after opening this conversation — and only then, so a
+      // reply arriving later still scrolls with the text as it is written.
+      const key = `chat:${activeConversationId ?? ""}`;
+      if (openedThreadRef.current !== key && !sending) {
+        openedThreadRef.current = key;
+        lastAnchorAtRef.current = 0;
+        scrollToMessageStart(
+          document.getElementById(
+            `message-${messages[messages.length - 1]?.id ?? ""}`,
+          ),
+        );
+        return;
       }
     }
     lastAnchorAtRef.current = Date.now();
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [
+    activeConversationId,
     loadingMessages,
     messages.length,
     sending,
@@ -6309,16 +6345,29 @@ function AskVaenyxPanel({
         );
         if (first) {
           lastAnchorAtRef.current = 0;
-          document
-            .getElementById(`message-${first.id}`)
-            ?.scrollIntoView({ block: "start" });
+          openedThreadRef.current = `task:${focusedTaskId ?? ""}`;
+          scrollToMessageStart(document.getElementById(`message-${first.id}`));
           return;
         }
+      }
+      // Same rule as a chat: opening a task lands on the first line of its
+      // newest run, which on a scheduled task is the whole point of opening it.
+      const key = `task:${focusedTaskId ?? ""}`;
+      if (openedThreadRef.current !== key && !sendingTaskMessage) {
+        openedThreadRef.current = key;
+        lastAnchorAtRef.current = 0;
+        scrollToMessageStart(
+          document.getElementById(
+            `message-${taskMessages[taskMessages.length - 1]?.id ?? ""}`,
+          ),
+        );
+        return;
       }
     }
     lastAnchorAtRef.current = Date.now();
     taskEndRef.current?.scrollIntoView({ block: "end" });
   }, [
+    focusedTaskId,
     loadingTaskMessages,
     sendingTaskMessage,
     streamStatus,
