@@ -70,6 +70,8 @@ $Messages = @{
   "node.manual"     = @{ en = "You can install it yourself from https://nodejs.org and run this again."; zh = "你也可以自己去 https://nodejs.org 安装,然后重新运行。" }
   "node.notfound"   = @{ en = "Node.js still cannot be found after installing."; zh = "安装之后仍然找不到 Node.js。" }
   "node.reboot"     = @{ en = "Restart the computer and run Vaenyx-Setup.cmd again."; zh = "请重启电脑,然后重新运行 Vaenyx-Setup.cmd。" }
+  "deps.size"       = @{ en = "About 500 MB in 18,000 files. On a slow connection this takes 10-20 minutes, and npm says nothing while it works - the line below is Vaenyx checking, so you can see it is alive."; zh = "约 500 MB、18000 个文件。网络慢时需要 10-20 分钟,而且 npm 干活时不会有任何提示 —— 下面这行是 Vaenyx 在替你盯着,好让你知道它没死。" }
+  "deps.alive"      = @{ en = "still working"; zh = "仍在进行" }
   "deps.retry"      = @{ en = "That did not finish. Trying once more..."; zh = "这一步没完成,再试一次..." }
   "deps.failed"     = @{ en = "The download failed twice."; zh = "下载连续失败两次。" }
   "deps.net"        = @{ en = "This step needs a working internet connection. Check it and run Vaenyx-Setup.cmd again."; zh = "这一步需要正常的网络连接。检查网络后重新运行 Vaenyx-Setup.cmd。" }
@@ -344,6 +346,52 @@ function Start-Elevated {
   return Start-Process -FilePath $FilePath -ArgumentList $Arguments -Verb RunAs -Wait -PassThru
 }
 
+# THE LANDMINE THIS SCRIPT WALKED ON FOR MONTHS, and what it cost:
+#
+# This script runs with $ErrorActionPreference = "Stop" so a real failure
+# cannot be scrolled past. In Windows PowerShell 5.1 that setting also applies
+# to ANY line a native program writes to stderr while its output is being
+# captured or transcribed - and Start-Transcript is on from the first step.
+# npm writes ordinary notices there ("npm notice", audit summaries), and vite
+# writes its chunk-size hint there. Neither is an error. Both were fatal.
+#
+# On a machine with a warm npm cache nothing is printed and the install
+# sails through, which is why every test here and in CI passed. On a machine
+# that has never seen Vaenyx, npm downloads half a gigabyte, prints one
+# notice, and the install dies on the last line of the step it just
+# completed - looking, from the outside, exactly like "stuck at step 3"
+# (Oskar's Surface, v0.3.3, 2026-08-07; reproduced here with an empty cache).
+#
+# So no external tool runs through PowerShell's streams any more. Each one is
+# its own process: its output goes straight to the window, and the ONLY thing
+# that decides success is the exit code.
+function Invoke-Tool {
+  param(
+    [string]$FilePath,
+    [string[]]$Arguments,
+    [string]$WorkingDirectory = $root
+  )
+  $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments `
+    -WorkingDirectory $WorkingDirectory -NoNewWindow -PassThru -Wait
+  return $process.ExitCode
+}
+
+# Same, for the short "--version" style calls whose OUTPUT is needed. The
+# preference is relaxed only for the length of the call.
+function Get-ToolOutput {
+  param([string]$FilePath, [string[]]$Arguments)
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $output = & $FilePath @Arguments 2>$null
+    return ($output | Select-Object -First 1)
+  } catch {
+    return $null
+  } finally {
+    $ErrorActionPreference = $previous
+  }
+}
+
 $failed = $false
 try {
   # Files that arrive inside a downloaded zip are marked "from the internet"
@@ -380,7 +428,7 @@ try {
   }
 
   if (Get-Command node.exe -ErrorAction SilentlyContinue) {
-    $nodeVersionText = & node.exe --version
+    $nodeVersionText = Get-ToolOutput "node.exe" @("--version")
     Write-Info "$(Say 'node.found') $nodeVersionText"
   } else {
     $nodeVersionText = ""
@@ -486,13 +534,13 @@ try {
     throw "npm not found"
   }
 
-  $finalNodeVersion = & $nodeExe --version
+  $finalNodeVersion = Get-ToolOutput $nodeExe @("--version")
   $finalNodeMajor = Get-NodeMajor $finalNodeVersion
   if ($finalNodeMajor -lt $MinimumNodeMajor) {
     Write-Bad "Node.js $finalNodeVersion is still too old (need $MinimumNodeMajor or newer)."
     throw "node too old"
   }
-  $npmVersion = & $npmCmd --version
+  $npmVersion = Get-ToolOutput $npmCmd @("--version")
   if ((Get-NodeMajor $npmVersion) -lt $MinimumNpmMajor) {
     Write-Bad "npm $npmVersion is too old (need $MinimumNpmMajor or newer)."
     Write-Info "Installing the current Node.js LTS from https://nodejs.org fixes this."
@@ -520,12 +568,49 @@ try {
 
   # -- 2. Dependencies ----
   Write-Head (Say "step3")
-  & $npmCmd ci
-  if ($LASTEXITCODE -ne 0) {
-    Write-Warn (Say "deps.retry")
-    & $npmCmd ci
+  Write-Info (Say "deps.size")
+  # npm ci prints NOTHING until it finishes. Half a gigabyte later, on a
+  # laptop where every extracted file is scanned by Windows Defender, that
+  # silence lasts long enough to look like a dead installer — and it did
+  # (Oskar, 2026-08-07: "安装卡在第三步"). So npm runs in its own process and
+  # this loop reports every ten seconds how long it has been going and how
+  # much has landed on disk. Nothing about the install changes; the only new
+  # thing is that it can be seen.
+  function Invoke-NpmCi {
+    $started = Get-Date
+    $modules = Join-Path $root "node_modules"
+    # --no-audit / --no-fund: both write to stderr and neither says
+    # anything about whether the install worked.
+    $process = Start-Process -FilePath $npmCmd `
+      -ArgumentList "ci", "--no-audit", "--no-fund" `
+      -WorkingDirectory $root -NoNewWindow -PassThru
+    while (-not $process.HasExited) {
+      Start-Sleep -Seconds 10
+      if ($process.HasExited) { break }
+      $megabytes = 0
+      try {
+        if (Test-Path $modules) {
+          $sum = (Get-ChildItem $modules -Recurse -File -Force -ErrorAction SilentlyContinue |
+            Measure-Object -Property Length -Sum).Sum
+          $megabytes = [math]::Round(($sum / 1MB))
+        }
+      } catch {
+        # A folder being written to while it is measured; the next tick tries
+        # again. Never let the progress line break the install.
+      }
+      $elapsed = (Get-Date) - $started
+      Write-Host ("   {0} - {1} MB, {2:mm\:ss}" -f (Say "deps.alive"), $megabytes, $elapsed) -ForegroundColor DarkGray
+    }
+    return $process.ExitCode
   }
-  if ($LASTEXITCODE -ne 0) {
+
+  $depsExit = Invoke-NpmCi
+  if ($depsExit -ne 0) {
+    Write-Warn (Say "deps.retry")
+    $depsExit = Invoke-NpmCi
+  }
+  $global:LASTEXITCODE = $depsExit
+  if ($depsExit -ne 0) {
     Write-Bad (Say "deps.failed")
     Write-Info (Say "deps.net")
     Write-Info "$(Say 'log.at') $setupLog"
@@ -535,8 +620,11 @@ try {
 
   # -- 3. Build ----
   Write-Head (Say "step4")
-  & $npmCmd run build
-  if ($LASTEXITCODE -ne 0) {
+  # vite writes its chunk-size hint to stderr, which under this script's
+  # Stop preference used to be fatal. Own process, exit code only.
+  $buildExit = Invoke-Tool $npmCmd @("run", "build")
+  $global:LASTEXITCODE = $buildExit
+  if ($buildExit -ne 0) {
     Write-Bad (Say "build.failed")
     Write-Info "$(Say 'log.at') $setupLog"
     throw "build failed"
