@@ -182,11 +182,30 @@ jobs:
 
           # The uninstaller relaunches itself from TEMP (as _iuXXXXX.tmp), so
           # neither the first process returning nor the Add/Remove entry
-          # disappearing means it is DONE — the entry goes early, while the
-          # DelTree of a built node_modules keeps running for minutes.
-          # Completion is the relaunched process exiting.
+          # disappearing means it is DONE. Completion is the relaunched
+          # process exiting; its own /LOG is the authority on what it removed
+          # and what refused, and every failure path prints the full state.
+          $uninsLog = Join-Path $env:RUNNER_TEMP "vaenyx-uninstall-inno.log"
+          function Show-UninstallState {
+            Write-Host "=== uninstall Inno log tail ==="
+            if (Test-Path $uninsLog) { Get-Content $uninsLog -Tail 60 | Write-Host } else { Write-Host "(no uninstall log)" }
+            Write-Host "=== node processes ==="
+            Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" |
+              ForEach-Object { Write-Host "  pid $($_.ProcessId): $($_.CommandLine)" }
+            Write-Host "=== server probe ==="
+            try {
+              $s = Invoke-RestMethod "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 4
+              Write-Host "  still answering: $($s.name) $($s.version)"
+            } catch { Write-Host "  not answering" }
+            Write-Host "=== $dir top level ==="
+            if (Test-Path $dir) { Get-ChildItem $dir -Force | ForEach-Object { Write-Host "  $($_.Name)" } }
+            if (Test-Path "$dir\apps") {
+              Write-Host "=== $dir\apps ==="
+              Get-ChildItem "$dir\apps" -Force -Recurse | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            }
+          }
           Start-Process -FilePath "$dir\unins000.exe" `
-            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' | Out-Null
+            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$uninsLog" | Out-Null
           Start-Sleep -Seconds 10
           $deadline = (Get-Date).AddMinutes(8)
           while ((Get-Date) -lt $deadline) {
@@ -195,20 +214,23 @@ jobs:
             Start-Sleep -Seconds 5
           }
           if (@(Get-Process | Where-Object { $_.ProcessName -like '_iu*' -or $_.ProcessName -like 'unins*' }).Count -ne 0) {
+            Show-UninstallState
             throw "the uninstaller was still running 8 minutes after launch"
           }
-          if (Test-Path $reg) { throw "Add/Remove entry still present after uninstall" }
+          if (Test-Path $reg) { Show-UninstallState; throw "Add/Remove entry still present after uninstall" }
 
           schtasks /Query /TN "VaenyxAutostart" 2>$null | Out-Null
-          if ($LASTEXITCODE -eq 0) { throw "autostart task survived uninstall" }
+          if ($LASTEXITCODE -eq 0) { Show-UninstallState; throw "autostart task survived uninstall" }
           foreach ($folder in @("apps", "packages", "node_modules", "scripts")) {
-            if (Test-Path "$dir\$folder") { throw "$folder\ survived uninstall" }
+            if (Test-Path "$dir\$folder") { Show-UninstallState; throw "$folder\ survived uninstall" }
           }
           if (-not (Test-Path "$dir\userdata\config\keep-me.txt")) {
+            Show-UninstallState
             throw "userdata was DELETED by a silent uninstall - the keep-data default is broken"
           }
           try {
             Invoke-RestMethod "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 5 | Out-Null
+            Show-UninstallState
             throw "the server is still answering after uninstall"
           } catch {
             if ($_.Exception.Message -eq "the server is still answering after uninstall") { throw }
