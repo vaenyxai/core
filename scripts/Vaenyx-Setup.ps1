@@ -589,20 +589,35 @@ try {
     } else {
       Write-Info (Say "auto.ask")
       Write-Info (Say "auto.why")
-      # Single-quoted concatenation on purpose: the schtasks /TR value needs
-      # literal \" escapes, and building that inside a double-quoted
-      # PowerShell string is where quoting goes to die.
-      #
       # Register only, never /Run here. The task runs as SYSTEM with the Task
       # Scheduler service's boot-time PATH snapshot, so on a machine where
       # THIS install just added Node.js the task cannot find it and the first
       # start dies while setup waits (the P0 first-install death). The first
       # start is the direct one below, from this session's fresh PATH; the
       # task takes over at the next boot.
-      $schtasksArguments = '/c schtasks /Create /TN "' + $TaskName +
-        '" /TR "cmd /c \"' + $runner + '\"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F'
+      #
+      # The Set-ScheduledTask that follows /Create undoes two schtasks
+      # defaults that kill real machines: a 72-hour execution limit — the
+      # watchdog IS this task, so three days after boot Task Scheduler kills
+      # the watchdog and the server it supervises in one stroke (observed on
+      # the reference machine, 2026-08-06 21:51, no log line left behind) —
+      # and battery rules under which a laptop off its charger never starts
+      # Vaenyx at boot at all. One elevated child does both; -EncodedCommand
+      # because the /TR value's literal \" escapes inside another quoted
+      # layer is where quoting goes to die.
+      $registerScript = @"
+schtasks /Create /TN "$TaskName" /TR "cmd /c \"$runner\"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F | Out-Null
+if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
+try {
+  Set-ScheduledTask -TaskName "$TaskName" -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) | Out-Null
+} catch { }
+exit 0
+"@
+      $encodedRegister = [Convert]::ToBase64String(
+        [System.Text.Encoding]::Unicode.GetBytes($registerScript))
       try {
-        $taskProcess = Start-Elevated -FilePath "cmd.exe" -Arguments $schtasksArguments
+        $taskProcess = Start-Elevated -FilePath (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe") `
+          -Arguments "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedRegister"
         if ($taskProcess.ExitCode -eq 0) {
           $autostartRegistered = $true
           Write-Good (Say "auto.ok")

@@ -236,6 +236,10 @@ jobs:
             if ($_.Exception.Message -eq "the server is still answering after uninstall") { throw }
           }
           Write-Host "Uninstalled: entry and task gone, code folders gone, server stopped, userdata kept."
+          # The task-survived check above SUCCEEDS by schtasks failing, which
+          # leaves $LASTEXITCODE = 1 — and the pwsh step wrapper exits with
+          # it, painting a fully green gate red. Say plainly that we passed.
+          exit 0
 
       # Published with the GitHub CLI, which is preinstalled on the runner.
       # No third-party action gets write access to this repository's releases
