@@ -596,20 +596,28 @@ try {
       # start is the direct one below, from this session's fresh PATH; the
       # task takes over at the next boot.
       #
-      # The Set-ScheduledTask that follows /Create undoes two schtasks
-      # defaults that kill real machines: a 72-hour execution limit — the
-      # watchdog IS this task, so three days after boot Task Scheduler kills
-      # the watchdog and the server it supervises in one stroke (observed on
-      # the reference machine, 2026-08-06 21:51, no log line left behind) —
-      # and battery rules under which a laptop off its charger never starts
-      # Vaenyx at boot at all. One elevated child does both; -EncodedCommand
-      # because the /TR value's literal \" escapes inside another quoted
-      # layer is where quoting goes to die.
+      # The Set-ScheduledTask that follows /Create undoes THREE schtasks
+      # defaults that kill real machines:
+      #   * a 72-hour execution limit — the watchdog IS this task, so three
+      #     days after boot Task Scheduler kills the watchdog and the server
+      #     it supervises in one stroke (observed on the reference machine,
+      #     2026-08-06 21:51, no log line left behind);
+      #   * battery rules under which a laptop off its charger never starts
+      #     Vaenyx at boot at all;
+      #   * priority 7, which runs the task and everything it starts at
+      #     BELOW_NORMAL. That one made Vaenyx feel broken: on a busy machine
+      #     the server answered seconds late while using no cpu, because it
+      #     was not being given any. Priority 4 is NORMAL — the same footing
+      #     as everything else the Owner runs, which is right for a server
+      #     they are sitting there waiting for.
+      # One elevated child does all three; -EncodedCommand because the /TR
+      # value's literal \" escapes inside another quoted layer is where
+      # quoting goes to die.
       $registerScript = @"
 schtasks /Create /TN "$TaskName" /TR 'cmd /c \"$runner\"' /SC ONSTART /RU SYSTEM /RL HIGHEST /F | Out-Null
 if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
 try {
-  Set-ScheduledTask -TaskName "$TaskName" -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) | Out-Null
+  Set-ScheduledTask -TaskName "$TaskName" -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Priority 4) | Out-Null
 } catch { }
 exit 0
 "@

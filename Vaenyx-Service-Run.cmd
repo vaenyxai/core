@@ -71,7 +71,22 @@ goto loop
 :found_node
 set "NODE_MISSING_LOGGED="
 echo [%date% %time%] Starting Vaenyx server using "%NODE_EXE%" >> "userdata\logs\vaenyx-service.log"
-"%NODE_EXE%" apps\server\dist\index.js >> "userdata\logs\vaenyx.log" 2>> "userdata\logs\vaenyx-error.log"
+REM /normal is load-bearing, not tidiness. schtasks creates tasks at priority
+REM 7, which runs them - and everything they start - at BELOW_NORMAL. On a
+REM quiet machine nobody notices; on a working one Vaenyx loses the processor
+REM to whatever else is running and answers seconds late while using no cpu at
+REM all. That is what the Owner saw on 2026-08-06/07: a 26.7-second stall in
+REM the log, the models list taking 85 seconds, sign-in crawling - and a
+REM hand-started copy of the same build, at normal priority, answering in one
+REM millisecond. Measured: task-started server = priority 6, everything else
+REM on that machine = 8.
+REM
+REM Set here as well as on the task itself (Vaenyx-Setup.ps1 registers it with
+REM -Priority 4) because this line reaches installs that were registered
+REM before the fix, without asking anyone for an elevated prompt. /b keeps it
+REM in this console so the redirects below still apply, and /wait keeps the
+REM watchdog waiting on the server exactly as it did before.
+start "Vaenyx Server" /b /wait /normal "%NODE_EXE%" apps\server\dist\index.js >> "userdata\logs\vaenyx.log" 2>> "userdata\logs\vaenyx-error.log"
 echo [%date% %time%] Vaenyx server exited (code %ERRORLEVEL%), restarting in 5s >> "userdata\logs\vaenyx-service.log"
 ping -n 6 127.0.0.1 >nul
 goto loop
