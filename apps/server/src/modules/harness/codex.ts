@@ -235,12 +235,16 @@ function codexEnvironment(
 function runCodexCommand(args: string[]): ReturnType<typeof spawnSync> {
   const executable = findCodexCommand();
 
+  // Status probes only (--version, login status) — normally ~0.3s each. The
+  // cap is the worst case the event loop can be frozen per probe, so it is
+  // kept tight; a CLI that cannot answer in 5s reads as not installed and
+  // the 30s cache retries soon enough.
   return spawnSync(executable.command, [...executable.args, ...args], {
     encoding: "utf8",
     env: codexEnvironment(),
     shell: executable.shell,
     windowsHide: true,
-    timeout: 10_000,
+    timeout: 5_000,
   });
 }
 
@@ -261,6 +265,22 @@ function createForgeEnvironment(
   return environment;
 }
 
+// The status probe shells out to the CLI twice, SYNCHRONOUSLY — and it sits
+// on hot read paths (every providers list, the settings screen), where one
+// slow CLI start froze the whole event loop: the night of 2026-08-06 each
+// probe rode its 10s timeout, a Settings page fires several of these at
+// once, they serialised, and /v1/models/providers took 85 seconds — the
+// Owner saw every connected model "disappear". The cure is not a faster
+// probe but FEWER: one probe per half-minute answers for all callers, and
+// the install/login flows drop the cache so a state change still shows up
+// at once.
+let codexStatusCache: { value: CodexStatus; at: number } | null = null;
+const CODEX_STATUS_CACHE_MS = 30_000;
+
+export function invalidateCodexStatus(): void {
+  codexStatusCache = null;
+}
+
 export function getCodexStatus(): CodexStatus {
   if (process.env.NODE_ENV === "test" && !process.env.VAENYX_CODEX_COMMAND) {
     return {
@@ -270,7 +290,18 @@ export function getCodexStatus(): CodexStatus {
       version: null,
     };
   }
+  if (
+    codexStatusCache &&
+    Date.now() - codexStatusCache.at < CODEX_STATUS_CACHE_MS
+  ) {
+    return codexStatusCache.value;
+  }
+  const value = probeCodexStatus();
+  codexStatusCache = { value, at: Date.now() };
+  return value;
+}
 
+function probeCodexStatus(): CodexStatus {
   const versionResult = runCodexCommand(["--version"]);
   if (versionResult.error || versionResult.status !== 0) {
     return {
@@ -355,8 +386,9 @@ export async function ensureCodexInstalled(): Promise<
     });
   });
   if (exitCode !== 0) return "install-failed";
-  // The global-script probe caches nothing, so a fresh install is found at
-  // once; the status check proves the binary actually answers.
+  // A fresh install must be seen NOW, not when the cache ages out; the
+  // status check proves the binary actually answers.
+  invalidateCodexStatus();
   return getCodexStatus().installed ? "installed" : "install-failed";
 }
 
@@ -415,6 +447,9 @@ export function startCodexLogin(profileKey: string = "core"): Promise<{
     child.once("exit", (code) => {
       clearTimeout(timer);
       if (codexLoginInFlight === profileKey) codexLoginInFlight = null;
+      // Whatever the outcome, the signed-in answer may just have changed —
+      // the next status read must ask the CLI, not the cache.
+      invalidateCodexStatus();
       if (code === 0) {
         // Already signed in (or the flow finished instantly): no URL needed.
         settle(null);
