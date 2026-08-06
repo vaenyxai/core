@@ -251,6 +251,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # What changed goes FIRST, in the words CHANGELOG.md already carries:
+          # the same text the app shows on its update card, which until now
+          # read the download blurb instead of the release notes. The section
+          # is everything under "## <tag>" up to the next version heading.
+          $tag = $env:GITHUB_REF_NAME
+          $changelog = Get-Content "CHANGELOG.md" -Raw
+          $section = [regex]::Match(
+            $changelog,
+            "(?ms)^## $([regex]::Escape($tag))\b.*?(?=^## v|\z)"
+          ).Value.Trim()
+          if ($section) {
+            # Drop the heading line: the release already carries the version.
+            $whatChanged = (($section -split "`n", 2)[1]).Trim() + "`n`n---`n`n"
+          } else {
+            Write-Host "::warning::CHANGELOG.md has no $tag section; publishing without release notes."
+            $whatChanged = ""
+          }
           $notes = @"
           Two downloads, same result -- pick one:
 
@@ -288,7 +305,7 @@ jobs:
           choose to connect.
           "@
           $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
-          Set-Content -Path $notesFile -Value $notes -Encoding utf8
+          Set-Content -Path $notesFile -Value ($whatChanged + $notes) -Encoding utf8
           gh release create "$env:GITHUB_REF_NAME" `
             release/vaenyx-setup.exe `
             release/vaenyx-setup.exe.sha256 `
