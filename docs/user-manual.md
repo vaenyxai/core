@@ -512,5 +512,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.3-dev.7** · last updated 2026-08-07.
+Manual for **v0.3.3-dev.8** · last updated 2026-08-07.
 Keep this file up to date whenever a feature changes.

@@ -1005,15 +1005,6 @@ function IconArrowDown() {
   );
 }
 
-function IconArrowUp() {
-  return (
-    <LineIcon>
-      <path d="M12 20V6" />
-      <path d="m6 12 6-6 6 6" />
-    </LineIcon>
-  );
-}
-
 function IconCamera() {
   return (
     <LineIcon>
@@ -1208,12 +1199,15 @@ function CameraButton({
 }
 
 
-// Floating jump pill (Oskar design, dev.149), just above the composer on the
-// right, accent-highlighted:
-// - scrolled away from the bottom → "↓ Latest", stays until you're back down
-// - landing at the bottom (opening a chat / a push / scrolling down yourself)
-//   → "↑ Reply Start" jumps to the top of the last message, and fades by
-//   itself after 3s; not shown when the whole last message already fits.
+// The one floating control above the composer: a down arrow, shown while the
+// Owner is away from the bottom of the thread, gone again three seconds after
+// they stop touching the screen (Oskar, 2026-08-07).
+//
+// It used to carry the word "Latest" and a second "↑ Reply Start" state. Both
+// are retired: the label repeated what the arrow already says over the text it
+// was covering, and the way back up exists because opening a thread used to
+// land at the bottom — it now lands on the newest message's first line, so
+// there is nothing to jump back to.
 function JumpToLatest({
   resetKey,
   targetRef,
@@ -1221,109 +1215,54 @@ function JumpToLatest({
   resetKey: string;
   targetRef: RefObject<HTMLDivElement | null>;
 }) {
-  const [mode, setMode] = useState<"hidden" | "up" | "down">("hidden");
-  const wasAtBottomRef = useRef(true);
+  const [visible, setVisible] = useState(false);
   const hideTimerRef = useRef(0);
 
-  function lastMessageElement(): Element | null {
-    const all = document.querySelectorAll(
-      ".ask-vaenyx-messages .ask-vaenyx-message",
-    );
-    return all[all.length - 1] ?? null;
-  }
-
-  // The sticky banner's height differs per conversation (task toolbar,
-  // capability bar…) — measure it live so jumps land just below it.
-  function bannerOffset(): number {
-    const header = document.querySelector(".ask-vaenyx-chat-header");
-    return (header?.getBoundingClientRect().height ?? 90) + 12;
-  }
-
-  function showUpIfUseful() {
-    window.clearTimeout(hideTimerRef.current);
-    const last = lastMessageElement();
-    // Only useful when the last message's start is hidden behind/above the
-    // banner.
-    if (!last || last.getBoundingClientRect().top >= bannerOffset()) {
-      setMode("hidden");
-      return;
-    }
-    setMode("up");
-    hideTimerRef.current = window.setTimeout(() => {
-      setMode((current) => (current === "up" ? "hidden" : current));
-    }, 3000);
-  }
-
   useEffect(() => {
-    const onScroll = () => {
+    // Any touch, scroll or click counts as "still here" and restarts the
+    // three seconds; reaching the bottom hides it outright, because then it
+    // has nowhere to go.
+    const wake = () => {
+      window.clearTimeout(hideTimerRef.current);
       const doc = document.documentElement;
       const fromBottom =
         doc.scrollHeight - (window.scrollY + window.innerHeight);
-      const atBottom = fromBottom < 120;
-      if (!atBottom) {
-        window.clearTimeout(hideTimerRef.current);
-        setMode("down");
-      } else if (!wasAtBottomRef.current) {
-        // Just arrived at the bottom — offer the way back up, briefly.
-        showUpIfUseful();
+      if (fromBottom < 120) {
+        setVisible(false);
+        return;
       }
-      wasAtBottomRef.current = atBottom;
+      setVisible(true);
+      hideTimerRef.current = window.setTimeout(() => setVisible(false), 3000);
     };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+    wake();
+    window.addEventListener("scroll", wake, { passive: true });
+    window.addEventListener("resize", wake);
+    window.addEventListener("touchstart", wake, { passive: true });
+    window.addEventListener("pointerdown", wake);
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("scroll", wake);
+      window.removeEventListener("resize", wake);
+      window.removeEventListener("touchstart", wake);
+      window.removeEventListener("pointerdown", wake);
       window.clearTimeout(hideTimerRef.current);
     };
-  }, []);
-
-  // Opening a conversation lands at the bottom — offer the way up once the
-  // auto-scroll settled.
-  useEffect(() => {
-    const timer = window.setTimeout(showUpIfUseful, 600);
-    return () => window.clearTimeout(timer);
   }, [resetKey]);
 
-  if (mode === "hidden") return null;
-
-  if (mode === "up") {
-    return (
-      <button
-        aria-label="Jump to the start of the last message"
-        className="jump-latest"
-        onClick={() => {
-          window.clearTimeout(hideTimerRef.current);
-          const last = lastMessageElement();
-          if (!last) return;
-          window.scrollTo({
-            top:
-              window.scrollY +
-              last.getBoundingClientRect().top -
-              bannerOffset(),
-            behavior: "smooth",
-          });
-        }}
-        type="button"
-      >
-        <IconArrowUp />
-        Reply Start
-      </button>
-    );
-  }
+  if (!visible) return null;
 
   return (
     <button
       aria-label="Jump to latest"
-      className="jump-latest"
-      onClick={() =>
-        targetRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-      }
+      className="jump-latest jump-latest--icon"
+      onClick={() => {
+        window.clearTimeout(hideTimerRef.current);
+        setVisible(false);
+        targetRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }}
+      title="Jump to latest"
       type="button"
     >
       <IconArrowDown />
-      Latest
     </button>
   );
 }
@@ -6261,6 +6200,21 @@ function AskVaenyxPanel({
   // window re-anchors to the true end.
   const lastAnchorAtRef = useRef(0);
 
+  // The chat's half of the same rule: the moment a send starts, the composer's
+  // end of the thread is where the Owner should be.
+  // null until the first look: opening a thread that is ALREADY working is not
+  // an act of the Owner's, and must not overrule the land-on-the-first-line
+  // rule. Only a transition seen while they are watching counts.
+  const wasSendingRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (view !== "chat") return;
+    const started = sending && wasSendingRef.current === false;
+    wasSendingRef.current = sending;
+    if (!started) return;
+    lastAnchorAtRef.current = Date.now();
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [sending, view]);
+
   // Opening a conversation lands on the START of its newest message, not at
   // the bottom: a long answer opened at the bottom drops the Owner into its
   // middle, and finding the first line is their job (Oskar, 2026-08-07 —
@@ -6335,6 +6289,23 @@ function AskVaenyxPanel({
   // the dots…") appears AFTER the send flips, so anchoring only on the send left
   // it jammed against the composer and the Owner had to scroll to see it (Oskar,
   // 2026-07-30). Every change of what is showing re-anchors.
+  // Anything that sets this task thinking — Run Now, a message, a file — puts
+  // the view at the bottom at once, where the working line and the answer will
+  // appear (Oskar, 2026-08-07). A run started from the toolbar changes only
+  // the task's status, which no other anchor watches, so it is watched here.
+  // Same null-first rule as the chat's: a task found already running when it
+  // is opened keeps the opening behaviour.
+  const wasWorkingRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (view !== "task") return;
+    const working = focusedTaskStatus === "running" || sendingTaskMessage;
+    const started = working && wasWorkingRef.current === false;
+    wasWorkingRef.current = working;
+    if (!started) return;
+    lastAnchorAtRef.current = Date.now();
+    taskEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [focusedTaskStatus, sendingTaskMessage, view]);
+
   useEffect(() => {
     if (view !== "task") return;
     if (!loadingTaskMessages && taskMessages.length > 0) {
@@ -8776,10 +8747,11 @@ function AskVaenyxPanel({
     if (focusedTask.scheduleEnabled && focusedTask.scheduleCadence) {
       taskChips.push({
         key: "scheduled",
-        // Short forms (Oskar, 2026-07-30): a chip is a marker, not a sentence,
-        // and the full words pushed the phone header onto extra rows. The hover
-        // title still spells the schedule out in full.
-        label: "SCHED",
+        // Short forms (Oskar, 2026-07-30, shortened again 2026-08-07): a chip
+        // is a marker, not a sentence, and every character here is taken from
+        // the title beside it. The hover title still spells the schedule out
+        // in full.
+        label: "SCH",
         tone: "scheduled",
         title: describeSchedule(focusedTask),
       });

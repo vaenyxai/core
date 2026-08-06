@@ -2399,6 +2399,20 @@ textarea::placeholder {
   height: 15px;
 }
 
+/* Icon only: a round 44px target — the arrow says everything the word said,
+   over less of the text underneath (Oskar, 2026-08-07). */
+.jump-latest--icon {
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+}
+
+.jump-latest--icon .line-icon {
+  width: 18px;
+  height: 18px;
+}
+
 @media (max-width: 720px) {
   .jump-latest {
     bottom: 168px;
@@ -3503,8 +3517,14 @@ select {
   /* Kept deliberately shallow — every pixel here is stolen from the messages
      below (Oskar, dev.122). */
   min-height: 44px;
-  /* Right floor leaves room for the fixed Hard Refresh button in the corner. */
-  padding: 5px max(56px, calc((100% - 820px) / 2)) 7px;
+  /* The two floors are deliberately different. Left clears the sticky
+     hamburger. Right used to reserve the same 56px for a floating Hard
+     Refresh button that was removed on 2026-07-27, and the leftover strip is
+     what kept the ⋮ off the corner on a phone (Oskar, twice). On a wide
+     screen both sides resolve to the centring calc, so only narrow screens
+     ever see these numbers. */
+  padding: 5px max(14px, calc((100% - 820px) / 2)) 7px
+    max(56px, calc((100% - 820px) / 2));
   border-bottom: 1px solid rgba(255, 255, 255, 0.055);
   background: rgba(38, 38, 36, 0.85);
   backdrop-filter: blur(18px);
