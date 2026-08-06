@@ -1405,25 +1405,58 @@ textarea::placeholder {
 .composer-tools-toggle .line-icon {
   width: 18px;
   height: 18px;
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
+/* The plus becomes the cross by turning, not by being replaced. */
+.composer-tools[data-open="true"] .composer-tools-toggle .line-icon {
+  transform: rotate(45deg);
+}
+
+/* Always in the DOM so opening and closing can both be animated — display
+   cannot be transitioned. Hidden state is visibility + opacity + a small drop,
+   which also keeps the buttons out of the tab order while folded. */
 .composer-tools-row {
-  display: none;
-}
-
-.composer-tools[data-open="true"] .composer-tools-row {
   position: absolute;
   z-index: 30;
   bottom: calc(100% + 8px);
   left: 0;
   display: flex;
   flex-direction: column;
+  visibility: hidden;
   gap: 6px;
   padding: 8px;
   border: 0.5px solid var(--border);
   border-radius: var(--r-md);
   background: var(--bg-raised);
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  opacity: 0;
+  transform: translateY(6px) scale(0.94);
+  transform-origin: bottom left;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 0s linear 140ms;
+  pointer-events: none;
+}
+
+.composer-tools[data-open="true"] .composer-tools-row {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 160ms ease,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    visibility 0s;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-tools-row,
+  .composer-tools[data-open="true"] .composer-tools-row,
+  .composer-tools-toggle .line-icon {
+    transition-duration: 0s;
+  }
 }
 
 .door-switch {
@@ -2377,7 +2410,9 @@ textarea::placeholder {
 .jump-latest {
   position: fixed;
   right: 18px;
-  /* Sits just above the composer (Oskar, dev.161: closer than before). */
+  /* Starting value only — the component measures the composer and sets the
+     real offset inline, so the button sits just above it whatever height it
+     has taken (Oskar, 2026-08-07: "往下贴近对话框"). */
   bottom: 148px;
   z-index: 7;
   display: flex;
@@ -2413,11 +2448,8 @@ textarea::placeholder {
   height: 18px;
 }
 
-@media (max-width: 720px) {
-  .jump-latest {
-    bottom: 168px;
-  }
-}
+/* No phone-specific offset any more: the measured one is right on every
+   screen, and a second value here would only fight it for one frame. */
 
 /* Composer controls anchor to the RIGHT edge (Oskar, dev.142): the first
    button after the textarea (mic when connected, else Send) takes the auto
@@ -3480,6 +3512,12 @@ select {
   display: grid;
   min-width: 0;
   gap: 5px;
+  /* It is the header's only child, and the header is a flex row: without this
+     the box is only as wide as its widest ROW — which is the schedule
+     toolbar. The ⋮ then parks at the toolbar's right edge instead of the
+     screen's, and no amount of padding on the header moves it (Oskar spotted
+     the real shape: "感觉整个套件的宽度就到那边"). */
+  flex: 1 1 auto;
 }
 
 .focused-task-meta {
@@ -7128,6 +7166,10 @@ select {
 
   .ask-vaenyx-chat-header {
     display: grid;
+    /* Explicit, because the base rule's justify-content: space-between makes
+       a single auto-sized column sit at the start at its own width — which is
+       the toolbar's width, and is what kept the ⋮ off the corner. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     min-height: 48px;
     /* Left keeps clearing the sticky hamburger. The right used to reserve the

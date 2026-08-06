@@ -1005,6 +1005,15 @@ function IconArrowDown() {
   );
 }
 
+function IconArrowUp() {
+  return (
+    <LineIcon>
+      <path d="M12 20V6" />
+      <path d="m6 12 6-6 6 6" />
+    </LineIcon>
+  );
+}
+
 function IconCamera() {
   return (
     <LineIcon>
@@ -1199,15 +1208,16 @@ function CameraButton({
 }
 
 
-// The one floating control above the composer: a down arrow, shown while the
-// Owner is away from the bottom of the thread, gone again three seconds after
-// they stop touching the screen (Oskar, 2026-08-07).
+// One round button in one place, just above the composer, carrying whichever
+// arrow is useful from where the Owner is standing (Oskar, 2026-08-07):
+//   away from the bottom → ↓, jumps to the newest message
+//   at the bottom        → ↑, jumps to the start of that message
+// No word on it — the arrow says it — and it goes three seconds after they
+// stop touching the screen, so it is never sitting over the text for long.
 //
-// It used to carry the word "Latest" and a second "↑ Reply Start" state. Both
-// are retired: the label repeated what the arrow already says over the text it
-// was covering, and the way back up exists because opening a thread used to
-// land at the bottom — it now lands on the newest message's first line, so
-// there is nothing to jump back to.
+// Its distance from the composer is MEASURED, not guessed: the composer's
+// height changes with the disclaimer line and with a multi-line draft, and a
+// fixed offset can only be right for one of those.
 function JumpToLatest({
   resetKey,
   targetRef,
@@ -1215,24 +1225,54 @@ function JumpToLatest({
   resetKey: string;
   targetRef: RefObject<HTMLDivElement | null>;
 }) {
-  const [visible, setVisible] = useState(false);
+  const [mode, setMode] = useState<"hidden" | "up" | "down">("hidden");
+  const [bottom, setBottom] = useState(148);
   const hideTimerRef = useRef(0);
+
+  function lastMessageElement(): Element | null {
+    const all = document.querySelectorAll(
+      ".ask-vaenyx-messages .ask-vaenyx-message",
+    );
+    return all[all.length - 1] ?? null;
+  }
+
+  // The sticky header's height differs per conversation (task toolbar,
+  // capability bar…) — measure it live so the ↑ lands just below it.
+  function bannerOffset(): number {
+    const header = document.querySelector(".ask-vaenyx-chat-header");
+    return (header?.getBoundingClientRect().height ?? 90) + 12;
+  }
 
   useEffect(() => {
     // Any touch, scroll or click counts as "still here" and restarts the
-    // three seconds; reaching the bottom hides it outright, because then it
-    // has nowhere to go.
+    // three seconds.
     const wake = () => {
       window.clearTimeout(hideTimerRef.current);
+      const composer = document.querySelector(".ask-vaenyx-composer");
+      if (composer) {
+        setBottom(
+          Math.max(
+            12,
+            Math.round(window.innerHeight - composer.getBoundingClientRect().top) + 8,
+          ),
+        );
+      }
       const doc = document.documentElement;
       const fromBottom =
         doc.scrollHeight - (window.scrollY + window.innerHeight);
-      if (fromBottom < 120) {
-        setVisible(false);
-        return;
+      if (fromBottom >= 120) {
+        setMode("down");
+      } else {
+        // At the bottom: offer the way back up, but only when the start of
+        // that message is actually out of sight.
+        const last = lastMessageElement();
+        setMode(
+          last && last.getBoundingClientRect().top < bannerOffset()
+            ? "up"
+            : "hidden",
+        );
       }
-      setVisible(true);
-      hideTimerRef.current = window.setTimeout(() => setVisible(false), 3000);
+      hideTimerRef.current = window.setTimeout(() => setMode("hidden"), 3000);
     };
     wake();
     window.addEventListener("scroll", wake, { passive: true });
@@ -1248,21 +1288,36 @@ function JumpToLatest({
     };
   }, [resetKey]);
 
-  if (!visible) return null;
+  if (mode === "hidden") return null;
 
+  const goUp = mode === "up";
   return (
     <button
-      aria-label="Jump to latest"
+      aria-label={goUp ? "Jump to the start of the last message" : "Jump to latest"}
       className="jump-latest jump-latest--icon"
       onClick={() => {
         window.clearTimeout(hideTimerRef.current);
-        setVisible(false);
-        targetRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        setMode("hidden");
+        if (!goUp) {
+          targetRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "end",
+          });
+          return;
+        }
+        const last = lastMessageElement();
+        if (!last) return;
+        window.scrollTo({
+          behavior: "smooth",
+          top:
+            window.scrollY + last.getBoundingClientRect().top - bannerOffset(),
+        });
       }}
-      title="Jump to latest"
+      style={{ bottom: `${bottom}px` }}
+      title={goUp ? "Jump to the start of the last message" : "Jump to latest"}
       type="button"
     >
-      <IconArrowDown />
+      {goUp ? <IconArrowUp /> : <IconArrowDown />}
     </button>
   );
 }
@@ -1883,9 +1938,28 @@ function ComposerTools({
   showMic: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const shellRef = useRef<HTMLSpanElement>(null);
+
+  // Anywhere else on the screen closes it. Without this the only way out was
+  // the same "+" you came in by — which is not where anyone's thumb goes when
+  // they have changed their mind (Oskar, 2026-08-07). Capture phase, so a tap
+  // that lands on some other control both closes this and does its own job.
+  useEffect(() => {
+    if (!open) return;
+    const closeIfOutside = (event: PointerEvent) => {
+      if (!shellRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeIfOutside, true);
+    return () =>
+      document.removeEventListener("pointerdown", closeIfOutside, true);
+  }, [open]);
 
   return (
-    <span className="composer-tools" data-open={open ? "true" : "false"}>
+    <span
+      className="composer-tools"
+      data-open={open ? "true" : "false"}
+      ref={shellRef}
+    >
       <button
         aria-expanded={open}
         aria-label={open ? "Fewer options" : "More options"}
@@ -1893,12 +1967,10 @@ function ComposerTools({
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
+        {/* One glyph, not two: the plus TURNS into the close cross (45°), so
+            opening and closing is a movement rather than a swap. */}
         <LineIcon>
-          {open ? (
-            <path d="M6 6l12 12M18 6L6 18" />
-          ) : (
-            <path d="M12 5v14M5 12h14" />
-          )}
+          <path d="M12 5v14M5 12h14" />
         </LineIcon>
       </button>
       <span className="composer-tools-row">
