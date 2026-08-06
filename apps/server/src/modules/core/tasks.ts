@@ -1053,8 +1053,64 @@ function buildResearchContext(
 const RUN_RESULT_INSTRUCTION =
   "This is a background run of a saved task, executing NOW. Produce the complete, ready-to-read deliverable itself — organized for reading, with source links where relevant. Never reply with an acknowledgement, a confirmation of rules, a restatement of preferences, or a plan: if you find yourself writing '收到', '明白', 'Understood' or listing the task's own settings, stop and produce the actual result instead.";
 
-// Any format, scope or preference the Owner tuned in the task's conversation
-// carries into every later run — chatting with the task IS how it is tuned.
+// How many past deliveries the next run is told about, and how much of each.
+// Five days of a daily task is enough for it to see its own habits; more than
+// that costs tokens to say the same thing.
+const DELIVERED_RUNS_IN_CONTEXT = 5;
+const DELIVERED_RUN_EXCERPT = 1200;
+
+function recentCompletedRuns(
+  database: DatabaseHandle,
+  taskId: string,
+  limit: number,
+): { result: string; finished_at: string }[] {
+  return database.sqlite
+    .prepare(
+      `SELECT result, finished_at FROM task_runs
+       WHERE task_id = ? AND status = 'completed' AND result != ''
+       ORDER BY finished_at DESC
+       LIMIT ?`,
+    )
+    .all(taskId, limit) as { result: string; finished_at: string }[];
+}
+
+// What a recurring task has ALREADY given the Owner — and the standing order
+// not to give it again.
+//
+// This block exists because of the opposite mistake. Every run used to be
+// handed its own previous outputs inside the "honor any format, scope or
+// preference agreed there" transcript, which is the strongest possible
+// instruction to produce that same thing once more: a daily news task spent
+// each morning re-reporting the previous morning, from the same handful of
+// sources (Oskar, 2026-08-07 — "每天推送的都是类似的新闻,广度不够"). The
+// format was never the problem; treating delivered CONTENT as a template was.
+function buildDeliveredContext(
+  database: DatabaseHandle,
+  taskId: string,
+): string | undefined {
+  const runs = recentCompletedRuns(
+    database,
+    taskId,
+    DELIVERED_RUNS_IN_CONTEXT,
+  );
+  if (runs.length === 0) return undefined;
+  const delivered = runs
+    .map(
+      (run) =>
+        `--- already delivered ${run.finished_at} ---\n${run.result.slice(0, DELIVERED_RUN_EXCERPT)}`,
+    )
+    .join("\n\n");
+  return [
+    `This task has run before. The Owner has ALREADY READ everything below, so this run's job is what they do not have yet.`,
+    `- Do not deliver an item that already appears below. If one of them has materially changed, lead with WHAT CHANGED and say so — never restate it as though it were new.`,
+    `- Widen the net on purpose: sources, subtopics and angles the runs below never touched. Returning to the same few sources every run is exactly the failure this instruction exists to prevent.`,
+    `- Prefer what is genuinely new since ${runs[0]?.finished_at ?? "the last run"}.`,
+    `- If there is honestly nothing new worth their time, say so in one line. Padding with what they have already read is worse than a short answer.`,
+    `The FORMAT and scope of the runs below are settled — keep them. It is the CONTENT that has to be new.`,
+    delivered,
+  ].join("\n");
+}
+
 function buildTaskConversationContext(
   database: DatabaseHandle,
   taskId: string,
@@ -1074,8 +1130,19 @@ function buildTaskConversationContext(
        LIMIT 10`,
     )
     .all(row.conversation_id) as { role: string; content: string }[];
-  if (messages.length === 0) return undefined;
-  const transcript = messages
+  // Past run results are posted into this same conversation, so without this
+  // they would arrive here too — under the "honor this" framing that
+  // buildDeliveredContext exists to undo. A wider net than the digest itself,
+  // so an older delivery still sitting in the window is caught as well.
+  const deliveredBefore = new Set(
+    recentCompletedRuns(database, taskId, 40).map((run) => run.result),
+  );
+  const discussion = messages.filter(
+    (message) =>
+      message.role === "owner" || !deliveredBefore.has(message.content),
+  );
+  if (discussion.length === 0) return undefined;
+  const transcript = discussion
     .reverse()
     .map(
       (message) =>
@@ -1127,6 +1194,7 @@ function runTaskById(
     const context = [
       buildResearchContext(memories),
       buildTaskConversationContext(database, task.id),
+      buildDeliveredContext(database, task.id),
       RUN_RESULT_INSTRUCTION,
     ]
       .filter(Boolean)

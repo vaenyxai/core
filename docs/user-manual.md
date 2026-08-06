@@ -185,6 +185,14 @@ Read this inside the app: **Settings → Manual**.
 - **Talk to a task** — the box at the bottom of a task takes everything the chat
   box takes: a photo, a PDF, something spoken. It is the same conversation
   underneath, so every task already has this, however long ago you made it.
+- **A repeating task does not repeat itself.** Each run is shown what its last
+  five runs already gave you, with one order: do not deliver it again. If
+  something there has changed, it leads with what changed; otherwise it goes
+  looking for ground the earlier runs missed — other sources, other corners of
+  the subject. On a genuinely quiet day it says so in a line rather than
+  padding with what you have already read. Anything you asked for in the
+  task's own chat (format, length, what to leave out) still carries into every
+  run; it is only the content that has to be new.
 - **Prerequisite** — the computer must be awake at that time. If it was not, the
   run is marked failed with the reason; nothing is silently retried on a
   different model.
@@ -504,5 +512,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.3-dev.6** · last updated 2026-08-07.
+Manual for **v0.3.3-dev.7** · last updated 2026-08-07.
 Keep this file up to date whenever a feature changes.
