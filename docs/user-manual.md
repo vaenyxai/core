@@ -20,8 +20,9 @@ Read this inside the app: **Settings → Manual**.
 
 ## 1. Starting and stopping
 
-- **Start it** — double-click `Vaenyx-Start.cmd` in the Vaenyx folder. It also
-  starts by itself when the computer boots.
+- **Start it** — double-click the **Vaenyx** icon on the desktop (the
+  installer puts it there), or `Vaenyx-Start.cmd` in the Vaenyx folder — same
+  thing. It also starts by itself when the computer boots.
 - **Open it** — a browser at `http://127.0.0.1:3000` on that computer, or the
   remote address on your phone (see *Using it away from the computer*).
 - **Stop it** — Settings → System → **Stop Vaenyx**. Or close the window that
@@ -31,6 +32,9 @@ Read this inside the app: **Settings → Manual**.
 - **Sign in** — your Owner name and password, made the first time you ran it.
 - **Forgot the password** — there is no reset. Restore from a backup, or start
   a fresh instance. **Warning:** This is the one thing nobody can undo for you.
+- **Remove Vaenyx** — Windows Settings → Apps → **Vaenyx** → Uninstall (if you
+  used the installer). It asks whether to keep your data; keeping it is the
+  default, so installing again later brings everything back.
 
 ## 2. Updating
 
@@ -57,9 +61,13 @@ Read this inside the app: **Settings → Manual**.
   marks on and off.
 - **Look closer** — tap a photo for fullscreen; pinch to zoom. The marks and the
   layers button come with it.
-- **Send a document** — the document button. It takes PDFs and plain-text
-  files (.txt, .md); one button, and Vaenyx sorts out how each kind is read.
-  Word documents are not readable yet — save as PDF and send that.
+- **Send a document** — the document button. It takes PDFs, plain-text files
+  (.txt, .md) and Word, Excel or PowerPoint files (.docx, .xlsx, .pptx); one
+  button, and Vaenyx sorts out how each kind is read. From an Office file the
+  **words** are read — layout, pictures and charts are not — so if the point
+  of the file is visual, save it as PDF, which is read as pictures. The old
+  formats (.doc, .xls, .ppt) are not readable — save as PDF or as the modern
+  format and send that.
   - Over ten pages, Vaenyx asks first and tells you the page count, because long
     documents cost real money on a paid model.
   - With **Reading** switched off (AI Settings → Capabilities) the file is
@@ -186,9 +194,9 @@ Read this inside the app: **Settings → Manual**.
 - **Where** — Settings → **AI Settings**. Two cards, and the split between them
   never moves: **Capabilities** is what Vaenyx may do, which model does each job,
   and a **Test** to see that it really does; **Models** is where a model gets
-  connected. Every model key is pasted in Models, without exception. (The
-  Subscription Door's own key is not a model key: it is made, and replaced, on
-  that card.)
+  connected. Every provider API key is pasted in Models, without exception. (An
+  app's **Model Key** is a different thing: it opens the Subscription Door, and
+  it is made, and replaced, on that card — see *Subscription Door* below.)
 - **Free models** — the **Free models** button beside the heading shows what was
   found last time; **Ask again** beside it asks your main model again and then
   shows you the new answer. **Careful:** The answer says which model said it and
@@ -323,38 +331,35 @@ Read this inside the app: **Settings → Manual**.
 - **Switch it on** — the toggle. It starts closed.
 - **Give an app the address** — the top one (this page's own address). Copy
   button beside it.
-- **Who gets in** — only an app holding a key you issued here, calling from a
-  device on your private network. There is no address list to keep: the key is
-  the identity.
-- **What it can do** — text, and reading a picture or PDF. The same seven
-  capabilities as AI Settings are listed under each subscription, and what it
-  cannot do is dimmed rather than left out: these two subscriptions do no voice
-  and make no pictures, and **Fetching** and **Web** never come through this
-  door at all, whatever is ticked anywhere.
-- **One key for every app, not one each** — so the door's own key has no list of
-  its own: it follows the switches in AI Settings, and a capability switched off
-  there is refused here before anything is even downloaded.
-- **An app knocking with its own Token brings its list with it** — the door also
-  accepts a Token from Library → Token, and then that key's ticks apply here
-  exactly as they do to a Method run. If an app of yours knocks with its Token
-  and gets `RELAY_CAPABILITY_NOT_GRANTED`, tick that capability on the key —
-  or give the app the door's own key instead, which has no list.
+- **Who gets in** — only an app holding a **Model Key** you issued here, calling
+  from a device on your private network. There is no address list to keep: the
+  key is the identity.
+- **What it can do** — text, and reading a picture or PDF. These two
+  subscriptions do no voice and make no pictures, and **Fetching** and **Web**
+  never come through this door at all, whatever is ticked anywhere — so each
+  app's row here shows only the ticks this door can actually serve.
+- **A Token is not a Model Key** — this door takes Model Keys only. A Method or
+  Routine Token from Library → Token knocking here is refused with its own
+  answer (`RELAY_KEY_WRONG_KIND`), so you always know which of the two an app
+  is holding. The two products never blur: Tokens live on the Tokens screen,
+  Model Keys live here.
 - **Files** — apps send a short-lived download link, never the file. Vaenyx
   fetches it only from the hosts you listed, uses it, and deletes it.
 - **What is written down** — time, kind of job, which subscription, how long,
   worked or not. **Never** the prompt, the file, or the answer.
 - **This month** — the same card shows who spent what this month, per app and
-  per subscription: your apps, the door key, and Vaenyx itself. Call counts are
-  always real; token counts appear only where an engine truly reports them —
-  never estimated.
-- **Every app has its own key and its own account** — press **Add App**, give
-  it a name, and hand the key over; it is shown once. The app then signs in
-  with its own ChatGPT or Claude subscription, from inside that app, **before**
-  it works: an engine it has not connected gets a clear "not connected", never
-  your account by accident. Each app's row here carries its capability ticks,
-  a Rotate and a Revoke.
-- **The old shared key is retired.** Every app carries its own key; a call on
-  the old one is simply refused.
+  per subscription: your apps, Vaenyx itself, and — for history — anything the
+  retired shared key spent, shown as "Door key". Call counts are always real;
+  token counts appear only where an engine truly reports them — never
+  estimated.
+- **Every app has its own Model Key and its own account** — press **Add App**,
+  give it a name, and hand the key over; it is shown once. The app then signs
+  in with its own ChatGPT or Claude subscription, from inside that app,
+  **before** it works: an engine it has not connected gets a clear "not
+  connected", never your account by accident. Each app's row here carries its
+  capability ticks, a Rotate and a Revoke.
+- **The old shared key is retired.** Every app carries its own Model Key; a
+  call on the old shared one is simply refused.
 - **Prerequisite** — the app's device must be on your private network, and now
   the door itself checks: a request from outside the tailnet is refused with a
   clear answer (RELAY_TAILNET_REQUIRED), **even with a correct key**. A leaked
@@ -364,13 +369,31 @@ Read this inside the app: **Settings → Manual**.
 
 ## 11. Using it away from the computer
 
-- **Address** — the private-network address of your machine. It is the address
-  shown in the Subscription Door card.
-- **Requirement** — your phone must be on the same private network (Tailscale).
-- **Add it to the home screen** — your browser's *Add to Home Screen*. It then
-  behaves like an app.
+- **The guided way** — Settings → **Phone Access** (the end of the first run
+  offers the same step). Three lights — *Tailscale installed*, *Signed in*,
+  *Phone channel on* — each with a button that fixes it: Vaenyx installs the
+  free Tailscale client, opens its sign-in page, and turns the channel on.
+  When all three are green, a QR code appears.
+- **Scan the code** — with the phone's camera, then open the link. The QR code
+  is drawn on your own machine by Vaenyx itself; the address is never sent to
+  any outside QR or link service.
+- **The address is public, your Vaenyx is not** — the channel gives this
+  machine an https address anyone could type, but everything behind it asks
+  for your Vaenyx password first. The phone needs no Tailscale app for this.
+- **Log in on the phone** — with your own Vaenyx account, same as at the
+  computer.
+- **Add it to the home screen** — iPhone: Safari → Share → *Add to Home
+  Screen*. Android: Chrome → top-right menu → *Install app* (or *Add to Home
+  screen*). It then behaves like an app.
+- **If the phone cannot open it** — a freshly opened channel can take a minute
+  or two to become reachable from the internet. Wait a minute and scan again.
+  The computer cannot confirm the public side itself — only the phone can
+  prove it.
 - **Notifications** — Settings → Notifications → allow, then **Test** to prove
   one arrives.
+- **The console route** — `Vaenyx-Connect-Tailscale.cmd` in the Vaenyx folder
+  drives the same Tailscale commands by hand. It uses the client installed
+  under Program Files.
 
 ## 12. Backup and restore
 
@@ -445,7 +468,7 @@ Read this inside the app: **Settings → Manual**.
 | What you see | What to do |
 |---|---|
 | Nothing loads at all | The computer is off or asleep. Wake it. |
-| Phone cannot reach it, computer can | The phone is off the private network. Reconnect Tailscale. |
+| Phone cannot reach it, computer can | A freshly opened channel needs a minute — wait and retry. Still nothing: Settings → Phone Access, check the three lights. |
 | "Not signed in" on a subscription | Settings → AI Settings → sign in to that one again. |
 | An engine fails and nothing else happens | By design. Read which one failed, then pick another engine on that row. |
 | Voice button does nothing | The Hearing row has no engine, or Hearing is switched off. Settings → AI Settings → Capabilities → Hearing. |
@@ -457,11 +480,11 @@ Read this inside the app: **Settings → Manual**.
 | Photo comes back with no marks | The Vision row has no engine or is switched off, or the model found nothing to mark. |
 | A PDF asks about pages first | Over ten pages, on purpose. It is telling you the cost before spending it. |
 | Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the app has not signed in to a subscription yet. |
-| Your app gets `RELAY_CAPABILITY_NOT_GRANTED` | It knocked with its own Token, and that capability is not ticked on the key. Library → Token → that key → What It May Do — or give the app the door's own key, which has no list of its own. |
+| Your app gets `RELAY_CAPABILITY_NOT_GRANTED` | That capability is not ticked on the app's Model Key. Settings → AI Settings → Subscription Door → that app's row, and tick it. |
 | A scheduled run failed overnight | The computer slept. The failure and its reason stay on the run. |
 | An update banner will not go away | Press it, then Restart. |
 
 ---
 
-Manual for **v0.3.1-dev.92** · last updated 2026-08-06.
+Manual for **v0.3.1-dev.93** · last updated 2026-08-06.
 Keep this file up to date whenever a feature changes.

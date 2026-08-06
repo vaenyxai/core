@@ -1,5 +1,13 @@
 export { SystemStatusSchema, type SystemStatus } from "./system-status.js";
 export {
+  PhoneAccessStatusSchema,
+  PhoneLoginResponseSchema,
+  PhoneTunnelResponseSchema,
+  type PhoneAccessStatus,
+  type PhoneLoginResponse,
+  type PhoneTunnelResponse,
+} from "./phone-access.js";
+export {
   BootstrapStatusSchema,
   AgentProfileSchema,
   AppAskRequestSchema,

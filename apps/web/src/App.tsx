@@ -6,6 +6,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -15,6 +16,7 @@ import {
   AnnotatedPhoto,
   AnnotatedPhotoEditor,
 } from "./photo-marks";
+import { encodeQr, qrSvgPath } from "./qr";
 
 import type {
   AgentProfile,
@@ -157,6 +159,11 @@ import {
   fetchUpdateStatus,
   checkForUpdate,
   downloadUpdate,
+  fetchPhoneAccessStatus,
+  installPhoneTailscale,
+  startPhoneLogin,
+  enablePhoneTunnel,
+  type PhoneAccessStatus,
   type UpdateStatus,
   type PushPrefs,
   type PushDiagnostics,
@@ -1795,11 +1802,13 @@ interface SpeechPrewarm {
   promise: Promise<{ audioId: string }>;
 }
 
-// Attach a PDF ("Document Reading", Oskar 2026-07-29). The upload happens on
-// pick so the REAL page count is known before anything is spent — that number
-// is what the M1 cost gate names. Every refusal (too big, too many pages,
-// password-protected, not a readable PDF) comes back from the server in words
-// the Owner can act on.
+// Attach a document ("Document Reading", Oskar 2026-07-29): one button for
+// PDF, plain text and Word/Excel/PowerPoint — the server sorts kinds by
+// content, never by name. The upload happens on pick so a PDF's REAL page
+// count is known before anything is spent — that number is what the M1 cost
+// gate names. Every refusal (too big, too many pages, password-protected,
+// old Office format, unreadable) comes back from the server in words the
+// Owner can act on.
 interface PickedDocument {
   documentId: string;
   name: string;
@@ -1821,7 +1830,7 @@ function DocumentButton({
   return (
     <>
       <input
-        accept="application/pdf,.pdf,.txt,.md,.markdown,text/plain,text/markdown"
+        accept="application/pdf,.pdf,.txt,.md,.markdown,text/plain,text/markdown,.docx,.xlsx,.pptx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -9772,7 +9781,9 @@ function SubscriptionDoorPanel() {
   // THE APPS (2026-08-02): each app has its own relay key, listed and managed
   // here and nowhere else — the Tokens screen filters this kind out, and this
   // panel never shows a Method/Routine Token. One key pipeline underneath;
-  // two products on top, kept apart on both screens.
+  // two products on top, kept apart on both screens. In front of the user the
+  // relay key is called a Model Key (模型钥匙, 2026-08-06) — "Token" stays
+  // reserved for the Method/Routine kind, and the two names must never blur.
   const [apps, setApps] = useState<AppProfile[]>([]);
   const [newAppName, setNewAppName] = useState("");
   const [addBusy, setAddBusy] = useState(false);
@@ -9839,7 +9850,9 @@ function SubscriptionDoorPanel() {
       setMintedApp({ profileId, token: result.token });
     } catch (error) {
       showErrorToast(
-        error instanceof Error ? error.message : "Could not rotate the key.",
+        error instanceof Error
+          ? error.message
+          : "Could not rotate the Model Key.",
       );
     } finally {
       setAppBusy(null);
@@ -9856,7 +9869,9 @@ function SubscriptionDoorPanel() {
       // went out stays answerable after the key is gone.
     } catch (error) {
       showErrorToast(
-        error instanceof Error ? error.message : "Could not revoke the key.",
+        error instanceof Error
+          ? error.message
+          : "Could not revoke the Model Key.",
       );
     } finally {
       setAppBusy(null);
@@ -9948,16 +9963,16 @@ function SubscriptionDoorPanel() {
         </button>
         <span>
           {lang === "zh"
-            ? "跟钥匙一起填进 app 的设置里"
-            : "goes into the app's settings beside its key"}
+            ? "跟它的模型钥匙一起填进 app 的设置里"
+            : "goes into the app's settings beside its Model Key"}
         </span>
       </div>
 
       <h3 className="door-subhead">Your apps</h3>
       <p className="door-legend">
         {lang === "zh"
-          ? "一个 app 一把钥匙、一个订阅身份:配好钥匙后,app 要在它自己里面完成一次订阅登录才可用 —— 它花的是它登录的那个账号,绝不借用 Vaenyx 自己的。"
-          : "One key and one subscription identity per app: after the key is in place, the app signs in to a subscription from inside itself before it works — it spends the account it signed in with, never Vaenyx's own."}
+          ? "一个 app 一把模型钥匙、一个订阅身份:钥匙配好后,app 要在它自己里面完成一次订阅登录才可用 —— 它花的是它登录的那个账号,绝不借用 Vaenyx 自己的。"
+          : "One Model Key and one subscription identity per app: after the key is in place, the app signs in to a subscription from inside itself before it works — it spends the account it signed in with, never Vaenyx's own."}
       </p>
       <div className="door-address">
         <input
@@ -10037,8 +10052,8 @@ function SubscriptionDoorPanel() {
               </button>
               <span>
                 {lang === "zh"
-                  ? "现在就复制 —— 之后不再显示"
-                  : "copy it now — it is never shown again"}
+                  ? "现在就复制这把模型钥匙 —— 之后不再显示"
+                  : "copy the Model Key now — it is never shown again"}
               </span>
             </div>
           ) : null}
@@ -13240,6 +13255,453 @@ function UpdatePanel() {
   );
 }
 
+// ── Phone access (onboarding Part 2 section 5) ───────────────────────────
+// One flow, two homes: the last first-run step and the permanent Settings →
+// Phone Access card both render this panel. Vaenyx binds to 127.0.0.1 only,
+// so a phone reaches it through the owner's own Tailscale account; the three
+// rows mirror the three server-checked facts (installed / signed in / tunnel
+// up) and each red row carries its one-tap fix. The QR is generated by our
+// own encoder in qr.ts — the instance URL never touches an external QR or
+// short-link service.
+
+function PhoneQrCode({ url }: { url: string }) {
+  const qr = useMemo(() => {
+    try {
+      return encodeQr(url);
+    } catch {
+      return null;
+    }
+  }, [url]);
+  if (!qr) return null;
+  // The four-module quiet zone the spec requires is part of the drawing, and
+  // the symbol stays dark-on-white in every theme — a scanner needs contrast.
+  return (
+    <svg
+      aria-label={url}
+      className="phone-qr"
+      role="img"
+      shapeRendering="crispEdges"
+      viewBox={`-4 -4 ${qr.size + 8} ${qr.size + 8}`}
+    >
+      <rect
+        fill="#ffffff"
+        height={qr.size + 8}
+        width={qr.size + 8}
+        x={-4}
+        y={-4}
+      />
+      <path d={qrSvgPath(qr)} fill="#000000" />
+    </svg>
+  );
+}
+
+// Drawn hints for the two add-to-home-screen menus (never screenshots, never
+// emoji): the iOS share square with its up arrow, and Chrome's three dots.
+function PhoneHintIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="line-icon"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.6"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {children}
+    </svg>
+  );
+}
+
+const IconIosShare = (
+  <PhoneHintIcon>
+    <path d="M8 9.5H6.5A1.5 1.5 0 0 0 5 11v8a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-8a1.5 1.5 0 0 0-1.5-1.5H16" />
+    <path d="M12 14V3.5" />
+    <path d="m8.5 7 3.5-3.5L15.5 7" />
+  </PhoneHintIcon>
+);
+
+const IconAndroidMenu = (
+  <PhoneHintIcon>
+    <circle cx="12" cy="5" r="1" />
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="12" cy="19" r="1" />
+  </PhoneHintIcon>
+);
+
+// The phone-side steps, shown beside the QR wherever it appears.
+function PhoneInstructions({ url }: { url: string }) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  return (
+    <ol className="phone-steps">
+      <li>
+        {zh
+          ? "用手机相机扫上面的二维码,打开出现的链接。"
+          : "Scan the code above with the phone's camera and open the link it shows."}
+        <span className="phone-step-fine">
+          {zh
+            ? "这个地址是公开网址,但后面的一切都需要你的 Vaenyx 密码。"
+            : "The address is public, but everything behind it needs your Vaenyx password."}
+        </span>
+      </li>
+      <li>
+        {zh
+          ? "在手机上用你自己的 Vaenyx 账号登录 —— 和在这台电脑上一样。"
+          : "Log in with your own Vaenyx account — the same login as on this computer."}
+      </li>
+      <li>
+        {zh ? "加到主屏幕:" : "Add it to the Home Screen:"}
+        <span className="phone-step-detail">
+          {IconIosShare}
+          {zh
+            ? "iPhone:在 Safari 里点分享按钮,选「添加到主屏幕」。"
+            : "iPhone: in Safari, tap the Share button, then “Add to Home Screen”."}
+        </span>
+        <span className="phone-step-detail">
+          {IconAndroidMenu}
+          {zh
+            ? "Android:在 Chrome 里点右上角菜单,选「安装应用」或「添加到主屏幕」。"
+            : "Android: in Chrome, tap the top-right menu, then “Install app” or “Add to Home screen”."}
+        </span>
+      </li>
+      <li>
+        <a href={url} rel="noreferrer" target="_blank">
+          {url}
+        </a>
+        <span className="phone-step-fine">
+          {zh
+            ? "扫不了码的话,直接在手机浏览器里输入这个地址也一样。"
+            : "No camera handy? Typing this address into the phone's browser works the same."}
+        </span>
+      </li>
+    </ol>
+  );
+}
+
+function PhoneAccessPanel() {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  const [status, setStatus] = useState<PhoneAccessStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"install" | "login" | "tunnel" | null>(
+    null,
+  );
+  const [loginUrl, setLoginUrl] = useState<string | null>(null);
+  // Poll while something settles OUTSIDE this page — the winget download or
+  // the browser sign-in. Stops by itself once every light is green (or the
+  // install fails), and always stops when the panel unmounts.
+  const [watching, setWatching] = useState(false);
+
+  const refresh = useCallback(async (): Promise<PhoneAccessStatus | null> => {
+    try {
+      const next = await fetchPhoneAccessStatus();
+      setStatus(next);
+      return next;
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "读不到手机访问的状态。"
+            : "Could not read the phone-access status.",
+      );
+      return null;
+    }
+  }, [zh]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!watching) return undefined;
+    const timer = window.setInterval(() => {
+      void refresh().then((next) => {
+        if (!next) return;
+        const settled =
+          next.installPhase === "failed" ||
+          (next.installPhase !== "installing" &&
+            next.installed &&
+            next.signedIn);
+        if (settled) setWatching(false);
+      });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [watching, refresh]);
+
+  async function doInstall() {
+    setBusy("install");
+    setError(null);
+    try {
+      setStatus(await installPhoneTailscale(lang));
+      setWatching(true);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "安装没能开始。"
+            : "The install could not start.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function doLogin() {
+    setBusy("login");
+    setError(null);
+    try {
+      const result = await startPhoneLogin(lang);
+      if (result.alreadySignedIn) {
+        await refresh();
+        return;
+      }
+      if (result.url) {
+        setLoginUrl(result.url);
+        window.open(result.url, "_blank", "noopener");
+        setWatching(true);
+        return;
+      }
+      if (result.detail) setError(result.detail);
+      await refresh();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "登录没能开始。"
+            : "The sign-in could not start.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function doTunnel() {
+    setBusy("tunnel");
+    setError(null);
+    try {
+      const result = await enablePhoneTunnel(lang);
+      if (!result.tunnelUp && result.detail) setError(result.detail);
+      await refresh();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "通道没能打开。"
+            : "The channel could not be turned on.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!status) {
+    return <p className="settings-card-copy">{zh ? "正在检查…" : "Checking..."}</p>;
+  }
+
+  const installing = status.installPhase === "installing";
+  const notYet = (
+    <span className="library-chip">{zh ? "未完成" : "Not Yet"}</span>
+  );
+  const done = (label: string) => (
+    <span className="library-chip chip-published">{label}</span>
+  );
+  // An admin-console link inside a Tailscale error (Funnel not enabled on the
+  // tailnet yet) is the fix itself, so surface it as a link, not just prose.
+  const errorLink = error?.match(/https:\/\/[^\s"']+/)?.[0] ?? null;
+
+  return (
+    <>
+      <p className="settings-card-copy">
+        {zh
+          ? "Vaenyx 只监听这台电脑的 127.0.0.1,从不向网络开放端口 —— 手机(哪怕同一个 WiFi)要走你自己的 Tailscale 账号建立的加密通道。Tailscale 是免费服务,下面三步都在这里完成。"
+          : "Vaenyx listens only on this computer's 127.0.0.1 and never opens a port to the network — so a phone (even on the same WiFi) connects through an encrypted channel run by your own Tailscale account. Tailscale is a free service, and all three steps happen right here."}
+      </p>
+
+      <div className="engine-row">
+        <p className="settings-card-copy phone-row-label">
+          {zh ? "1. 安装 Tailscale" : "1. Tailscale installed"}
+          <span className="phone-step-fine">
+            {status.version ??
+              (zh
+                ? "这台电脑上还没有 Tailscale。"
+                : "Tailscale is not on this computer yet.")}
+          </span>
+        </p>
+        {status.installed ? (
+          done(zh ? "已安装" : "Installed")
+        ) : (
+          <>
+            {notYet}
+            <button
+              className="secondary-button"
+              disabled={busy !== null || installing}
+              onClick={() => void doInstall()}
+              type="button"
+            >
+              {installing
+                ? zh
+                  ? "正在安装…"
+                  : "Installing..."
+                : zh
+                  ? "自动安装"
+                  : "Install It"}
+            </button>
+          </>
+        )}
+      </div>
+      {installing ? (
+        <p className="settings-card-copy phone-step-fine">
+          {zh
+            ? "下载和安装可能要几分钟,这个页面会自己更新。"
+            : "The download can take a few minutes; this page updates by itself."}
+        </p>
+      ) : null}
+      {status.installPhase === "failed" ? (
+        <p className="form-error">
+          {status.detail}{" "}
+          {zh ? "也可以自己装:去 " : "You can also install it yourself from "}
+          <a
+            href="https://tailscale.com/download"
+            rel="noreferrer"
+            target="_blank"
+          >
+            tailscale.com/download
+          </a>
+          {zh ? " 下载安装,然后回到这里。" : " — then come back here."}
+        </p>
+      ) : null}
+
+      <div className="engine-row">
+        <p className="settings-card-copy phone-row-label">
+          {zh ? "2. 登录 Tailscale" : "2. Signed in to Tailscale"}
+          <span className="phone-step-fine">
+            {zh
+              ? "用你自己的免费 Tailscale 账号,在浏览器里登录一次。"
+              : "One browser sign-in with your own free Tailscale account."}
+          </span>
+        </p>
+        {status.signedIn ? (
+          done(zh ? "已登录" : "Signed In")
+        ) : (
+          <>
+            {notYet}
+            <button
+              className="secondary-button"
+              disabled={busy !== null || !status.installed}
+              onClick={() => void doLogin()}
+              type="button"
+            >
+              {busy === "login"
+                ? zh
+                  ? "正在打开…"
+                  : "Opening..."
+                : zh
+                  ? "去登录"
+                  : "Sign In"}
+            </button>
+          </>
+        )}
+      </div>
+      {!status.signedIn && (loginUrl ?? status.loginUrl) ? (
+        <p className="settings-card-copy phone-step-fine">
+          <a
+            href={loginUrl ?? status.loginUrl ?? undefined}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {zh
+              ? "没弹出窗口?点这里打开登录页 ↗"
+              : "No window? Open the sign-in page ↗"}
+          </a>
+        </p>
+      ) : null}
+
+      <div className="engine-row">
+        <p className="settings-card-copy phone-row-label">
+          {zh ? "3. 打开手机通道" : "3. Phone channel on"}
+          <span className="phone-step-fine">
+            {zh
+              ? "把本机的 Vaenyx 通过加密通道发布成一个 https 地址。"
+              : "Publishes this machine's Vaenyx as an https address over the encrypted channel."}
+          </span>
+        </p>
+        {status.tunnelUp ? (
+          done(zh ? "已开启" : "On")
+        ) : (
+          <>
+            {notYet}
+            <button
+              className="secondary-button"
+              disabled={busy !== null || !status.signedIn}
+              onClick={() => void doTunnel()}
+              type="button"
+            >
+              {busy === "tunnel"
+                ? zh
+                  ? "正在开启…"
+                  : "Turning On..."
+                : zh
+                  ? "开启"
+                  : "Turn On"}
+            </button>
+          </>
+        )}
+      </div>
+
+      {error ? (
+        <p className="form-error">
+          {error}
+          {errorLink ? (
+            <>
+              {" "}
+              <a href={errorLink} rel="noreferrer" target="_blank">
+                {zh ? "打开这个链接处理 ↗" : "Open this link to fix it ↗"}
+              </a>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
+      {status.tunnelUp && status.phoneUrl ? (
+        <>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">
+            {zh ? "用手机扫这个码" : "Scan This With The Phone"}
+          </h3>
+          <PhoneQrCode url={status.phoneUrl} />
+          {/* Honest reachability (a real lesson): a fresh funnel takes a
+              minute to reach the public internet, and THIS machine cannot
+              verify the public side — its own lookup resolves through
+              MagicDNS straight back into the tailnet. Only the phone can
+              prove it, so the copy never claims this machine confirmed it. */}
+          <p className="settings-card-copy phone-step-fine">
+            {zh
+              ? "刚开启的通道要过一两分钟才能从外网打开。手机打不开的话,等一分钟再扫一次 —— 这台电脑自己没法确认外网那一侧,能证明的只有手机。"
+              : "A freshly opened channel can take a minute or two to work from the internet. If the phone cannot open it, wait a minute and scan again — this computer cannot confirm the public side itself; only the phone can."}
+          </p>
+          <PhoneInstructions url={status.phoneUrl} />
+        </>
+      ) : null}
+
+      <button
+        className="text-button"
+        disabled={busy !== null}
+        onClick={() => void refresh()}
+        type="button"
+      >
+        {zh ? "重新检查" : "Check Again"}
+      </button>
+    </>
+  );
+}
+
 function SettingsPanel({
   settings,
   onUpdate,
@@ -13861,6 +14323,13 @@ function SettingsPanel({
             </form>
           </Modal>
         ) : null}
+      </section>
+      ) : null}
+      {activeTab === "user" && !locked ? (
+      <section className="settings-card" id="phone-access">
+        <p className="eyebrow">{lang === "zh" ? "设备" : "Devices"}</p>
+        <h2>{lang === "zh" ? "手机访问" : "Phone Access"}</h2>
+        <PhoneAccessPanel />
       </section>
       ) : null}
       {activeTab === "ai" ? (
@@ -20664,6 +21133,9 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   const [codexUrl, setCodexUrl] = useState<string | null>(null);
   // Step 4: the completion page, shown after connecting or skipping.
   const [finished, setFinished] = useState(false);
+  // Step 5, optional: the phone step — the same panel Settings → Phone
+  // Access keeps permanently, so skipping here loses nothing.
+  const [phoneSetup, setPhoneSetup] = useState(false);
 
   useEffect(() => {
     void fetchModelProviders()
@@ -20761,6 +21233,34 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
 
   const codexProvider = providers.find((provider) => provider.id === "codex");
 
+  // Step 5 of the first run (onboarding Part 2 section 5): the real phone
+  // step — detect, install, sign in, tunnel, then the QR — driven by the
+  // shared Phone Access panel. Always skippable; Done and Skip both land in
+  // the workspace, and Settings → Phone Access carries the same flow forever.
+  if (finished && phoneSetup) {
+    return (
+      <main className="acceptance-screen">
+        <div className="acceptance-card">
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <h2>{zh ? "把 Vaenyx 装到手机上" : "Put Vaenyx on your phone"}</h2>
+          <PhoneAccessPanel />
+          <button
+            className="primary-button acceptance-continue"
+            onClick={onDone}
+            type="button"
+          >
+            {zh ? "完成,开始使用" : "Done — Start Using Vaenyx"}
+          </button>
+          <p className="acceptance-fine">
+            {zh
+              ? "没弄完也没关系:设置 → 手机访问 里随时能接着做。"
+              : "Unfinished is fine: Settings → Phone Access carries on from wherever you stop."}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   // Step 4 of the first run (onboarding spec section 4): one screen that
   // points at something to try and at the phone/remote option, so the Owner
   // is never dropped into an empty app wondering what it is for.
@@ -20794,13 +21294,20 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
             <strong>{zh ? "想在手机上用?" : "Want it on your phone?"}</strong>
             <p className="settings-card-copy">
               {zh
-                ? "Vaenyx 只监听本机 127.0.0.1,不会把端口暴露到网络上 —— 手机(哪怕同一个 WiFi)也要走加密的远程通道。双击文件夹里的 Vaenyx-Connect-Tailscale.cmd 按提示做一次,之后手机打开网址、加到主屏即可。"
-                : "Vaenyx listens only on this computer's 127.0.0.1 and never opens a port to the network — so a phone (even on the same WiFi) connects through an encrypted remote channel. Run Vaenyx-Connect-Tailscale.cmd in the Vaenyx folder once, then open the address on the phone and add it to the Home Screen."}
+                ? "三步把 Vaenyx 加到手机主屏:装上 Tailscale、登录、开启加密通道,然后用手机扫一个码。全程在这里引导完成。"
+                : "Three steps put Vaenyx on the phone's Home Screen: install Tailscale, sign in, turn on the encrypted channel — then scan one code with the phone. Everything is guided right here."}
             </p>
+            <button
+              className="secondary-button"
+              onClick={() => setPhoneSetup(true)}
+              type="button"
+            >
+              {zh ? "现在设置手机" : "Set Up The Phone Now"}
+            </button>
             <p className="acceptance-fine">
               {zh
-                ? "可选,随时都能做。跳过不影响这台电脑上的使用。"
-                : "Optional, and you can do it any time. Skipping changes nothing here."}
+                ? "可选,随时都能做:以后在 设置 → 手机访问 里也是同一套流程。"
+                : "Optional, any time: Settings → Phone Access keeps this exact flow."}
             </p>
           </section>
 

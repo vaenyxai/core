@@ -9,6 +9,12 @@ sign-in, its own usage line, its own key lifecycle.
 Everything here EXTENDS the existing App Profile system (`app_profiles`). There
 is no second registry: an app's key is its identity everywhere in Vaenyx.
 
+In front of the user this key is named a **Model Key** (Chinese: **模型钥匙**)
+— that is what the Subscription Door panel and the manual call it. "Relay key"
+in this document is the same object, named by its kind in the code. The Tokens
+screen's Method/Routine **Token** is a different product and never takes this
+name; the two must never blur.
+
 ## The one rule everything follows
 
 **The key is the identity.** Every profile endpoint authenticates with the
@@ -38,8 +44,9 @@ performs on first run is core-only — a profile starts signed out, always.
 
 ## Keys and login — the rule since 2026-08-02
 
-**Relay keys are their own kind.** A key for this door is issued on Vaenyx's
-Subscription Door panel ("Add App": a name, nothing else — no Method, no
+**Relay keys are their own kind.** A key for this door — a **Model Key**, on
+the panel and in the manual — is issued on Vaenyx's Subscription Door panel
+("Add App": a name, nothing else — no Method, no
 Routine bound). The Tokens screen's Method/Routine Tokens are a different
 product: one of those knocking here is refused with `403 RELAY_KEY_WRONG_KIND`
 — deliberately not the same answer as a missing key, because "get this app a
@@ -109,8 +116,10 @@ The app's own status. Response:
 }
 ```
 
-`capabilities` is the key's capability grant list (what the Owner ticked on the
-Token screen), the same list `/v1/ai/run` enforces.
+`key` describes the app's own Model Key — version, timestamps, prefix hint,
+never the secret. `capabilities` is that key's capability grant list (what the
+Owner ticked on the app's row on the Subscription Door panel), the same list
+`/v1/ai/run` enforces.
 
 ### `POST /v1/relay/profile/login/start` — body `{ "engine": "openai-cli" | "claude-cli" }`
 
@@ -142,11 +151,12 @@ not a way back onto the door's account.
 
 ### `POST /v1/relay/profile/key/rotate` — empty body
 
-Issues a fresh key bound to this profile, revokes the old one in the same
+Issues a fresh Model Key bound to this profile, revokes the old one in the same
 statement, returns `{ "token", "keyVersion" }`. The token appears in this
 response once and is never retrievable again. Store it before answering the
 user. If the response is lost mid-flight, the app is locked out and the Owner
-re-issues from Vaenyx's Token screen — which is the recovery path, not a bug.
+re-issues with Rotate on the app's row of the Subscription Door panel — which
+is the recovery path, not a bug.
 
 ### `GET /v1/relay/usage` — Owner session only, not app keys
 
@@ -161,7 +171,7 @@ Call counts always; token counts only where an engine truly reports them
 | Device not on the tailnet | `403` `RELAY_TAILNET_REQUIRED` — an answer, not a timeout |
 | Vaenyx unreachable | network error / timeout — fall back to your free model |
 | Key rejected or revoked | `401` `RELAY_PROFILE_REQUIRED` (profile routes) / `401` on `/v1/ai/run` |
-| Wrong KIND of key (a Method/Routine Token) | `403` `RELAY_KEY_WRONG_KIND` — issue this app a relay key on the Door panel |
+| Wrong KIND of key (a Method/Routine Token) | `403` `RELAY_KEY_WRONG_KIND` — issue this app a Model Key on the Door panel |
 | Door switched off | `503` `RELAY_OFF` |
 | This profile's login missing | `503` `RELAY_PROFILE_NOT_CONNECTED:<engine>` — start a sign-in |
 | Capability off on the machine | `403` `RELAY_CAPABILITY_OFF:<capability>` |

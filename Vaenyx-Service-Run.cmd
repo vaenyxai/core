@@ -48,8 +48,30 @@ if exist "userdata\config\update-pending.json" (
   echo [%date% %time%] Applying staged update >> "userdata\logs\vaenyx-service.log"
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Vaenyx-Apply-Update.ps1"
 )
-echo [%date% %time%] Starting Vaenyx server >> "userdata\logs\vaenyx-service.log"
-node apps\server\dist\index.js >> "userdata\logs\vaenyx.log" 2>> "userdata\logs\vaenyx-error.log"
+REM Find node.exe without trusting PATH. This script runs as SYSTEM under the
+REM Task Scheduler service, whose environment is a boot-time snapshot: a
+REM Node.js that setup installed minutes ago is NOT on that PATH until the
+REM next reboot, and a bare "node" here dies instantly. Setup writes the
+REM absolute path it detected into userdata\config\node-path; trust that
+REM first, then the default install folder, then PATH as the last resort.
+set "NODE_EXE="
+if exist "userdata\config\node-path" set /p NODE_EXE=<"userdata\config\node-path"
+if defined NODE_EXE if not exist "%NODE_EXE%" set "NODE_EXE="
+if not defined NODE_EXE if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
+if not defined NODE_EXE for /f "delims=" %%N in ('where node 2^>nul') do if not defined NODE_EXE set "NODE_EXE=%%N"
+if defined NODE_EXE goto found_node
+REM No Node anywhere. Say why once per outage, then retry slowly - a 5-second
+REM loop on a command that fails instantly floods the log.
+if not defined NODE_MISSING_LOGGED (
+  echo [%date% %time%] Cannot start Vaenyx: node.exe was not found. Checked userdata\config\node-path, %ProgramFiles%\nodejs\node.exe and PATH. Install Node.js 24 or newer, or run Vaenyx-Setup.cmd again. Retrying every 60s. >> "userdata\logs\vaenyx-service.log"
+  set "NODE_MISSING_LOGGED=1"
+)
+ping -n 61 127.0.0.1 >nul
+goto loop
+:found_node
+set "NODE_MISSING_LOGGED="
+echo [%date% %time%] Starting Vaenyx server using "%NODE_EXE%" >> "userdata\logs\vaenyx-service.log"
+"%NODE_EXE%" apps\server\dist\index.js >> "userdata\logs\vaenyx.log" 2>> "userdata\logs\vaenyx-error.log"
 echo [%date% %time%] Vaenyx server exited (code %ERRORLEVEL%), restarting in 5s >> "userdata\logs\vaenyx-service.log"
 ping -n 6 127.0.0.1 >nul
 goto loop

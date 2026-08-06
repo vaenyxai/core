@@ -87,6 +87,9 @@ import type {
   VaenyxMeCandidate,
   VaenyxThread,
   Workspace,
+  PhoneAccessStatus,
+  PhoneLoginResponse,
+  PhoneTunnelResponse,
 } from "@vaenyx/contracts";
 
 export type {
@@ -95,6 +98,9 @@ export type {
   DeviceMode,
   UpdateStatus,
   RelayUsageResponse,
+  PhoneAccessStatus,
+  PhoneLoginResponse,
+  PhoneTunnelResponse,
 } from "@vaenyx/contracts";
 
 import { showErrorToast, showSavedToast } from "./toast.js";
@@ -208,6 +214,38 @@ export function shutdownVaenyx(): Promise<{ message: string }> {
 
 export function restartVaenyx(): Promise<{ message: string }> {
   return requestJson<{ message: string }>("/v1/system/restart", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+// ── Phone access (Settings → Phone access and the first-run step) ────────
+
+export function fetchPhoneAccessStatus(): Promise<PhoneAccessStatus> {
+  return requestJson<PhoneAccessStatus>("/v1/phone/status");
+}
+
+// `lang` rides along on the three actions because each can come back with a
+// `detail` sentence the Owner reads, and a CLI result gives the server no
+// other clue which language to say so in.
+export function installPhoneTailscale(
+  lang: string,
+): Promise<PhoneAccessStatus> {
+  return requestJson<PhoneAccessStatus>(`/v1/phone/install?lang=${lang}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function startPhoneLogin(lang: string): Promise<PhoneLoginResponse> {
+  return requestJson<PhoneLoginResponse>(`/v1/phone/login?lang=${lang}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function enablePhoneTunnel(lang: string): Promise<PhoneTunnelResponse> {
+  return requestJson<PhoneTunnelResponse>(`/v1/phone/tunnel?lang=${lang}`, {
     method: "POST",
     body: JSON.stringify({}),
   });

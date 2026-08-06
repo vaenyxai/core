@@ -2,28 +2,36 @@
 setlocal
 cd /d "%~dp0"
 
-set "TAILSCALE_EXE=%CD%\private\tools\tailscale\tailscale.exe"
+rem The installed Tailscale client lives under Program Files (the MSI puts it
+rem there). The old arrangement of copying tailscale.exe into private\tools is
+rem retired: a copied CLI drifts out of sync with the background service it
+rem talks to, and the installer already provides the real one.
+rem
+rem No parenthesized blocks around these paths on purpose: the ")" inside an
+rem expanded %ProgramFiles(x86)% closes a block early and corrupts the script.
+set "TAILSCALE_EXE=%ProgramFiles%\Tailscale\tailscale.exe"
+if not exist "%TAILSCALE_EXE%" set "TAILSCALE_EXE=%ProgramFiles(x86)%\Tailscale\tailscale.exe"
 
 echo.
 echo Vaenyx Tailscale Connect
 echo =======================
 echo.
 
-if not exist "%TAILSCALE_EXE%" (
-  echo [Missing] tailscale.exe was not found at:
-  echo %TAILSCALE_EXE%
-  echo.
-  echo On Windows, Tailscale is not a single portable file like cloudflared.
-  echo Install the official Tailscale client first. It adds the Tailscale
-  echo background service. Then copy its tailscale.exe into:
-  echo   %CD%\private\tools\tailscale\
-  echo.
-  echo Vaenyx never downloads this tool for you. Get it from the official
-  echo Tailscale website yourself, then place the file above.
-  pause
-  exit /b 1
-)
+if exist "%TAILSCALE_EXE%" goto :have_tool
+echo [Missing] The Tailscale client is not installed on this computer.
+echo Looked under Program Files for Tailscale\tailscale.exe.
+echo.
+echo The easiest way to set up phone access is inside Vaenyx itself:
+echo   Settings -^> Phone Access
+echo installs, signs in and opens the channel for you, with a QR code at
+echo the end.
+echo.
+echo To install just the client by hand instead, get it from the official
+echo Tailscale website: https://tailscale.com/download
+pause
+exit /b 1
 
+:have_tool
 if /I "%~1"=="--version" goto :version
 if /I "%~1"=="--login" goto :login
 if /I "%~1"=="--funnel" goto :funnel
@@ -34,7 +42,9 @@ echo Tool:
 "%TAILSCALE_EXE%" version
 echo.
 echo Vaenyx is still local-only until you log in to Tailscale and turn on
-echo Funnel for the local Vaenyx port 3000.
+echo Funnel for the local Vaenyx port 3000. Settings -^> Phone Access inside
+echo Vaenyx walks through all of this with buttons; this window is the manual
+echo route for people who prefer a console.
 echo.
 echo Safe commands:
 echo   "%~nx0" --version
@@ -65,11 +75,12 @@ echo own free Tailscale account. It does not expose Vaenyx by itself.
 exit /b %ERRORLEVEL%
 
 :funnel
-echo Publishing the local Vaenyx port 3000 through Tailscale Funnel.
+echo Publishing the local Vaenyx port 3000 through Tailscale Funnel, in the
+echo background so it stays on after this window closes.
 echo If your Tailnet has not enabled Funnel yet, Tailscale prints a link to
 echo turn it on in the admin console. Open that link, enable Funnel, then run
 echo this command again.
-"%TAILSCALE_EXE%" funnel 3000
+"%TAILSCALE_EXE%" funnel --bg 3000
 exit /b %ERRORLEVEL%
 
 :status

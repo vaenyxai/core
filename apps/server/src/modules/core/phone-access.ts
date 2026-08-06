@@ -1,0 +1,417 @@
+// Phone access (onboarding Part 2 section 5): the server-side half of getting
+// Vaenyx onto the owner's phone. Vaenyx binds to 127.0.0.1 only, so a phone —
+// even on the same WiFi — reaches it through the owner's own Tailscale
+// account: install the client, sign in, then publish local port 3000 with
+// `tailscale funnel --bg`, matching the serve shape a hand-run
+// Vaenyx-Connect-Tailscale.cmd produces.
+//
+// Honesty rules baked in here:
+//   * every status field comes from actually running the tailscale CLI —
+//     nothing is inferred from wishes;
+//   * this machine can NEVER verify the public side of a fresh funnel (its
+//     own lookup resolves through MagicDNS back inside the tailnet), so no
+//     field claims public reachability — the UI tells the owner the phone is
+//     the only real test.
+import { existsSync } from "node:fs";
+import { execFile, spawn } from "node:child_process";
+import { join } from "node:path";
+
+import type {
+  PhoneAccessStatus,
+  PhoneLoginResponse,
+  PhoneTunnelResponse,
+} from "@vaenyx/contracts";
+
+// The port the funnel forwards to — Vaenyx's own local port.
+const LOCAL_PORT = 3000;
+
+// The fixed sentences these flows produce are read by the Owner in the panel,
+// so they follow the app's bilingual rule; the routes pass the language the
+// Owner is reading the app in. Raw CLI output (winget's last line, a
+// tailscale error with its admin-console link) still travels verbatim —
+// translating a tool's own words would hide what actually happened.
+export type PhoneLang = "en" | "zh";
+
+// ── Locating the CLI ──────────────────────────────────────────────────────
+
+// The installed client lives under Program Files (the retired arrangement of
+// copying tailscale.exe into private\tools is gone). An env override exists
+// so tests can point at a stub instead of the real thing.
+export function findTailscaleCommand(): string | null {
+  const override = process.env.VAENYX_TAILSCALE_COMMAND;
+  if (override) return override;
+  if (process.env.NODE_ENV === "test") return null;
+  if (process.platform === "win32") {
+    for (const root of [
+      process.env.ProgramFiles,
+      process.env["ProgramFiles(x86)"],
+    ]) {
+      if (!root) continue;
+      const candidate = join(root, "Tailscale", "tailscale.exe");
+      if (existsSync(candidate)) return candidate;
+    }
+    return null;
+  }
+  // On other platforms the CLI is on PATH when installed; `run` treats a
+  // spawn failure as "not installed".
+  return "tailscale";
+}
+
+interface RunResult {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+}
+
+function run(
+  command: string,
+  args: string[],
+  timeoutMs = 10_000,
+): Promise<RunResult> {
+  return new Promise((resolveRun) => {
+    execFile(
+      command,
+      args,
+      { timeout: timeoutMs, windowsHide: true, encoding: "utf8" },
+      (error, stdout, stderr) => {
+        resolveRun({ ok: !error, stdout: stdout ?? "", stderr: stderr ?? "" });
+      },
+    );
+  });
+}
+
+// ── Parsing (pure, unit-tested) ───────────────────────────────────────────
+
+export interface ParsedBackendStatus {
+  backendState: string | null;
+  authUrl: string | null;
+  dnsName: string | null;
+}
+
+// `tailscale status --json`: BackendState is "Running" once signed in,
+// "NeedsLogin" (often with an AuthURL) before that.
+export function parseBackendStatus(jsonText: string): ParsedBackendStatus {
+  try {
+    const parsed = JSON.parse(jsonText) as {
+      BackendState?: unknown;
+      AuthURL?: unknown;
+      Self?: { DNSName?: unknown };
+    };
+    const dnsRaw =
+      typeof parsed.Self?.DNSName === "string" ? parsed.Self.DNSName : null;
+    return {
+      backendState:
+        typeof parsed.BackendState === "string" ? parsed.BackendState : null,
+      authUrl:
+        typeof parsed.AuthURL === "string" && parsed.AuthURL.length > 0
+          ? parsed.AuthURL
+          : null,
+      dnsName: dnsRaw ? dnsRaw.replace(/\.$/, "") : null,
+    };
+  } catch {
+    return { backendState: null, authUrl: null, dnsName: null };
+  }
+}
+
+export interface ParsedServeStatus {
+  tunnelUp: boolean;
+  phoneUrl: string | null;
+}
+
+// `tailscale serve status --json` in the exact shape the live machine runs
+// today: a Web entry keyed "host:port" whose "/" handler proxies to
+// 127.0.0.1:3000, plus AllowFunnel true for the same key. Only that
+// combination counts as "tunnel up" — a tailnet-only serve (no funnel) or a
+// forward to some other port is honestly reported as down.
+export function parseServeStatus(jsonText: string): ParsedServeStatus {
+  try {
+    const parsed = JSON.parse(jsonText) as {
+      Web?: Record<
+        string,
+        { Handlers?: Record<string, { Proxy?: unknown }> }
+      >;
+      AllowFunnel?: Record<string, unknown>;
+    };
+    for (const [hostPort, entry] of Object.entries(parsed.Web ?? {})) {
+      const proxy = entry?.Handlers?.["/"]?.Proxy;
+      if (typeof proxy !== "string") continue;
+      if (!/^https?:\/\/127\.0\.0\.1:3000\/?$/.test(proxy)) continue;
+      if (parsed.AllowFunnel?.[hostPort] !== true) continue;
+      const lastColon = hostPort.lastIndexOf(":");
+      const host = lastColon > 0 ? hostPort.slice(0, lastColon) : hostPort;
+      const port = lastColon > 0 ? hostPort.slice(lastColon + 1) : "443";
+      return {
+        tunnelUp: true,
+        phoneUrl: port === "443" ? `https://${host}` : `https://${host}:${port}`,
+      };
+    }
+    return { tunnelUp: false, phoneUrl: null };
+  } catch {
+    return { tunnelUp: false, phoneUrl: null };
+  }
+}
+
+// ── Install (winget, same pattern as the Node install in setup) ──────────
+
+interface InstallState {
+  phase: PhoneAccessStatus["installPhase"];
+  detail: string | null;
+}
+
+const installState: InstallState = { phase: "idle", detail: null };
+
+// Starts `winget install tailscale.tailscale` in the background; the status
+// endpoint reports progress. Deliberately fire-and-poll rather than a
+// long-hanging request: the download takes minutes on a slow line. The
+// failure detail is formatted in the language of the click that started the
+// install — the exit lands after that request has answered, so the closure
+// keeps the language the Owner was reading at the time.
+export function installTailscale(lang: PhoneLang = "en"): InstallState {
+  if (installState.phase === "installing") return installState;
+  if (findTailscaleCommand()) {
+    installState.phase = "idle";
+    installState.detail = null;
+    return installState;
+  }
+  installState.phase = "installing";
+  installState.detail = null;
+  const child = spawn(
+    "winget",
+    [
+      "install",
+      "--id",
+      "tailscale.tailscale",
+      "-e",
+      "--silent",
+      "--accept-source-agreements",
+      "--accept-package-agreements",
+    ],
+    { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+  );
+  let output = "";
+  const collect = (chunk: unknown) => {
+    output = (output + String(chunk)).slice(-2000);
+  };
+  child.stdout?.on("data", collect);
+  child.stderr?.on("data", collect);
+  child.once("error", (error) => {
+    installState.phase = "failed";
+    // The usual cause: winget is not available to the account Vaenyx runs
+    // under. The UI pairs this with the manual-download fallback.
+    installState.detail =
+      lang === "zh"
+        ? `无法启动 winget(${error.message.slice(0, 120)})。`
+        : `Could not start winget (${error.message.slice(0, 120)}).`;
+  });
+  child.once("exit", (code) => {
+    if (code === 0) {
+      installState.phase = "idle";
+      installState.detail = null;
+      return;
+    }
+    if (installState.phase === "installing") {
+      installState.phase = "failed";
+      const lastLine =
+        output
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .pop() ??
+        (lang === "zh"
+          ? `winget 退出了,代码 ${code}。`
+          : `winget exited with code ${code}.`);
+      installState.detail = lastLine.slice(0, 300);
+    }
+  });
+  child.unref();
+  return installState;
+}
+
+// ── Status ────────────────────────────────────────────────────────────────
+
+export async function getPhoneAccessStatus(): Promise<PhoneAccessStatus> {
+  const command = findTailscaleCommand();
+  const base: PhoneAccessStatus = {
+    installed: false,
+    version: null,
+    signedIn: false,
+    backendState: null,
+    loginUrl: null,
+    tunnelUp: false,
+    phoneUrl: null,
+    installPhase: installState.phase,
+    detail: installState.detail,
+  };
+  if (!command) return base;
+
+  const versionResult = await run(command, ["version"]);
+  if (!versionResult.ok) return base;
+  base.installed = true;
+  base.version = versionResult.stdout.split(/\r?\n/)[0]?.trim() || null;
+
+  const statusResult = await run(command, ["status", "--json"]);
+  const backend = parseBackendStatus(statusResult.stdout);
+  base.backendState = backend.backendState;
+  base.signedIn = backend.backendState === "Running";
+  base.loginUrl = backend.authUrl ?? capturedLoginUrl;
+
+  if (base.signedIn) {
+    const serveResult = await run(command, ["serve", "status", "--json"]);
+    const serve = parseServeStatus(serveResult.stdout);
+    base.tunnelUp = serve.tunnelUp;
+    base.phoneUrl = serve.phoneUrl;
+    // Fall back to MagicDNS for the address only when serve is actually
+    // configured but printed no host we could parse — never invent a URL for
+    // a tunnel that is not up.
+    if (serve.tunnelUp && !serve.phoneUrl && backend.dnsName) {
+      base.phoneUrl = `https://${backend.dnsName}`;
+    }
+  }
+  return base;
+}
+
+// ── Sign-in ───────────────────────────────────────────────────────────────
+
+// The `tailscale login` child hosts the browser flow; it keeps running until
+// the owner finishes in the browser, so it is left running unref'd and only
+// the printed URL is waited for — the same pattern as the Codex CLI login.
+let loginInFlight = false;
+let capturedLoginUrl: string | null = null;
+
+export async function startTailscaleLogin(
+  lang: PhoneLang = "en",
+): Promise<PhoneLoginResponse> {
+  const command = findTailscaleCommand();
+  if (!command) {
+    return {
+      url: null,
+      alreadySignedIn: false,
+      detail:
+        lang === "zh"
+          ? "Tailscale 还没有安装。"
+          : "Tailscale is not installed yet.",
+    };
+  }
+  const statusResult = await run(command, ["status", "--json"]);
+  const backend = parseBackendStatus(statusResult.stdout);
+  if (backend.backendState === "Running") {
+    capturedLoginUrl = null;
+    return { url: null, alreadySignedIn: true, detail: null };
+  }
+  // The backend may already be offering an auth URL from an earlier attempt.
+  if (backend.authUrl) {
+    return { url: backend.authUrl, alreadySignedIn: false, detail: null };
+  }
+  if (loginInFlight && capturedLoginUrl) {
+    return { url: capturedLoginUrl, alreadySignedIn: false, detail: null };
+  }
+  loginInFlight = true;
+  const child = spawn(command, ["login"], {
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  return new Promise((resolveLogin) => {
+    let output = "";
+    let settled = false;
+    const settle = (url: string | null, detail: string | null = null) => {
+      if (settled) return;
+      settled = true;
+      resolveLogin({ url, alreadySignedIn: false, detail });
+    };
+    const timer = setTimeout(
+      () =>
+        settle(
+          null,
+          lang === "zh"
+            ? "Tailscale 没有及时给出登录链接。"
+            : "Tailscale did not print a sign-in link in time.",
+        ),
+      15_000,
+    );
+    timer.unref();
+    const scan = (chunk: unknown) => {
+      output += String(chunk);
+      const match = output.match(/https:\/\/[^\s"']+/);
+      if (match) {
+        clearTimeout(timer);
+        capturedLoginUrl = match[0].replace(/[).,]+$/, "");
+        settle(capturedLoginUrl);
+      }
+    };
+    child.stdout?.on("data", scan);
+    child.stderr?.on("data", scan);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      loginInFlight = false;
+      settle(null, error.message.slice(0, 200));
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      loginInFlight = false;
+      if (code === 0) {
+        // Sign-in completed (or was already valid) before we saw a URL.
+        capturedLoginUrl = null;
+        settle(null);
+        return;
+      }
+      const firstLine =
+        output
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)[0] ??
+        (lang === "zh"
+          ? "Tailscale 没能开始登录。"
+          : "Tailscale could not start the sign-in.");
+      settle(null, firstLine.slice(0, 200));
+    });
+    child.unref();
+  });
+}
+
+// ── Tunnel ────────────────────────────────────────────────────────────────
+
+// `tailscale funnel --bg 3000` persists the exact serve shape the status
+// check looks for. When the tailnet has Funnel disabled the CLI prints an
+// admin-console link and fails — that output goes back to the owner verbatim
+// enough to act on.
+export async function enablePhoneTunnel(
+  lang: PhoneLang = "en",
+): Promise<PhoneTunnelResponse> {
+  const command = findTailscaleCommand();
+  if (!command) {
+    return {
+      tunnelUp: false,
+      phoneUrl: null,
+      detail:
+        lang === "zh"
+          ? "Tailscale 还没有安装。"
+          : "Tailscale is not installed yet.",
+    };
+  }
+  const result = await run(
+    command,
+    ["funnel", "--bg", String(LOCAL_PORT)],
+    30_000,
+  );
+  // Trust the re-read config, not the command's own claims.
+  const serveResult = await run(command, ["serve", "status", "--json"]);
+  const serve = parseServeStatus(serveResult.stdout);
+  if (serve.tunnelUp) {
+    return { tunnelUp: true, phoneUrl: serve.phoneUrl, detail: null };
+  }
+  const combined = `${result.stdout}\n${result.stderr}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 500);
+  return {
+    tunnelUp: false,
+    phoneUrl: null,
+    detail:
+      combined ||
+      (lang === "zh"
+        ? "Tailscale Funnel 没能打开。"
+        : "Tailscale Funnel could not be turned on."),
+  };
+}

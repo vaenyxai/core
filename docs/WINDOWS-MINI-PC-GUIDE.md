@@ -156,12 +156,14 @@ the new one, restore. See [MIGRATE-TO-NEW-PC.md](MIGRATE-TO-NEW-PC.md).
 
 Vaenyx listens on `127.0.0.1` only, so it is not reachable from your phone by
 default — and you should never change that or open port 3000 in your firewall
-or router. The supported way in is an authenticated tunnel: install the
-official Tailscale client yourself, then use **`Vaenyx-Connect-Tailscale.cmd`**,
-which prints the exact commands to sign in and to publish port 3000 as a
-private `https://…ts.net` address. Tailscale is a third-party service under its
-own terms, you sign in with your own account, and your Vaenyx owner password is
-what protects the instance once the address exists.
+or router. The supported way in is an authenticated tunnel through your own
+Tailscale account, and **Settings → Phone Access** inside Vaenyx sets it all
+up with buttons: it installs the official client, opens the sign-in page,
+turns the channel on, and ends with a QR code for the phone. Prefer a
+console? **`Vaenyx-Connect-Tailscale.cmd`** drives the same commands by hand,
+using the client installed under Program Files. Tailscale is a third-party
+service under its own terms, you sign in with your own account, and your
+Vaenyx owner password is what protects the instance once the address exists.
 
 ## When Something Goes Wrong
 

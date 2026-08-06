@@ -102,8 +102,9 @@ keep your documents, and delete it from the USB stick once the move is done.
    Backup and Backup Password all start empty on a new machine. If your old
    Backup Folder pointed at a drive letter that does not exist here, set a new
    one.
-5. **Redo phone access if you had it.** Tailscale is per machine: install the
-   official client on the new PC and run `Vaenyx-Connect-Tailscale.cmd` again.
+5. **Redo phone access if you had it.** Tailscale is per machine: on the new
+   PC, Settings → **Phone Access** walks through it again (or install the
+   official client and run `Vaenyx-Connect-Tailscale.cmd` yourself).
 6. **Make a fresh backup** on the new PC, so the first backup here is one you
    made on purpose.
 7. Only once all of that works, wipe the old PC's Vaenyx folder — and remember

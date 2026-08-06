@@ -85,8 +85,9 @@ Backup Password）。
 4. **重设备份设置。** Backup Folder、Keep Most Recent、Automatic Backup、Backup
    Password 在新机上都是空的。旧的 Backup Folder 如果指向一个这台机器上不存在的
    盘符，请重新设一个。
-5. **手机访问要重做（如果你之前配过）。** Tailscale 是按机器配的：在新电脑上装好
-   官方客户端，再运行一次 `Vaenyx-Connect-Tailscale.cmd`。
+5. **手机访问要重做（如果你之前配过）。** Tailscale 是按机器配的：在新电脑上
+   走一遍 设置 → **手机访问**（或者自己装官方客户端、再运行
+   `Vaenyx-Connect-Tailscale.cmd`）。
 6. **在新电脑上重新做一次备份**，让这台机器上的第一份备份是你有意做的。
 7. 以上全部跑通之后，再去清理旧电脑的 Vaenyx 文件夹 —— 记住删文件夹 = 连里面的
    数据一起删掉。

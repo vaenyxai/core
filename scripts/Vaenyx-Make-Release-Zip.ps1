@@ -1,17 +1,12 @@
-# Builds the download users get from the website: one zip whose top folder is
-# "Vaenyx", with Vaenyx-Setup.cmd sitting right there to double-click.
+﻿# Builds the portable download users get from the website: one zip whose top
+# level holds exactly two things to look at -- Vaenyx-Setup.cmd to double-click
+# and Read-Me-First.txt to read -- with the whole app tree one level down in
+# Vaenyx\. Fewer files at the top means fewer wrong things to click first.
 #
 # The same script runs locally and in CI (.github/workflows/release.yml), so
-# what gets tested here is what ships.
-#
-# What goes in: the tracked source tree only. No node_modules and no dist --
-# Vaenyx-Setup.cmd fetches and builds those on the user's machine. A fat zip
-# would be worse, not better: npm creates the @vaenyx/* workspace links as
-# Windows junctions, and a zip cannot carry those, so a pre-populated
-# node_modules would arrive silently broken.
-#
-# Line endings matter: .cmd files with LF endings break cmd.exe's goto/for
-# parsing. Everything is normalised to CRLF for the scripts a user runs.
+# what gets tested is what ships. The payload itself is staged by
+# scripts/installer/Vaenyx-Stage-Payload.ps1, shared with the .exe installer
+# build so the two downloads can never drift apart.
 [CmdletBinding()]
 param(
   [string]$OutputDirectory = "",
@@ -33,66 +28,31 @@ if (-not $Version) {
 
 Write-Host "Packaging Vaenyx $Version" -ForegroundColor Cyan
 
-# git archive gives exactly the tracked files -- no node_modules, no dist, no
-# userdata, no .git, and nothing a stray local file could smuggle in.
 $staging = Join-Path ([System.IO.Path]::GetTempPath()) ("vaenyx-release-" + [guid]::NewGuid().ToString("N"))
 $payload = Join-Path $staging "Vaenyx"
-New-Item -ItemType Directory -Path $payload -Force | Out-Null
+New-Item -ItemType Directory -Path $staging -Force | Out-Null
+& (Join-Path $PSScriptRoot "installer\Vaenyx-Stage-Payload.ps1") -Destination $payload
 
-Push-Location $root
-try {
-  $tarPath = Join-Path $staging "source.tar"
-  & git archive --format=tar --output="$tarPath" HEAD
-  if ($LASTEXITCODE -ne 0) { throw "git archive failed (is this a git checkout?)" }
-  & tar -xf "$tarPath" -C "$payload"
-  if ($LASTEXITCODE -ne 0) { throw "extracting the archive failed" }
-  Remove-Item $tarPath -Force
-} finally {
-  Pop-Location
-}
+# The zip layout: only the setup launcher and the read-me at the top,
+# everything else inside Vaenyx\. The launcher knows both layouts (it looks
+# for scripts\Vaenyx-Setup.ps1 next to itself first, then under Vaenyx\), so
+# the same file works here and in a git checkout.
+#
+# COPY, not move: the app tree keeps its own Vaenyx-Setup.cmd. The in-app
+# updater applies the Vaenyx\ folder over an install, and an installed copy
+# must keep receiving launcher fixes; the top-level copy exists so the person
+# who just unzipped has exactly one obvious thing to double-click.
+Copy-Item (Join-Path $payload "Vaenyx-Setup.cmd") (Join-Path $staging "Vaenyx-Setup.cmd")
+Copy-Item (Join-Path $payload "scripts\installer\Read-Me-First.txt") (Join-Path $staging "Read-Me-First.txt")
 
-# Never ship a package inside the package. A previous build's output was once
-# committed by accident, which quietly doubled the download size.
-$nestedRelease = Join-Path $payload "release"
-if (Test-Path $nestedRelease) {
-  Remove-Item $nestedRelease -Recurse -Force
-  Write-Host "  Dropped a stale release/ folder from the payload."
+# Assert the top-level contract before packing: exactly these three entries.
+# The website's install guide and the release notes describe this layout, and
+# a stray extra file at the top would be the first thing every user clicks.
+$topLevel = @(Get-ChildItem -Path $staging | Sort-Object Name | ForEach-Object { $_.Name })
+$expected = @("Read-Me-First.txt", "Vaenyx", "Vaenyx-Setup.cmd")
+if (($topLevel -join "|") -ne ($expected -join "|")) {
+  throw "Unexpected zip top level: $($topLevel -join ', ') (wanted: $($expected -join ', '))"
 }
-
-# Normalise the launchers to CRLF. git archive writes whatever is in the
-# object database (LF), and a LF .cmd is a broken .cmd.
-# .ps1 keeps a UTF-8 BOM: Windows PowerShell 5.1 reads a BOM-less script as the
-# ANSI codepage, which turns the Chinese setup messages into parse errors.
-$crlfCount = 0
-foreach ($file in Get-ChildItem -Path $payload -Recurse -File -Include *.cmd, *.ps1) {
-  $text = [System.IO.File]::ReadAllText($file.FullName)
-  $normalised = ($text -replace "`r`n", "`n") -replace "`n", "`r`n"
-  $wantsBom = $file.Extension -eq ".ps1"
-  [System.IO.File]::WriteAllText($file.FullName, $normalised, (New-Object System.Text.UTF8Encoding($wantsBom)))
-  $crlfCount = $crlfCount + 1
-}
-Write-Host "  CRLF-normalised $crlfCount launcher script(s)."
-
-# Sanity: the things a fresh install cannot start without.
-$required = @(
-  "Vaenyx-Setup.cmd",
-  "scripts\Vaenyx-Setup.ps1",
-  "Vaenyx-Start.cmd",
-  "Vaenyx-Service-Run.cmd",
-  "package.json",
-  "package-lock.json",
-  "apps\server\migrations",
-  "sample-library",
-  "docs\legal"
-)
-foreach ($item in $required) {
-  if (-not (Test-Path (Join-Path $payload $item))) {
-    throw "The package is missing $item -- refusing to publish a broken download."
-  }
-}
-$migrationCount = (Get-ChildItem (Join-Path $payload "apps\server\migrations") -Filter *.sql).Count
-if ($migrationCount -lt 1) { throw "No migrations in the package." }
-Write-Host "  Contents verified ($migrationCount migrations)."
 
 if (-not (Test-Path $OutputDirectory)) {
   New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
@@ -106,7 +66,7 @@ if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 # download that has to be a correct zip.
 Push-Location $staging
 try {
-  & tar.exe -a -c -f "$zipPath" "Vaenyx"
+  & tar.exe -a -c -f "$zipPath" "Vaenyx-Setup.cmd" "Read-Me-First.txt" "Vaenyx"
   if ($LASTEXITCODE -ne 0) { throw "packing the zip failed ($LASTEXITCODE)" }
 } finally {
   Pop-Location

@@ -11,6 +11,12 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  detectOfficeKind,
+  extractOfficeText,
+  isLegacyOfficeDocument,
+} from "./office.js";
+
 const require = createRequire(import.meta.url);
 
 // Provider limits (Anthropic's documented ceilings, 2026-07-29). A file over
@@ -114,8 +120,32 @@ export async function inspectDocument(file: Buffer): Promise<DocumentFacts> {
   }
   // A text file has no pages, so it can never trip the page-cost gate — which
   // is right: the gate exists because a PDF is read as pictures on a paid
-  // model, and words alone are the cheap path.
+  // model, and words alone are the cheap path. Office files (docx/xlsx/pptx)
+  // ride the same words path, so they are pages: 1 too — but their extraction
+  // runs HERE, at upload time, so a broken, encrypted or bomb-shaped file is
+  // refused at the door instead of failing silently mid-chat.
   if (!isPdfDocument(file)) {
+    if (detectOfficeKind(file)) {
+      try {
+        extractOfficeText(file);
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        if (code === "OFFICE_ENCRYPTED") {
+          throw new Error("DOCUMENT_PASSWORD", { cause: error });
+        }
+        if (code === "OFFICE_TOO_LARGE") {
+          throw new Error("DOCUMENT_UNPACKS_TOO_LARGE", { cause: error });
+        }
+        throw new Error("DOCUMENT_UNREADABLE", { cause: error });
+      }
+      return { pages: 1 };
+    }
+    // The old binary Office formats are refused by NAME (of the format, never
+    // of the file) so the fix — save as PDF or as the modern format — can be
+    // said precisely instead of hiding in the generic sentence.
+    if (isLegacyOfficeDocument(file)) {
+      throw new Error("DOCUMENT_LEGACY_OFFICE");
+    }
     if (isTextDocument(file)) return { pages: 1 };
     throw new Error("DOCUMENT_UNREADABLE");
   }
@@ -147,9 +177,13 @@ export async function extractDocumentText(
   file: Buffer,
   maxPages = 40,
 ): Promise<string> {
-  // A text file IS its own extraction. Capped so a huge log file cannot crowd
-  // the whole conversation out of the model's window.
+  // Office files become their words here — never a native document block, on
+  // any backend: the native path is a PDF thing, and pretending a spreadsheet
+  // went that way would make the M1 cost sentence a lie. A text file IS its
+  // own extraction. Both are capped so a huge file cannot crowd the whole
+  // conversation out of the model's window.
   if (!isPdfDocument(file)) {
+    if (detectOfficeKind(file)) return extractOfficeText(file);
     return file.toString("utf8").slice(0, 200_000);
   }
   const pdfjs = await loadPdfJs();

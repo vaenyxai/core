@@ -92,10 +92,12 @@ $Messages = @{
   "run.already"     = @{ en = "Vaenyx is already running."; zh = "Vaenyx 已经在运行。" }
   "run.ok"          = @{ en = "Vaenyx is running."; zh = "Vaenyx 已启动。" }
   "run.fail"        = @{ en = "Vaenyx did not start."; zh = "Vaenyx 没能启动。" }
-  "run.diag"        = @{ en = "Run Vaenyx-Diagnose.cmd, or look at the error log in"; zh = "请运行 Vaenyx-Diagnose.cmd,或查看错误日志:" }
+  "run.diag"        = @{ en = "Run Vaenyx-Diagnose.cmd, or check userdata\logs\vaenyx-service.log and userdata\logs\vaenyx-error.log."; zh = "请运行 Vaenyx-Diagnose.cmd,或查看 userdata\logs\vaenyx-service.log 和 userdata\logs\vaenyx-error.log。" }
   "ready"           = @{ en = "Vaenyx is ready."; zh = "Vaenyx 已就绪。" }
   "ready.open"      = @{ en = "Open this in your browser and follow the short setup:"; zh = "在浏览器打开下面的地址,按提示完成设置:" }
   "ready.noauto"    = @{ en = "Note: Vaenyx will not start with Windows yet."; zh = "提示:Vaenyx 目前不会随 Windows 启动。" }
+  "browser.fail"    = @{ en = "The browser did not open by itself. Open one yourself and go to this address:"; zh = "浏览器没有自动打开。请自己打开浏览器,访问下面这个地址:" }
+  "browser.copied"  = @{ en = "The address is already copied - press Ctrl+V in the address bar to paste it."; zh = "地址已经复制好了 —— 在浏览器地址栏按 Ctrl+V 粘贴即可。" }
   "stopped"         = @{ en = "Setup stopped:"; zh = "安装中止:" }
 }
 
@@ -480,6 +482,24 @@ try {
   }
   Write-Good "Using Node.js $finalNodeVersion with npm $npmVersion."
 
+  # The autostart watchdog runs as SYSTEM under the Task Scheduler service,
+  # whose PATH is a boot-time snapshot - a Node.js installed a minute ago is
+  # not on it, so a bare "node" there dies instantly (the P0 first-install
+  # death). Hand the watchdog the absolute path we just resolved. One line,
+  # no BOM, no trailing newline: Vaenyx-Service-Run.cmd reads it with set /p.
+  try {
+    $configDirectory = Join-Path $root "userdata\config"
+    if (-not (Test-Path $configDirectory)) {
+      New-Item -ItemType Directory -Path $configDirectory -Force | Out-Null
+    }
+    [System.IO.File]::WriteAllText(
+      (Join-Path $configDirectory "node-path"),
+      $nodeExe,
+      (New-Object System.Text.UTF8Encoding($false)))
+  } catch {
+    # Not fatal: the watchdog falls back to probing the default install folder.
+  }
+
   # -- 2. Dependencies ----
   Write-Head (Say "step3")
   & $npmCmd ci
@@ -515,8 +535,8 @@ try {
   # sandboxing question, which an ACL cannot answer.
   #
   # No elevation needed: this account created userdata, and an owner may
-  # rewrite its ACL. Runs before the autostart step because schtasks /Run
-  # starts the server immediately.
+  # rewrite its ACL. Runs before the server's first start below, so
+  # everything the server creates inherits the locked ACL from day one.
   #
   # 🔴 ORDER MATTERS: the reset must target userdata\* (the children only),
   # never the userdata folder itself. Resetting the folder re-inherits the
@@ -554,9 +574,15 @@ try {
       # Single-quoted concatenation on purpose: the schtasks /TR value needs
       # literal \" escapes, and building that inside a double-quoted
       # PowerShell string is where quoting goes to die.
+      #
+      # Register only, never /Run here. The task runs as SYSTEM with the Task
+      # Scheduler service's boot-time PATH snapshot, so on a machine where
+      # THIS install just added Node.js the task cannot find it and the first
+      # start dies while setup waits (the P0 first-install death). The first
+      # start is the direct one below, from this session's fresh PATH; the
+      # task takes over at the next boot.
       $schtasksArguments = '/c schtasks /Create /TN "' + $TaskName +
-        '" /TR "cmd /c \"' + $runner + '\"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F' +
-        ' && schtasks /Run /TN "' + $TaskName + '"'
+        '" /TR "cmd /c \"' + $runner + '\"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F'
       try {
         $taskProcess = Start-Process -FilePath "cmd.exe" -ArgumentList $schtasksArguments -Verb RunAs -Wait -PassThru
         if ($taskProcess.ExitCode -eq 0) {
@@ -590,34 +616,36 @@ try {
   if (Test-VaenyxUp $statusUrl) {
     Write-Good (Say "run.already")
   } else {
-    if (-not $autostartRegistered) {
-      # No watchdog (skipped or declined): start the server directly, the same
-      # way Vaenyx-Start.cmd does.
-      $env:NODE_ENV = "production"
-      $env:VAENYX_HOST = "127.0.0.1"
-      $env:VAENYX_PORT = "$Port"
-      $env:VAENYX_LOG_LEVEL = "info"
-      $env:VAENYX_DATA_DIR = Join-Path $root "userdata\db"
-      $env:VAENYX_BACKUPS_DIR = Join-Path $root "userdata\backups"
-      $env:VAENYX_LIBRARY_DIR = Join-Path $root "userdata\library\methods"
-      $env:VAENYX_ROUTINES_DIR = Join-Path $root "userdata\library\routines"
-      foreach ($needed in @($env:VAENYX_DATA_DIR, $env:VAENYX_BACKUPS_DIR)) {
-        if (-not (Test-Path $needed)) {
-          New-Item -ItemType Directory -Path $needed -Force | Out-Null
-        }
+    # The first start is ALWAYS direct, whether or not the autostart task was
+    # registered: this session has the fresh PATH and the resolved $nodeExe,
+    # while the task's SYSTEM environment will not see a just-installed Node
+    # until the next reboot. The watchdog never fights this server - its loop
+    # checks the status endpoint and only starts a server of its own when
+    # nothing answers.
+    $env:NODE_ENV = "production"
+    $env:VAENYX_HOST = "127.0.0.1"
+    $env:VAENYX_PORT = "$Port"
+    $env:VAENYX_LOG_LEVEL = "info"
+    $env:VAENYX_DATA_DIR = Join-Path $root "userdata\db"
+    $env:VAENYX_BACKUPS_DIR = Join-Path $root "userdata\backups"
+    $env:VAENYX_LIBRARY_DIR = Join-Path $root "userdata\library\methods"
+    $env:VAENYX_ROUTINES_DIR = Join-Path $root "userdata\library\routines"
+    foreach ($needed in @($env:VAENYX_DATA_DIR, $env:VAENYX_BACKUPS_DIR)) {
+      if (-not (Test-Path $needed)) {
+        New-Item -ItemType Directory -Path $needed -Force | Out-Null
       }
-      # Absolute path on purpose: Vaenyx-Stop.ps1 and the diagnose script find
-      # the running server by looking for the project root inside the process
-      # command line. A relative argument makes this instance invisible to
-      # them (found while testing the setup end to end).
-      $serverEntry = Join-Path $root "apps\server\dist\index.js"
-      Start-Process -FilePath $nodeExe `
-        -ArgumentList "`"$serverEntry`"" `
-        -WorkingDirectory $root `
-        -WindowStyle Minimized `
-        -RedirectStandardOutput (Join-Path $logDirectory "vaenyx.log") `
-        -RedirectStandardError (Join-Path $logDirectory "vaenyx-error.log") | Out-Null
     }
+    # Absolute path on purpose: Vaenyx-Stop.ps1 and the diagnose script find
+    # the running server by looking for the project root inside the process
+    # command line. A relative argument makes this instance invisible to
+    # them (found while testing the setup end to end).
+    $serverEntry = Join-Path $root "apps\server\dist\index.js"
+    Start-Process -FilePath $nodeExe `
+      -ArgumentList "`"$serverEntry`"" `
+      -WorkingDirectory $root `
+      -WindowStyle Minimized `
+      -RedirectStandardOutput (Join-Path $logDirectory "vaenyx.log") `
+      -RedirectStandardError (Join-Path $logDirectory "vaenyx-error.log") | Out-Null
 
     $ready = $false
     for ($attempt = 1; $attempt -le 40; $attempt++) {
@@ -628,14 +656,38 @@ try {
       Write-Good (Say "run.ok")
     } else {
       Write-Bad (Say "run.fail")
-      Write-Info "$(Say 'run.diag') $logDirectory"
+      Write-Info (Say "run.diag")
       throw "server did not become ready"
     }
   }
 
   $appUrl = "http://localhost:$Port"
   if (-not $NoBrowser) {
-    try { Start-Process $appUrl | Out-Null } catch { }
+    try {
+      Start-Process $appUrl | Out-Null
+    } catch {
+      # No default browser, a broken http association - whatever it was, never
+      # swallow it: Vaenyx IS running, the user just cannot see it yet. Print
+      # the address big enough to spot from across the room and put it on the
+      # clipboard so a single Ctrl+V finishes the job.
+      Write-Host ""
+      Write-Warn (Say "browser.fail")
+      Write-Host ""
+      Write-Host ("  " + ("=" * 60)) -ForegroundColor Yellow
+      Write-Host ""
+      Write-Host "        $appUrl" -ForegroundColor White
+      Write-Host ""
+      Write-Host ("  " + ("=" * 60)) -ForegroundColor Yellow
+      Write-Host ""
+      $copied = $false
+      try { Set-Clipboard -Value $appUrl -ErrorAction Stop; $copied = $true } catch { }
+      if (-not $copied) {
+        # Set-Clipboard can fail on a locked-down machine; clip.exe has shipped
+        # with Windows since XP and takes anything on stdin.
+        try { $appUrl | clip.exe; $copied = $true } catch { }
+      }
+      if ($copied) { Write-Info (Say "browser.copied") }
+    }
   }
 
   Write-Host ""

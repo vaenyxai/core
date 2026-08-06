@@ -27,6 +27,18 @@ if not errorlevel 1 (
   exit /b 0
 )
 
+REM Find node.exe without trusting PATH. A console opened before Vaenyx-Setup
+REM installed Node.js does not have it on PATH yet. Setup writes the absolute
+REM path it detected into userdata\config\node-path; put that folder at the
+REM front of PATH so every node/npm call below uses it. Fall back to the
+REM default install folder; if neither exists, PATH stays as it was and
+REM :check_runtime reports the friendly [Missing] message as before.
+set "NODE_EXE="
+if exist "userdata\config\node-path" set /p NODE_EXE=<"userdata\config\node-path"
+if defined NODE_EXE if not exist "%NODE_EXE%" set "NODE_EXE="
+if not defined NODE_EXE if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
+if defined NODE_EXE for %%N in ("%NODE_EXE%") do set "PATH=%%~dpN;%PATH%"
+
 call :check_runtime
 if errorlevel 1 goto :failed_preflight
 

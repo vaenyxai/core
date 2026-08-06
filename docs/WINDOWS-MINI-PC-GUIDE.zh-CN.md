@@ -134,11 +134,12 @@ Notifications、Backup、Sharing、Legal 都在 Settings 里。
 ## 用手机访问
 
 Vaenyx 只监听 `127.0.0.1`，所以手机默认访问不到 —— 这一点不要去改，也绝不要在
-防火墙或路由器上开放 3000 端口。受支持的做法是走带认证的隧道：自己安装官方
-Tailscale 客户端，然后用 **`Vaenyx-Connect-Tailscale.cmd`**，它会打印出登录以及
-把 3000 端口发布成一个 `https://…ts.net` 地址所需的确切命令。Tailscale 是第三方
-服务、受其条款约束，用你自己的账号登录；地址开出来之后，真正保护实例的是你的
-Vaenyx Owner 密码。
+防火墙或路由器上开放 3000 端口。受支持的做法是走你自己 Tailscale 账号的带认证
+隧道，而 Vaenyx 里的 **设置 → 手机访问** 会用按钮把整套事做完：替你安装官方
+客户端、打开登录页、开启通道，最后给手机一个二维码。更喜欢控制台的话，
+**`Vaenyx-Connect-Tailscale.cmd`** 可以手动跑同样的命令，用的是装在 Program
+Files 下的客户端。Tailscale 是第三方服务、受其条款约束，用你自己的账号登录；
+地址开出来之后，真正保护实例的是你的 Vaenyx Owner 密码。
 
 ## 出问题时
 

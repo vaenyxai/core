@@ -9,14 +9,23 @@ on your own hardware.
 > Status: pre-1.0, under active development. Interfaces and data formats may
 > still change between versions.
 
-## Install from the release zip (recommended)
+## Install (Windows)
 
-1. Download `vaenyx-setup.zip` from the
-   [latest release](https://github.com/vaenyxai/core/releases/latest).
-2. Unzip it anywhere and double-click **`Vaenyx-Setup.cmd`**. It walks you
-   through setup and starts Vaenyx; afterwards the app keeps itself up to date
-   from inside Settings.
-3. Open `http://localhost:3000` in your browser.
+**The installer (recommended).** Download `vaenyx-setup.exe` from the
+[latest release](https://github.com/vaenyxai/core/releases/latest) and run it.
+If Windows shows a blue "Windows protected your PC" box, click **More info**,
+then **Run anyway** — the download is new and not yet signed; nothing is
+wrong. The wizard asks for a language and an install folder (default
+`C:\Vaenyx`), sets everything up, starts Vaenyx, and leaves a **Vaenyx** icon
+on the desktop. Uninstall from Windows Apps & features; it asks whether to
+keep your data, and keeping it is the default.
+
+**The zip (no installer).** Download `vaenyx-setup.zip` instead, unzip it
+anywhere sensible (not a cloud-synced folder), read `Read-Me-First.txt`, and
+double-click **`Vaenyx-Setup.cmd`** — the same setup, without a wizard.
+
+Either way Vaenyx ends up at `http://localhost:3000` in your browser, and the
+app keeps itself up to date from inside Settings.
 
 Cloning this repository with git also works (see below) and is the right path
 for development — but note that a git checkout deliberately does **not**

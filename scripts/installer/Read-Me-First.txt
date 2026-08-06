@@ -1,0 +1,53 @@
+=====================================================
+  VAENYX - READ ME FIRST  /  请先读我
+=====================================================
+
+ENGLISH
+-------
+
+1. If Windows shows a blue box saying "Windows protected your PC":
+   click "More info", then "Run anyway".
+   The box appears because this download is new and not yet signed.
+   It does not mean something is wrong with your computer.
+
+2. Double-click Vaenyx-Setup.cmd (next to this file).
+   It checks the computer, installs Node.js if it is missing, builds
+   Vaenyx, and opens it in your browser when it is ready.
+
+3. Keep this folder somewhere simple, like C:\ - NOT inside OneDrive,
+   Dropbox or Google Drive. Vaenyx keeps a live database in here, and
+   cloud sync would corrupt it. Setup refuses cloud-synced locations.
+
+4. Your data (chats, settings, backups, sign-ins) will live in the
+   Vaenyx\userdata folder on this computer. Vaenyx itself uploads
+   nothing; what you send to a connected cloud model goes to that
+   provider.
+
+Prefer a normal installer? Download vaenyx-setup.exe from the same
+release page instead - it does all of the above as an install wizard
+and puts a Vaenyx icon on your desktop.
+
+中文
+----
+
+1. 如果 Windows 弹出蓝色提示「Windows 已保护你的电脑」:
+   点「更多信息」,再点「仍要运行」。
+   出现这个提示只是因为下载的文件较新、尚未签名,
+   并不代表你的电脑有问题。
+
+2. 双击本文件旁边的 Vaenyx-Setup.cmd。
+   它会检查电脑、按需安装 Node.js、构建 Vaenyx,
+   完成后在浏览器中打开。
+
+3. 请把这个文件夹放在简单的位置,比如 C:\ ——
+   不要放进 OneDrive、Dropbox 或 Google Drive。
+   Vaenyx 会在这里存放一个正在使用的数据库,云同步会把它弄坏。
+   安装程序会拒绝云同步的位置。
+
+4. 你的数据(聊天、设置、备份、登录信息)都保存在这台电脑的
+   Vaenyx\userdata 文件夹里。Vaenyx 本身不会上传任何内容;
+   你发给所连接云端模型的内容会到达该服务商。
+
+想用普通安装程序?可以改从同一发布页下载 vaenyx-setup.exe,
+它以安装向导的方式完成上面的全部步骤,并在桌面放一个
+Vaenyx 图标。

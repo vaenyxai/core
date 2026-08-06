@@ -1089,9 +1089,11 @@ export async function createAskVaenyxMessage(
       } else {
         const file = readDocument(options.dataDirectory, options.documentId);
         if (file) {
-          // Native document blocks are a PDF thing; a text file goes as words
-          // on EVERY backend, including the native ones — there is nothing in
-          // it that the picture path would preserve.
+          // Native document blocks are a PDF thing; a text or Office file
+          // (docx/xlsx/pptx) goes as locally extracted words on EVERY
+          // backend, including the native ones — the words are all this
+          // machine promised to read out of them, and the M1 cost sentence
+          // only describes the picture path.
           if (
             DOCUMENT_NATIVE_PROVIDER_IDS.includes(provider.id) &&
             isPdfDocument(file)

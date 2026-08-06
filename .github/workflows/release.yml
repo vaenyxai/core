@@ -1,18 +1,23 @@
 name: Release
 
-# Builds the download the website links to, and attaches it to a GitHub
+# Builds the downloads the website links to, and attaches them to a GitHub
 # Release. Runs only when a version tag is pushed (or by hand), so it costs
-# nothing day to day.
+# nothing day to day. Tags are pushed by scripts/Vaenyx-Release.ps1, which
+# stamps the version and runs the checks locally first.
 #
-# The website's Download button points at
+# The website's Download buttons point at
+#   https://github.com/vaenyxai/core/releases/latest/download/vaenyx-setup.exe
 #   https://github.com/vaenyxai/core/releases/latest/download/vaenyx-setup.zip
 # which GitHub always resolves to the newest release. Publishing a release is
 # therefore the only step needed to ship an update -- nothing to re-upload,
-# nothing on the site to edit, and no way for the two to drift apart.
+# nothing on the site to edit, and no way for the two to drift apart. The
+# asset NAMES are load-bearing: the site expects exactly these.
 #
 # Windows runner on purpose: the packaged .cmd launchers must carry CRLF line
-# endings, and the packaging script is the same one used locally
-# (scripts/Vaenyx-Make-Release-Zip.ps1), so what is tested is what ships.
+# endings, the installer is compiled with Inno Setup (Windows-only), and the
+# packaging scripts are the same ones used locally
+# (scripts/Vaenyx-Make-Release-Zip.ps1, scripts/installer/
+# Vaenyx-Build-Installer.ps1), so what is tested is what ships.
 on:
   push:
     tags:
@@ -24,12 +29,15 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
+  # Deliberately NOT cancel-in-progress: cancelling a release halfway can
+  # leave a published Release missing its assets. One release at a time,
+  # each runs to completion.
   cancel-in-progress: false
 
 jobs:
   package:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -49,29 +57,67 @@ jobs:
       - name: Run checks
         run: npm run check
 
-      - name: Build the download
+      - name: Build the zip download
         shell: pwsh
         run: ./scripts/Vaenyx-Make-Release-Zip.ps1
 
+      # Inno Setup is free; Chocolatey is preinstalled on the runner. The
+      # Simplified Chinese translation is vendored in scripts/installer, so
+      # the stock install is enough.
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build the installer exe
+        shell: pwsh
+        run: ./scripts/installer/Vaenyx-Build-Installer.ps1
+
       # Prove the artefact is installable before anyone can download it:
-      # extract it somewhere clean and run the real setup end to end, with the
-      # elevated step skipped (a CI runner has no business registering a
-      # boot task) on a port that cannot collide.
+      # extract the zip somewhere clean and run the real setup end to end,
+      # with the elevated step skipped (a CI runner has no business
+      # registering a boot task) on a port that cannot collide. This is the
+      # direct-start path -- the same path a first install takes on a real
+      # machine. Publishing is blocked until this passes.
       - name: Verify the download installs
         shell: pwsh
         run: |
           $dest = Join-Path $env:RUNNER_TEMP "vaenyx-release-check"
           Expand-Archive -Path "release/vaenyx-setup.zip" -DestinationPath $dest -Force
+
+          # The zip's top level is a contract the install guides describe:
+          # exactly the setup launcher, the read-me, and the app folder.
+          $top = @(Get-ChildItem $dest | Sort-Object Name | ForEach-Object { $_.Name })
+          $expected = @("Read-Me-First.txt", "Vaenyx", "Vaenyx-Setup.cmd")
+          if (($top -join "|") -ne ($expected -join "|")) {
+            throw "Unexpected zip top level: $($top -join ', ')"
+          }
+
           $app = Join-Path $dest "Vaenyx"
           & "$app/scripts/Vaenyx-Setup.ps1" -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "setup self-test failed" }
-          & "$app/scripts/Vaenyx-Setup.ps1" -SkipAutostart -NoBrowser -Port 3111
+          & "$app/scripts/Vaenyx-Setup.ps1" -SkipAutostart -NoBrowser -Port 3210
           if ($LASTEXITCODE -ne 0) { throw "setup failed on the packaged download" }
-          $status = Invoke-RestMethod "http://127.0.0.1:3111/v1/system/status" -TimeoutSec 20
+          $response = Invoke-WebRequest "http://127.0.0.1:3210/v1/system/status" -UseBasicParsing -TimeoutSec 20
+          if ($response.StatusCode -ne 200) { throw "status endpoint answered $($response.StatusCode), not 200" }
+          $status = $response.Content | ConvertFrom-Json
           if ($status.status -ne "ready") { throw "the installed instance never became ready" }
-          $bootstrap = Invoke-RestMethod "http://127.0.0.1:3111/v1/bootstrap/status" -TimeoutSec 20
+          $bootstrap = Invoke-RestMethod "http://127.0.0.1:3210/v1/bootstrap/status" -TimeoutSec 20
           if (-not $bootstrap.setupRequired) { throw "a fresh install should ask for owner setup" }
           Write-Host "Packaged download installs and boots clean."
+
+      # The exe cannot be fully installed here without registering boot tasks
+      # on a hosted runner, but its payload is byte-for-byte the same staged
+      # tree the zip carries (both come from Vaenyx-Stage-Payload.ps1) and
+      # the compile itself hard-fails on a broken script. Sanity-check that
+      # it exists and its published hash matches.
+      - name: Verify the installer exe
+        shell: pwsh
+        run: |
+          $exe = Get-Item "release/vaenyx-setup.exe"
+          if ($exe.Length -lt 1MB) { throw "vaenyx-setup.exe is suspiciously small ($($exe.Length) bytes)" }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+          $published = (Get-Content "release/vaenyx-setup.exe.sha256" -Raw).Split(" ")[0].Trim()
+          if ($hash -ne $published) { throw "vaenyx-setup.exe.sha256 does not match the exe" }
+          Write-Host "Installer exe present, $([math]::Round($exe.Length / 1MB, 2)) MB, hash verified."
 
       # Published with the GitHub CLI, which is preinstalled on the runner.
       # No third-party action gets write access to this repository's releases
@@ -84,32 +130,43 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $notes = @"
-          Download **vaenyx-setup.zip**, unzip it, and double-click
-          **Vaenyx-Setup.cmd** inside the ``Vaenyx`` folder.
+          Two downloads, same result -- pick one:
 
-          Setup checks the computer, installs Node.js if it is missing,
-          fetches and builds Vaenyx, offers to start it with Windows, then
-          opens the first-run wizard. Your notes, chats and files stay on
-          that computer; what you send to a connected cloud model goes to
-          that provider.
+          **vaenyx-setup.exe** (recommended): a normal Windows installer.
+          If Windows shows a blue box saying "Windows protected your PC",
+          click **More info**, then **Run anyway** -- the download is new
+          and not yet signed; nothing is wrong. The wizard asks where to
+          install, sets everything up, and leaves a Vaenyx icon on the
+          desktop.
 
-          Optional check: the SHA-256 of the download is in
-          ``vaenyx-setup.zip.sha256``.
+          **vaenyx-setup.zip**: the same install without a wizard. Unzip
+          it, read ``Read-Me-First.txt``, then double-click
+          **Vaenyx-Setup.cmd**.
+
+          Your notes, chats and files stay on that computer; what you send
+          to a connected cloud model goes to that provider.
+
+          Optional check: the SHA-256 of each download is in the matching
+          ``.sha256`` file.
           "@
           $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
           Set-Content -Path $notesFile -Value $notes -Encoding utf8
           gh release create "$env:GITHUB_REF_NAME" `
+            release/vaenyx-setup.exe `
+            release/vaenyx-setup.exe.sha256 `
             release/vaenyx-setup.zip `
             release/vaenyx-setup.zip.sha256 `
             --title "Vaenyx $env:GITHUB_REF_NAME" `
             --notes-file "$notesFile" `
             --generate-notes
 
-      - name: Keep the package as a build artefact
+      - name: Keep the packages as build artefacts
         uses: actions/upload-artifact@v4
         with:
           name: vaenyx-setup
           path: |
+            release/vaenyx-setup.exe
+            release/vaenyx-setup.exe.sha256
             release/vaenyx-setup.zip
             release/vaenyx-setup.zip.sha256
           retention-days: 14

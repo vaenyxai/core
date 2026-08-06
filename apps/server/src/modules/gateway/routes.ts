@@ -50,6 +50,9 @@ import {
   type ExitModeRequest,
   PushPrefsSchema,
   UpdateStatusSchema,
+  PhoneAccessStatusSchema,
+  PhoneLoginResponseSchema,
+  PhoneTunnelResponseSchema,
   DeviceModeSchema,
   SetDeviceModeRequestSchema,
   type SetDeviceModeRequest,
@@ -514,6 +517,12 @@ import {
   startCodexLogin,
 } from "../harness/codex.js";
 import {
+  enablePhoneTunnel,
+  getPhoneAccessStatus,
+  installTailscale,
+  startTailscaleLogin,
+} from "../core/phone-access.js";
+import {
   authenticateOwner,
   clearSession,
   createOwner,
@@ -770,6 +779,9 @@ export async function registerGatewayRoutes(
     "/v1/system/backup",
     "/v1/system/restart",
     "/v1/system/shutdown",
+    // Publishing the instance to the internet is a system action; a locked
+    // mode must not be able to start installs, sign-ins or tunnels.
+    "/v1/phone/",
     "/v1/auth/change-password",
     "/v1/auth/logout-all",
   ];
@@ -1255,6 +1267,109 @@ export async function registerGatewayRoutes(
         version: context.config.version,
         repositoryRoot: context.config.repositoryRoot,
       });
+    },
+  );
+
+  // ── Phone access (onboarding Part 2 section 5) ─────────────────────────
+  // Owner-session-only, like every system action: these run the tailscale
+  // CLI on the machine, so an app key or an unauthenticated caller must
+  // never reach them. Status is a read (not audited, like other reads);
+  // install, sign-in and tunnel changes are audited system actions.
+  app.get(
+    "/v1/phone/status",
+    {
+      schema: {
+        response: { 200: PhoneAccessStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return getPhoneAccessStatus();
+    },
+  );
+
+  // `lang` rides along on the three actions because their `detail` sentences
+  // are read by the Owner in the panel, and a CLI result gives the server no
+  // other clue which language to say so in.
+  app.post<{ Querystring: { lang?: string } }>(
+    "/v1/phone/install",
+    {
+      schema: {
+        response: { 200: PhoneAccessStatusSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "phone.install",
+        decision: "allowed",
+        reason:
+          "Owner asked Vaenyx to install the Tailscale client with winget.",
+        resourceType: "system",
+      });
+      installTailscale(request.query.lang === "zh" ? "zh" : "en");
+      return getPhoneAccessStatus();
+    },
+  );
+
+  app.post<{ Querystring: { lang?: string } }>(
+    "/v1/phone/login",
+    {
+      schema: {
+        response: { 200: PhoneLoginResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "phone.login",
+        decision: "allowed",
+        reason:
+          "Owner started the Tailscale browser sign-in from phone setup.",
+        resourceType: "system",
+      });
+      return startTailscaleLogin(request.query.lang === "zh" ? "zh" : "en");
+    },
+  );
+
+  app.post<{ Querystring: { lang?: string } }>(
+    "/v1/phone/tunnel",
+    {
+      schema: {
+        response: { 200: PhoneTunnelResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "phone.tunnel",
+        decision: "allowed",
+        reason:
+          "Owner asked Vaenyx to publish local port 3000 through Tailscale Funnel.",
+        resourceType: "system",
+      });
+      return enablePhoneTunnel(request.query.lang === "zh" ? "zh" : "en");
     },
   );
 
@@ -6959,10 +7074,11 @@ export async function registerGatewayRoutes(
     },
   );
 
-  // Document Reading: store a PDF and report the facts the M1 cost gate needs
-  // — above all its REAL page count. Every refusal says what is actually
-  // wrong (too big, too many pages, password-protected, unreadable), because
-  // "something went wrong" is not something an Owner can act on.
+  // Document Reading: store a document (PDF, plain text, or a Word/Excel/
+  // PowerPoint file) and report the facts the M1 cost gate needs — above all
+  // a PDF's REAL page count. Every refusal says what is actually wrong (too
+  // big, too many pages, password-protected, old Office format, unreadable),
+  // because "something went wrong" is not something an Owner can act on.
   app.post<{ Querystring: { lang?: string } }>(
     "/v1/documents/upload",
     {
@@ -7008,25 +7124,54 @@ export async function registerGatewayRoutes(
         pages = (await inspectDocument(file)).pages;
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
+        // The refusals are read by the Owner in the attach flow, so they
+        // follow the app's bilingual rule using the same `lang` the
+        // capability refusal above already trusts.
+        const zh = request.query.lang === "zh";
         if (code === "DOCUMENT_TOO_LARGE") {
+          const limitMb = Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024));
           return reply.code(413).send({
-            error: `That file is larger than ${Math.round(MAX_DOCUMENT_BYTES / (1024 * 1024))} MB, which is the most a model will take in one request. Split it and send the part you need.`,
+            error: zh
+              ? `这个文件超过 ${limitMb} MB,已经超出模型一次能接收的上限。把它拆开,发你需要的那部分。`
+              : `That file is larger than ${limitMb} MB, which is the most a model will take in one request. Split it and send the part you need.`,
           });
         }
         if (code === "DOCUMENT_TOO_MANY_PAGES") {
           return reply.code(400).send({
-            error: `That document has more than ${MAX_DOCUMENT_PAGES} pages, which is more than a model will read in one request. Split it and send the pages you need.`,
+            error: zh
+              ? `这份文档超过 ${MAX_DOCUMENT_PAGES} 页,已经超出模型一次能读的页数。把它拆开,发你需要的那几页。`
+              : `That document has more than ${MAX_DOCUMENT_PAGES} pages, which is more than a model will read in one request. Split it and send the pages you need.`,
           });
         }
         if (code === "DOCUMENT_PASSWORD") {
+          // "File", not "PDF": an Office archive with encrypted entries lands
+          // here too, and the fix is the same sentence.
           return reply.code(400).send({
-            error:
-              "That PDF is password-protected, so it cannot be opened. Save an unlocked copy and send that.",
+            error: zh
+              ? "这个文件有密码保护,打不开。另存一份没有密码的,再发那份。"
+              : "That file is password-protected, so it cannot be opened. Save an unlocked copy and send that.",
+          });
+        }
+        if (code === "DOCUMENT_UNPACKS_TOO_LARGE") {
+          // An Office file that inflates past the safety cap — corrupt or a
+          // zip bomb; either way the honest advice is a smaller file.
+          return reply.code(400).send({
+            error: zh
+              ? "这个文件解开后太大,这台电脑一次装不下。把它拆开,发你需要的那部分。"
+              : "That file unpacks to more than this machine will safely hold in one go. Split it and send the part you need.",
+          });
+        }
+        if (code === "DOCUMENT_LEGACY_OFFICE") {
+          return reply.code(400).send({
+            error: zh
+              ? "这是旧格式的 Office 文件(.doc、.xls、.ppt),Vaenyx 打不开。把它另存为 PDF 或新格式(.docx、.xlsx、.pptx),再发那份。"
+              : "That is an old-format Office file (.doc, .xls, .ppt), which Vaenyx cannot open. Save it as PDF or as the modern format (.docx, .xlsx, .pptx) and send that.",
           });
         }
         return reply.code(400).send({
-          error:
-            "That file could not be read. Vaenyx takes PDFs and plain-text files (.txt, .md); a Word document is neither yet — save it as PDF and send that.",
+          error: zh
+            ? "这个文件读不了。Vaenyx 能收 PDF、纯文本文件(.txt、.md)和 Word、Excel、PowerPoint 文件(.docx、.xlsx、.pptx)。如果内容主要是图像 —— 扫描件、图纸 —— 把它另存为 PDF,会按图片来读。"
+            : "That file could not be read. Vaenyx takes PDFs, plain-text files (.txt, .md) and Word, Excel or PowerPoint files (.docx, .xlsx, .pptx). If it is mostly visual — a scan, a drawing — save it as PDF, which is read as pictures.",
         });
       }
 
