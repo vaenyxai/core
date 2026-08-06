@@ -326,6 +326,24 @@ try {
 }
 try { Start-Transcript -Path $setupLog -Append | Out-Null } catch { }
 
+# The steps that need admin rights (winget, msiexec, schtasks) only ask for
+# elevation when this session does not already have it. When it does — the GUI
+# installer always runs setup elevated — they run directly: -Verb RunAs goes
+# through ShellExecute, which needs the consent UI, and in an unattended
+# session (CI, a service, a scheduled run) that request can hang forever with
+# nobody there to click it.
+$Script:IsElevated = ([Security.Principal.WindowsPrincipal] `
+  [Security.Principal.WindowsIdentity]::GetCurrent()
+  ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+function Start-Elevated {
+  param([string]$FilePath, [string]$Arguments)
+  if ($Script:IsElevated) {
+    return Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru
+  }
+  return Start-Process -FilePath $FilePath -ArgumentList $Arguments -Verb RunAs -Wait -PassThru
+}
+
 $failed = $false
 try {
   # Files that arrive inside a downloaded zip are marked "from the internet"
@@ -388,7 +406,7 @@ try {
       Write-Info (Say "node.winget")
       try {
         $wingetArguments = "install --id OpenJS.NodeJS.LTS -e --silent --accept-source-agreements --accept-package-agreements"
-        $wingetProcess = Start-Process -FilePath "winget.exe" -ArgumentList $wingetArguments -Verb RunAs -Wait -PassThru
+        $wingetProcess = Start-Elevated -FilePath "winget.exe" -Arguments $wingetArguments
         if ($wingetProcess.ExitCode -eq 0) {
           $installed = $true
           Write-Good (Say "node.done")
@@ -420,7 +438,7 @@ try {
       }
       Write-Info (Say "node.install")
       try {
-        $msiProcess = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$msiPath`" /qn /norestart" -Verb RunAs -Wait -PassThru
+        $msiProcess = Start-Elevated -FilePath "msiexec.exe" -Arguments "/i `"$msiPath`" /qn /norestart"
         if ($msiProcess.ExitCode -ne 0) {
           Write-Bad "The Node.js installer stopped with code $($msiProcess.ExitCode)."
           throw "node install failed"
@@ -584,7 +602,7 @@ try {
       $schtasksArguments = '/c schtasks /Create /TN "' + $TaskName +
         '" /TR "cmd /c \"' + $runner + '\"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F'
       try {
-        $taskProcess = Start-Process -FilePath "cmd.exe" -ArgumentList $schtasksArguments -Verb RunAs -Wait -PassThru
+        $taskProcess = Start-Elevated -FilePath "cmd.exe" -Arguments $schtasksArguments
         if ($taskProcess.ExitCode -eq 0) {
           $autostartRegistered = $true
           Write-Good (Say "auto.ok")

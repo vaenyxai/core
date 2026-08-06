@@ -130,10 +130,29 @@ jobs:
         shell: pwsh
         run: |
           $dir = "C:\VaenyxExeCheck"
+          $innoLog = Join-Path $env:RUNNER_TEMP "vaenyx-install-inno.log"
+          # The install's console output goes to ITS window, not this step's
+          # log — but Setup.ps1 keeps a full transcript in userdata\logs\
+          # setup.log and /LOG makes Inno write its own. On any failure both
+          # tails are printed, so a red run says WHERE instead of just "red".
+          function Show-InstallLogs {
+            Write-Host "=== Inno log tail ==="
+            if (Test-Path $innoLog) { Get-Content $innoLog -Tail 40 | Write-Host }
+            Write-Host "=== setup.log tail ==="
+            $setupLog = "$dir\userdata\logs\setup.log"
+            if (Test-Path $setupLog) { Get-Content $setupLog -Tail 60 | Write-Host }
+            Write-Host "=== processes still around ==="
+            Get-Process | Where-Object { $_.ProcessName -match '^(vaenyx|node|npm|powershell|pwsh|cmd|schtasks|winget|msiexec)' } |
+              Format-Table Id, ProcessName, StartTime -AutoSize | Out-String | Write-Host
+          }
           $p = Start-Process -FilePath "release\vaenyx-setup.exe" `
-            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dir" `
-            -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "silent install exited $($p.ExitCode)" }
+            -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$dir","/LOG=$innoLog" `
+            -PassThru
+          if (-not $p.WaitForExit(20 * 60 * 1000)) {
+            Show-InstallLogs
+            throw "silent install did not finish within 20 minutes"
+          }
+          if ($p.ExitCode -ne 0) { Show-InstallLogs; throw "silent install exited $($p.ExitCode)" }
 
           # A suppressed setup failure still exits 0, so the running server is
           # the real proof the install worked.
@@ -145,7 +164,7 @@ jobs:
               if ($status.status -eq "ready") { $ready = $true; break }
             } catch {}
           }
-          if (-not $ready) { throw "the exe-installed instance never became ready on port 3000" }
+          if (-not $ready) { Show-InstallLogs; throw "the exe-installed instance never became ready on port 3000" }
           if (-not (Test-Path "$dir\unins000.exe")) { throw "unins000.exe missing after install" }
           $reg = @(
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{19467537-246D-4970-9F8B-C6C03E2904D7}_is1",
