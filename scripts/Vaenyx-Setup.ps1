@@ -606,7 +606,7 @@ try {
       # because the /TR value's literal \" escapes inside another quoted
       # layer is where quoting goes to die.
       $registerScript = @"
-schtasks /Create /TN "$TaskName" /TR "cmd /c \"$runner\"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F | Out-Null
+schtasks /Create /TN "$TaskName" /TR 'cmd /c \"$runner\"' /SC ONSTART /RU SYSTEM /RL HIGHEST /F | Out-Null
 if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }
 try {
   Set-ScheduledTask -TaskName "$TaskName" -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) | Out-Null
