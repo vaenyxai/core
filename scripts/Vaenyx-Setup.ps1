@@ -579,14 +579,22 @@ try {
   function Invoke-NpmCi {
     $started = Get-Date
     $modules = Join-Path $root "node_modules"
-    # --no-audit / --no-fund: both write to stderr and neither says
-    # anything about whether the install worked.
-    $process = Start-Process -FilePath $npmCmd `
-      -ArgumentList "ci", "--no-audit", "--no-fund" `
-      -WorkingDirectory $root -NoNewWindow -PassThru
-    while (-not $process.HasExited) {
-      Start-Sleep -Seconds 10
-      if ($process.HasExited) { break }
+    # .NET's Process, not Start-Process: the PowerShell cmdlet only reports an
+    # ExitCode when it is given -Wait, and -Wait means no progress line. Asked
+    # for one without the other it returns $null, which reads as failure — it
+    # reported "npm ci failed" twice over an install that had in fact written
+    # all 497 MB (caught before shipping, 2026-08-07). Holding the handle here
+    # gives both: a tick every ten seconds AND the real exit code.
+    #
+    # --no-audit / --no-fund: both write to stderr and neither says anything
+    # about whether the install worked.
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = "cmd.exe"
+    $info.Arguments = "/c """"$npmCmd"" ci --no-audit --no-fund"""
+    $info.WorkingDirectory = $root
+    $info.UseShellExecute = $false
+    $process = [System.Diagnostics.Process]::Start($info)
+    while (-not $process.WaitForExit(10000)) {
       $megabytes = 0
       try {
         if (Test-Path $modules) {
