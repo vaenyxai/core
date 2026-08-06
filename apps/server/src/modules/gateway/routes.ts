@@ -512,6 +512,7 @@ import {
 import {
   codexProfileSignedIn,
   disconnectCodexProfile,
+  ensureCodexInstalled,
   runCodexChatTest,
   runForgeReadOnly,
   startCodexLogin,
@@ -1573,7 +1574,26 @@ export async function registerGatewayRoutes(
         reason: "Owner started the official Codex ChatGPT sign-in flow.",
         resourceType: "system",
       });
-      return startCodexLogin();
+      // Root cause B (Oskar's Surface, 2026-08-06): on a clean machine nothing
+      // had installed the Codex CLI, and this button showed Windows' raw
+      // "'codex' is not recognized" to a non-technical user. The click now
+      // installs it on demand (the people who never use ChatGPT never wait for
+      // it), and NO raw shell line ever reaches the browser from here — the
+      // detail field carries codes the UI turns into sentences, and the raw
+      // line goes to the server log where it belongs.
+      const ensured = await ensureCodexInstalled();
+      if (ensured === "install-failed") {
+        return { url: null, detail: "CODEX_INSTALL_FAILED" };
+      }
+      const result = await startCodexLogin();
+      if (result.detail) {
+        request.log.warn(
+          { codexDetail: result.detail },
+          "codex login could not start",
+        );
+        return { url: result.url, detail: "CODEX_LOGIN_FAILED" };
+      }
+      return result;
     },
   );
 

@@ -9,7 +9,7 @@ import {
   statSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
@@ -306,6 +306,60 @@ export function getCodexStatus(): CodexStatus {
 // OAuth callback), so it is left running and unref'd — this call only waits
 // briefly for the URL. Vaenyx never sees the password or the tokens; the
 // official CLI stores its own credentials, exactly as a manual login does.
+// THE CODEX CLI IS NOT INSTALLED BY SETUP, on purpose: only owners who use
+// the ChatGPT subscription need it, and everyone else should not wait through
+// an npm install for it. So the first "Sign In With ChatGPT" click installs it
+// — and until 2026-08-06 that path was broken twice over on a clean machine:
+// nothing installed it, and findCodexCommand's bare-"codex" fallback meant the
+// wizard printed Windows' raw "'codex' is not recognized as an internal or
+// external command" to a non-technical user (root cause B, Oskar's Surface).
+//
+// npm ships beside node.exe, so the machine that runs this server can always
+// find it without PATH — the same lesson the watchdog fix learned.
+function npmExecutable(): string {
+  const beside = resolve(
+    dirname(process.execPath),
+    process.platform === "win32" ? "npm.cmd" : "npm",
+  );
+  return existsSync(beside) ? beside : "npm";
+}
+
+export async function ensureCodexInstalled(): Promise<
+  "ready" | "installed" | "install-failed"
+> {
+  if (getCodexStatus().installed) return "ready";
+  const npm = npmExecutable();
+  const exitCode = await new Promise<number | null>((resolveExit) => {
+    const child = spawn(npm, ["install", "-g", "@openai/codex"], {
+      env: codexEnvironment(),
+      shell: process.platform === "win32",
+      stdio: ["ignore", "ignore", "ignore"],
+      windowsHide: true,
+    });
+    const timer = setTimeout(() => {
+      try {
+        child.kill();
+      } catch {
+        // Already gone.
+      }
+      resolveExit(null);
+    }, 5 * 60_000);
+    timer.unref?.();
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      resolveExit(code);
+    });
+    child.once("error", () => {
+      clearTimeout(timer);
+      resolveExit(null);
+    });
+  });
+  if (exitCode !== 0) return "install-failed";
+  // The global-script probe caches nothing, so a fresh install is found at
+  // once; the status check proves the binary actually answers.
+  return getCodexStatus().installed ? "installed" : "install-failed";
+}
+
 // One codex login at a time, across ALL profiles — not a style choice: the
 // official flow hosts a local OAuth callback on a fixed port, so two children
 // would fight over the socket and both would lose confusingly. Claude logins

@@ -90,7 +90,8 @@ SQLite. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Code: [MIT](LICENSE). Third-party dependencies:
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) (regenerated every release).
-The "Vaenyx" name and brand assets are **not** MIT-licensed — see the
+The "Vaenyx" name and brand assets are **not** MIT-licensed — see
+[TRADEMARKS.md](TRADEMARKS.md) and the
 [Trademark Policy](docs/legal/trademark-policy.md); forks must rebrand.
 Community-published content is CC BY 4.0 under the Contributor Agreement.
 

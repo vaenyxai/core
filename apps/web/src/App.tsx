@@ -9773,6 +9773,21 @@ function localBackendNoticeKey(
 // which subscription is signed in, the address to give an app, who counts as
 // him, the limits, and what it has been asked to do lately — without ever
 // showing what was in any of it.
+// The ChatGPT sign-in path speaks in sentences, never in shell (root cause B:
+// a clean machine used to print Windows' raw "'codex' is not recognized" into
+// the first-run wizard). The server sends codes; this is where they become
+// words a household can act on.
+function codexSignInError(code: string, zh: boolean): string {
+  if (code === "CODEX_INSTALL_FAILED") {
+    return zh
+      ? "ChatGPT 登录组件没装上。检查网络后再点一次这个按钮,它会重新安装。"
+      : "The ChatGPT sign-in component could not be installed. Check the internet connection and press the button again — it retries the install.";
+  }
+  return zh
+    ? "ChatGPT 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"
+    : "The ChatGPT sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.";
+}
+
 function SubscriptionDoorPanel() {
   const { lang } = useI18n();
   const [panel, setPanel] = useState<RelayPanelData | null>(null);
@@ -12015,7 +12030,7 @@ function ModelsPanel({
     try {
       const { url, detail } = await startCodexLogin();
       if (detail) {
-        setError(detail);
+        setError(codexSignInError(detail, false));
         return;
       }
       if (url) {
@@ -12489,7 +12504,9 @@ function ModelsPanel({
                       type="button"
                     >
                       {codexWaiting
-                        ? "Waiting For Sign-In..."
+                        ? codexLoginUrl
+                          ? "Waiting For Sign-In..."
+                          : "Preparing The ChatGPT Sign-In (About A Minute)..."
                         : "Sign In With ChatGPT"}
                     </button>
                   </div>
@@ -21164,7 +21181,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       const { url, detail } = await startCodexLogin();
-      if (detail) setError(detail);
+      if (detail) setError(codexSignInError(detail, zh));
       if (!url) {
         setBusy(false);
         return;
@@ -21356,9 +21373,13 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
                 ? zh
                   ? "等待登录完成…"
                   : "Waiting For Sign-In..."
-                : zh
-                  ? "用 ChatGPT 登录"
-                  : "Sign In With ChatGPT"}
+                : busy
+                  ? zh
+                    ? "正在准备 ChatGPT 登录(约一分钟)…"
+                    : "Preparing The ChatGPT Sign-In (About A Minute)..."
+                  : zh
+                    ? "用 ChatGPT 登录"
+                    : "Sign In With ChatGPT"}
             </button>
           )}
           {codexUrl ? (

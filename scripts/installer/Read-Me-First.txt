@@ -5,10 +5,18 @@
 ENGLISH
 -------
 
-1. If Windows shows a blue box saying "Windows protected your PC":
-   click "More info", then "Run anyway".
-   The box appears because this download is new and not yet signed.
-   It does not mean something is wrong with your computer.
+1. Windows may stop you up to THREE times on the way in. All three
+   happen because this download is new and not yet signed - none of
+   them means something is wrong with your computer:
+   - Your browser may say the file "isn't commonly downloaded":
+     choose Keep (in Chrome/Edge: the three dots on the download).
+   - A blue box "Windows protected your PC": click "More info",
+     then "Run anyway".
+   - The permission prompt may show "Publisher: Unknown": press Yes.
+   Note: on a brand-new PC with Smart App Control ON, Windows can
+   block unsigned programs with no "Run anyway" at all. A signed
+   installer is on its way; until then such a machine needs Smart App
+   Control set to Off in Windows Security > App & browser control.
 
 2. Double-click Vaenyx-Setup.cmd (next to this file).
    It checks the computer, installs Node.js if it is missing, builds
@@ -30,10 +38,17 @@ and puts a Vaenyx icon on your desktop.
 中文
 ----
 
-1. 如果 Windows 弹出蓝色提示「Windows 已保护你的电脑」:
-   点「更多信息」,再点「仍要运行」。
-   出现这个提示只是因为下载的文件较新、尚未签名,
-   并不代表你的电脑有问题。
+1. 一路进来 Windows 可能拦你最多三次。三次都只是因为这个下载
+   较新、尚未签名 —— 都不代表你的电脑有问题:
+   - 浏览器可能提示「不常被下载」:选择「保留」
+     (Chrome/Edge:下载条上的三个点)。
+   - 蓝色提示「Windows 已保护你的电脑」:点「更多信息」,
+     再点「仍要运行」。
+   - 授权弹窗可能显示「发布者:未知」:点「是」。
+   注意:全新电脑若开着「智能应用控制(Smart App Control)」,
+   Windows 会直接拦下未签名程序、没有「仍要运行」按钮。签名版
+   正在申请中;在那之前这类电脑需要到「Windows 安全中心 →
+   应用和浏览器控制」把智能应用控制设为「关」。
 
 2. 双击本文件旁边的 Vaenyx-Setup.cmd。
    它会检查电脑、按需安装 Node.js、构建 Vaenyx,

@@ -4,6 +4,21 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.2 — 2026-08-06
+
+**The first sign-in works on a clean machine.** Pressing "Sign In With
+ChatGPT" on a computer that never had the ChatGPT component now installs it
+by itself — the button says "preparing the sign-in, about a minute" and then
+carries on. The raw Windows error it used to print is gone for good: anything
+that fails now says what happened in plain words, in your language, with the
+same button as the retry.
+
+**Getting past Windows' warnings.** An unsigned new download trips up to
+three Windows gates; the read-me in the zip and the note under the website's
+download button now walk through all three. A free code signature (SignPath
+Foundation, for open source) is being applied for — once it ships, the
+warnings and the walkthroughs both go away.
+
 ## v0.3.1 — 2026-08-06
 
 **A real installer.** One vaenyx-setup.exe: pick a language, pick a folder,
