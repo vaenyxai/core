@@ -220,6 +220,10 @@ Read this inside the app: **Settings → Manual**.
 - **What each row would affect** — a capability row says how many Methods
   declared it ("3 Methods use this"), so you can see who would notice before
   you switch it off.
+- **Two engines can speak, plus the one on this machine** — Gemini (English and
+  Chinese) and Cloudflare Workers AI (**English only** — given Chinese it says
+  so rather than mispronouncing it). The voice installed on this machine speaks
+  both, costs nothing per use and never leaves the computer.
 - **Free models** — the **Free models** button beside the heading shows what was
   found last time; **Ask again** beside it asks your main model again and then
   shows you the new answer. **Careful:** The answer says which model said it and
@@ -527,5 +531,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.5-dev.6** · last updated 2026-08-07.
+Manual for **v0.3.5-dev.7** · last updated 2026-08-07.
 Keep this file up to date whenever a feature changes.

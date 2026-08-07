@@ -11494,8 +11494,8 @@ function CapabilitiesPanel({
         <>
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "跟这一行选的引擎走。本机语音在这台电脑上生成,什么都不出去、也没有每次的费用;Gemini 那种是发出去合成的,声音更自然。本机语音在下面的 Models 里装。"
-              : "Whichever engine this row is set to. The voice on this machine is generated here — nothing leaves and there is no per-use cost; Gemini and the like synthesise it away from here and sound more natural. The voice on this machine is installed below, in Models."}
+              ? "跟这一行选的引擎走。本机语音在这台电脑上生成,什么都不出去、也没有每次的费用,中英文都能念;Gemini 是发出去合成的,声音更自然,中英文都行。⚠️ Cloudflare(Workers AI)那个声音只会英文 —— 遇到中文它会明说,不会瞎念。本机语音在下面的 Models 里装。"
+              : "Whichever engine this row is set to. The voice on this machine is generated here — nothing leaves, there is no per-use cost, and it speaks both English and Chinese; Gemini synthesises away from here, sounds more natural, and also does both. ⚠️ The Cloudflare (Workers AI) voice speaks English only — given Chinese it says so rather than mispronouncing it. The voice on this machine is installed below, in Models."}
           </p>
           {outputEngine === "browser" ? (
             <p className="settings-card-copy">

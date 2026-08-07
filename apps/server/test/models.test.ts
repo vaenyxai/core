@@ -421,13 +421,13 @@ describe("an engine slot survives losing its provider", () => {
   }
 
   it("repairs a speaking slot aimed at a backend that cannot speak", () => {
-    // Exactly the state an Owner was left in: the slot named Workers AI,
-    // which this build has no way to ask for speech, while Gemini - which it
-    // can - was connected all along.
+    // The shape an Owner was left in: a slot naming a connected backend this
+    // build cannot ask for speech. (It was Workers AI at the time; Workers AI
+    // can speak now, so the example moved to Groq, which cannot.)
     const dir = secretsWith({
       gemini: { apiKey: "AIza-real" },
-      workersai: { apiKey: "cf-token" },
-      voiceOutput: { engine: "workersai" },
+      groq: { apiKey: "gsk-real" },
+      voiceOutput: { engine: "groq" },
     });
     connectModelProvider({ secretsDirectory: dir }, "mistral", {
       apiKey: "any-connect-runs-the-repair",

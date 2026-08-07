@@ -6950,6 +6950,14 @@ export async function registerGatewayRoutes(
               : "Voice output has no speech engine — pick one on the Speaking row, or install the voice on this machine under Models.",
           });
         }
+        // Cloudflare's voice is an English one. Saying so beats reading a
+        // Chinese reply as if it were English, which is what it would do.
+        if (message === "VOICE_TTS_ENGLISH_ONLY") {
+          return reply.code(400).send({
+            error:
+              "The Cloudflare voice speaks English only. For Chinese, set Speaking to Gemini, or install the voice on this machine under Models — it speaks both.",
+          });
+        }
         // Say what actually happened — a Gemini free-tier limit reads very
         // differently from "not connected" (Oskar hit exactly this).
         if (message.startsWith("VOICE_TTS_FAILED:")) {

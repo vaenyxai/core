@@ -84,12 +84,28 @@ export function setVoiceInput(
 const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const DEFAULT_GEMINI_VOICE = "Kore";
 
-export type VoiceOutputEngine = "none" | "browser" | "gemini" | "local";
+export type VoiceOutputEngine =
+  | "none"
+  | "browser"
+  | "gemini"
+  | "workersai"
+  | "local";
 
 // The PROVIDER connections speech can be asked of. "browser" and "local"
 // are engines rather than connections, so they are not here; the models
 // layer compares its own list against this one in a test.
-export const TTS_PROVIDER_ENGINES = ["gemini"] as const;
+//
+// Workers AI joined on 2026-08-07, and only after being asked: Deepgram's
+// aura-1 answers with an MP3 for an English line (verified with the Owner's
+// own key), which makes Speaking survive losing Gemini. Two neighbours were
+// checked at the same time and are NOT here, because they do not work:
+//   * @cf/myshell-ai/melotts — fine in English, HTTP 500 on Chinese, twice.
+//   * Groq's Orpheus models  — 400 "requires terms acceptance", which only
+//     the account's owner can do in Groq's console.
+// aura-1 is an ENGLISH voice. Chinese is refused by name below rather than
+// mispronounced, and the row says so.
+export const TTS_PROVIDER_ENGINES = ["gemini", "workersai"] as const;
+const WORKERS_TTS_MODEL = "@cf/deepgram/aura-1";
 
 function resolveVoiceOutput(
   secretsDirectory: string,
@@ -109,6 +125,13 @@ function resolveVoiceOutput(
       engine: "gemini",
       apiKey: connections.gemini.apiKey,
       voice: output.voice ?? DEFAULT_GEMINI_VOICE,
+    };
+  }
+  if (output?.engine === "workersai" && connections.workersai?.apiKey) {
+    return {
+      engine: "workersai",
+      apiKey: connections.workersai.apiKey,
+      voice: "aura",
     };
   }
   if (output?.engine === "browser") {
@@ -251,6 +274,14 @@ export async function synthesizeSpeech(
       enVoice: output?.enVoice,
     });
   }
+  if (resolved.engine === "workersai" && resolved.apiKey) {
+    return await synthesizeWorkersSpeech(
+      secretsDirectory,
+      dataDirectory,
+      text,
+      resolved.apiKey,
+    );
+  }
   if (resolved.engine !== "gemini" || !resolved.apiKey) {
     throw new Error("VOICE_OUTPUT_NOT_CONNECTED");
   }
@@ -300,10 +331,63 @@ export async function synthesizeSpeech(
   return audioId;
 }
 
+// Cloudflare's Deepgram voice. Answers with an MP3 straight away — no base64,
+// no PCM header to build — and the account id comes from the same base URL
+// the chat connection already stores.
+//
+// English only, and that is enforced rather than hoped: Aura reads Chinese
+// characters as though they were English, which sounds like nonsense and
+// would look like a Vaenyx fault. Chinese says so and names the two engines
+// that can do it.
+async function synthesizeWorkersSpeech(
+  secretsDirectory: string,
+  dataDirectory: string,
+  text: string,
+  apiKey: string,
+): Promise<string> {
+  if (/[一-鿿]/.test(text)) {
+    throw new Error("VOICE_TTS_ENGLISH_ONLY");
+  }
+  const baseUrl = readProviderConnections(secretsDirectory).workersai?.baseUrl;
+  const account = baseUrl?.match(/accounts\/([^/]+)/)?.[1];
+  if (!account) throw new Error("VOICE_OUTPUT_NOT_CONNECTED");
+
+  const hash = createHash("sha256")
+    .update(`workersai:${text}`)
+    .digest("hex")
+    .slice(0, 16);
+  const audioId = `tts-${hash}.mp3`;
+  const directory = resolve(dataDirectory, "voice");
+  const path = resolve(directory, audioId);
+  if (existsSync(path)) return audioId;
+
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${WORKERS_TTS_MODEL}`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ text }),
+      signal: AbortSignal.timeout(60_000),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`VOICE_TTS_FAILED:${response.status}`);
+  }
+  const audio = Buffer.from(await response.arrayBuffer());
+  if (audio.length === 0) throw new Error("VOICE_TTS_EMPTY");
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(path, audio);
+  return audioId;
+}
+
 // The Owner's original recordings, kept so a voice bubble can replay them
 // (WeChat-style). Files live under <dataDirectory>/voice; the id embeds the
 // extension and is strictly validated before any read.
-const AUDIO_ID_PATTERN = /^(tts-[0-9a-f]{16}|[0-9a-f-]{36})\.(webm|m4a|ogg|wav)$/;
+const AUDIO_ID_PATTERN =
+  /^(tts-[0-9a-f]{16}|[0-9a-f-]{36})\.(webm|m4a|ogg|wav|mp3)$/;
 
 function audioExtension(mimeType: string): "webm" | "m4a" | "ogg" {
   if (mimeType.includes("mp4")) return "m4a";

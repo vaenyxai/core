@@ -176,7 +176,8 @@ export function listModelProviders(
 // The truth, checked against the code and held there by a test
 // (models.test.ts, "the capability lists match what the engines implement"):
 //   * hearing  — STT_ENGINES in core/voice.ts
-//   * speaking — synthesizeSpeech in core/voice.ts (Gemini; plus "browser"
+//   * speaking — TTS_PROVIDER_ENGINES in core/voice.ts (Gemini, Workers AI;
+//                plus "browser"
 //                and "local", which are engines rather than connections)
 //   * vision   — VISION_CANDIDATES in core/vision.ts
 // Exported for the test that holds them against the engine tables.
@@ -187,7 +188,7 @@ export const CAPABILITY_LISTS_FOR_TESTS = {
 };
 
 const STT_CAPABLE_PROVIDERS = ["groq", "openai"];
-const TTS_CAPABLE_PROVIDERS = ["gemini"];
+const TTS_CAPABLE_PROVIDERS = ["gemini", "workersai"];
 const VISION_CAPABLE_PROVIDERS = ["gemini", "zhipu", "openai", "claude-sub"];
 const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
 
