@@ -12,12 +12,14 @@ import { resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-// Pinned versions: the 2023.11.14-2 engine release and the v1.0.0 voice pack
-// are the long-stable artifacts everyone ships.
+// Pinned versions: the 2023.11.14-2 engine release, and a voice pack pinned to
+// a COMMIT rather than the v1.0.0 tag. v1.0.0 predates the only Chinese voice
+// with a licence we can stand behind (see the catalogue below); a commit sha
+// is as immutable as a tag and available today, where a newer tag is not.
 const PIPER_ZIP_URL =
   "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip";
-const VOICES_BASE_URL =
-  "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0";
+const VOICES_REVISION = "ea046e8458f6acd997706d6e6066a022b42f6fb1";
+const VOICES_BASE_URL = `https://huggingface.co/rhasspy/piper-voices/resolve/${VOICES_REVISION}`;
 
 export interface LocalVoiceInfo {
   id: string;
@@ -30,14 +32,33 @@ interface LocalVoice extends LocalVoiceInfo {
   path: string;
 }
 
-// The catalogue the settings dropdowns show. Chinese has a single finished
-// Piper voice today (the dropdown exists so a future voice slots straight
-// in); English offers a real choice. Defaults ship with the base install.
+// The catalogue the settings dropdowns show. Defaults ship with the base
+// install; the rest download on pick.
+//
+// LICENCES ARE PART OF THE CHOICE HERE, not a footnote. A product that is
+// about to be open source, and that families install on their own machines,
+// does not point them at model weights whose terms nobody can state:
+//   * chaowen  — CC0, and therefore the Chinese default (Oskar, 2026-08-07).
+//   * huayan   — its model card says "License: Unknown". Kept so an instance
+//     that already downloaded it keeps working, and marked in the list so
+//     nobody picks it without knowing.
+//   * xiao_ya  — checked and REJECTED: non-commercial only (data-baker), and
+//     it needs Piper's Python build for g2pW, which is not what ships here.
+// Verified against the pinned revision on 2026-08-07; chaowen's card names
+// OHF-Voice/voice-datasets as its source and CC0 as its licence, while noting
+// it was finetuned from xiao_ya — we take the publisher's stated licence, as
+// we do for every other dependency.
 const VOICE_CATALOG: LocalVoice[] = [
+  {
+    id: "zh_CN-chaowen-medium",
+    lang: "zh",
+    label: "Chaowen (Female)",
+    path: "zh/zh_CN/chaowen/medium",
+  },
   {
     id: "zh_CN-huayan-medium",
     lang: "zh",
-    label: "Huayan (Female)",
+    label: "Huayan (Female) — licence unknown, not recommended",
     path: "zh/zh_CN/huayan/medium",
   },
   {
@@ -66,7 +87,7 @@ const VOICE_CATALOG: LocalVoice[] = [
   },
 ];
 
-export const DEFAULT_ZH_VOICE = "zh_CN-huayan-medium";
+export const DEFAULT_ZH_VOICE = "zh_CN-chaowen-medium";
 export const DEFAULT_EN_VOICE = "en_US-amy-medium";
 
 export function localVoiceCatalogEntry(id: string): LocalVoice | null {

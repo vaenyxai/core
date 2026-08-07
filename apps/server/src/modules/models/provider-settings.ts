@@ -163,9 +163,23 @@ export function listModelProviders(
 // engine slots (voice input / voice output / vision) are plain pointers —
 // empty slot = feature off, auto-filled once when a capable model connects,
 // changeable by hand any time. No hidden "auto" resolution.
-const STT_CAPABLE_PROVIDERS = ["groq", "openai"];
-const TTS_CAPABLE_PROVIDERS = ["gemini"];
-const VISION_CAPABLE_PROVIDERS = ["gemini", "zhipu", "openai", "claude-sub"];
+// These lists were narrower than the backends actually are, and the cost was
+// concrete: Speaking could only ever be Gemini, so one key expiring took the
+// whole capability out, while the Owner already held keys that can do it
+// (Oskar, 2026-08-07). Widened to what each connected backend really offers:
+//   * workersai — Whisper for hearing, MeloTTS for speaking
+//   * groq      — Orpheus for speaking (small allowance), and vision models
+// Local Piper is not here on purpose: it is not a provider connection, it is
+// an engine the Speaking row offers directly once downloaded.
+const STT_CAPABLE_PROVIDERS = ["groq", "openai", "workersai"];
+const TTS_CAPABLE_PROVIDERS = ["gemini", "workersai", "groq"];
+const VISION_CAPABLE_PROVIDERS = [
+  "gemini",
+  "zhipu",
+  "openai",
+  "claude-sub",
+  "groq",
+];
 const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
 
 /** What each backend can be used FOR, so the engine pickers can offer the

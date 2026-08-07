@@ -520,6 +520,14 @@ export function fetchModelProviders(): Promise<{
   );
 }
 
+/** What this provider says the Owner's key may use. Asked live — never a
+ *  list we keep, because the ids move and a stale menu is a lie. */
+export function fetchProviderModels(id: string): Promise<{ models: string[] }> {
+  return requestJson<{ models: string[] }>(
+    `/v1/models/providers/${encodeURIComponent(id)}/catalogue`,
+  );
+}
+
 // In-chat background creation (spec §2a): post the "✔ built" confirmation into
 // the conversation as a normal assistant message.
 export function appendConversationNote(

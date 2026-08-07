@@ -498,6 +498,19 @@ textarea::placeholder {
   margin-top: 6px;
 }
 
+/* The model list and the button that fetches it, on one line — the picker
+   takes the room, the ask sits beside it. */
+.model-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-choice > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .model-key-link {
   display: inline-block;
   margin-top: 4px;
@@ -1186,12 +1199,21 @@ textarea::placeholder {
   margin: var(--space-3) 0;
 }
 
+/* The line closes the whole capability — row, its test result, its drawer —
+   so a result can never appear on the next capability's side of it. */
+.capability-block {
+  border-bottom: 0.5px solid var(--border);
+}
+
+.capability-block:last-child {
+  border-bottom: 0;
+}
+
 .capability-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) 0;
-  border-bottom: 0.5px solid var(--border);
 }
 
 .capability-row-icon {
@@ -1772,13 +1794,11 @@ textarea::placeholder {
   cursor: default;
 }
 
+/* Indented under its own row's name, and given the room BELOW it that used
+   to come from the row's divider. Two rules used to fight here: the first set
+   a bottom margin, the second immediately overwrote it. */
 .capability-test-result {
-  grid-column: 1 / -1;
   margin: 0 0 var(--space-2) 26px;
-}
-
-.capability-test-result {
-  margin: var(--space-2) 0 0;
   font-size: var(--fs-label);
   line-height: 1.45;
 }

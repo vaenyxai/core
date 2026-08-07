@@ -34,4 +34,11 @@ local engines are used is always the owner's choice, never forced.
    Shipping that inside the MIT installer distributes GPL code. The solution
    is a first-run download of that binary — never packaged into the installer.
 2. The Chinese voice every tutorial recommends (`huayan`) has licence
-   "Unknown". Use **`chaowen` (CC0, 14 MB)** instead.
+   "Unknown". Use **`chaowen` (CC0)** instead.
+   **Done for the Piper TTS that already ships (2026-08-07):** chaowen is in
+   the Piper catalogue too, but only after the `v1.0.0` tag this code was
+   pinned to — the pin is now a commit sha. Chinese defaults to chaowen;
+   huayan stays listed and labelled for instances that already have it;
+   `xiao_ya` was checked and rejected (non-commercial, and needs Piper's
+   Python build). As a Piper voice chaowen is ~63 MB, not the 14 MB quoted
+   above for the sherpa int8 build.

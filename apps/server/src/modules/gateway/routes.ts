@@ -435,6 +435,10 @@ import {
   listParseExamples,
 } from "../core/routine-storage.js";
 import {
+  listProviderModels,
+  ModelCatalogueUnavailableError,
+} from "../models/catalogue.js";
+import {
   connectModelProvider,
   disconnectModelProvider,
   listModelProviders,
@@ -1637,6 +1641,50 @@ export async function registerGatewayRoutes(
         resourceType: "system",
       });
       return { providers: listModelProviders(context.config.secretsDirectory) };
+    },
+  );
+
+  // Ask a provider which models this key may use. Never a stored list: the
+  // ids change under us, and a stale menu is worse than a text box.
+  app.get<{ Params: { id: string } }>(
+    "/v1/models/providers/:id/catalogue",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: Type.Object(
+            { models: Type.Array(Type.String()) },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return {
+          models: await listProviderModels(
+            context.config.secretsDirectory,
+            request.params.id,
+          ),
+        };
+      } catch (error) {
+        request.log.warn({ err: error }, "model catalogue unavailable");
+        return reply.code(503).send({
+          error:
+            error instanceof ModelCatalogueUnavailableError
+              ? error.message
+              : "This provider did not answer with its model list.",
+        });
+      }
     },
   );
 

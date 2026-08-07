@@ -1,6 +1,5 @@
 import {
   type CSSProperties,
-  Fragment,
   type FormEvent,
   type ReactNode,
   type RefObject,
@@ -123,6 +122,7 @@ import {
   attachRoutineToChat,
   classifyMessage,
   fetchModelProviders,
+  fetchProviderModels,
   connectModelProvider,
   disconnectModelProvider,
   startCodexLogin,
@@ -270,6 +270,11 @@ import {
 } from "./capability-chips.js";
 import { Picker, type PickerOption } from "./picker.js";
 import { PROVIDER_DATA_FACTS, dataFactsBadge } from "./data-facts.js";
+import {
+  PROVIDER_COST_FACTS,
+  capabilityCostNote,
+  costBadge,
+} from "./provider-facts.js";
 import { CAPABILITIES } from "./capabilities.js";
 import {
   getCodexAuthCopy,
@@ -2325,13 +2330,43 @@ function MicButton({
 const SILENT_WAV =
   "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQQAAAAAAAAA";
 
+// All thirty voices Gemini TTS publishes, not the six that fitted in the
+// first draft (Oskar, 2026-08-07). Names are Google's; four were spot-checked
+// against the live API on that date — Kore, Sulafat, Vindemiatrix and
+// Zubenelgenubi all synthesised, which is enough to trust the published list
+// rather than a remembered one. Any that ever stops existing fails visibly on
+// this row's Test button, which is the honest way for a name to be wrong.
 const GEMINI_TTS_VOICES = [
   { id: "Kore", label: "Kore (Recommended)" },
-  { id: "Leda", label: "Leda" },
-  { id: "Puck", label: "Puck" },
-  { id: "Zephyr", label: "Zephyr" },
-  { id: "Charon", label: "Charon" },
+  { id: "Achernar", label: "Achernar" },
+  { id: "Achird", label: "Achird" },
+  { id: "Algenib", label: "Algenib" },
+  { id: "Algieba", label: "Algieba" },
+  { id: "Alnilam", label: "Alnilam" },
   { id: "Aoede", label: "Aoede" },
+  { id: "Autonoe", label: "Autonoe" },
+  { id: "Callirrhoe", label: "Callirrhoe" },
+  { id: "Charon", label: "Charon" },
+  { id: "Despina", label: "Despina" },
+  { id: "Enceladus", label: "Enceladus" },
+  { id: "Erinome", label: "Erinome" },
+  { id: "Fenrir", label: "Fenrir" },
+  { id: "Gacrux", label: "Gacrux" },
+  { id: "Iapetus", label: "Iapetus" },
+  { id: "Laomedeia", label: "Laomedeia" },
+  { id: "Leda", label: "Leda" },
+  { id: "Orus", label: "Orus" },
+  { id: "Puck", label: "Puck" },
+  { id: "Pulcherrima", label: "Pulcherrima" },
+  { id: "Rasalgethi", label: "Rasalgethi" },
+  { id: "Sadachbia", label: "Sadachbia" },
+  { id: "Sadaltager", label: "Sadaltager" },
+  { id: "Schedar", label: "Schedar" },
+  { id: "Sulafat", label: "Sulafat" },
+  { id: "Umbriel", label: "Umbriel" },
+  { id: "Vindemiatrix", label: "Vindemiatrix" },
+  { id: "Zephyr", label: "Zephyr" },
+  { id: "Zubenelgenubi", label: "Zubenelgenubi" },
 ];
 
 // The Tools page (its own settings tab, Oskar 2026-07-29): what Vaenyx can do
@@ -10685,7 +10720,9 @@ function CapabilitiesPanel({
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [outputVoice, setOutputVoice] = useState("Kore");
   const [localEnVoice, setLocalEnVoice] = useState("en_US-amy-medium");
-  const [localZhVoice, setLocalZhVoice] = useState("zh_CN-huayan-medium");
+  // Chinese default is chaowen (CC0). huayan, whose licence its own model card
+  // calls "Unknown", is still in the list for instances that downloaded it.
+  const [localZhVoice, setLocalZhVoice] = useState("zh_CN-chaowen-medium");
   const [outputError, setOutputError] = useState<string | null>(null);
   // Separate from `busy`, which names the row whose switch is being written: a
   // drawer's own buttons must not grey out because another row is mid-save.
@@ -11047,16 +11084,20 @@ function CapabilitiesPanel({
     // (AI-CONNECT): you should see that it is there and cannot do this here,
     // not wonder where it went.
     const options: PickerOption[] = connected.map((provider) => {
-      // The training badge rides the picker label: the moment of choosing an
-      // engine is the moment the fact matters, and nobody opens a second
-      // screen to check.
-      const badge = dataFactsBadge(provider.id, lang);
+      // Two badges ride the picker label, because choosing the engine is when
+      // both facts matter and nobody opens a second screen to check: what the
+      // provider does with your content, and — per capability, not per
+      // provider — whether THIS job is the one it charges for.
+      const badges = [
+        capabilityCostNote(provider.id, slot, lang),
+        dataFactsBadge(provider.id, lang),
+      ].filter(Boolean);
       const name = provider.isDefault
         ? `${provider.name} ${mainNote}`
         : provider.name;
       return {
         disabled: !provider.capabilities.includes(slot),
-        label: badge ? `${name} · ${badge}` : name,
+        label: badges.length ? `${name} · ${badges.join(" · ")}` : name,
         value: provider.id,
       };
     });
@@ -11649,6 +11690,9 @@ function CapabilitiesPanel({
   }
 
   function ocrSetup() {
+    const mistralConnected = providers.some(
+      (provider) => provider.id === "mistral" && provider.connected,
+    );
     return drawer({
       what: (
         <p className="settings-card-copy">
@@ -11656,6 +11700,27 @@ function CapabilitiesPanel({
             ? "把图里的字变成文字:扫描件、照片上的字都是它认。读一份扫描 PDF = 图转文 + 读文档两个能力搭在一起 —— 所以可以只开这一个:扫描件在本机变成文字给你自己看,不送任何模型。"
             : "Turns the words in a picture into text: scans, and text in photos. Reading a scanned PDF is OCR plus Reading working together — which is why they are separate switches: with only this one on, a scan becomes text on this machine for your own eyes, and no model sees it."}
         </p>
+      ),
+      // "Its key goes under Models" is true and was not enough: the entry
+      // there is called Mistral, the engine here is called Mistral OCR, and
+      // the Owner could not find one from the other (2026-08-07). This takes
+      // them to it, opened and scrolled to.
+      settings: mistralConnected ? null : (
+        <button
+          className="secondary-button"
+          onClick={() => {
+            localStorage.setItem(CONNECT_MODEL_INTENT, "mistral");
+            document
+              .getElementById("model-card-mistral")
+              ?.scrollIntoView({ behavior: "smooth", block: "center" });
+            window.location.reload();
+          }}
+          type="button"
+        >
+          {lang === "zh"
+            ? "去连 Mistral(OCR 引擎)"
+            : "Connect Mistral (the OCR engine)"}
+        </button>
       ),
       who: (
         <p className="settings-card-copy">
@@ -11941,7 +12006,14 @@ function CapabilitiesPanel({
           const hasSetup = SETUP_ROWS.has(meta.id);
           const open = openSetup === meta.id;
           return (
-            <Fragment key={meta.id}>
+            // One block per capability, and the dividing line belongs to the
+            // BLOCK. It used to sit on the row itself, which put the test
+            // result — a sibling rendered after the row — on the far side of
+            // its own line, reading as though it belonged to the row below
+            // (Oskar, 2026-08-07: "✓ gemini: It spoke" appearing under
+            // Speaking's divider, against Vision). Row, its answer and its
+            // drawer are one thing now, and the line closes them.
+            <div className="capability-block" key={meta.id}>
               <div className={open ? "capability-row open" : "capability-row"}>
                 <span className="capability-row-icon">{meta.icon}</span>
                 <span className="capability-row-name">
@@ -12003,16 +12075,15 @@ function CapabilitiesPanel({
                   </span>
                 )}
               </div>
-              {/* A SIBLING of the row, never a child: the indent and the full
-                  width come from `grid-column: 1 / -1`, which resolves against
-                  the rows grid and not against the flex row. */}
+              {/* A SIBLING of the row, never a child: it needs the block's
+                  full width, not a slot in the row's flex line. */}
               {testAnswer(meta.id)}
               {hasSetup && open ? (
                 <div className="capability-setup" id={`setup-${meta.id}`}>
                   {setupFor(meta.id)}
                 </div>
               ) : null}
-            </Fragment>
+            </div>
           );
         })}
       </div>
@@ -12073,6 +12144,13 @@ function ModelsPanel({
   // A Workers AI-template token cannot name its own account (verified
   // 2026-07-27), so the id has its own always-visible field.
   const [cfAccountId, setCfAccountId] = useState("");
+  // Model lists, per provider, fetched on request and kept for this visit
+  // only: they come from the provider and go stale the moment it changes.
+  const [catalogues, setCatalogues] = useState<Record<string, string[]>>({});
+  const [catalogueBusy, setCatalogueBusy] = useState<string | null>(null);
+  const [catalogueError, setCatalogueError] = useState<Record<string, string>>(
+    {},
+  );
   // Deleting the local voice throws away a 150 MB download — ask first.
   const [confirmRemoveLocal, setConfirmRemoveLocal] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
@@ -12139,6 +12217,38 @@ function ModelsPanel({
       .getElementById(`model-card-${connectTarget}`)
       ?.scrollIntoView({ block: "center" });
   }, [connectTarget, providers]);
+
+  async function loadCatalogue(id: string) {
+    setCatalogueBusy(id);
+    setCatalogueError((current) => ({ ...current, [id]: "" }));
+    try {
+      const { models } = await fetchProviderModels(id);
+      setCatalogues((current) => ({ ...current, [id]: models }));
+      if (models.length === 0) {
+        setCatalogueError((current) => ({
+          ...current,
+          [id]:
+            lang === "zh"
+              ? "这家没有返回任何模型名 —— 保持默认即可。"
+              : "This provider returned no model names — leaving it on the default is fine.",
+        }));
+      }
+    } catch (caught) {
+      // The key has to be saved before the provider will answer; say that
+      // rather than the raw failure.
+      setCatalogueError((current) => ({
+        ...current,
+        [id]:
+          caught instanceof Error && caught.message
+            ? caught.message
+            : lang === "zh"
+              ? "问不到型号列表。先把 key 连上再试。"
+              : "Could not ask for the list. Connect the key first, then try again.",
+      }));
+    } finally {
+      setCatalogueBusy(null);
+    }
+  }
 
   function reload() {
     fetchModelProviders()
@@ -12597,18 +12707,61 @@ function ModelsPanel({
             }
           />
         ) : null}
-        <input
-          className="method-rename-input"
-          placeholder={
-            provider.model
-              ? `Model (optional, current: ${provider.model})`
-              : "Model (optional)"
-          }
-          value={draftFor(provider.id).model}
-          onChange={(event) =>
-            patchDraft(provider.id, { model: event.target.value })
-          }
-        />
+        {/* Which model, asked of the provider rather than typed from memory
+            (Oskar, 2026-08-07: "里面有好多 3.5、3.6 什么的"). The list arrives
+            only when it is asked for — one button, one request — because it
+            costs a round trip with the Owner's own key. A provider that
+            cannot be asked keeps the box, and says why. */}
+        <div className="model-choice">
+          <Picker
+            ariaLabel={lang === "zh" ? "选择模型" : "Choose a model"}
+            onChange={(value) => patchDraft(provider.id, { model: value })}
+            options={[
+              {
+                label:
+                  lang === "zh"
+                    ? `默认${provider.model ? `(现在:${provider.model})` : ""}`
+                    : `Default${provider.model ? ` (now: ${provider.model})` : ""}`,
+                value: "",
+              },
+              ...(catalogues[provider.id] ?? []).map((id) => ({
+                label: id,
+                value: id,
+              })),
+              // A model that is set but not in the fetched list stays
+              // selectable, so opening this form never silently changes it.
+              ...(draftFor(provider.id).model &&
+              !(catalogues[provider.id] ?? []).includes(
+                draftFor(provider.id).model,
+              )
+                ? [
+                    {
+                      label: draftFor(provider.id).model,
+                      value: draftFor(provider.id).model,
+                    },
+                  ]
+                : []),
+            ]}
+            value={draftFor(provider.id).model}
+          />
+          <button
+            className="text-button"
+            disabled={catalogueBusy === provider.id}
+            onClick={() => void loadCatalogue(provider.id)}
+            type="button"
+          >
+            {catalogueBusy === provider.id
+              ? lang === "zh"
+                ? "读取中…"
+                : "Asking…"
+              : lang === "zh"
+                ? "列出可用模型"
+                : "List available models"}
+          </button>
+        </div>
+        {catalogueError[provider.id] ? (
+          <small className="text-faint">{catalogueError[provider.id]}</small>
+        ) : null}
         <p className="context-disclaimer">
           {provider.kind === "openai-compatible"
             ? t(localBackendNoticeKey(draftFor(provider.id).baseUrl))
@@ -12679,7 +12832,20 @@ function ModelsPanel({
               {provider.isDefault ? (
                 <span className="library-chip chip-installed">Default</span>
               ) : null}
+              {/* Free or paid, first glance, before any of the detail. */}
+              {costBadge(provider.id, lang) ? (
+                <span className="library-chip">
+                  {costBadge(provider.id, lang)}
+                </span>
+              ) : null}
             </div>
+            {PROVIDER_COST_FACTS[provider.id]?.eligibility ? (
+              <small className="model-card-model">
+                {PROVIDER_COST_FACTS[provider.id]?.eligibility?.[
+                  lang === "zh" ? "zh" : "en"
+                ]}
+              </small>
+            ) : null}
             {provider.model ? (
               <small className="model-card-model">{provider.model}</small>
             ) : null}
@@ -12817,16 +12983,17 @@ function ModelsPanel({
                 label: lang === "zh" ? "选一个提供方…" : "Choose a provider…",
                 value: "",
               },
-              ...availableProviders.map((provider) => ({
-                // claude-sub has a connect note but is NOT a free tier — its
-                // usage comes out of the Owner's own Claude plan.
-                label:
-                  MODEL_FREE_TIER_NOTES[provider.id] &&
-                  provider.id !== "claude-sub"
-                    ? `${provider.name}${lang === "zh" ? " —— 免费额度" : " — Free Tier"}`
+              ...availableProviders.map((provider) => {
+                // One badge from one table, so the dropdown and the connected
+                // cards can never disagree about what a provider costs.
+                const badge = costBadge(provider.id, lang);
+                return {
+                  label: badge
+                    ? `${provider.name} — ${badge}`
                     : provider.name,
-                value: provider.id,
-              })),
+                  value: provider.id,
+                };
+              }),
             ]}
             value={addTargetId}
           />
