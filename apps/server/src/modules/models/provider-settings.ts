@@ -331,10 +331,21 @@ export function connectModelProvider(
     throw new Error("MODEL_PROVIDER_NOT_CONNECTABLE");
   }
   const connections = readProviderConnections(config.secretsDirectory);
+  // 🔴 AN EMPTY FIELD MEANS "LEAVE IT", NEVER "DELETE IT". The connect form
+  // cannot show a stored key — so every time it is reopened to change
+  // something ELSE, the key box arrives blank, and writing that blank through
+  // deleted the key. Oskar chose a model for Gemini, pressed Update, and
+  // Gemini vanished from the Models list with its key gone (2026-08-07).
+  // Removing a key has exactly one door, and it is called Disconnect.
+  const keep = connections[id];
+  const nextKey = input.apiKey?.trim() ? input.apiKey : keep?.apiKey;
+  const nextBaseUrl = input.baseUrl?.trim() ? input.baseUrl : keep?.baseUrl;
   connections[id] = {
-    ...connections[id],
-    ...(input.apiKey !== undefined ? { apiKey: input.apiKey } : {}),
-    ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+    ...keep,
+    ...(nextKey !== undefined ? { apiKey: nextKey } : {}),
+    ...(nextBaseUrl !== undefined ? { baseUrl: nextBaseUrl } : {}),
+    // The model is different: an empty model is a real choice — "use the
+    // backend's default" — and the form offers it as the first option.
     ...(input.model !== undefined ? { model: input.model } : {}),
   };
   // A newly capable connection auto-fills any empty engine slot (voice

@@ -41,6 +41,13 @@ const NOT_CHAT = [
 
 function chatOnly(ids: string[]): string[] {
   return ids
+    .map((id) =>
+      // Gemini's listing returns "models/gemini-3.6-flash" while its endpoint
+      // wants "gemini-3.6-flash". Handing back the listed form verbatim would
+      // store a name the backend then rejects — the list has to be usable, not
+      // just accurate.
+      id.startsWith("models/") ? id.slice("models/".length) : id,
+    )
     .filter((id) => !NOT_CHAT.some((pattern) => pattern.test(id)))
     .sort((left, right) => left.localeCompare(right));
 }

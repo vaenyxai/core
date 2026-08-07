@@ -339,3 +339,59 @@ describe("resolveProvider (per-chat pinning)", () => {
     expect(resolveProvider("openai").id).toBe("openai");
   });
 });
+
+// The connect form cannot show a stored key, so it comes back blank whenever
+// it is reopened to change something else. Writing that blank through cost
+// the Owner a live Gemini key: he picked a model, pressed Update, and the
+// provider disappeared from the list (2026-08-07).
+describe("connectModelProvider keeps what it was not given", () => {
+  function secretsWith(connections: Record<string, unknown>): string {
+    const dir = mkdtempSync(resolve(tmpdir(), "vaenyx-connect-"));
+    temporaryDirectories.push(dir);
+    writeFileSync(
+      resolve(dir, "model-providers.json"),
+      JSON.stringify(connections),
+    );
+    return dir;
+  }
+  function read(dir: string): Record<string, { apiKey?: string; model?: string; baseUrl?: string }> {
+    return JSON.parse(
+      readFileSync(resolve(dir, "model-providers.json"), "utf8"),
+    ) as Record<string, { apiKey?: string; model?: string; baseUrl?: string }>;
+  }
+
+  it("changing only the model leaves the key alone", () => {
+    const dir = secretsWith({ gemini: { apiKey: "AIza-real-key" } });
+    connectModelProvider({ secretsDirectory: dir }, "gemini", {
+      apiKey: "",
+      model: "gemini-3.6-flash",
+    });
+    expect(read(dir).gemini?.apiKey).toBe("AIza-real-key");
+    expect(read(dir).gemini?.model).toBe("gemini-3.6-flash");
+  });
+
+  it("a whitespace-only key is not a key either", () => {
+    const dir = secretsWith({ gemini: { apiKey: "AIza-real-key" } });
+    connectModelProvider({ secretsDirectory: dir }, "gemini", {
+      apiKey: "   ",
+    });
+    expect(read(dir).gemini?.apiKey).toBe("AIza-real-key");
+  });
+
+  it("a real new key does replace the old one", () => {
+    const dir = secretsWith({ gemini: { apiKey: "AIza-old" } });
+    connectModelProvider({ secretsDirectory: dir }, "gemini", {
+      apiKey: "AIza-new",
+    });
+    expect(read(dir).gemini?.apiKey).toBe("AIza-new");
+  });
+
+  it("clearing the model back to the backend default is still allowed", () => {
+    const dir = secretsWith({
+      gemini: { apiKey: "AIza-real-key", model: "gemini-3.6-flash" },
+    });
+    connectModelProvider({ secretsDirectory: dir }, "gemini", { model: "" });
+    expect(read(dir).gemini?.model).toBe("");
+    expect(read(dir).gemini?.apiKey).toBe("AIza-real-key");
+  });
+});
