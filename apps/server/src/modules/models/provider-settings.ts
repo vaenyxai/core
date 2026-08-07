@@ -232,9 +232,17 @@ export function fillEngineDefaults(
     TTS_CAPABLE_PROVIDERS.includes(output.engine) &&
     !hasKey(output.engine)
   ) {
-    // A cloud TTS engine whose key vanished -> slot empties ("browser" and
-    // "local" carry no key and are never cleared here).
-    delete connections.voiceOutput;
+    // A cloud TTS engine whose key vanished. This used to empty the slot
+    // outright while the other three slots re-point to another capable
+    // backend — so losing one key took Speaking out completely, and the row
+    // went on showing the engine it no longer had (Oskar's screenshot,
+    // 2026-08-07, after the Gemini key was destroyed). It behaves like its
+    // siblings now: hand the job to another connected backend that can do it,
+    // and only empty the slot when there is genuinely nobody left.
+    // "browser" and "local" carry no key and are never cleared here.
+    const pick = TTS_CAPABLE_PROVIDERS.find(hasKey);
+    if (pick) connections.voiceOutput = { engine: pick };
+    else delete connections.voiceOutput;
     changed = true;
   }
 

@@ -438,6 +438,7 @@ import {
   listProviderModels,
   ModelCatalogueUnavailableError,
 } from "../models/catalogue.js";
+import { readProviderConnections } from "../models/connections.js";
 import {
   connectModelProvider,
   disconnectModelProvider,
@@ -6929,9 +6930,24 @@ export async function registerGatewayRoutes(
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         if (message === "VOICE_OUTPUT_NOT_CONNECTED") {
+          // Two different situations wore the same sentence, and one of them
+          // was actively misleading: "pick Gemini or Local Voice" told an
+          // Owner who HAD picked Gemini to go and do what they had already
+          // done. The engine can also be set and unusable — its provider's
+          // key is gone — and that has a different fix (Oskar, 2026-08-07).
+          const chosen = readProviderConnections(
+            context.config.secretsDirectory,
+          );
+          const engine = chosen.voiceOutput?.engine;
+          const staleKey =
+            engine &&
+            engine !== "browser" &&
+            engine !== "local" &&
+            !chosen[engine]?.apiKey;
           return reply.code(400).send({
-            error:
-              "Voice output has no speech engine — pick Gemini or Local Voice in AI Settings.",
+            error: staleKey
+              ? `Speaking is set to ${engine}, but ${engine} has no key on this machine any more — connect it again under Models, or switch this row to the voice on this machine.`
+              : "Voice output has no speech engine — pick one on the Speaking row, or install the voice on this machine under Models.",
           });
         }
         // Say what actually happened — a Gemini free-tier limit reads very

@@ -8,6 +8,7 @@ import { AnthropicProvider } from "../src/modules/models/anthropic-provider.js";
 import { OpenAICompatibleProvider } from "../src/modules/models/openai-compatible-provider.js";
 import {
   connectModelProvider,
+  disconnectModelProvider,
   listModelProviders,
   setDefaultModelProvider,
 } from "../src/modules/models/provider-settings.js";
@@ -393,5 +394,45 @@ describe("connectModelProvider keeps what it was not given", () => {
     connectModelProvider({ secretsDirectory: dir }, "gemini", { model: "" });
     expect(read(dir).gemini?.model).toBe("");
     expect(read(dir).gemini?.apiKey).toBe("AIza-real-key");
+  });
+});
+
+// Losing one provider must not take a whole capability out: the other three
+// engine slots already re-point to another connected backend, and Speaking
+// used to just empty instead — so the row went on showing an engine the
+// server had already dropped (Oskar's screenshot, 2026-08-07).
+describe("an engine slot survives losing its provider", () => {
+  function secretsWith(connections: Record<string, unknown>): string {
+    const dir = mkdtempSync(resolve(tmpdir(), "vaenyx-slots-"));
+    temporaryDirectories.push(dir);
+    writeFileSync(
+      resolve(dir, "model-providers.json"),
+      JSON.stringify(connections),
+    );
+    return dir;
+  }
+  function read(dir: string): Record<string, { engine?: string }> {
+    return JSON.parse(
+      readFileSync(resolve(dir, "model-providers.json"), "utf8"),
+    ) as Record<string, { engine?: string }>;
+  }
+
+  it("hands speaking to another connected backend when the first loses its key", () => {
+    const dir = secretsWith({
+      gemini: { apiKey: "AIza-real" },
+      workersai: { apiKey: "cf-token" },
+      voiceOutput: { engine: "gemini" },
+    });
+    disconnectModelProvider({ secretsDirectory: dir }, "gemini");
+    expect(read(dir).voiceOutput?.engine).toBe("workersai");
+  });
+
+  it("empties the slot only when nobody is left who can speak", () => {
+    const dir = secretsWith({
+      gemini: { apiKey: "AIza-real" },
+      voiceOutput: { engine: "gemini" },
+    });
+    disconnectModelProvider({ secretsDirectory: dir }, "gemini");
+    expect(read(dir).voiceOutput).toBeUndefined();
   });
 });
