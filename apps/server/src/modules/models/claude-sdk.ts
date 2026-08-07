@@ -229,6 +229,9 @@ export function restoreClaudeSdkForConnectedInstance(options: {
 }): void {
   if (!options.connected || isClaudeSdkInstalled()) return;
   void ensureClaudeSdkInstalled(options.dataDirectory).then(
+    // "ready" cannot happen here — it was checked a line ago — and "installed"
+    // is the good ending, not a problem to report. Both outcomes are passed on
+    // and it is the caller that decides what deserves a log line.
     (outcome) => {
       if (outcome !== "ready") options.onDone?.(outcome);
     },

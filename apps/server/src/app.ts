@@ -61,10 +61,11 @@ export async function buildApp(
     ),
     dataDirectory: config.dataDirectory,
     onDone: (outcome) =>
-      app.log.warn(
-        { outcome },
-        "claude subscription component could not be restored",
-      ),
+      outcome === "installed"
+        ? app.log.info("claude subscription component restored after upgrade")
+        : app.log.warn(
+            "claude subscription component could not be restored; the Claude subscription will say so and everything else is unaffected",
+          ),
   });
   // Web Push: point the push module at the secrets directory (VAPID keypair
   // lives there, generated on first use).
