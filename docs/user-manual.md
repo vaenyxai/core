@@ -224,6 +224,10 @@ Read this inside the app: **Settings → Manual**.
   Chinese) and Cloudflare Workers AI (**English only** — given Chinese it says
   so rather than mispronouncing it). The voice installed on this machine speaks
   both, costs nothing per use and never leaves the computer.
+  - **Gemini's free tier allows three spoken replies a minute** (measured
+    against the API, 2026-08-07). A fourth is refused for a few seconds, and
+    Vaenyx says how long to wait rather than pretending the day's allowance is
+    gone. The voice on this machine has no limit at all.
 - **Free models** — the **Free models** button beside the heading shows what was
   found last time; **Ask again** beside it asks your main model again and then
   shows you the new answer. **Careful:** The answer says which model said it and
@@ -531,5 +535,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.5-dev.8** · last updated 2026-08-07.
+Manual for **v0.3.5-dev.9** · last updated 2026-08-07.
 Keep this file up to date whenever a feature changes.

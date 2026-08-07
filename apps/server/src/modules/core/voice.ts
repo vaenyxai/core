@@ -107,6 +107,32 @@ export type VoiceOutputEngine =
 export const TTS_PROVIDER_ENGINES = ["gemini", "workersai"] as const;
 const WORKERS_TTS_MODEL = "@cf/deepgram/aura-1";
 
+/** How long the provider itself said to wait, in whole seconds. Google puts
+ *  it in a RetryInfo detail and in the message; either will do, and neither
+ *  being there is not an error — the caller just says less. */
+async function retryAfterSeconds(response: Response): Promise<number | null> {
+  try {
+    const body = (await response.json()) as {
+      error?: {
+        message?: string;
+        details?: { "@type"?: string; retryDelay?: string }[];
+      };
+    };
+    const detail = body.error?.details?.find((entry) =>
+      entry["@type"]?.endsWith("RetryInfo"),
+    )?.retryDelay;
+    const fromDetail = detail ? Number.parseFloat(detail) : Number.NaN;
+    if (Number.isFinite(fromDetail)) return Math.max(1, Math.ceil(fromDetail));
+    const fromMessage = body.error?.message?.match(
+      /retry in ([\d.]+)s/i,
+    )?.[1];
+    if (fromMessage) return Math.max(1, Math.ceil(Number.parseFloat(fromMessage)));
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveVoiceOutput(
   secretsDirectory: string,
   dataDirectory: string,
@@ -312,6 +338,17 @@ export async function synthesizeSpeech(
     },
   );
   if (!response.ok) {
+    // A 429 here is almost never "you have used up today". Google's free tier
+    // allows THREE speech requests a minute per model, and its own refusal
+    // carries the seconds to wait — measured against the live API on
+    // 2026-08-07: quotaId GenerateRequestsPerMinutePerProjectPerModel-FreeTier,
+    // quotaValue 3, retryDelay 8s. Telling the Owner to "wait a while" when
+    // the answer is "eight seconds" sends them off to change engines over
+    // nothing, so the number is carried out to them.
+    if (response.status === 429) {
+      const seconds = await retryAfterSeconds(response);
+      throw new Error(`VOICE_TTS_RATE_LIMITED:${seconds ?? ""}`);
+    }
     throw new Error(`VOICE_TTS_FAILED:${response.status}`);
   }
   const parsed = (await response.json()) as {

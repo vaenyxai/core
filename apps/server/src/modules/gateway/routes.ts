@@ -6958,16 +6958,22 @@ export async function registerGatewayRoutes(
               "The Cloudflare voice speaks English only. For Chinese, set Speaking to Gemini, or install the voice on this machine under Models — it speaks both.",
           });
         }
-        // Say what actually happened — a Gemini free-tier limit reads very
-        // differently from "not connected" (Oskar hit exactly this).
+        // A free-tier refusal is a RATE limit, not an exhausted allowance:
+        // Google permits three speech requests a minute per model and says
+        // how many seconds to wait (measured 2026-08-07). The old wording,
+        // "used up right now — wait a while", sent the Owner off to change
+        // engines over what is usually an eight-second pause.
+        if (message.startsWith("VOICE_TTS_RATE_LIMITED")) {
+          const seconds = message.split(":")[1];
+          const wait = seconds
+            ? `Try again in about ${seconds} seconds.`
+            : "Try again in a moment.";
+          return reply.code(429).send({
+            error: `Gemini's free tier allows three spoken replies a minute. ${wait} The voice on this machine has no such limit — install it under Models.`,
+          });
+        }
         if (message.startsWith("VOICE_TTS_FAILED:")) {
           const status = message.split(":")[1];
-          if (status === "429") {
-            return reply.code(502).send({
-              error:
-                "Gemini's free voice quota is used up right now — wait a while, or switch Voice Output to Local Voice (offline, unlimited).",
-            });
-          }
           return reply.code(502).send({
             error: `Speech generation failed (Gemini ${status}).`,
           });
