@@ -93,15 +93,22 @@ if (-not $SkipChecks) {
 }
 
 # -- 5. Commit, tag, push ----
-git add apps/server/src/config.ts
-git commit -m "release: $tag"
-if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
-git tag $tag
-if ($LASTEXITCODE -ne 0) { throw "git tag failed" }
-git push origin main
-if ($LASTEXITCODE -ne 0) { throw "git push of main failed - the tag was NOT pushed. Resolve, then push main and the tag yourself." }
-git push origin $tag
-if ($LASTEXITCODE -ne 0) { throw "git push of $tag failed - push it yourself with: git push origin $tag" }
+# git goes through cmd.exe for the same reason npm does above: git writes its
+# ordinary progress ("To https://github.com/...") to stderr, and under
+# $ErrorActionPreference = "Stop" PowerShell 5.1 treats that as fatal. The
+# push of main SUCCEEDED and the script threw anyway, leaving the tag behind
+# unpushed - which is the one state this step must never end in (2026-08-08).
+function Invoke-Git {
+  param([string]$Arguments, [string]$Failure)
+  cmd.exe /c "git $Arguments 2>&1"
+  if ($LASTEXITCODE -ne 0) { throw $Failure }
+}
+
+Invoke-Git "add apps/server/src/config.ts" "git add failed"
+Invoke-Git "commit -m ""release: $tag""" "git commit failed"
+Invoke-Git "tag $tag" "git tag failed"
+Invoke-Git "push origin main" "git push of main failed - the tag was NOT pushed. Resolve, then push main and the tag yourself."
+Invoke-Git "push origin $tag" "git push of $tag failed - push it yourself with: git push origin $tag"
 
 Write-Host ""
 Write-Host "Release $tag is on its way." -ForegroundColor Green
