@@ -293,16 +293,24 @@ function runInstall(steps: InstallStep[]): void {
   })();
 }
 
-// Kick off (or ignore, if already running/finished) the ~150 MB base
-// install: engine zip + the two default voices, with byte-level progress.
-export function startLocalTtsInstall(dataDirectory: string): void {
+// Kick off (or ignore, if already running/finished) the base install: the
+// engine plus whichever default voices are asked for, with byte-level
+// progress.
+//
+// LANGUAGES ARE ASKED FOR SEPARATELY (2026-08-08). The engine is 21 MB and
+// each voice is 60 MB, so "both" is 141 MB and one language is 81 MB — a real
+// difference on the installer's component page, where Chinese and English are
+// two separate ticks. The engine is shared, so ticking a SECOND language adds
+// 60 MB, not 81: whatever computes a total has to know that.
+//
+// Defaults to both, which is what every existing caller means and what a
+// bilingual household needs — speech picks its voice from the language of the
+// sentence, so a machine with only one voice goes silent on the other.
+export function startLocalTtsInstall(
+  dataDirectory: string,
+  languages: ("en" | "zh")[] = ["zh", "en"],
+): void {
   if (installState.status === "downloading") return;
-  if (isLocalTtsInstalled(dataDirectory)) {
-    installState.status = "ready";
-    installState.progress = 100;
-    installState.detail = null;
-    return;
-  }
   const root = localTtsRoot(dataDirectory);
   mkdirSync(root, { recursive: true });
   const steps: InstallStep[] = [];
@@ -321,7 +329,11 @@ export function startLocalTtsInstall(dataDirectory: string): void {
       },
     });
   }
-  for (const id of [DEFAULT_ZH_VOICE, DEFAULT_EN_VOICE]) {
+  const wanted = languages.length ? languages : ["zh" as const, "en" as const];
+  for (const id of [
+    ...(wanted.includes("zh") ? [DEFAULT_ZH_VOICE] : []),
+    ...(wanted.includes("en") ? [DEFAULT_EN_VOICE] : []),
+  ]) {
     const voice = localVoiceCatalogEntry(id);
     if (voice && !isVoiceDownloaded(dataDirectory, id)) {
       steps.push(voiceDownloadStep(dataDirectory, voice));

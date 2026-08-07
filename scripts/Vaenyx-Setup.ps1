@@ -19,7 +19,14 @@ param(
   [int]$Port = 3000,
   [switch]$SelfTest,
   # en or zh. Unset means ask; the answer also becomes the app's language.
-  [string]$Language = ""
+  [string]$Language = "",
+  # What the installer's component page was ticked for, comma-separated:
+  # claude, codex, tailscale, voice-en, voice-zh. NOTHING IS DOWNLOADED HERE --
+  # the list is written into userdata\config and Vaenyx fetches each one on its
+  # first boot, with the code that already does each of those jobs and with
+  # progress the first-run screen can show. Setup that never touches the
+  # network is setup that a failed component cannot break.
+  [string]$Components = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -327,6 +334,28 @@ try {
     (New-Object System.Text.UTF8Encoding($false)))
 } catch {
   # The app simply defaults to English if this cannot be written.
+}
+
+# The component page's answer, passed straight through. An unknown name is
+# dropped here as well as in the app: this file ends up on a real disk, and
+# what reads it should never have to trust it.
+if ($Components.Trim()) {
+  try {
+    $known = @("claude", "codex", "tailscale", "voice-en", "voice-zh")
+    $wanted = @($Components.Split(",") |
+      ForEach-Object { $_.Trim().ToLowerInvariant() } |
+      Where-Object { $known -contains $_ } |
+      Select-Object -Unique)
+    if ($wanted.Count -gt 0) {
+      $json = "{ ""components"": [" + (($wanted | ForEach-Object { """$_""" }) -join ", ") + "] }"
+      [System.IO.File]::WriteAllText(
+        (Join-Path $configDirectory "wanted-components.json"),
+        "$json`r`n",
+        (New-Object System.Text.UTF8Encoding($false)))
+    }
+  } catch {
+    # Vaenyx installs fine without them; every one has a button in Settings.
+  }
 }
 try { Start-Transcript -Path $setupLog -Append | Out-Null } catch { }
 

@@ -8,6 +8,8 @@ import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { type AppConfig, loadConfig } from "./config.js";
 import { createDatabase } from "./db/database.js";
 import { setCodexToolsDirectory } from "./modules/harness/codex.js";
+import { installWantedComponent } from "./modules/core/install-components.js";
+import { startWantedComponents } from "./modules/core/wanted-components.js";
 import { claudeMachineLogin } from "./modules/models/claude-login.js";
 import {
   restoreClaudeSdkForConnectedInstance,
@@ -52,6 +54,24 @@ export async function buildApp(
   // Same folder, same reason, for the Claude subscription component.
   setClaudeSdkToolsDirectory(config.dataDirectory);
   initModelRegistry(config);
+  // WHAT THE INSTALLER WAS TICKED FOR. A fresh install may have been asked
+  // for a subscription component, Tailscale, or an offline voice; the
+  // installer wrote the list and did none of it, so it happens here, with the
+  // code that already does each of these and with progress the first-run
+  // screen can show. Failures are lines in the log, never a boot that stops.
+  const asked = startWantedComponents({
+    dataDirectory: config.dataDirectory,
+    install: (id) => installWantedComponent(id, config.dataDirectory),
+    onDone: (results) =>
+      app.log.info(
+        { results: results.done },
+        "installer components finished",
+      ),
+  });
+  if (asked.length) {
+    app.log.info({ components: asked }, "installing what the installer asked for");
+  }
+
   // An instance that was already using its Claude subscription keeps it: the
   // component used to be a dependency, and this upgrade prunes it.
   restoreClaudeSdkForConnectedInstance({
