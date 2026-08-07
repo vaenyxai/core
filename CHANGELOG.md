@@ -4,7 +4,7 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
-## v0.3.7 — 2026-08-07
+## v0.3.7 — 2026-08-08
 
 **The download is less than half the size.** Installing Vaenyx fetched about
 500 MB, and 250 MB of it was one component: the piece that lets Vaenyx talk to
