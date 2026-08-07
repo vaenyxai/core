@@ -52,6 +52,8 @@ $Messages = @{
   "step2"           = @{ en = "[2/6] Making sure Node.js 24 or newer is installed"; zh = "[2/6] 确认已安装 Node.js 24 或更新版本" }
   "step3"           = @{ en = "[3/6] Downloading what Vaenyx needs (a few minutes on first run)"; zh = "[3/6] 下载 Vaenyx 需要的组件(首次需要几分钟)" }
   "step4"           = @{ en = "[4/6] Preparing Vaenyx"; zh = "[4/6] 准备 Vaenyx" }
+  "deps.included"   = @{ en = "Already included in the download - nothing to fetch."; zh = "安装包里已经带了 —— 不用再下载。" }
+  "build.included"  = @{ en = "Already built - nothing to compile."; zh = "已经是编译好的 —— 不用再编译。" }
   "step5"           = @{ en = "[5/6] Starting Vaenyx with Windows"; zh = "[5/6] 让 Vaenyx 随 Windows 启动" }
   "step6"           = @{ en = "[6/6] Starting Vaenyx"; zh = "[6/6] 启动 Vaenyx" }
   "unblocked"       = @{ en = "Downloaded files unblocked."; zh = "已解除下载文件的封锁。" }
@@ -567,7 +569,21 @@ try {
   }
 
   # -- 2. Dependencies ----
+  # THE PREBUILT PAYLOAD (2026-08-07). The exe now carries node_modules and the
+  # built dist folders, so on that route these two steps have nothing left to
+  # do. The question asked is "are the files here", never "which installer am
+  # I" — the zip route, a developer checkout and a repaired install all answer
+  # it correctly, and a payload that is somehow incomplete falls back to doing
+  # the work rather than starting something broken.
+  $prebuilt = (Test-Path (Join-Path $root "node_modulesastify")) -and
+    (Test-Path (Join-Path $root "node_modules\@vaenyx\contracts\package.json")) -and
+    (Test-Path (Join-Path $root "apps\server\dist\index.js")) -and
+    (Test-Path (Join-Path $root "apps\web\dist\index.html"))
+
   Write-Head (Say "step3")
+  if ($prebuilt) {
+    Write-Good (Say "deps.included")
+  } else {
   Write-Info (Say "deps.size")
   # npm ci prints NOTHING until it finishes. Half a gigabyte later, on a
   # laptop where every extracted file is scanned by Windows Defender, that
@@ -625,9 +641,13 @@ try {
     throw "npm ci failed"
   }
   Write-Good (Say "deps.ok")
+  }
 
   # -- 3. Build ----
   Write-Head (Say "step4")
+  if ($prebuilt) {
+    Write-Good (Say "build.included")
+  } else {
   # vite writes its chunk-size hint to stderr, which under this script's
   # Stop preference used to be fatal. Own process, exit code only.
   $buildExit = Invoke-Tool $npmCmd @("run", "build")
@@ -638,6 +658,7 @@ try {
     throw "build failed"
   }
   Write-Good (Say "build.ok")
+  }
 
   # Lock userdata to this Windows account. Out of the box the folder inherits
   # BUILTIN\Users:RX + Authenticated Users:M — on a shared family PC every

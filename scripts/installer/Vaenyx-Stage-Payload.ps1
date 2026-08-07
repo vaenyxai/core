@@ -4,15 +4,34 @@
 # (scripts/installer/Vaenyx-Build-Installer.ps1) so the two downloads can never
 # drift apart.
 #
-# What goes in: the tracked source tree only. No node_modules and no dist --
-# setup fetches and builds those on the user's machine. A fat payload would be
-# worse, not better: npm creates the @vaenyx/* workspace links as Windows
-# junctions, and neither a zip nor an installer can carry those, so a
-# pre-populated node_modules would arrive silently broken.
+# What goes in by default: the tracked source tree only, and the machine that
+# receives it fetches and builds. That is what the ZIP download still carries.
+#
+# -WithDependencies also puts node_modules and the built dist folders in, which
+# is what the exe carries: the user then downloads ~115 MB once instead of
+# fetching ~230 MB in 18,000 files and compiling it, and the two steps that
+# have broken most often on other people's machines stop running there at all.
+#
+# ⚠ THE WORKSPACE-JUNCTION PROBLEM, and the decision.
+# npm links the workspace packages (@vaenyx/contracts) into node_modules as
+# Windows JUNCTIONS. Neither a zip nor an Inno payload can carry a junction:
+# they would arrive as empty folders or dangling links, and the failure would
+# be an import error at first boot rather than anything the build noticed.
+# The options were to recreate the links on the user's machine (a step that can
+# fail, on the install path with the worst track record) or to not have links
+# at all. This takes the second: after the dependency install, every @vaenyx
+# junction is replaced by a REAL COPY of the package. They are a few hundred
+# kilobytes of type definitions, a copy behaves identically to a link at
+# runtime, and it survives being zipped, compiled into an exe, extracted,
+# moved and restored from a backup. Nothing has to work on the user's machine
+# for it to be right.
 [CmdletBinding()]
 param(
   # The folder to fill with the payload tree. Created by this script.
-  [Parameter(Mandatory = $true)][string]$Destination
+  [Parameter(Mandatory = $true)][string]$Destination,
+  # Also install production dependencies and build, so the receiving machine
+  # does neither. Used by the exe; the zip stays source-only.
+  [switch]$WithDependencies
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,3 +99,65 @@ foreach ($item in $required) {
 $migrationCount = (Get-ChildItem (Join-Path $Destination "apps\server\migrations") -Filter *.sql).Count
 if ($migrationCount -lt 1) { throw "No migrations in the payload." }
 Write-Host "  Payload verified ($migrationCount migrations)."
+
+if ($WithDependencies) {
+  Push-Location $Destination
+  try {
+    # Everything, because the build needs typescript and vite; pruned below.
+    Write-Host "  Installing dependencies into the payload..."
+    & npm ci --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed while staging the payload" }
+
+    Write-Host "  Building..."
+    & npm run build
+    if ($LASTEXITCODE -ne 0) { throw "the build failed while staging the payload" }
+
+    # The user needs none of the build tooling. This is the difference between
+    # shipping ~230 MB and ~115 MB.
+    Write-Host "  Removing build-only dependencies..."
+    & npm prune --omit=dev --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw "npm prune failed while staging the payload" }
+  } finally {
+    Pop-Location
+  }
+
+  # De-junction (see the note at the top): a link cannot survive the trip, a
+  # copy can. Done AFTER prune, because prune rewrites node_modules.
+  $workspaceLinks = Join-Path $Destination "node_modules\@vaenyx"
+  $replaced = 0
+  if (Test-Path $workspaceLinks) {
+    foreach ($link in Get-ChildItem $workspaceLinks -Force) {
+      $source = Join-Path $Destination "packages\$($link.Name)"
+      if (-not (Test-Path $source)) {
+        throw "node_modules\@vaenyx\$($link.Name) points at a workspace that is not in the payload."
+      }
+      Remove-Item $link.FullName -Recurse -Force
+      Copy-Item $source $link.FullName -Recurse -Force
+      $replaced = $replaced + 1
+    }
+  }
+  if ($replaced -lt 1) { throw "No @vaenyx workspace packages were staged -- the payload would not start." }
+  Write-Host "  Replaced $replaced workspace link(s) with real copies."
+
+  # 🔴 Prove it rather than assume it: a junction reports as a ReparsePoint,
+  # and one surviving here is a payload that arrives broken with no other sign.
+  foreach ($item in Get-ChildItem $workspaceLinks -Force) {
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+      throw "node_modules\@vaenyx\$($item.Name) is still a link, not a copy."
+    }
+  }
+
+  # And that the pieces a prebuilt install cannot start without are really here.
+  foreach ($item in @(
+      "node_modulesastify",
+      "node_modules\@vaenyx\contracts\package.json",
+      "apps\server\dist\index.js",
+      "apps\web\dist\index.html")) {
+    if (-not (Test-Path (Join-Path $Destination $item))) {
+      throw "The prebuilt payload is missing $item -- refusing to build a broken download."
+    }
+  }
+  $bytes = (Get-ChildItem $Destination -File -Recurse -Force -ErrorAction SilentlyContinue |
+    Measure-Object Length -Sum).Sum
+  Write-Host ("  Prebuilt payload staged: {0:N0} MB." -f ($bytes / 1MB))
+}

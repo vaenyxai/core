@@ -1,7 +1,8 @@
 ﻿# Compiles the GUI installer (release/vaenyx-setup.exe) with Inno Setup 6.
 #
-# Stages the exact payload the zip download carries (Vaenyx-Stage-Payload.ps1,
-# tracked files only) and hands it to ISCC with the version read from
+# Stages the payload PREBUILT (Vaenyx-Stage-Payload.ps1 -WithDependencies:
+# tracked files plus node_modules and the built dist, so nothing is fetched or
+# compiled on the user's machine) and hands it to ISCC with the version read from
 # apps/server/src/config.ts. Runs locally and in CI
 # (.github/workflows/release.yml) - same script, same output.
 #
@@ -57,7 +58,10 @@ Write-Host "  Compiler: $iscc"
 $staging = Join-Path ([System.IO.Path]::GetTempPath()) ("vaenyx-installer-" + [guid]::NewGuid().ToString("N"))
 $payload = Join-Path $staging "payload"
 try {
-  & (Join-Path $PSScriptRoot "Vaenyx-Stage-Payload.ps1") -Destination $payload
+  # -WithDependencies: the exe carries node_modules and the built dist, so the
+  # user's machine runs no npm and no compiler. The zip build calls the same
+  # script without it and stays source-only.
+  & (Join-Path $PSScriptRoot "Vaenyx-Stage-Payload.ps1") -Destination $payload -WithDependencies
 
   if (-not (Test-Path $OutputDirectory)) {
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
