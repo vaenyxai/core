@@ -115,11 +115,35 @@ export function isVoiceDownloaded(
   return existsSync(voicePath(dataDirectory, voiceId));
 }
 
-export function isLocalTtsInstalled(dataDirectory: string): boolean {
+/** Any downloaded voice of this language, preferring the one asked for. */
+export function firstDownloadedVoice(
+  dataDirectory: string,
+  lang: "zh" | "en",
+  preferred?: string,
+): string | null {
+  if (preferred && isVoiceDownloaded(dataDirectory, preferred)) {
+    const entry = localVoiceCatalogEntry(preferred);
+    if (entry?.lang === lang) return preferred;
+  }
   return (
-    existsSync(piperExecutable(dataDirectory)) &&
-    isVoiceDownloaded(dataDirectory, DEFAULT_ZH_VOICE) &&
-    isVoiceDownloaded(dataDirectory, DEFAULT_EN_VOICE)
+    VOICE_CATALOG.find(
+      (voice) =>
+        voice.lang === lang && isVoiceDownloaded(dataDirectory, voice.id),
+    )?.id ?? null
+  );
+}
+
+// "Installed" means the engine plus a voice it can actually use — NOT the two
+// ids that happen to be the defaults today. Written as the defaults, it broke
+// the moment the Chinese default moved from huayan to chaowen: an instance
+// with the engine and both original voices on disk suddenly reported nothing
+// installed at all, and the local option vanished from the Speaking row
+// (found 2026-08-07, testing something else entirely). A default is a
+// preference; a download is a fact.
+export function isLocalTtsInstalled(dataDirectory: string): boolean {
+  if (!existsSync(piperExecutable(dataDirectory))) return false;
+  return VOICE_CATALOG.some((voice) =>
+    isVoiceDownloaded(dataDirectory, voice.id),
   );
 }
 
@@ -341,15 +365,16 @@ export async function synthesizeLocalSpeech(
     throw new Error("LOCAL_TTS_NOT_INSTALLED");
   }
   const wantsChinese = /[一-鿿]/.test(text);
+  const lang = wantsChinese ? "zh" : "en";
   const preferred = wantsChinese
     ? preferences?.zhVoice ?? DEFAULT_ZH_VOICE
     : preferences?.enVoice ?? DEFAULT_EN_VOICE;
-  const fallback = wantsChinese ? DEFAULT_ZH_VOICE : DEFAULT_EN_VOICE;
+  // Falls back to whatever of that language IS on disk, rather than to the
+  // default id — which may itself be the one that was never downloaded.
   const voiceId =
-    localVoiceCatalogEntry(preferred) &&
-    isVoiceDownloaded(dataDirectory, preferred)
-      ? preferred
-      : fallback;
+    firstDownloadedVoice(dataDirectory, lang, preferred) ??
+    firstDownloadedVoice(dataDirectory, wantsChinese ? "en" : "zh");
+  if (!voiceId) throw new Error("LOCAL_TTS_NOT_INSTALLED");
   const hash = createHash("sha256")
     .update(`local:${voiceId}\n${text}`)
     .digest("hex")
