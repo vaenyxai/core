@@ -452,6 +452,7 @@ import {
   submitClaudeLoginCode,
 } from "../models/claude-login.js";
 import { ensureClaudeSdkInstalled } from "../models/claude-sdk.js";
+import { componentProgress } from "../core/wanted-components.js";
 import {
   createProjectMemory,
   deleteProjectMemory,
@@ -1110,6 +1111,17 @@ export async function registerGatewayRoutes(
     },
     async () => getSystemStatus(context.config, context.database),
   );
+
+  // What the installer's component page was ticked for, and how far each one
+  // has got. The first-run screen reads this so a person who asked for phone
+  // access is TAKEN to the sign-in rather than offered it — the installer
+  // said the next screen would finish the job, and installing Tailscale is
+  // not the same as being connected to it.
+  //
+  // Unauthenticated on purpose, like /v1/system/status: it is answered on
+  // 127.0.0.1 only, it names components and nothing about the person, and the
+  // first-run screen needs it before any Owner exists to authenticate as.
+  app.get("/v1/system/components", async () => componentProgress());
 
   app.post(
     "/v1/system/shutdown",

@@ -18,6 +18,33 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
+## 0. What the installer asks
+
+- **Choose what to download** — the install-location screen carries five ticks
+  and a running total, so you decide instead of waiting for a mystery
+  download: your ChatGPT subscription, your Claude subscription, phone access
+  (Tailscale), and an offline voice for Chinese and for English. Nothing is
+  compulsory, and Vaenyx installs and works with none of them ticked.
+- **Only Tailscale is on by default** — it is the smallest, and using Vaenyx
+  from a phone is part of what it is for. The two subscriptions are off
+  because each is about 250 MB and only useful if you already pay for that
+  service; leave them off and Vaenyx fetches the right one the first time you
+  connect it.
+- **The total is what is still to come**, on top of the installer you already
+  downloaded. The speech engine is shared, so a second language adds 60 MB and
+  not 81.
+- **Anything you skip is still one click away** later, in Settings — the same
+  buttons, the same downloads, no reinstall.
+- **They are fetched after the install, not during it** — Vaenyx does it on its
+  first start and shows you each one. That is deliberate: a component that
+  will not download can then say so without taking the install down with it.
+- **Ticking phone access installs Tailscale; it does not connect it.** The
+  first screen after setup takes you through signing in with your own free
+  Tailscale account and shows the QR code for your phone.
+- **Not enough disk space** — Vaenyx says so before it starts, names the drive
+  and how much is short. It checks two drives when they differ: where Vaenyx
+  goes, and the Windows drive the downloads unpack through.
+
 ## 1. Starting and stopping
 
 - **Start it** — double-click the **Vaenyx** icon on the desktop (the
@@ -238,9 +265,10 @@ Read this inside the app: **Settings → Manual**.
     in once, inside the app. These are **not** free credit; they are your own
     paid subscriptions. Both need a component that is **not** included in the
     download, so the first time you press either sign-in button it fetches one
-    first — a minute or so for ChatGPT, about 250 MB for Claude. Everyone else
-    downloads neither, which is a quarter of a gigabyte the download does not
-    carry. If the fetch fails
+    first — a minute or so for ChatGPT, about 250 MB for Claude. The installer
+    also offers both as a tick, which fetches them during setup instead of
+    making you wait at first use; either way, everyone who uses neither
+    downloads neither. If the fetch fails
     it says so and retries on the next press; nothing else in Vaenyx is
     affected.
   - *Free API allowance* — pick a provider and paste its key.

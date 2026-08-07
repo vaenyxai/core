@@ -206,6 +206,15 @@ function savedToastMessage(): string {
   }
 }
 
+/** What the installer's component page was ticked for, and how each went. */
+export function fetchInstalledComponents(): Promise<{
+  current: string | null;
+  done: { id: string; outcome: string }[];
+  wanted: string[];
+}> {
+  return requestJson("/v1/system/components");
+}
+
 export function fetchSystemStatus(): Promise<SystemStatus> {
   return requestJson<SystemStatus>("/v1/system/status");
 }

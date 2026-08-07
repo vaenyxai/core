@@ -14,6 +14,20 @@ the first time you connect a Claude subscription, and never otherwise, the
 same way the ChatGPT sign-in already worked. If you already use Claude here,
 nothing changes: the update notices and fetches it back by itself.
 
+**You choose what gets downloaded.** The install-location screen now carries
+five ticks and a running total: your ChatGPT subscription, your Claude
+subscription, phone access, and an offline voice for Chinese and for English.
+Only phone access is on by default — it is the smallest, and using Vaenyx from
+a phone is part of what it is for. Both subscriptions are off, because each is
+a quarter of a gigabyte and only useful if you already pay for that service;
+leave them off and Vaenyx fetches the right one the first time you connect it.
+Nothing is compulsory, everything you skip is one click away in Settings, and
+if the drive is short of room Vaenyx says so before it starts, naming the drive
+and the shortfall. The components are fetched after the install rather than
+during it, so one that will not download says so instead of taking the whole
+install down — and ticking phone access now leads straight into signing in,
+because installing Tailscale is not the same as being connected to it.
+
 **Installing does not build anything any more.** The setup used to hand your
 computer the source code and have it do the rest: download about 500 MB in
 18,000 files, then compile — ten to twenty minutes, and the two steps that have

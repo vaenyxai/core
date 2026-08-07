@@ -121,6 +121,7 @@ import {
   runRoutineInChat,
   attachRoutineToChat,
   classifyMessage,
+  fetchInstalledComponents,
   fetchModelProviders,
   fetchProviderModels,
   connectModelProvider,
@@ -21704,6 +21705,21 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     void fetchModelProviders()
       .then((result) => setProviders(result.providers))
+      .catch(() => undefined);
+  }, []);
+
+  // Ticking "use Vaenyx on my phone" in the installer installs Tailscale and
+  // nothing more — the sign-in is a browser thing, with the household's own
+  // free Tailscale account, and a browser is exactly where this screen is.
+  // The installer says the next screen finishes the job, so somebody who
+  // asked for it is TAKEN there instead of being offered it: installed is not
+  // connected, and a half-done phone setup is the failure this whole step
+  // exists to avoid.
+  useEffect(() => {
+    void fetchInstalledComponents()
+      .then((components) => {
+        if (components.wanted.includes("tailscale")) setPhoneSetup(true);
+      })
       .catch(() => undefined);
   }, []);
 
