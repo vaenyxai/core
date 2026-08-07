@@ -369,6 +369,32 @@ textarea::placeholder {
   gap: 6px;
 }
 
+/* One block per route, numbered, so the choice reads as three answers to one
+   question rather than a row of twelve names. */
+.auth-route {
+  margin: 0 0 14px;
+}
+
+.auth-route-head {
+  margin: 0 0 2px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-route-copy {
+  margin: 0 0 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* Skipping is allowed, and it does not look like the thing to press. */
+.auth-model-button--quiet {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
 .auth-model-button {
   padding: 6px 10px;
   border: 1px solid var(--border);

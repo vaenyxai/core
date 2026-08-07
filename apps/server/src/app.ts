@@ -7,6 +7,7 @@ import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 
 import { type AppConfig, loadConfig } from "./config.js";
 import { createDatabase } from "./db/database.js";
+import { setCodexToolsDirectory } from "./modules/harness/codex.js";
 import { seedLibraryIfEmpty } from "./modules/core/library-seed.js";
 import { initModelRegistry } from "./modules/models/registry.js";
 import { normalizeEngineConnections } from "./modules/models/provider-settings.js";
@@ -39,6 +40,9 @@ export async function buildApp(
   // older build stored inside voice/voiceOutput move to their provider
   // entries, and empty slots fill from capable connections.
   normalizeEngineConnections(config);
+  // Where the ChatGPT sign-in component lives: userdata/tools, named by
+  // Vaenyx rather than by whichever account runs the server.
+  setCodexToolsDirectory(config.dataDirectory);
   initModelRegistry(config);
   // Web Push: point the push module at the secrets directory (VAPID keypair
   // lives there, generated on first use).

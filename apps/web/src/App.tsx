@@ -683,6 +683,13 @@ function AuthScreen({
   );
 
   function chooseModel(id: string) {
+    // "Go on without a model" is a real choice, not a missing one: it clears
+    // any parked intent so sign-in lands on the ordinary screen.
+    if (!id) {
+      localStorage.removeItem(CONNECT_MODEL_INTENT);
+      setConnectChoice(null);
+      return;
+    }
     if (connectChoice === id) {
       localStorage.removeItem(CONNECT_MODEL_INTENT);
       setConnectChoice(null);
@@ -806,31 +813,94 @@ function AuthScreen({
           </button>
         </form>
 
+        {/* THREE ROUTES, NOT TWELVE BUTTONS (Oskar, 2026-08-07). A new Owner
+            standing here has one question — "what do I need for this to
+            work?" — and a flat row of every provider answers it with a quiz.
+            There are really only three answers: use a subscription you pay
+            for already, take a free key, or go on without one and accept
+            what that means. The whole list is still one screen away, in
+            Models. */}
         <div className="auth-models">
           <p className="auth-models-title">
-            Connect a model after {bootstrap.setupRequired ? "setup" : "sign-in"}
+            {bootstrap.setupRequired
+              ? "Vaenyx needs a model to think with"
+              : "Connect a model after sign-in"}
           </p>
-          <div className="auth-models-row">
-            {CONNECTABLE_MODELS.map((model) => (
-              <button
-                aria-pressed={connectChoice === model.id}
-                className={
-                  connectChoice === model.id
-                    ? "auth-model-button selected"
-                    : "auth-model-button"
-                }
-                key={model.id}
-                onClick={() => chooseModel(model.id)}
-                type="button"
-              >
-                {model.label}
-              </button>
-            ))}
+
+          <div className="auth-route">
+            <p className="auth-route-head">
+              1 · Use a subscription you already pay for
+            </p>
+            <p className="auth-route-copy">
+              Nothing extra to buy. One sign-in, in the app.
+            </p>
+            <div className="auth-models-row">
+              {["codex", "claude-sub"].map((id) => (
+                <button
+                  aria-pressed={connectChoice === id}
+                  className={
+                    connectChoice === id
+                      ? "auth-model-button selected"
+                      : "auth-model-button"
+                  }
+                  key={id}
+                  onClick={() => chooseModel(id)}
+                  type="button"
+                >
+                  {id === "codex" ? "ChatGPT" : "Claude"}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <div className="auth-route">
+            <p className="auth-route-head">2 · Take a free key</p>
+            <p className="auth-route-copy">
+              No card, a few minutes on the provider's site, and you paste one
+              line back here.
+            </p>
+            <div className="auth-models-row">
+              {["gemini", "groq"].map((id) => (
+                <button
+                  aria-pressed={connectChoice === id}
+                  className={
+                    connectChoice === id
+                      ? "auth-model-button selected"
+                      : "auth-model-button"
+                  }
+                  key={id}
+                  onClick={() => chooseModel(id)}
+                  type="button"
+                >
+                  {id === "gemini" ? "Gemini" : "Groq"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="auth-route">
+            <p className="auth-route-head">3 · Skip for now</p>
+            {/* Said plainly, because the consequence is total: without a
+                model Vaenyx has nothing to think with. Everything else — the
+                library, the settings, your data — is still here. */}
+            <p className="auth-route-copy">
+              Vaenyx opens, but it cannot answer anything: there is no model
+              behind it yet. Connect one later under Settings → AI Settings →
+              Models.
+            </p>
+            <button
+              className="auth-model-button auth-model-button--quiet"
+              onClick={() => chooseModel("")}
+              type="button"
+            >
+              Go on without a model
+            </button>
+          </div>
+
           <p className="auth-models-hint">
             {connectChoice
               ? "You'll land on that model's connection card."
-              : "Pick one to go straight to its connection card."}
+              : "All the other backends are in Settings → Models."}
           </p>
         </div>
 
@@ -9951,9 +10021,12 @@ function localBackendNoticeKey(
 // words a household can act on.
 function codexSignInError(code: string, zh: boolean): string {
   if (code === "CODEX_INSTALL_FAILED") {
+    // A second press is worth trying, but somebody stuck on a fresh machine
+    // needs the way round it as well — and there is one, it takes two
+    // minutes, and it does not involve installing anything.
     return zh
-      ? "ChatGPT 登录组件没装上。检查网络后再点一次这个按钮,它会重新安装。"
-      : "The ChatGPT sign-in component could not be installed. Check the internet connection and press the button again — it retries the install.";
+      ? "ChatGPT 登录组件没装上。检查网络后再点一次,它会重新安装。装不上也没关系:在 Models 里连一个免费的 Gemini 或 Groq key,Vaenyx 一样能用,而且不需要装任何东西。"
+      : "The ChatGPT sign-in component could not be installed. Check the internet connection and press the button again — it retries. If it still will not install, you are not stuck: connect a free Gemini or Groq key under Models instead. Nothing to install, and Vaenyx works the same.";
   }
   return zh
     ? "ChatGPT 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"

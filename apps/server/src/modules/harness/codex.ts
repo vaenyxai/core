@@ -80,6 +80,33 @@ function isInsideVaenyxRepository(path: string): boolean {
 // user profiles for the standard npm global install location. Cached once
 // found (revalidated in case the CLI was uninstalled).
 let cachedCodexScript: string | null = null;
+// WHERE VAENYX PUTS THE CHATGPT COMPONENT, and why it is not left to npm.
+//
+// `npm install -g` writes into the profile of whoever is running — and the
+// server usually runs as SYSTEM, whose profile lives under
+// C:\Windows\System32\config\systemprofile. Whether the result is then
+// findable depends on that account's APPDATA and PATH, which is a lot of
+// "depends" for the first button a new owner presses; on a fresh machine it
+// answered "the sign-in component is not installed" after apparently
+// installing it (Oskar's new PC, 2026-08-07).
+//
+// So Vaenyx names the location itself: userdata/tools. One path, owned by
+// the instance, the same whichever account runs the server, and gone when
+// the instance is removed. The old profile locations are still SEARCHED, so
+// a machine that already installed it the other way keeps working.
+export function codexToolsRoot(dataDirectory: string): string {
+  return resolve(dataDirectory, "..", "tools");
+}
+
+let vaenyxCodexHome: string | null = null;
+
+/** Told to the harness once the config is known, so the lookup can prefer
+ *  Vaenyx's own copy over anything in a user profile. */
+export function setCodexToolsDirectory(dataDirectory: string): void {
+  vaenyxCodexHome = codexToolsRoot(dataDirectory);
+  cachedCodexScript = null;
+}
+
 function findNpmGlobalCodexScript(): string | null {
   if (cachedCodexScript && existsSync(cachedCodexScript)) {
     return cachedCodexScript;
@@ -87,6 +114,14 @@ function findNpmGlobalCodexScript(): string | null {
   cachedCodexScript = null;
   const npmSuffix = ["npm", "node_modules", "@openai", "codex", "bin", "codex.js"];
   const candidates: string[] = [];
+  // Vaenyx's own copy first: it is the one this build installs.
+  if (vaenyxCodexHome) {
+    candidates.push(resolve(vaenyxCodexHome, ...npmSuffix));
+    // npm on Windows puts a --prefix install directly under the prefix.
+    candidates.push(
+      resolve(vaenyxCodexHome, "node_modules", "@openai", "codex", "bin", "codex.js"),
+    );
+  }
   if (process.env.APPDATA) {
     candidates.push(resolve(process.env.APPDATA, ...npmSuffix));
   }
@@ -360,8 +395,18 @@ export async function ensureCodexInstalled(): Promise<
 > {
   if (getCodexStatus().installed) return "ready";
   const npm = npmExecutable();
+  // --prefix, so the component lands in userdata/tools rather than in the
+  // profile of whichever account happens to be running the server. Without
+  // it, a SYSTEM-run install goes somewhere the next lookup may not reach,
+  // and the button reports "not installed" after installing.
+  const prefix = vaenyxCodexHome ?? codexToolsRoot(loadConfig().dataDirectory);
+  try {
+    mkdirSync(prefix, { recursive: true });
+  } catch {
+    // If this cannot be created the install below fails and says so.
+  }
   const exitCode = await new Promise<number | null>((resolveExit) => {
-    const child = spawn(npm, ["install", "-g", "@openai/codex"], {
+    const child = spawn(npm, ["install", "-g", "@openai/codex", "--prefix", prefix], {
       env: codexEnvironment(),
       shell: process.platform === "win32",
       stdio: ["ignore", "ignore", "ignore"],
@@ -388,6 +433,9 @@ export async function ensureCodexInstalled(): Promise<
   if (exitCode !== 0) return "install-failed";
   // A fresh install must be seen NOW, not when the cache ages out; the
   // status check proves the binary actually answers.
+  // The new copy is under a path the lookup has never scanned, so the cached
+  // answer has to go as well as the status.
+  cachedCodexScript = null;
   invalidateCodexStatus();
   return getCodexStatus().installed ? "installed" : "install-failed";
 }
