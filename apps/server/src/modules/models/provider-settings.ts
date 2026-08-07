@@ -223,7 +223,12 @@ export function fillEngineDefaults(
       connections.voice = { provider: pick };
       changed = true;
     }
-  } else if (!hasKey(voiceProvider)) {
+  } else if (
+    !STT_CAPABLE_PROVIDERS.includes(voiceProvider) ||
+    !hasKey(voiceProvider)
+  ) {
+    // Not capable OR no key: both leave the slot pointing at something that
+    // cannot do the job, and both are repaired the same way.
     const pick = STT_CAPABLE_PROVIDERS.find(hasKey);
     if (pick) connections.voice = { provider: pick };
     else delete connections.voice;
@@ -268,7 +273,10 @@ export function fillEngineDefaults(
       connections.vision = { provider: pick };
       changed = true;
     }
-  } else if (!hasKey(visionProvider)) {
+  } else if (
+    !VISION_CAPABLE_PROVIDERS.includes(visionProvider) ||
+    !hasKey(visionProvider)
+  ) {
     const pick = VISION_CAPABLE_PROVIDERS.find(hasKey);
     if (pick) connections.vision = { provider: pick };
     else delete connections.vision;
@@ -289,7 +297,10 @@ export function fillEngineDefaults(
       connections.imageOutput = { provider: pick };
       changed = true;
     }
-  } else if (!hasKey(imageProvider)) {
+  } else if (
+    !IMAGE_CAPABLE_PROVIDERS.includes(imageProvider) ||
+    !hasKey(imageProvider)
+  ) {
     const pick = IMAGE_CAPABLE_PROVIDERS.find(hasKey);
     if (pick) connections.imageOutput = { provider: pick };
     else delete connections.imageOutput;

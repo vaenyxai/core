@@ -444,6 +444,21 @@ describe("an engine slot survives losing its provider", () => {
     expect(read(dir).voiceOutput).toBeUndefined();
   });
 
+  it("repairs a picture-reading slot aimed at a backend that cannot see", () => {
+    // The same shape as the Workers AI speaking case, and it really happened:
+    // an instance was left with vision pointing at Groq, which has a key and
+    // cannot be asked to read a picture by this build.
+    const dir = secretsWith({
+      groq: { apiKey: "gsk-real" },
+      gemini: { apiKey: "AIza-real" },
+      vision: { provider: "groq" },
+    });
+    connectModelProvider({ secretsDirectory: dir }, "mistral", {
+      apiKey: "any-connect-runs-the-repair",
+    });
+    expect(read(dir).vision?.provider).toBe("gemini");
+  });
+
   it("hands the picture-reading slot to another backend that can do it", () => {
     // The same rule, where a second capable backend really exists today.
     const dir = secretsWith({
