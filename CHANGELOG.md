@@ -4,6 +4,22 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.6 — 2026-08-07
+
+**The ChatGPT sign-in installs on a new computer.** It never could: the
+component is fetched with npm, and Vaenyx ran npm through the Windows
+command shell using its full path — which on a default install is under
+"C:\Program Files\nodejs", where the shell stops at the space. Every new PC
+got "the sign-in component could not be installed"; no machine that already
+had the component ever ran the line, which is why it survived. npm is now
+run the way Node runs any script, with nothing for a space to break.
+
+**Claude has a sign-in button on the first screen too.** The first-run
+wizard offered the ChatGPT subscription and an API key, and nothing for the
+Claude subscription — so an Owner who pays for Claude was shown a sign-in
+they could not use and a key box they did not need. Same step, same shape,
+one screen.
+
 ## v0.3.5 — 2026-08-07
 
 **Pick the model, not just the provider.** Connect a backend, open it under

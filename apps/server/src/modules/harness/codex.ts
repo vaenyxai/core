@@ -382,19 +382,51 @@ function probeCodexStatus(): CodexStatus {
 //
 // npm ships beside node.exe, so the machine that runs this server can always
 // find it without PATH — the same lesson the watchdog fix learned.
-function npmExecutable(): string {
+// HOW npm IS RUN, and why it is not run as a command name.
+//
+// The obvious spawn — the path to npm.cmd with shell: true — is broken on a
+// default Windows install and had been shipping for weeks: node lives at
+// "C:\Program Files\nodejs", cmd.exe splits that at the space, and the whole
+// thing dies with 'C:\Program' is not recognized. It never showed here
+// because this machine already had the component, so the install never ran;
+// it failed on every genuinely new PC, which is the only place it runs
+// (Oskar's, 2026-08-07). Measured alternatives on that same path:
+//   shell: true on npm.cmd .... 'C:\Program' is not recognized
+//   shell: false on npm.cmd ... spawn EINVAL (node will not exec a .cmd)
+//   cmd /c ""path" args" ...... "The network path was not found"
+//   node npm-cli.js .......... exit 0, and a real install into a prefix that
+//                              itself contains a space also succeeded
+// So npm is run the way node runs anything: as a script, by this very node.
+// No shell, nothing to quote, no space anywhere to get wrong.
+function npmRunner(): { args: string[]; command: string; shell: boolean } {
+  const cli = resolve(
+    dirname(process.execPath),
+    "node_modules",
+    "npm",
+    "bin",
+    "npm-cli.js",
+  );
+  if (existsSync(cli)) {
+    return { args: [cli], command: process.execPath, shell: false };
+  }
+  // Unusual layout (npm installed elsewhere): fall back to the old shape
+  // rather than refusing outright.
   const beside = resolve(
     dirname(process.execPath),
     process.platform === "win32" ? "npm.cmd" : "npm",
   );
-  return existsSync(beside) ? beside : "npm";
+  return {
+    args: [],
+    command: existsSync(beside) ? beside : "npm",
+    shell: process.platform === "win32",
+  };
 }
 
 export async function ensureCodexInstalled(): Promise<
   "ready" | "installed" | "install-failed"
 > {
   if (getCodexStatus().installed) return "ready";
-  const npm = npmExecutable();
+  const npm = npmRunner();
   // --prefix, so the component lands in userdata/tools rather than in the
   // profile of whichever account happens to be running the server. Without
   // it, a SYSTEM-run install goes somewhere the next lookup may not reach,
@@ -406,12 +438,25 @@ export async function ensureCodexInstalled(): Promise<
     // If this cannot be created the install below fails and says so.
   }
   const exitCode = await new Promise<number | null>((resolveExit) => {
-    const child = spawn(npm, ["install", "-g", "@openai/codex", "--prefix", prefix], {
-      env: codexEnvironment(),
-      shell: process.platform === "win32",
-      stdio: ["ignore", "ignore", "ignore"],
-      windowsHide: true,
-    });
+    const child = spawn(
+      npm.command,
+      [
+        ...npm.args,
+        "install",
+        "-g",
+        "@openai/codex",
+        "--prefix",
+        prefix,
+        "--no-audit",
+        "--no-fund",
+      ],
+      {
+        env: codexEnvironment(),
+        shell: npm.shell,
+        stdio: ["ignore", "ignore", "ignore"],
+        windowsHide: true,
+      },
+    );
     const timer = setTimeout(() => {
       try {
         child.kill();

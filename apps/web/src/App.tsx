@@ -21660,6 +21660,9 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [codexWaiting, setCodexWaiting] = useState(false);
   const [codexUrl, setCodexUrl] = useState<string | null>(null);
+  // The Claude sign-in's two steps: the page to open, and the code it gives.
+  const [claudeUrl, setClaudeUrl] = useState<string | null>(null);
+  const [claudeCode, setClaudeCode] = useState("");
   // Step 4: the completion page, shown after connecting or skipping.
   const [finished, setFinished] = useState(false);
   // Step 5, optional: the phone step — the same panel Settings → Phone
@@ -21761,6 +21764,56 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   }
 
   const codexProvider = providers.find((provider) => provider.id === "codex");
+  const claudeProvider = providers.find(
+    (provider) => provider.id === "claude-sub",
+  );
+
+  // The Claude sign-in is the official binary's own flow, driven from the
+  // server: open the page it prints, paste the code it shows back.
+  async function beginClaude() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { url } = await startClaudeLogin();
+      setClaudeUrl(url);
+      if (url) window.open(url, "_blank", "noopener");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : zh
+            ? "没能开始 Claude 登录。"
+            : "Could not start the Claude sign-in.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finishClaude() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await submitClaudeLoginCode(claudeCode.trim());
+      setProviders(result.providers);
+      setClaudeUrl(null);
+      setClaudeCode("");
+      await setDefaultModelProvider("claude-sub").catch(() => undefined);
+      finish();
+    } catch (caught) {
+      setClaudeUrl(null);
+      setClaudeCode("");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : zh
+            ? "这个代码没能完成登录。"
+            : "That code did not finish the sign-in.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // Step 5 of the first run (onboarding Part 2 section 5): the real phone
   // step — detect, install, sign in, tunnel, then the QR — driven by the
@@ -21864,7 +21917,9 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
         </p>
 
         <section className="wizard-option">
-          <strong>{zh ? "① 用 ChatGPT 登录" : "1. Sign in with ChatGPT"}</strong>
+          <strong>
+            {zh ? "① 用 ChatGPT 登录" : "1. Sign in with ChatGPT"}
+          </strong>
           <p className="settings-card-copy">
             {zh
               ? "有 ChatGPT 订阅就选这个:不用 API key,浏览器登录一次即可。"
@@ -21906,8 +21961,71 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
           ) : null}
         </section>
 
+        {/* The other subscription. It was missing here while ChatGPT was
+            offered — so an Owner who pays for Claude and not for ChatGPT was
+            shown a sign-in they could not use and a key box they did not
+            need (Oskar, 2026-08-07). Same shape, same step, one screen. */}
         <section className="wizard-option">
-          <strong>{zh ? "② 粘一个 API key" : "2. Paste an API key"}</strong>
+          <strong>
+            {zh ? "① 用 Claude 登录" : "1. Sign in with Claude"}
+          </strong>
+          <p className="settings-card-copy">
+            {zh
+              ? "有 Claude 订阅就选这个:同样不用 API key,用你自己的 Claude 方案。"
+              : "Best if you have a Claude subscription: no API key either, and it uses your own Claude plan."}
+          </p>
+          {claudeProvider?.healthy ? (
+            <span className="library-chip chip-published">
+              {zh ? "已连接" : "Connected"}
+            </span>
+          ) : claudeUrl ? (
+            <>
+              <a
+                className="primary-button claude-signin-button"
+                href={claudeUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {zh ? "打开 Claude 登录页 ↗" : "Open Claude Sign-In ↗"}
+              </a>
+              <p className="settings-card-copy">
+                {zh
+                  ? "登录后把页面给你的那串代码粘到这里:"
+                  : "Sign in, then paste the code that page shows you here:"}
+              </p>
+              <input
+                autoCapitalize="off"
+                autoComplete="off"
+                className="method-rename-input key-input"
+                onChange={(event) => setClaudeCode(event.target.value)}
+                placeholder={zh ? "登录页给的代码" : "Code from the sign-in page"}
+                spellCheck={false}
+                type="text"
+                value={claudeCode}
+              />
+              <button
+                className="primary-button"
+                disabled={busy || !claudeCode.trim()}
+                onClick={() => void finishClaude()}
+                type="button"
+              >
+                {zh ? "完成登录" : "Finish Sign-In"}
+              </button>
+            </>
+          ) : (
+            <button
+              className="primary-button"
+              disabled={busy}
+              onClick={() => void beginClaude()}
+              type="button"
+            >
+              {zh ? "用 Claude 登录" : "Sign In With Claude"}
+            </button>
+          )}
+        </section>
+
+        <section className="wizard-option">
+          <strong>{zh ? "③ 粘一个 API key" : "3. Paste an API key"}</strong>
           <p className="settings-card-copy">
             {zh
               ? "Gemini 和 Groq 有免费额度,不用信用卡。"
