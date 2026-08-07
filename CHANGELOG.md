@@ -4,6 +4,50 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.5 — 2026-08-07
+
+**Pick the model, not just the provider.** Connect a backend, open it under
+Models and press *List available models*: Vaenyx asks that provider, with
+your own key, what it will accept, and offers the answer as a list — so you
+choose the current name instead of guessing between versions. Nothing is
+stored; it asks again whenever you want it.
+
+**Free or paid, marked for the job it is doing.** Every backend carries a
+badge, and the engine lists mark the one job that costs money even when the
+provider is otherwise free. The one to know: Gemini's free tier covers
+text, pictures-in, hearing, PDFs and speaking, and gives **nothing** for
+making pictures — so its entry on the Drawing row says so. Zhipu now says
+that signing up needs Chinese ID verification.
+
+**Models is a list again.** A connected backend is one line — name, state,
+what it costs, what it can do — and everything else opens when you ask for
+it. A capability row now says how many Methods use it, so you can see who
+would notice before switching something off.
+
+**Speaking no longer rests on one provider.** Cloudflare Workers AI joins
+Gemini as a cloud voice (English only — given Chinese it says so rather
+than mispronouncing it), and the voice on this machine speaks both. A
+Gemini refusal is now named correctly: its free tier allows three spoken
+replies a minute, and Vaenyx tells you how many seconds to wait instead of
+implying the day's allowance is gone.
+
+**The Chinese offline voice has a licence you can read.** The old one's own
+model card said "License: Unknown"; the default is now chaowen, released
+under CC0. Anything already downloaded keeps working.
+
+**Setting up on a new computer.** The first screen now offers three routes
+instead of a row of twelve names: use a subscription you already pay for,
+take a free key, or skip — and skipping says plainly that Vaenyx will open
+but cannot answer anything yet. The ChatGPT sign-in component also installs
+somewhere Vaenyx can always find it, fixing a fresh machine that was told
+the component was not installed after installing it.
+
+**Fixed: updating a connection could delete its key.** The connect form
+cannot show a stored key, so its box is blank whenever it is reopened to
+change something else — and that blank was being written through. Choosing
+a model and pressing Update destroyed the key. An empty field now means
+"leave it"; removing a key has one door, and it is called Disconnect.
+
 ## v0.3.4 — 2026-08-07
 
 **Installing on a new computer works.** Every version until now could fail
