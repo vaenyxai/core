@@ -4,9 +4,12 @@ import { resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { STT_ENGINES, TTS_PROVIDER_ENGINES } from "../src/modules/core/voice.js";
+import { VISION_CANDIDATES } from "../src/modules/core/vision.js";
 import { AnthropicProvider } from "../src/modules/models/anthropic-provider.js";
 import { OpenAICompatibleProvider } from "../src/modules/models/openai-compatible-provider.js";
 import {
+  CAPABILITY_LISTS_FOR_TESTS,
   connectModelProvider,
   disconnectModelProvider,
   listModelProviders,
@@ -411,28 +414,69 @@ describe("an engine slot survives losing its provider", () => {
     );
     return dir;
   }
-  function read(dir: string): Record<string, { engine?: string }> {
+  function read(dir: string): Record<string, { engine?: string; provider?: string }> {
     return JSON.parse(
       readFileSync(resolve(dir, "model-providers.json"), "utf8"),
-    ) as Record<string, { engine?: string }>;
+    ) as Record<string, { engine?: string; provider?: string }>;
   }
 
-  it("hands speaking to another connected backend when the first loses its key", () => {
+  it("repairs a speaking slot aimed at a backend that cannot speak", () => {
+    // Exactly the state an Owner was left in: the slot named Workers AI,
+    // which this build has no way to ask for speech, while Gemini - which it
+    // can - was connected all along.
     const dir = secretsWith({
       gemini: { apiKey: "AIza-real" },
       workersai: { apiKey: "cf-token" },
-      voiceOutput: { engine: "gemini" },
+      voiceOutput: { engine: "workersai" },
     });
-    disconnectModelProvider({ secretsDirectory: dir }, "gemini");
-    expect(read(dir).voiceOutput?.engine).toBe("workersai");
+    connectModelProvider({ secretsDirectory: dir }, "mistral", {
+      apiKey: "any-connect-runs-the-repair",
+    });
+    expect(read(dir).voiceOutput?.engine).toBe("gemini");
   });
 
-  it("empties the slot only when nobody is left who can speak", () => {
+  it("empties the speaking slot when nobody left can speak", () => {
     const dir = secretsWith({
       gemini: { apiKey: "AIza-real" },
       voiceOutput: { engine: "gemini" },
     });
     disconnectModelProvider({ secretsDirectory: dir }, "gemini");
     expect(read(dir).voiceOutput).toBeUndefined();
+  });
+
+  it("hands the picture-reading slot to another backend that can do it", () => {
+    // The same rule, where a second capable backend really exists today.
+    const dir = secretsWith({
+      gemini: { apiKey: "AIza-real" },
+      openai: { apiKey: "sk-real" },
+      vision: { provider: "gemini" },
+    });
+    disconnectModelProvider({ secretsDirectory: dir }, "gemini");
+    expect(read(dir).vision?.provider).toBe("openai");
+  });
+});
+
+// 🔴 The lists that decide what a picker offers AND where a slot re-points
+// must never name a backend the engine code cannot call. Widened once to what
+// the providers can do rather than what Vaenyx has built, they sent an
+// Owner's Speaking slot to Workers AI, which this build cannot ask for
+// speech (2026-08-07). This test is why that cannot ship again.
+describe("the capability lists match what the engines implement", () => {
+  it("hearing names only backends STT_ENGINES can call", () => {
+    expect([...CAPABILITY_LISTS_FOR_TESTS.hearing].sort()).toEqual(
+      Object.keys(STT_ENGINES).sort(),
+    );
+  });
+
+  it("speaking names only backends synthesis can ask", () => {
+    expect([...CAPABILITY_LISTS_FOR_TESTS.speaking].sort()).toEqual(
+      [...TTS_PROVIDER_ENGINES].sort(),
+    );
+  });
+
+  it("vision names only backends VISION_CANDIDATES covers", () => {
+    expect([...CAPABILITY_LISTS_FOR_TESTS.vision].sort()).toEqual(
+      VISION_CANDIDATES.map((candidate) => candidate.id).sort(),
+    );
   });
 });

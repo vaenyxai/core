@@ -95,7 +95,7 @@ export const VISION_DIRECT_PROVIDER_IDS = [
 // free-tier friendly, no separate vision setup needed. "claude-sub" has no
 // baseUrl/model: it reads photos through the locked-down Agent SDK path
 // (claudeSubscriptionVision) instead of an OpenAI-style endpoint.
-const VISION_CANDIDATES = [
+export const VISION_CANDIDATES = [
   {
     id: "gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",

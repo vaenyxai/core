@@ -163,23 +163,32 @@ export function listModelProviders(
 // engine slots (voice input / voice output / vision) are plain pointers —
 // empty slot = feature off, auto-filled once when a capable model connects,
 // changeable by hand any time. No hidden "auto" resolution.
-// These lists were narrower than the backends actually are, and the cost was
-// concrete: Speaking could only ever be Gemini, so one key expiring took the
-// whole capability out, while the Owner already held keys that can do it
-// (Oskar, 2026-08-07). Widened to what each connected backend really offers:
-//   * workersai — Whisper for hearing, MeloTTS for speaking
-//   * groq      — Orpheus for speaking (small allowance), and vision models
-// Local Piper is not here on purpose: it is not a provider connection, it is
-// an engine the Speaking row offers directly once downloaded.
-const STT_CAPABLE_PROVIDERS = ["groq", "openai", "workersai"];
-const TTS_CAPABLE_PROVIDERS = ["gemini", "workersai", "groq"];
-const VISION_CAPABLE_PROVIDERS = [
-  "gemini",
-  "zhipu",
-  "openai",
-  "claude-sub",
-  "groq",
-];
+// 🔴 THESE LISTS MAY ONLY NAME BACKENDS THE ENGINE CODE CAN ACTUALLY CALL.
+// They drive two things — what the pickers offer, and where a slot re-points
+// when its provider goes away — so a name in here that the engine cannot use
+// does not fail politely: it silently hands the job to something that cannot
+// do it. That is precisely what happened when they were widened on
+// 2026-08-07 to what the BACKENDS can do (Workers AI has MeloTTS, Groq has
+// Orpheus, both real) rather than what VAENYX has built: the Owner's
+// Speaking slot re-pointed to Workers AI, which this codebase has no way to
+// ask for speech. Widening them for real means writing that call first.
+//
+// The truth, checked against the code and held there by a test
+// (models.test.ts, "the capability lists match what the engines implement"):
+//   * hearing  — STT_ENGINES in core/voice.ts
+//   * speaking — synthesizeSpeech in core/voice.ts (Gemini; plus "browser"
+//                and "local", which are engines rather than connections)
+//   * vision   — VISION_CANDIDATES in core/vision.ts
+// Exported for the test that holds them against the engine tables.
+export const CAPABILITY_LISTS_FOR_TESTS = {
+  get hearing() { return STT_CAPABLE_PROVIDERS; },
+  get speaking() { return TTS_CAPABLE_PROVIDERS; },
+  get vision() { return VISION_CAPABLE_PROVIDERS; },
+};
+
+const STT_CAPABLE_PROVIDERS = ["groq", "openai"];
+const TTS_CAPABLE_PROVIDERS = ["gemini"];
+const VISION_CAPABLE_PROVIDERS = ["gemini", "zhipu", "openai", "claude-sub"];
 const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
 
 /** What each backend can be used FOR, so the engine pickers can offer the
@@ -229,17 +238,23 @@ export function fillEngineDefaults(
       changed = true;
     }
   } else if (
-    TTS_CAPABLE_PROVIDERS.includes(output.engine) &&
-    !hasKey(output.engine)
+    output.engine !== "browser" &&
+    output.engine !== "local" &&
+    (!TTS_CAPABLE_PROVIDERS.includes(output.engine) ||
+      !hasKey(output.engine))
   ) {
-    // A cloud TTS engine whose key vanished. This used to empty the slot
-    // outright while the other three slots re-point to another capable
-    // backend — so losing one key took Speaking out completely, and the row
-    // went on showing the engine it no longer had (Oskar's screenshot,
-    // 2026-08-07, after the Gemini key was destroyed). It behaves like its
-    // siblings now: hand the job to another connected backend that can do it,
-    // and only empty the slot when there is genuinely nobody left.
-    // "browser" and "local" carry no key and are never cleared here.
+    // Two ways to end up pointing at nothing usable: the provider lost its
+    // key, or the slot names a backend this build cannot ask for speech at
+    // all — which is how an instance was briefly left pointing at Workers AI.
+    // Both are repaired the same way, which is why the name is checked as
+    // well as the key.
+    //
+    // This used to empty the slot outright while the other three re-point to
+    // another capable backend, so losing one key took Speaking out completely
+    // and the row went on showing the engine it no longer had (Oskar's
+    // screenshot, 2026-08-07). It behaves like its siblings now, and only
+    // empties when there is genuinely nobody left. "browser" and "local"
+    // carry no key and are never touched here.
     const pick = TTS_CAPABLE_PROVIDERS.find(hasKey);
     if (pick) connections.voiceOutput = { engine: pick };
     else delete connections.voiceOutput;

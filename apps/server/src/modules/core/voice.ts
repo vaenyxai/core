@@ -22,7 +22,7 @@ import {
 } from "./voice-local.js";
 
 // The STT-capable backends and how to call them.
-const STT_ENGINES: Record<string, { baseUrl: string; model: string }> = {
+export const STT_ENGINES: Record<string, { baseUrl: string; model: string }> = {
   groq: {
     baseUrl: "https://api.groq.com/openai/v1",
     model: "whisper-large-v3-turbo",
@@ -85,6 +85,11 @@ const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 const DEFAULT_GEMINI_VOICE = "Kore";
 
 export type VoiceOutputEngine = "none" | "browser" | "gemini" | "local";
+
+// The PROVIDER connections speech can be asked of. "browser" and "local"
+// are engines rather than connections, so they are not here; the models
+// layer compares its own list against this one in a test.
+export const TTS_PROVIDER_ENGINES = ["gemini"] as const;
 
 function resolveVoiceOutput(
   secretsDirectory: string,
