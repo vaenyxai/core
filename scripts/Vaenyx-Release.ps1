@@ -74,7 +74,17 @@ Write-Host "Stamped $Version into apps/server/src/config.ts" -ForegroundColor Cy
 
 # -- 4. The same gate CI runs ----
 if (-not $SkipChecks) {
-  & npm run check
+  # Through cmd.exe WITH ITS OWN REDIRECT, and the redirect is the point. This
+  # script sets $ErrorActionPreference = "Stop", and PowerShell 5.1 turns
+  # anything a native command writes to stderr into a terminating error — node
+  # prints "SQLite is an experimental feature" there on every run, so a
+  # perfectly green check killed the release (2026-08-08). Wrapping in cmd
+  # alone does not help; cmd passes the stream straight through. The output is
+  # shown either way, so a real failure is still readable.
+  $checkLog = Join-Path ([System.IO.Path]::GetTempPath()) `
+    ("vaenyx-release-check-" + [guid]::NewGuid().ToString("N") + ".log")
+  cmd.exe /c "npm run check > ""$checkLog"" 2>&1"
+  if (Test-Path $checkLog) { Get-Content $checkLog | Write-Host }
   if ($LASTEXITCODE -ne 0) {
     # Leave the stamp in place so the fix-and-retry loop is short; the tree
     # being dirty now also stops an accidental immediate re-run from tagging.
