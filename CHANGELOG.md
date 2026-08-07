@@ -4,6 +4,16 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.7 — 2026-08-07
+
+**The download is less than half the size.** Installing Vaenyx fetched about
+500 MB, and 250 MB of it was one component: the piece that lets Vaenyx talk to
+a Claude subscription. Everybody downloaded it — on Gemini, on Groq, on
+ChatGPT, on a local model — and almost nobody ever used it. It is now fetched
+the first time you connect a Claude subscription, and never otherwise, the
+same way the ChatGPT sign-in already worked. If you already use Claude here,
+nothing changes: the update notices and fetches it back by itself.
+
 ## v0.3.6 — 2026-08-07
 
 **The ChatGPT sign-in installs on a new computer.** It never could: the

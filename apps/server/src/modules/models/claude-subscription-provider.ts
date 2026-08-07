@@ -19,8 +19,11 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-
+import {
+  isClaudeSdkInstalled,
+  loadClaudeSdk,
+  type SdkUserMessage,
+} from "./claude-sdk.js";
 import { noteCoreUsage } from "../core/relay-usage.js";
 import { claudeMachineLogin, getClaudeHomeDirectory } from "./claude-login.js";
 import { readProviderConnections } from "./connections.js";
@@ -141,7 +144,7 @@ export async function claudeSubscriptionVision(
   const jail = join(tmpdir(), "vaenyx-claude-jail", randomUUID());
   mkdirSync(jail, { recursive: true });
 
-  const input = (async function* (): AsyncGenerator<SDKUserMessage> {
+  const input = (async function* (): AsyncGenerator<SdkUserMessage> {
     yield {
       type: "user",
       message: {
@@ -162,7 +165,8 @@ export async function claudeSubscriptionVision(
     };
   })();
 
-  const stream = query({
+  const sdk = await loadClaudeSdk();
+  const stream = sdk.query({
     prompt: input,
     options: {
       allowedTools: [],
@@ -239,7 +243,7 @@ export async function claudeSubscriptionRelay(
           },
         };
 
-  const input = (async function* (): AsyncGenerator<SDKUserMessage> {
+  const input = (async function* (): AsyncGenerator<SdkUserMessage> {
     yield {
       type: "user",
       message: {
@@ -250,7 +254,8 @@ export async function claudeSubscriptionRelay(
     };
   })();
 
-  const stream = query({
+  const sdk = await loadClaudeSdk();
+  const stream = sdk.query({
     prompt: input,
     options: {
       allowedTools: [],
@@ -292,6 +297,13 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     const auth = resolveClaudeSubscriptionAuth(this.#secretsDirectory);
     if (!auth.token && !auth.machineLogin) {
       throw new Error(`MODEL_PROVIDER_ERROR:${this.id}:not-connected`);
+    }
+    // The SDK is fetched when this channel is connected, so a machine that is
+    // connected normally has it. If it is missing anyway — userdata restored
+    // onto a different computer, a half-finished download — say which piece is
+    // missing instead of failing somewhere inside a module that is not there.
+    if (!isClaudeSdkInstalled()) {
+      throw new Error(`MODEL_PROVIDER_ERROR:${this.id}:component-missing`);
     }
 
     // An empty, throwaway working directory: even if a tool call somehow got
@@ -346,7 +358,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     // With an attachment, the prompt becomes ONE streaming user message
     // carrying the image and/or document block plus the text; plain turns stay
     // a simple string.
-    const attachments: SDKUserMessage["message"]["content"] = [];
+    const attachments: SdkUserMessage["message"]["content"] = [];
     if (imageMatch) {
       attachments.push({
         type: "image",
@@ -367,9 +379,9 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
         },
       });
     }
-    const promptInput: string | AsyncIterable<SDKUserMessage> =
+    const promptInput: string | AsyncIterable<SdkUserMessage> =
       attachments.length > 0
-        ? (async function* (): AsyncGenerator<SDKUserMessage> {
+        ? (async function* (): AsyncGenerator<SdkUserMessage> {
             yield {
               type: "user",
               message: {
@@ -382,7 +394,8 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
         : prompt;
 
     try {
-      const stream = query({
+      const sdk = await loadClaudeSdk();
+      const stream = sdk.query({
         prompt: promptInput,
         options: {
           abortController: abort,
@@ -428,7 +441,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           // Never read the machine's Claude settings, CLAUDE.md or MCP config.
           // The one server that can ever appear here is built in this process
           // from the Owner's own folder list; nothing is read off the disk.
-          mcpServers: files ? { vaenyx_files: fetchToolServer(files) } : {},
+          mcpServers: files ? { vaenyx_files: fetchToolServer(sdk, files) } : {},
           settingSources: [],
           systemPrompt:
             // The connector line: it kept closing briefings with a note about

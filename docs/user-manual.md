@@ -236,7 +236,12 @@ Read this inside the app: **Settings → Manual**.
 - **Two groups, never mixed**
   - *Use a subscription you already have* — ChatGPT (Codex CLI) and Claude. Sign
     in once, inside the app. These are **not** free credit; they are your own
-    paid subscriptions.
+    paid subscriptions. Both need a component that is **not** included in the
+    download, so the first time you press either sign-in button it fetches one
+    first — a minute or so for ChatGPT, about 250 MB for Claude. Everyone else
+    downloads neither, which is why the installer is small. If the fetch fails
+    it says so and retries on the next press; nothing else in Vaenyx is
+    affected.
   - *Free API allowance* — pick a provider and paste its key.
 - **The Capabilities table is the whole picture** — one row per capability, and
   the row carries both halves: which model does that job, and whether Vaenyx may
@@ -535,5 +540,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.5-dev.10** · last updated 2026-08-07.
+Manual for **v0.3.7** · last updated 2026-08-07.
 Keep this file up to date whenever a feature changes.

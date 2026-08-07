@@ -9,11 +9,12 @@ import {
   statSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "../../config.js";
+import { npmRunner } from "../core/component-install.js";
 import type { FetchAccess } from "../core/fetching.js";
 
 export interface CodexStatus {
@@ -382,45 +383,11 @@ function probeCodexStatus(): CodexStatus {
 //
 // npm ships beside node.exe, so the machine that runs this server can always
 // find it without PATH — the same lesson the watchdog fix learned.
-// HOW npm IS RUN, and why it is not run as a command name.
-//
-// The obvious spawn — the path to npm.cmd with shell: true — is broken on a
-// default Windows install and had been shipping for weeks: node lives at
-// "C:\Program Files\nodejs", cmd.exe splits that at the space, and the whole
-// thing dies with 'C:\Program' is not recognized. It never showed here
-// because this machine already had the component, so the install never ran;
-// it failed on every genuinely new PC, which is the only place it runs
-// (Oskar's, 2026-08-07). Measured alternatives on that same path:
-//   shell: true on npm.cmd .... 'C:\Program' is not recognized
-//   shell: false on npm.cmd ... spawn EINVAL (node will not exec a .cmd)
-//   cmd /c ""path" args" ...... "The network path was not found"
-//   node npm-cli.js .......... exit 0, and a real install into a prefix that
-//                              itself contains a space also succeeded
-// So npm is run the way node runs anything: as a script, by this very node.
-// No shell, nothing to quote, no space anywhere to get wrong.
-function npmRunner(): { args: string[]; command: string; shell: boolean } {
-  const cli = resolve(
-    dirname(process.execPath),
-    "node_modules",
-    "npm",
-    "bin",
-    "npm-cli.js",
-  );
-  if (existsSync(cli)) {
-    return { args: [cli], command: process.execPath, shell: false };
-  }
-  // Unusual layout (npm installed elsewhere): fall back to the old shape
-  // rather than refusing outright.
-  const beside = resolve(
-    dirname(process.execPath),
-    process.platform === "win32" ? "npm.cmd" : "npm",
-  );
-  return {
-    args: [],
-    command: existsSync(beside) ? beside : "npm",
-    shell: process.platform === "win32",
-  };
-}
+// HOW npm IS RUN lives with the shared component installer now — node runs
+// npm's own script, no shell, nothing for the space in "C:\Program
+// Files\nodejs" to break. It is written down in ONE place, with the four
+// measured alternatives, because this fix was expensive and a second copy is
+// a second thing to forget.
 
 export async function ensureCodexInstalled(): Promise<
   "ready" | "installed" | "install-failed"

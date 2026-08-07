@@ -451,6 +451,7 @@ import {
   startClaudeLogin,
   submitClaudeLoginCode,
 } from "../models/claude-login.js";
+import { ensureClaudeSdkInstalled } from "../models/claude-sdk.js";
 import {
   createProjectMemory,
   deleteProjectMemory,
@@ -1742,6 +1743,18 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      // The Agent SDK is a 250 MB component, not a dependency: everybody who
+      // uses Gemini, Groq or ChatGPT would otherwise download it to never
+      // touch it. This press is the moment it is actually wanted, so this is
+      // where it is fetched — the same shape as the ChatGPT button, and the
+      // same rule about what reaches the browser: a code, never a shell line.
+      const ready = await ensureClaudeSdkInstalled(context.config.dataDirectory);
+      if (ready === "install-failed") {
+        return reply.code(502).send({
+          error:
+            "CLAUDE_COMPONENT_FAILED:The Claude sign-in component could not be installed.",
+        });
+      }
       try {
         const { url } = await startClaudeLogin();
         recordAudit(context.database, {
@@ -1757,7 +1770,7 @@ export async function registerGatewayRoutes(
       } catch {
         cancelClaudeLogin();
         return reply.code(502).send({
-          error: "The Claude sign-in could not be started. Try again.",
+          error: "CLAUDE_LOGIN_FAILED:The Claude sign-in could not start.",
         });
       }
     },

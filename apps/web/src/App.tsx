@@ -10033,6 +10033,21 @@ function codexSignInError(code: string, zh: boolean): string {
     : "The ChatGPT sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.";
 }
 
+// Same idea for the Claude subscription, whose component is far larger: the
+// Agent SDK is fetched on the first connect rather than shipped, so a failure
+// here is a download that did not finish, not a broken Vaenyx.
+function claudeSignInError(message: string, zh: boolean): string {
+  const code = message.split(":")[0];
+  if (code === "CLAUDE_COMPONENT_FAILED") {
+    return zh
+      ? "Claude 订阅组件没装上(约 250 MB,第一次连接时下载)。检查网络后再点一次,它会重新下载。装不上也不影响别的:Vaenyx 其余功能照常,也可以在 Models 里连一个免费的 Gemini 或 Groq key。"
+      : "The Claude subscription component could not be installed (about 250 MB, downloaded the first time you connect). Check the internet connection and press the button again — it retries. Nothing else is affected: the rest of Vaenyx works as normal, and a free Gemini or Groq key under Models is always an option.";
+  }
+  return zh
+    ? "Claude 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"
+    : "The Claude sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.";
+}
+
 function SubscriptionDoorPanel() {
   const { lang } = useI18n();
   const [panel, setPanel] = useState<RelayPanelData | null>(null);
@@ -12263,9 +12278,16 @@ function ModelsPanel({
       const { url } = await startClaudeLogin();
       setClaudeLoginUrl(url);
       if (popup) popup.location.href = url;
-    } catch {
+    } catch (caught) {
       popup?.close();
-      // requestJson already raised the toast with the server's reason.
+      // These two codes carry no toast by design (the api client stays quiet
+      // for "CODE:sentence"), so this screen is where they become words.
+      setError(
+        claudeSignInError(
+          caught instanceof Error ? caught.message : "",
+          lang === "zh",
+        ),
+      );
     } finally {
       setBusy(null);
     }
@@ -12558,6 +12580,16 @@ function ModelsPanel({
           <p className="context-disclaimer">
             {t("legal.notice.modelConnect.cloud")}
           </p>
+          {!claudeLoginUrl ? (
+            // The one thing worth knowing before pressing: this channel needs a
+            // component that is not shipped, so the first press downloads
+            // before anything opens. Said here rather than discovered as a
+            // button that appears to have done nothing for ten minutes.
+            <p className="settings-card-copy text-faint">
+              First time only: this downloads a 250 MB component before the
+              sign-in page opens. Nothing else in Vaenyx needs it.
+            </p>
+          ) : null}
           <div className="model-card-actions">
             {claudeLoginUrl ? (
               <button
@@ -12575,7 +12607,7 @@ function ModelsPanel({
                 onClick={() => void beginClaudeLogin()}
                 type="button"
               >
-                {busy === provider.id ? "Starting…" : "Sign In With Claude"}
+                {busy === provider.id ? "Preparing…" : "Sign In With Claude"}
               </button>
             )}
             <button
@@ -21779,11 +21811,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
       if (url) window.open(url, "_blank", "noopener");
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : zh
-            ? "没能开始 Claude 登录。"
-            : "Could not start the Claude sign-in.",
+        claudeSignInError(caught instanceof Error ? caught.message : "", zh),
       );
     } finally {
       setBusy(false);
@@ -22013,14 +22041,21 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
               </button>
             </>
           ) : (
-            <button
-              className="primary-button"
-              disabled={busy}
-              onClick={() => void beginClaude()}
-              type="button"
-            >
-              {zh ? "用 Claude 登录" : "Sign In With Claude"}
-            </button>
+            <>
+              <p className="settings-card-copy text-faint">
+                {zh
+                  ? "第一次点会先下载一个约 250 MB 的组件,然后才打开登录页面。"
+                  : "The first press downloads a 250 MB component before the sign-in page opens."}
+              </p>
+              <button
+                className="primary-button"
+                disabled={busy}
+                onClick={() => void beginClaude()}
+                type="button"
+              >
+                {zh ? "用 Claude 登录" : "Sign In With Claude"}
+              </button>
+            </>
           )}
         </section>
 

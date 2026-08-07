@@ -16,14 +16,10 @@
 // sniff and the audit row, and there is no other way in. The turn that gets
 // these is also given `tools: []` — every built-in, Read included, stops
 // existing rather than merely being denied.
-import {
-  createSdkMcpServer,
-  type McpSdkServerConfigWithInstance,
-  tool,
-} from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 
 import { FetchRefusedError, type FetchAccess } from "../core/fetching.js";
+import type { ClaudeSdk, SdkMcpServer } from "./claude-sdk.js";
 
 const SERVER_NAME = "vaenyx_files";
 
@@ -52,10 +48,14 @@ function reason(error: unknown): string {
   return "Vaenyx could not open that.";
 }
 
+// The SDK is handed in rather than imported: it is an on-demand component
+// that may not be on this machine at all, and the one caller has already
+// loaded it by the time it needs these tools.
 export function fetchToolServer(
+  sdk: ClaudeSdk,
   access: FetchAccess,
-): McpSdkServerConfigWithInstance {
-  const listFolder = tool(
+): SdkMcpServer {
+  const listFolder = sdk.tool(
     "list_folder",
     "List what is in one of the folders the Owner has allowed. Call it with no folder to see everything that is allowed.",
     {
@@ -66,7 +66,7 @@ export function fetchToolServer(
           "An allowed folder, or a folder inside one. Leave it out to list every allowed folder.",
         ),
     },
-    async (args) => {
+    async (args: { folder?: string }) => {
       try {
         const entries = access.list(args.folder);
         if (entries.length === 0) return said("That folder is empty.");
@@ -86,7 +86,7 @@ export function fetchToolServer(
     },
   );
 
-  const openFile = tool(
+  const openFile = sdk.tool(
     "open_file",
     "Read one text file from a folder the Owner has allowed. Anything outside those folders is refused.",
     {
@@ -96,7 +96,7 @@ export function fetchToolServer(
           "The file, either in full or relative to one of the allowed folders.",
         ),
     },
-    async (args) => {
+    async (args: { path: string }) => {
       try {
         const file = access.open(args.path);
         return said(`${file.path}\n\n${file.text}`);
@@ -106,7 +106,7 @@ export function fetchToolServer(
     },
   );
 
-  return createSdkMcpServer({
+  return sdk.createSdkMcpServer({
     name: SERVER_NAME,
     version: "1.0.0",
     tools: [listFolder, openFile],

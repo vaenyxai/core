@@ -8,6 +8,12 @@ import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { type AppConfig, loadConfig } from "./config.js";
 import { createDatabase } from "./db/database.js";
 import { setCodexToolsDirectory } from "./modules/harness/codex.js";
+import { claudeMachineLogin } from "./modules/models/claude-login.js";
+import {
+  restoreClaudeSdkForConnectedInstance,
+  setClaudeSdkToolsDirectory,
+} from "./modules/models/claude-sdk.js";
+import { resolveClaudeSubscriptionAuth } from "./modules/models/claude-subscription-provider.js";
 import { seedLibraryIfEmpty } from "./modules/core/library-seed.js";
 import { initModelRegistry } from "./modules/models/registry.js";
 import { normalizeEngineConnections } from "./modules/models/provider-settings.js";
@@ -43,7 +49,23 @@ export async function buildApp(
   // Where the ChatGPT sign-in component lives: userdata/tools, named by
   // Vaenyx rather than by whichever account runs the server.
   setCodexToolsDirectory(config.dataDirectory);
+  // Same folder, same reason, for the Claude subscription component.
+  setClaudeSdkToolsDirectory(config.dataDirectory);
   initModelRegistry(config);
+  // An instance that was already using its Claude subscription keeps it: the
+  // component used to be a dependency, and this upgrade prunes it.
+  restoreClaudeSdkForConnectedInstance({
+    connected: Boolean(
+      resolveClaudeSubscriptionAuth(config.secretsDirectory).token ||
+        claudeMachineLogin(),
+    ),
+    dataDirectory: config.dataDirectory,
+    onDone: (outcome) =>
+      app.log.warn(
+        { outcome },
+        "claude subscription component could not be restored",
+      ),
+  });
   // Web Push: point the push module at the secrets directory (VAPID keypair
   // lives there, generated on first use).
   initPushService(config);

@@ -25,6 +25,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 
 import { loadConfig } from "../../config.js";
+import { claudeComponentRoots } from "./claude-sdk.js";
 
 const require = createRequire(import.meta.url);
 
@@ -107,6 +108,12 @@ export function bundledClaudeExecutable(): string | null {
     `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}-musl`,
   ];
   for (const packageName of candidates) {
+    // The on-demand component first: on a normal install the SDK is not in the
+    // app's own node_modules at all, it is in userdata/tools.
+    for (const root of claudeComponentRoots()) {
+      const path = join(root, ...packageName.split("/"), binary);
+      if (existsSync(path)) return path;
+    }
     try {
       const path = join(
         dirname(require.resolve(`${packageName}/package.json`)),
