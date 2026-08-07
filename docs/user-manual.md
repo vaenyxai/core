@@ -239,7 +239,8 @@ Read this inside the app: **Settings → Manual**.
     paid subscriptions. Both need a component that is **not** included in the
     download, so the first time you press either sign-in button it fetches one
     first — a minute or so for ChatGPT, about 250 MB for Claude. Everyone else
-    downloads neither, which is why the installer is small. If the fetch fails
+    downloads neither, which is a quarter of a gigabyte the download does not
+    carry. If the fetch fails
     it says so and retries on the next press; nothing else in Vaenyx is
     affected.
   - *Free API allowance* — pick a provider and paste its key.

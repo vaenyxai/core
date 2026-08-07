@@ -575,7 +575,7 @@ try {
   # I" — the zip route, a developer checkout and a repaired install all answer
   # it correctly, and a payload that is somehow incomplete falls back to doing
   # the work rather than starting something broken.
-  $prebuilt = (Test-Path (Join-Path $root "node_modulesastify")) -and
+  $prebuilt = (Test-Path (Join-Path $root "node_modules\fastify")) -and
     (Test-Path (Join-Path $root "node_modules\@vaenyx\contracts\package.json")) -and
     (Test-Path (Join-Path $root "apps\server\dist\index.js")) -and
     (Test-Path (Join-Path $root "apps\web\dist\index.html"))

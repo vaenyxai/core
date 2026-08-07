@@ -14,6 +14,14 @@ the first time you connect a Claude subscription, and never otherwise, the
 same way the ChatGPT sign-in already worked. If you already use Claude here,
 nothing changes: the update notices and fetches it back by itself.
 
+**Installing does not build anything any more.** The setup used to hand your
+computer the source code and have it do the rest: download about 500 MB in
+18,000 files, then compile — ten to twenty minutes, and the two steps that have
+gone wrong most often on other people's machines. vaenyx-setup.exe now carries
+Vaenyx already built. Steps three and four say so and move on, and the whole
+install is a few minutes of copying. The zip download still builds, for anyone
+who prefers it that way.
+
 ## v0.3.6 — 2026-08-07
 
 **The ChatGPT sign-in installs on a new computer.** It never could: the

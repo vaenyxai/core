@@ -103,20 +103,41 @@ Write-Host "  Payload verified ($migrationCount migrations)."
 if ($WithDependencies) {
   Push-Location $Destination
   try {
-    # Everything, because the build needs typescript and vite; pruned below.
+    # npm runs inside cmd.exe WITH ITS OWN REDIRECT, and the redirect is the
+    # part that matters. This script sets $ErrorActionPreference = "Stop", and
+    # PowerShell 5.1 turns anything a native command writes to stderr into a
+    # terminating error -- vite's progress reporter writes there, so a
+    # perfectly good build failed as "NativeCommandError". Wrapping it in
+    # cmd.exe alone does not help: cmd passes the stream straight through.
+    # Sending both streams to a file inside the cmd line means nothing reaches
+    # PowerShell at all, the exit code is the only verdict, and the output is
+    # kept for whoever has to read it. Same rule, same reason, as
+    # Vaenyx-Apply-Update.ps1.
+    $buildLog = Join-Path ([System.IO.Path]::GetTempPath()) `
+      ("vaenyx-payload-build-" + [guid]::NewGuid().ToString("N") + ".log")
+    function Invoke-PayloadNpm {
+      param([string]$Arguments, [string]$Failure)
+      cmd.exe /c "npm $Arguments >> ""$buildLog"" 2>&1"
+      if ($LASTEXITCODE -ne 0) {
+        Write-Host "  --- npm output ---"
+        if (Test-Path $buildLog) { Get-Content $buildLog -Tail 40 | ForEach-Object { Write-Host "  $_" } }
+        throw $Failure
+      }
+    }
+
+    # Everything is installed, because the build needs typescript and vite;
+    # pruned two steps later.
     Write-Host "  Installing dependencies into the payload..."
-    & npm ci --no-audit --no-fund
-    if ($LASTEXITCODE -ne 0) { throw "npm ci failed while staging the payload" }
+    Invoke-PayloadNpm "ci --no-audit --no-fund" "npm ci failed while staging the payload"
 
     Write-Host "  Building..."
-    & npm run build
-    if ($LASTEXITCODE -ne 0) { throw "the build failed while staging the payload" }
+    Invoke-PayloadNpm "run build" "the build failed while staging the payload"
 
     # The user needs none of the build tooling. This is the difference between
     # shipping ~230 MB and ~115 MB.
     Write-Host "  Removing build-only dependencies..."
-    & npm prune --omit=dev --no-audit --no-fund
-    if ($LASTEXITCODE -ne 0) { throw "npm prune failed while staging the payload" }
+    Invoke-PayloadNpm "prune --omit=dev --no-audit --no-fund" "npm prune failed while staging the payload"
+    Remove-Item $buildLog -Force -ErrorAction SilentlyContinue
   } finally {
     Pop-Location
   }
@@ -127,12 +148,36 @@ if ($WithDependencies) {
   $replaced = 0
   if (Test-Path $workspaceLinks) {
     foreach ($link in Get-ChildItem $workspaceLinks -Force) {
-      $source = Join-Path $Destination "packages\$($link.Name)"
-      if (-not (Test-Path $source)) {
+      # Follow the junction rather than guessing where it points. The
+      # workspaces are apps/* AND packages/* -- a first version looked only in
+      # packages/ and stopped dead on @vaenyx/server, which is apps/server.
+      # Guessing from the package name would work today and rot the moment a
+      # folder is renamed; the link already knows the answer.
+      $source = $null
+      $target = (Get-Item $link.FullName -Force).Target
+      if ($target) {
+        $targetPath = @($target)[0]
+        if (Test-Path $targetPath) { $source = (Resolve-Path $targetPath).Path }
+      }
+      if (-not $source) {
+        foreach ($root in @("apps", "packages")) {
+          $candidate = Join-Path $Destination "$root\$($link.Name)"
+          if (Test-Path $candidate) { $source = $candidate; break }
+        }
+      }
+      if (-not $source) {
         throw "node_modules\@vaenyx\$($link.Name) points at a workspace that is not in the payload."
       }
       Remove-Item $link.FullName -Recurse -Force
-      Copy-Item $source $link.FullName -Recurse -Force
+      # Only a nested node_modules is left behind. dist is NOT excluded, and
+      # that is not an oversight: @vaenyx/contracts IS its dist -- its package
+      # entry point is dist/index.js, so a copy without it starts the server
+      # and then dies on the first import (caught in rehearsal, 2026-08-07).
+      & robocopy $source $link.FullName /E /NFL /NDL /NJH /NJS /NP /XD node_modules | Out-Null
+      if ($LASTEXITCODE -ge 8) {
+        throw "could not copy the workspace package $($link.Name) (robocopy $LASTEXITCODE)"
+      }
+      $global:LASTEXITCODE = 0
       $replaced = $replaced + 1
     }
   }
@@ -149,7 +194,7 @@ if ($WithDependencies) {
 
   # And that the pieces a prebuilt install cannot start without are really here.
   foreach ($item in @(
-      "node_modulesastify",
+      "node_modules\fastify",
       "node_modules\@vaenyx\contracts\package.json",
       "apps\server\dist\index.js",
       "apps\web\dist\index.html")) {

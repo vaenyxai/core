@@ -1,4 +1,4 @@
-# Applies an update that the running server already downloaded, verified and
+﻿# Applies an update that the running server already downloaded, verified and
 # staged. Called by the watchdog (and by Vaenyx-Start.cmd) BEFORE the server
 # starts, so nothing being replaced is in use.
 #
@@ -157,6 +157,14 @@ try {
   Write-Log "New files copied in."
 
   # 3. Dependencies may have changed with the lockfile; rebuild from scratch.
+  #
+  # This route is unchanged by the prebuilt exe payload, and it is safe on one:
+  # an exe install has node_modules pruned to production only and no compiler,
+  # and `npm ci` installs the lockfile in full -- dev dependencies included --
+  # before the build runs, so the tree heals itself. It also rewrites the
+  # @vaenyx workspace entries as junctions, which is correct here: on a machine
+  # that is running Vaenyx, a link is as good as a copy. The copies exist for
+  # the trip inside an installer, not for the running instance.
   #
   # Run npm through cmd.exe with its output appended to the log. Calling it
   # directly is a trap: PowerShell turns anything a native command writes to
