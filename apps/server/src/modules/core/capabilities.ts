@@ -12,7 +12,7 @@
 // screen. Two vocabularies would need a lookup table, lookup tables rot, and the
 // Owner would see "Picture in" in Settings and "needs vision" on a Method
 // without knowing they are the same thing.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import type { DatabaseHandle } from "../../db/database.js";
@@ -124,6 +124,44 @@ export interface MethodManifest {
   capabilities: Capability[];
   /** The oldest Vaenyx that can honour this manifest, when the author set one. */
   minimumVersion: string | null;
+}
+
+// WHO WOULD NOTICE if this switch went off. Switching a capability off is a
+// decision with consequences somewhere else in the house, and until now the
+// row asked for it with no way to see them: the Owner had to remember which
+// of their Methods reads pictures before deciding whether Vision could go
+// (Oskar, 2026-08-07). A count is a view, not a setting — nothing here can
+// block or change anything, it only says how many Methods declared this
+// capability in their manifest.
+//
+// Reads the library folder, so it is called where a directory listing is
+// already acceptable — never inside a chat turn.
+export function countMethodsPerCapability(
+  libraryDirectory: string,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  if (!existsSync(libraryDirectory)) return counts;
+  let entries: string[];
+  try {
+    entries = readdirSync(libraryDirectory);
+  } catch {
+    return counts;
+  }
+  for (const entry of entries) {
+    const directory = join(libraryDirectory, entry);
+    let manifest: MethodManifest;
+    try {
+      manifest = readMethodManifest(directory);
+    } catch {
+      // A Method whose manifest will not parse is a problem the Library
+      // screen reports; it must not take this count down with it.
+      continue;
+    }
+    for (const capability of manifest.capabilities) {
+      counts[capability] = (counts[capability] ?? 0) + 1;
+    }
+  }
+  return counts;
 }
 
 // Read and normalise a Method's manifest.

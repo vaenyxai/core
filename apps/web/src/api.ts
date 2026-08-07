@@ -1627,6 +1627,9 @@ export interface CapabilityCeiling {
   neverViaToken: string[];
   /** Grantable to an app key, but only as its own deliberate approval. */
   needsOwnTokenApproval: string[];
+  /** How many Methods declared each capability — shown on the row so the
+   *  consequence of switching it off is visible before it is switched. */
+  usedByMethods: Record<string, number>;
 }
 
 export function fetchCapabilities(): Promise<CapabilityCeiling> {

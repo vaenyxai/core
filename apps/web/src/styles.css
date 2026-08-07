@@ -498,6 +498,57 @@ textarea::placeholder {
   margin-top: 6px;
 }
 
+/* Explanations that are true but rarely needed: one quiet line that opens.
+   The card stays short for the people who already know. */
+.settings-help {
+  margin: 0 0 var(--space-2);
+}
+
+.settings-help > summary {
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  cursor: pointer;
+}
+
+.settings-help > summary::marker {
+  color: var(--text-faint);
+}
+
+/* The one line a connected backend gets: what it can do, and the way in to
+   everything else. */
+.model-card-summary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-card-summary .line-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  transition: transform 140ms ease;
+}
+
+.model-card-summary[aria-expanded="true"] .line-icon {
+  transform: rotate(180deg);
+}
+
+.model-card-does {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The model list and the button that fetches it, on one line — the picker
    takes the room, the ask sits beside it. */
 .model-choice {
@@ -1237,6 +1288,15 @@ textarea::placeholder {
   min-width: 0;
   font-size: var(--fs-md);
   line-height: 1;
+}
+
+/* "3 Methods use this" — a consequence, not a setting, so it reads as the
+   quietest thing on the row. */
+.capability-row-users {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  font-style: normal;
 }
 
 /* The old wording, kept as an explanation and only on this screen. */

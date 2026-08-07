@@ -205,6 +205,21 @@ Read this inside the app: **Settings → Manual**.
   connected. Every provider API key is pasted in Models, without exception. (An
   app's **Model Key** is a different thing: it opens the Subscription Door, and
   it is made, and replaced, on that card — see *Subscription Door* below.)
+- **Which model, not just which provider** — connect a provider, then open it
+  in Models and press **List available models**. Vaenyx asks that provider,
+  with your own key, what it will accept, and offers the answer as a list — so
+  you pick the current name instead of guessing between the versions. Nothing
+  is stored: the list is asked for again whenever you want it. Backends with
+  no list to ask (ChatGPT via Codex, the Claude subscription, a local server)
+  say so and keep the typed box.
+- **Free or paid, marked per job** — every provider carries a badge, and the
+  engine lists mark the job that costs money even when the provider is
+  otherwise free. Gemini is the one to know: its free tier covers text,
+  pictures-in, hearing, PDFs and speaking, and gives nothing for **making**
+  pictures — so its entry on the Drawing row says so.
+- **What each row would affect** — a capability row says how many Methods
+  declared it ("3 Methods use this"), so you can see who would notice before
+  you switch it off.
 - **Free models** — the **Free models** button beside the heading shows what was
   found last time; **Ask again** beside it asks your main model again and then
   shows you the new answer. **Careful:** The answer says which model said it and
@@ -512,5 +527,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.5-dev.1** · last updated 2026-08-07.
+Manual for **v0.3.5-dev.2** · last updated 2026-08-07.
 Keep this file up to date whenever a feature changes.

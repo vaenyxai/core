@@ -564,6 +564,7 @@ import {
   missingCapabilities,
   ModeAboveCeilingError,
   modeAboveCeilingMessage,
+  countMethodsPerCapability,
   NEEDS_OWN_TOKEN_APPROVAL,
   NEVER_VIA_TOKEN,
   readGlobalCapabilities,
@@ -5028,6 +5029,7 @@ export async function registerGatewayRoutes(
               implemented: Type.Record(Type.String(), Type.Boolean()),
               neverViaToken: Type.Array(Type.String()),
               needsOwnTokenApproval: Type.Array(Type.String()),
+              usedByMethods: Type.Record(Type.String(), Type.Number()),
             },
             { additionalProperties: false },
           ),
@@ -5079,6 +5081,9 @@ export async function registerGatewayRoutes(
         // changes, the screen has to change with it or it starts lying.
         neverViaToken: [...NEVER_VIA_TOKEN],
         needsOwnTokenApproval: [...NEEDS_OWN_TOKEN_APPROVAL],
+        // How many Methods declared each capability — so the row can say who
+        // would notice before the switch goes off. A view; it decides nothing.
+        usedByMethods: countMethodsPerCapability(context.config.libraryDirectory),
       };
     },
   );

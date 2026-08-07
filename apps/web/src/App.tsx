@@ -10705,6 +10705,10 @@ function CapabilitiesPanel({
   // Told apart from "not loaded yet", because the two need different sentences.
   const [ceilingUnread, setCeilingUnread] = useState(false);
   const [implemented, setImplemented] = useState<Record<string, boolean>>({});
+  // How many Methods declared each capability, for the note on the row.
+  const [usedByMethods, setUsedByMethods] = useState<Record<string, number>>(
+    {},
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [showFree, setShowFree] = useState(false);
   const [providers, setProviders] = useState<ModelProviderInfo[]>([]);
@@ -10768,6 +10772,7 @@ function CapabilitiesPanel({
       .then((result) => {
         setGlobal(result.global);
         setImplemented(result.implemented);
+        setUsedByMethods(result.usedByMethods ?? {});
         setCeilingUnread(false);
         // The speak buttons on the chat page read this too, and they are a
         // different component tree that will not re-fetch on its own. They get
@@ -12019,6 +12024,18 @@ function CapabilitiesPanel({
                 <span className="capability-row-name">
                   {lang === "zh" ? meta.name.zh : meta.name.en}
                   <em>({lang === "zh" ? meta.gloss.zh : meta.gloss.en})</em>
+                  {/* Who would notice if this went off. Shown only when the
+                      answer is "somebody" — a row nothing depends on says
+                      nothing rather than "0 Methods". */}
+                  {(usedByMethods[meta.id] ?? 0) > 0 ? (
+                    <em className="capability-row-users">
+                      {lang === "zh"
+                        ? `${usedByMethods[meta.id]} 个 Method 在用`
+                        : `${usedByMethods[meta.id]} Method${
+                            usedByMethods[meta.id] === 1 ? "" : "s"
+                          } use this`}
+                    </em>
+                  ) : null}
                 </span>
                 {engine ? (
                   <div className="capability-row-engine">
@@ -12801,11 +12818,21 @@ function ModelsPanel({
   return (
     <section className="settings-card">
       <p className="eyebrow">Models</p>
+      {/* Three lines became one. The rest was true and rarely needed, so it
+          moved behind the same expander pattern the rows use. */}
       <p className="settings-card-copy">
-        Connect one or more model backends. Keys stay on this machine and are
-        never uploaded. Codex uses its own ChatGPT login (see the Connection
-        tab).
+        {lang === "zh"
+          ? "key 只存在这台电脑上,永不上传。"
+          : "Keys stay on this machine and are never uploaded."}
       </p>
+      <details className="settings-help">
+        <summary>{lang === "zh" ? "怎么选" : "How to choose"}</summary>
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "连一个或几个模型后端。每一个下面写着:免费还是付费、能干什么、以及这家拿你的内容做什么。ChatGPT(Codex)用它自己的登录,不需要 key。"
+            : "Connect one or more model backends. Each one says whether it is free or paid, what it can do, and what that provider does with your content. ChatGPT (Codex) uses its own login and needs no key."}
+        </p>
+      </details>
       {error ? <p className="form-error">{error}</p> : null}
       <div className="model-cards">
         {connectedProviders.map((provider) => (
@@ -12839,16 +12866,40 @@ function ModelsPanel({
                 </span>
               ) : null}
             </div>
-            {PROVIDER_COST_FACTS[provider.id]?.eligibility ? (
-              <small className="model-card-model">
-                {PROVIDER_COST_FACTS[provider.id]?.eligibility?.[
-                  lang === "zh" ? "zh" : "en"
-                ]}
-              </small>
-            ) : null}
-            {provider.model ? (
-              <small className="model-card-model">{provider.model}</small>
-            ) : null}
+            {/* Everything below is behind the expander. A connected backend
+                is one line — name, state, what it costs, what it can do —
+                because the list is read to answer "what have I got", and the
+                detail is only ever wanted about ONE of them (Oskar,
+                2026-08-07: 字还是太多太大,一眼扫完). */}
+            <button
+              aria-expanded={editingId === provider.id}
+              className="model-card-summary"
+              onClick={() =>
+                setEditingId((current) =>
+                  current === provider.id ? null : provider.id,
+                )
+              }
+              type="button"
+            >
+              <span className="model-card-does">
+                {capabilitySummary(provider, lang)}
+              </span>
+              <LineIcon>
+                <path d="m7 10 5 5 5-5" />
+              </LineIcon>
+            </button>
+            {editingId === provider.id ? (
+              <>
+                {PROVIDER_COST_FACTS[provider.id]?.eligibility ? (
+                  <small className="model-card-model">
+                    {PROVIDER_COST_FACTS[provider.id]?.eligibility?.[
+                      lang === "zh" ? "zh" : "en"
+                    ]}
+                  </small>
+                ) : null}
+                {provider.model ? (
+                  <small className="model-card-model">{provider.model}</small>
+                ) : null}
             {/* The provider's own data conditions, copied from its terms and
                 dated — the label beside the choice, never our judgment. */}
             {(() => {
@@ -12915,17 +12966,6 @@ function ModelsPanel({
               ) : null}
               {provider.kind !== "cli-login" ? (
                 <>
-                  <button
-                    className="secondary-button"
-                    onClick={() =>
-                      setEditingId((current) =>
-                        current === provider.id ? null : provider.id,
-                      )
-                    }
-                    type="button"
-                  >
-                    {editingId === provider.id ? "Close" : "Edit"}
-                  </button>
                   {confirmDisconnect === provider.id ? (
                     <>
                       <button
@@ -12959,8 +12999,10 @@ function ModelsPanel({
                   )}
                 </>
               ) : null}
-            </div>
-            {editingId === provider.id ? renderConnectForm(provider) : null}
+                </div>
+                {renderConnectForm(provider)}
+              </>
+            ) : null}
           </div>
         ))}
       </div>
@@ -17469,6 +17511,29 @@ function peekCreateIntent(): {
 
 // The sign-in page's quick-connect row and the Models panel's "get a key"
 // links share this list. Codex is the ChatGPT login; `local` needs no key.
+// What a connected backend can be used for, in the fewest words that are
+// still true — the one line the Models list is read for. Built from the
+// server's own capability list, so a backend that gains a job says so here
+// without anybody editing a second table.
+function capabilitySummary(
+  provider: { capabilities: string[] },
+  lang: string,
+): string {
+  const zh = lang === "zh";
+  const words: Record<string, { en: string; zh: string }> = {
+    chat: { en: "chat", zh: "聊天" },
+    "voice-in": { en: "hearing", zh: "听" },
+    "voice-out": { en: "speaking", zh: "念" },
+    vision: { en: "pictures in", zh: "看图" },
+    image: { en: "pictures out", zh: "生图" },
+  };
+  const parts = provider.capabilities
+    .map((capability) => words[capability])
+    .filter(Boolean)
+    .map((word) => (zh ? word!.zh : word!.en));
+  return parts.join(zh ? "、" : " · ");
+}
+
 const CONNECTABLE_MODELS: Array<{
   id: string;
   label: string;

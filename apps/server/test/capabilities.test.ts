@@ -3,7 +3,13 @@
 // REFUSES the run, where the same unknown name in routine.json is silently
 // dropped. Dropping it here would let an old client run a Method without a
 // capability it needed and look fine, which is the bug nobody ever finds.
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -15,6 +21,7 @@ import {
   currentCapabilityName,
   CAPABILITY_DEFAULT_ON,
   capabilityRefusedBy,
+  countMethodsPerCapability,
   chargeToken,
   decideCapabilities,
   decideTokenCapabilities,
@@ -544,5 +551,41 @@ describe("capabilities", () => {
   it("names the capability when one was reached for but never declared", () => {
     expect(undeclaredCapabilityMessage("web")).toContain("use the web");
     expect(undeclaredCapabilityMessage("web")).toContain("never declared");
+  });
+
+  // Switching a capability off is a decision with consequences elsewhere in
+  // the house; the row shows how many Methods declared it so those
+  // consequences are visible first.
+  it("counts how many Methods declared each capability", () => {
+    const library = mkdtempSync(resolve(tmpdir(), "vaenyx-cap-library-"));
+    directories.push(library);
+    const write = (name: string, manifest: unknown) => {
+      const folder = join(library, name);
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(
+        join(folder, "manifest.json"),
+        JSON.stringify(manifest),
+        "utf8",
+      );
+    };
+    write("reads-and-sees", { capabilities: ["reading", "vision"] });
+    write("just-reads", { capabilities: ["reading"] });
+    write("declares-nothing", { capabilities: [] });
+    // A folder with no manifest at all counts for nothing, and a broken one
+    // must not take the whole count down with it.
+    mkdirSync(join(library, "no-manifest"), { recursive: true });
+    mkdirSync(join(library, "broken"), { recursive: true });
+    writeFileSync(join(library, "broken", "manifest.json"), "{ not json", "utf8");
+
+    const counts = countMethodsPerCapability(library);
+    expect(counts.reading).toBe(2);
+    expect(counts.vision).toBe(1);
+    expect(counts.speaking).toBeUndefined();
+  });
+
+  it("counts nothing, and does not throw, when there is no library yet", () => {
+    expect(countMethodsPerCapability(join(tmpdir(), "vaenyx-not-here"))).toEqual(
+      {},
+    );
   });
 });
