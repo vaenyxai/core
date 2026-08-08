@@ -58,6 +58,9 @@ import {
   type SetDeviceModeRequest,
   ApplyDeviceModeResponseSchema,
   StopTurnRequestSchema,
+  FactsResponseSchema,
+  RecordFactRequestSchema,
+  type RecordFactRequest,
   VisionStatusSchema,
   ConnectVisionRequestSchema,
   type ConnectVisionRequest,
@@ -453,6 +456,14 @@ import {
 } from "../models/claude-login.js";
 import { ensureClaudeSdkInstalled } from "../models/claude-sdk.js";
 import { componentProgress } from "../core/wanted-components.js";
+import { approveFactCandidate } from "../core/facts-extract.js";
+import {
+  listCurrentFacts,
+  listFactHistory,
+  recordFact,
+  retireFact,
+  searchFacts,
+} from "../core/facts.js";
 import {
   createProjectMemory,
   deleteProjectMemory,
@@ -1122,6 +1133,177 @@ export async function registerGatewayRoutes(
   // 127.0.0.1 only, it names components and nothing about the person, and the
   // first-run screen needs it before any Owner exists to authenticate as.
   app.get("/v1/system/components", async () => componentProgress());
+
+  // ---- What Vaenyx knows (the facts table) ----
+  //
+  // Every one of these is filtered by the caller's mode in SQL, never by
+  // asking the model to be careful: one household member's medication must
+  // not surface in another's chat, and a rule that lives in a prompt leaks.
+  app.get(
+    "/v1/facts",
+    { schema: { response: { 200: FactsResponseSchema, 401: ErrorResponseSchema } } },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      return { facts: listCurrentFacts(context.database, owner.modeId) };
+    },
+  );
+
+  // Everything this slot has ever been — "where did I live in March". The
+  // whole reason nothing in that table is ever deleted.
+  app.get<{ Params: { slot: string } }>(
+    "/v1/facts/history/:slot",
+    {
+      schema: {
+        params: Type.Object({ slot: Type.String({ minLength: 1 }) }, {
+          additionalProperties: false,
+        }),
+        response: { 200: FactsResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      return {
+        facts: listFactHistory(context.database, request.params.slot, owner.modeId),
+      };
+    },
+  );
+
+  app.get<{ Querystring: { q?: string } }>(
+    "/v1/facts/search",
+    {
+      schema: {
+        querystring: Type.Object(
+          { q: Type.Optional(Type.String({ maxLength: 200 })) },
+          { additionalProperties: false },
+        ),
+        response: { 200: FactsResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      const query = request.query.q?.trim() ?? "";
+      if (!query) return { facts: [] };
+      return { facts: searchFacts(context.database, query, owner.modeId) };
+    },
+  );
+
+  // The Owner writing one by hand. This is the ONLY door through which
+  // something read on a web page can become a long-term memory, and it is
+  // deliberately a door a person has to walk through: the extractor never
+  // reads an assistant reply, so nothing fetched can arrive on its own.
+  app.post<{ Body: RecordFactRequest }>(
+    "/v1/facts",
+    {
+      schema: {
+        body: RecordFactRequestSchema,
+        response: {
+          200: FactsResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      try {
+        recordFact(context.database, {
+          eventTime: request.body.eventTime ?? null,
+          modeId: owner.modeId,
+          slot: request.body.slot,
+          sourceDetail: request.body.sourceDetail ?? null,
+          sourceKind: request.body.sourceKind ?? "manual",
+          value: request.body.value,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        return reply.code(400).send({
+          error: message.startsWith("FACT_SLOT_UNKNOWN")
+            ? "FACT_SLOT_UNKNOWN:Vaenyx does not keep that kind of fact."
+            : "FACT_INVALID:That could not be saved.",
+        });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "memory.fact.record",
+        decision: "allowed",
+        reason: `Owner recorded the fact ${request.body.slot}.`,
+        resourceType: "system",
+      });
+      return { facts: listCurrentFacts(context.database, owner.modeId) };
+    },
+  );
+
+  // Forgetting is dating, not deleting: the row stays so "Vaenyx forgot that
+  // on Tuesday" is still answerable and an approved fact cannot vanish
+  // without a trace.
+  app.delete<{ Params: { id: string } }>(
+    "/v1/facts/:id",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }, {
+          additionalProperties: false,
+        }),
+        response: {
+          200: FactsResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!retireFact(context.database, request.params.id)) {
+        return reply.code(404).send({ error: "That memory is not there." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "memory.fact.forget",
+        decision: "allowed",
+        reason: "Owner asked Vaenyx to forget a fact.",
+        resourceType: "system",
+      });
+      return { facts: listCurrentFacts(context.database, owner.modeId) };
+    },
+  );
+
+  // Approving a proposed fact. Separate from the trait approval on purpose:
+  // that one collapses a whole category onto one row.
+  app.post<{ Params: { id: string } }>(
+    "/v1/facts/candidates/:id/approve",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }, {
+          additionalProperties: false,
+        }),
+        response: {
+          200: FactsResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      try {
+        approveFactCandidate(context.database, request.params.id, owner.id);
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "That could not be approved.",
+        });
+      }
+      return { facts: listCurrentFacts(context.database, owner.modeId) };
+    },
+  );
 
   app.post(
     "/v1/system/shutdown",

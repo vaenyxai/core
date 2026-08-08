@@ -598,6 +598,58 @@ export const VaenyxMeCandidateSourceTypeSchema = Type.Union([
   Type.Literal("chat_history"),
 ]);
 
+// A fact: one slot, one value, two times. `validUntil` null means this is what
+// is true now — the Owner's screen shows current facts and, on request, what
+// each of them replaced.
+export const FactSchema = Type.Object(
+  {
+    id: Type.String(),
+    slot: Type.String(),
+    value: Type.String(),
+    // When it was true in the world. Legitimately partial: "2025-03".
+    eventTime: Type.Union([Type.String(), Type.Null()]),
+    // When Vaenyx learned it.
+    recordedAt: Type.String(),
+    validUntil: Type.Union([Type.String(), Type.Null()]),
+    supersedesId: Type.Union([Type.String(), Type.Null()]),
+    // Where it came from, so every memory on the screen can be traced back to
+    // the conversation that produced it.
+    sourceConversationId: Type.Union([Type.String(), Type.Null()]),
+    sourceMessageId: Type.Union([Type.String(), Type.Null()]),
+    sourceKind: Type.Union([
+      Type.Literal("external"),
+      Type.Literal("manual"),
+      Type.Literal("owner"),
+    ]),
+    sourceDetail: Type.Union([Type.String(), Type.Null()]),
+    confidence: Type.Number(),
+    modeId: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const FactsResponseSchema = Type.Object(
+  { facts: Type.Array(FactSchema) },
+  { additionalProperties: false },
+);
+
+export const RecordFactRequestSchema = Type.Object(
+  {
+    slot: Type.String({ minLength: 1, maxLength: 60 }),
+    value: Type.String({ minLength: 1, maxLength: 2000 }),
+    eventTime: Type.Optional(Type.Union([Type.String({ maxLength: 40 }), Type.Null()])),
+    // The Owner adding something they read somewhere marks it as such, and it
+    // carries the URL from then on.
+    sourceKind: Type.Optional(
+      Type.Union([Type.Literal("external"), Type.Literal("manual")]),
+    ),
+    sourceDetail: Type.Optional(
+      Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 export const VaenyxMeCandidateSchema = Type.Object(
   {
     id: Type.String(),
@@ -615,6 +667,13 @@ export const VaenyxMeCandidateSchema = Type.Object(
     reviewedAt: Type.Union([Type.String(), Type.Null()]),
     createdAt: Type.String(),
     updatedAt: Type.String(),
+    // Set when this candidate is a proposed FACT rather than a trait. The
+    // review screen shows them differently and they are approved by a
+    // different path, because the trait path collapses a whole category onto
+    // one row and an address must never be overwritten without a trace.
+    proposedSlot: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    proposedValue: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    proposedEventTime: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -2483,6 +2542,9 @@ export type UpdateAgentProfileNameRequest = Static<
 >;
 export type VaenyxThread = Static<typeof VaenyxThreadSchema>;
 export type VaenyxMeItem = Static<typeof VaenyxMeItemSchema>;
+export type Fact = Static<typeof FactSchema>;
+export type FactsResponse = Static<typeof FactsResponseSchema>;
+export type RecordFactRequest = Static<typeof RecordFactRequestSchema>;
 export type VaenyxMeCandidate = Static<typeof VaenyxMeCandidateSchema>;
 export type VaenyxMeProfile = Static<typeof VaenyxMeProfileSchema>;
 export type UpdateProjectMemoryRequest = Static<

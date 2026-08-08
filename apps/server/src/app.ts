@@ -10,6 +10,8 @@ import { createDatabase } from "./db/database.js";
 import { setCodexToolsDirectory } from "./modules/harness/codex.js";
 import { installWantedComponent } from "./modules/core/install-components.js";
 import { startWantedComponents } from "./modules/core/wanted-components.js";
+import { runFactExtractionPass } from "./modules/core/facts-runner.js";
+import { getOwner } from "./modules/guard/auth.js";
 import { claudeMachineLogin } from "./modules/models/claude-login.js";
 import {
   restoreClaudeSdkForConnectedInstance,
@@ -159,6 +161,33 @@ export async function buildApp(
     3 * 60_000,
   );
   vaenyxMeWarmup.unref();
+
+  // FACTS, distilled out of quiet conversations. Hourly, because the machine
+  // is the household's own and idle most of the night — a cloud assistant pays
+  // per token to consolidate memory and so does it rarely; this one does not,
+  // and that is the one advantage self-hosting has that is not about privacy.
+  //
+  // It never touches a conversation that is still happening (30 minutes of
+  // quiet first), reads only what the OWNER said, and proposes rather than
+  // decides: everything lands in the review queue.
+  const factsTick = setInterval(
+    () => {
+      const owner = getOwner(database);
+      if (!owner) return;
+      void runFactExtractionPass(database, owner.id)
+        .then((result) => {
+          if (result.queued > 0) {
+            app.log.info(
+              { conversations: result.conversations, queued: result.queued },
+              "facts proposed for review",
+            );
+          }
+        })
+        .catch((error) => app.log.error(error));
+    },
+    60 * 60_000,
+  );
+  factsTick.unref();
 
   // Event-loop stall detector. On 2026-08-06 the Owner's instance degraded
   // after about an hour into answering every second or third request 2.5-4

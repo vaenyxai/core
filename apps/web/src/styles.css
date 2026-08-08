@@ -7845,3 +7845,49 @@ html, body { overscroll-behavior-y: none; }
   line-height: 1.6;
   text-align: left;
 }
+
+/* What Vaenyx knows: one line per fact, its working underneath. Deliberately
+   a list and not cards — this is a record to be scanned, not a gallery. */
+.fact-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fact-row {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+}
+
+.fact-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: baseline;
+}
+
+.fact-value {
+  color: var(--text);
+  font-size: var(--fs-body);
+}
+
+.fact-meta {
+  font-size: var(--fs-sm);
+}
+
+.fact-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.fact-history {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-3);
+  font-size: var(--fs-sm);
+}

@@ -206,6 +206,60 @@ function savedToastMessage(): string {
   }
 }
 
+// WHAT VAENYX KNOWS. Facts are separate from Vaenyx Me traits on purpose: a
+// trait is a description ("prefers short answers"), a fact is a value with a
+// history ("home_address, 44 New Road, since 2025-03, replacing 12 Old Street").
+export interface FactRow {
+  confidence: number;
+  eventTime: string | null;
+  id: string;
+  modeId: string | null;
+  recordedAt: string;
+  slot: string;
+  sourceConversationId: string | null;
+  sourceDetail: string | null;
+  sourceKind: "external" | "manual" | "owner";
+  sourceMessageId: string | null;
+  supersedesId: string | null;
+  validUntil: string | null;
+  value: string;
+}
+
+export function fetchFacts(): Promise<{ facts: FactRow[] }> {
+  return requestJson("/v1/facts");
+}
+
+/** Everything one slot has ever been — what "where did I live in March" reads. */
+export function fetchFactHistory(slot: string): Promise<{ facts: FactRow[] }> {
+  return requestJson(`/v1/facts/history/${encodeURIComponent(slot)}`);
+}
+
+export function searchFacts(query: string): Promise<{ facts: FactRow[] }> {
+  return requestJson(`/v1/facts/search?q=${encodeURIComponent(query)}`);
+}
+
+export function recordFact(body: {
+  eventTime?: string | null;
+  slot: string;
+  sourceDetail?: string | null;
+  sourceKind?: "external" | "manual";
+  value: string;
+}): Promise<{ facts: FactRow[] }> {
+  return requestJson("/v1/facts", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** Forgetting dates the row rather than deleting it. */
+export function forgetFact(id: string): Promise<{ facts: FactRow[] }> {
+  return requestJson(`/v1/facts/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function approveFactCandidate(id: string): Promise<{ facts: FactRow[] }> {
+  return requestJson(`/v1/facts/candidates/${encodeURIComponent(id)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 /** What the installer's component page was ticked for, and how each went. */
 export function fetchInstalledComponents(): Promise<{
   current: string | null;

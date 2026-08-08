@@ -58,7 +58,15 @@ const candidateSelect = `
   FROM vaenyx_me_candidates
 `;
 
-function mapCandidate(row: VaenyxMeCandidateRow): VaenyxMeCandidate {
+interface FactCandidateColumns {
+  proposed_event_time?: string | null;
+  proposed_slot?: string | null;
+  proposed_value?: string | null;
+}
+
+function mapCandidate(
+  row: FactCandidateColumns & VaenyxMeCandidateRow,
+): VaenyxMeCandidate {
   return {
     id: row.id,
     category: row.category,
@@ -75,6 +83,12 @@ function mapCandidate(row: VaenyxMeCandidateRow): VaenyxMeCandidate {
     reviewedAt: row.reviewed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    // Set only on a proposed FACT. The review screen shows those differently
+    // and approves them through a different path, because this one collapses
+    // a whole category onto a single row.
+    proposedSlot: row.proposed_slot ?? null,
+    proposedValue: row.proposed_value ?? null,
+    proposedEventTime: row.proposed_event_time ?? null,
   };
 }
 

@@ -121,7 +121,12 @@ import {
   runRoutineInChat,
   attachRoutineToChat,
   classifyMessage,
+  fetchFactHistory,
+  fetchFacts,
   fetchInstalledComponents,
+  forgetFact,
+  searchFacts,
+  type FactRow,
   fetchModelProviders,
   fetchProviderModels,
   connectModelProvider,
@@ -15152,6 +15157,201 @@ function getVaenyxMeCandidateStatusCopy(
   return "Deleted";
 }
 
+// WHAT VAENYX KNOWS, with its working shown.
+//
+// A trait is a description; a fact is a value with a history. This section is
+// the history part: every current fact says where it came from and what it
+// replaced, so the Owner can check a memory rather than trust it. That is
+// three things at once — it is how a poisoned memory gets caught, it is what
+// makes the record auditable, and it is the only reason to believe any of it.
+// Readable names for the slot vocabulary. A copy of the server's list rather
+// than an import: these are user-facing strings, and the two families
+// (preference:*, relationship:*) have open tails that have to be rendered
+// rather than looked up.
+const FACT_SLOT_LABELS: Record<string, { en: string; zh: string }> = {
+  allergy: { en: "Allergy", zh: "过敏" },
+  birthday: { en: "Birthday", zh: "生日" },
+  diet: { en: "Diet", zh: "饮食" },
+  employer: { en: "Employer", zh: "雇主" },
+  home_address: { en: "Home address", zh: "家庭住址" },
+  medication: { en: "Medication", zh: "用药" },
+  occupation: { en: "Occupation", zh: "职业" },
+  pet: { en: "Pet", zh: "宠物" },
+  phone: { en: "Phone", zh: "电话" },
+  school: { en: "School", zh: "学校" },
+  vehicle: { en: "Vehicle", zh: "车辆" },
+  work_address: { en: "Work address", zh: "工作地址" },
+};
+
+function factSlotLabel(slot: string, zh: boolean): string {
+  const fixed = FACT_SLOT_LABELS[slot];
+  if (fixed) return zh ? fixed.zh : fixed.en;
+  const colon = slot.indexOf(":");
+  if (colon < 1) return slot;
+  const tail = slot.slice(colon + 1).replace(/_/g, " ");
+  if (slot.startsWith("preference:")) return zh ? `偏好:${tail}` : `Preference: ${tail}`;
+  if (slot.startsWith("relationship:")) return zh ? `家人:${tail}` : `Relationship: ${tail}`;
+  return slot;
+}
+
+function FactsSection() {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  const [facts, setFacts] = useState<FactRow[]>([]);
+  const [history, setHistory] = useState<Record<string, FactRow[]>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setFacts((await fetchFacts()).facts);
+    } catch {
+      // A screen that cannot list memories is not an error worth shouting
+      // about; the section simply stays empty.
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function runSearch(next: string) {
+    setQuery(next);
+    if (!next.trim()) {
+      setSearching(false);
+      await load();
+      return;
+    }
+    setSearching(true);
+    try {
+      setFacts((await searchFacts(next)).facts);
+    } catch {
+      setFacts([]);
+    }
+  }
+
+  async function showHistory(slot: string) {
+    if (history[slot]) {
+      setHistory((was) => {
+        const next = { ...was };
+        delete next[slot];
+        return next;
+      });
+      return;
+    }
+    try {
+      const result = await fetchFactHistory(slot);
+      setHistory((was) => ({ ...was, [slot]: result.facts }));
+    } catch {
+      setError(zh ? "没能读出这条的历史。" : "Could not read that history.");
+    }
+  }
+
+  async function forget(id: string) {
+    setBusy(id);
+    setError(null);
+    try {
+      setFacts((await forgetFact(id)).facts);
+    } catch {
+      setError(zh ? "没能删掉这条。" : "That could not be removed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="settings-card">
+      <h3>{zh ? "Vaenyx 知道的事" : "What Vaenyx knows"}</h3>
+      <p className="settings-card-copy">
+        {zh
+          ? "每一条都写明是怎么知道的。改了地址、换了学校,旧的不会被删掉 —— 只是标上截止日期,所以「我三月住哪」还答得出来。"
+          : "Each one says how it was learned. When something changes, the old value is not deleted — it is dated, which is why “where did I live in March” still has an answer."}
+      </p>
+      <input
+        className="method-rename-input"
+        onChange={(event) => void runSearch(event.target.value)}
+        placeholder={zh ? "搜索(中英文都行)" : "Search (English or Chinese)"}
+        type="search"
+        value={query}
+      />
+      {error ? <p className="settings-error">{error}</p> : null}
+      {facts.length === 0 ? (
+        <p className="library-note">
+          {searching
+            ? zh
+              ? "没有匹配的。"
+              : "Nothing matched."
+            : zh
+              ? "还没有。Vaenyx 会在对话安静下来之后,从你自己说过的话里提炼,并且先问过你。"
+              : "Nothing yet. Vaenyx distils these from what you said once a conversation has gone quiet, and always asks first."}
+        </p>
+      ) : (
+        <ul className="fact-list">
+          {facts.map((fact) => (
+            <li className="fact-row" key={fact.id}>
+              <div className="fact-main">
+                <strong>{factSlotLabel(fact.slot, zh)}</strong>
+                <span className="fact-value">{fact.value}</span>
+              </div>
+              <div className="fact-meta text-faint">
+                {fact.eventTime
+                  ? `${zh ? "自" : "since"} ${fact.eventTime} · `
+                  : ""}
+                {zh ? "记录于" : "learned"} {fact.recordedAt.slice(0, 10)}
+                {fact.sourceKind === "external"
+                  ? ` · ${zh ? "来自外部:" : "from outside: "}${fact.sourceDetail ?? (zh ? "未注明" : "unnamed")}`
+                  : fact.sourceKind === "manual"
+                    ? ` · ${zh ? "你手动加的" : "added by you"}`
+                    : ` · ${zh ? "来自一次对话" : "from a chat"}`}
+              </div>
+              <div className="fact-actions">
+                <button
+                  className="text-button"
+                  onClick={() => void showHistory(fact.slot)}
+                  type="button"
+                >
+                  {history[fact.slot]
+                    ? zh
+                      ? "收起历史"
+                      : "Hide history"
+                    : zh
+                      ? "看历史"
+                      : "History"}
+                </button>
+                <button
+                  className="text-button"
+                  disabled={busy === fact.id}
+                  onClick={() => void forget(fact.id)}
+                  type="button"
+                >
+                  {zh ? "忘掉" : "Forget"}
+                </button>
+              </div>
+              {history[fact.slot] ? (
+                <ol className="fact-history">
+                  {history[fact.slot]?.map((old) => (
+                    <li className="text-faint" key={old.id}>
+                      {old.value}
+                      {" — "}
+                      {old.validUntil
+                        ? `${zh ? "到" : "until"} ${old.validUntil.slice(0, 10)}`
+                        : zh
+                          ? "现在"
+                          : "current"}
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function VaenyxMePanel({
   ownerName,
   onProfileRefresh,
@@ -15362,6 +15562,7 @@ function VaenyxMePanel({
             </button>
           </div>
         </div>
+        <FactsSection />
         <div className="vaenyx-me-grid">
           {items.map((item) => {
             const state = vaenyxMeState(item);
