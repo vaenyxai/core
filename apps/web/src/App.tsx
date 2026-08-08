@@ -3401,11 +3401,14 @@ function AppsPanel({
             />
           </label>
 
-          {/* HOW THE APP USES IT, described by consequence.
-              The old control asked "Mode A or Mode B", which is a name for a
-              decision rather than the decision itself. What actually differs
-              is where the recipe lives and therefore what stops working when
-              this machine is off. */}
+          {/* HOW THE APP USES IT: the name AND the consequence.
+              The old control asked "Mode A or Mode B" and stopped there, which
+              is a name for a decision rather than the decision itself. What
+              actually differs is where the recipe lives, and therefore what
+              stops working when this machine is off — so that is the sentence.
+              The letter stays on the tag because it is what the Owner says out
+              loud to a developer, and a screen that will not say it makes him
+              translate every time. */}
           <div className="token-kind-field">
             <span className="method-picker-label">
               {zh ? "这个 app 怎么用它?" : "How does the app use it?"}
@@ -3416,7 +3419,15 @@ function AppsPanel({
                 onClick={() => setFetchRecipe(false)}
                 type="button"
               >
-                <strong>{zh ? "Vaenyx 帮它跑" : "Vaenyx runs it"}</strong>
+                <strong>
+                  {/* TYPE A / TYPE B: the name the Owner says out loud when he
+                      tells a developer which one to build against. The
+                      consequence sentence underneath is what he decides on -
+                      a letter alone was never a decision, which is why the
+                      sentence is not going away. */}
+                  <span className="token-kind-tag">Type A</span>
+                  {zh ? "Vaenyx 帮它跑" : "Vaenyx runs it"}
+                </strong>
                 <small>
                   {zh
                     ? "配方留在这里。app 送数据进来、拿结果回去,用你连接的模型和你的额度。需要这台机器开着,而且 app 那台设备连着 Tailscale。"
@@ -3429,6 +3440,7 @@ function AppsPanel({
                 type="button"
               >
                 <strong>
+                  <span className="token-kind-tag">Type B</span>
                   {zh ? "把配方交给它自己跑" : "Hand the recipe over"}
                 </strong>
                 <small>
@@ -3574,13 +3586,13 @@ function AppsPanel({
             </dd>
           </div>
           <div>
-            <dt>Method Token · Vaenyx runs one method (Mode A)</dt>
+            <dt>Method Token · Vaenyx runs one Method (Type A)</dt>
             <dd>
               <code>POST /v1/library/methods/:id/run</code>
             </dd>
           </div>
           <div>
-            <dt>Method Token · fetch recipe, run it yourself (Mode B)</dt>
+            <dt>Method Token · fetch recipe, run it yourself (Type B)</dt>
             <dd>
               <code>GET /v1/library/methods/:id/recipe</code>
             </dd>
@@ -9503,6 +9515,22 @@ applyChatFont(readStoredChatFontSize(), readStoredChatFontFamily());
 // single Escape would close them all at once.
 const modalStack: symbol[] = [];
 
+// Back presses that have been SCHEDULED but not yet made, keyed by the modal
+// that owes them.
+//
+// This exists because of StrictMode (main.tsx renders inside it), which mounts
+// every effect, tears it down, and mounts it again. Popping the history entry
+// straight from the cleanup would run that pop AFTER the second mount had
+// already pushed a fresh one — so the entry the second mount was relying on
+// would vanish, popstate would fire, and the dialog would slam shut the instant
+// it opened. Every modal in the app, in development only, which is exactly the
+// kind of bug that gets "fixed" by deleting the feature.
+//
+// So the pop is deferred by a tick and cancelled if the same modal comes
+// straight back: a StrictMode remount ends with one entry and no navigation, a
+// real close ends with the entry gone.
+const pendingModalPops = new Map<symbol, number>();
+
 // Lightweight modal: centered dialog, top-right ×, closes on × or Esc, never on
 // outside click (per the app's modal rules). Tap targets stay ≥44px.
 function Modal({
@@ -9519,21 +9547,62 @@ function Modal({
   variant?: "doc";
 }) {
   const idRef = useRef(Symbol("modal"));
+  // The close handler is read through a ref so the effect can run ONCE per
+  // modal. With `onClose` in the deps, a parent re-render makes a new closure,
+  // the effect tears down and re-runs, and it would push a second history entry
+  // for the same dialog — one back press would then do nothing.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const id = idRef.current;
     modalStack.push(id);
+
+    // BACK CLOSES THE DIALOG, not the app (native feel; it matters most on the
+    // phone, where back IS the close button and the × is a small target in a
+    // corner). One pushed entry per modal, and the top modal owns the press —
+    // nested dialogs unwind one at a time, like Escape already does.
+    let popped = false;
+    const scheduled = pendingModalPops.get(id);
+    if (scheduled !== undefined) {
+      // Coming straight back from a StrictMode teardown: the entry pushed a
+      // moment ago is still there, so keep it and cancel the pop it owed.
+      clearTimeout(scheduled);
+      pendingModalPops.delete(id);
+    } else {
+      window.history.pushState({ vaenyxModal: true }, "");
+    }
+    const onPop = () => {
+      if (modalStack[modalStack.length - 1] !== id) return;
+      popped = true;
+      closeRef.current();
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && modalStack[modalStack.length - 1] === id) {
-        onClose();
+        closeRef.current();
       }
     };
+    window.addEventListener("popstate", onPop);
     document.addEventListener("keydown", onKey);
     return () => {
       const at = modalStack.indexOf(id);
       if (at >= 0) modalStack.splice(at, 1);
+      window.removeEventListener("popstate", onPop);
       document.removeEventListener("keydown", onKey);
+      // Closed some other way (×, Escape, an action inside it): take our own
+      // entry back out, or the next back press would be swallowed doing
+      // nothing visible. Deferred a tick so a StrictMode remount can cancel it
+      // — see pendingModalPops.
+      if (!popped) {
+        pendingModalPops.set(
+          id,
+          window.setTimeout(() => {
+            pendingModalPops.delete(id);
+            window.history.back();
+          }, 0),
+        );
+      }
     };
-  }, [onClose]);
+  }, []);
 
   // Rendered into <body>, never in place (Oskar, 2026-07-28: the Archived
   // window came out UNDER the chat). A fixed overlay still obeys any ancestor
@@ -16722,13 +16791,21 @@ function PublishPausePanel() {
 function RoutineDetail({
   summary,
   methods,
-  onBack,
+  notice,
   onStart,
+  published,
+  extras,
 }: {
   summary: LibraryRoutineSummary;
   methods: LibraryMethodSummary[];
-  onBack: () => void;
   onStart: () => void;
+  // The update offer, which is the one thing here that asks for a decision, so
+  // it goes at the top where a decision can still be made.
+  notice?: ReactNode;
+  published: boolean;
+  // Publishing: it belongs to this Routine, so it belongs in the thing you
+  // opened rather than stacked under its card in the list.
+  extras?: ReactNode;
 }) {
   const { t } = useI18n();
   const [full, setFull] = useState<LibraryRoutine | null>(null);
@@ -16748,14 +16825,14 @@ function RoutineDetail({
   const methodName = (methodId: string) =>
     methods.find((method) => method.id === methodId)?.name ?? methodId;
 
+  // Modal content, not a page (Oskar, 2026-08-09: 点击再弹窗出来所有的具体
+  // 信息). No wrapper and no back button: the modal has a × and answers History
+  // back, and the list is still behind it — which is the point. Closing puts
+  // you back exactly where you were instead of re-rendering the whole tab.
   return (
-    <div className="library-layout">
-      <button className="text-button library-back" onClick={onBack} type="button">
-        {t("common.back")}
-      </button>
+    <div className="detail-modal">
+      {notice}
       <section className="settings-card">
-        <p className="eyebrow">{t("routine.open.title")}</p>
-        <h2>{summary.name}</h2>
         <p className="settings-card-copy">{summary.description}</p>
         {summary.tags.length > 0 ? (
           <span className="tag-row">
@@ -16801,10 +16878,18 @@ function RoutineDetail({
           </p>
         ) : null}
 
-        <small>
-          v{summary.version}
-          {summary.owner ? ` · by ${summary.owner}` : ""}
-        </small>
+        {/* Whose this is. It came off the card in the shrink because it
+            renders on EVERY card and so carries no signal in a list — but in
+            here it is the answer to a real question, so it is not lost. */}
+        <div className="library-card-head">
+          <ProvenanceChip
+            origin={summary.origin}
+            owner={summary.owner}
+            published={published}
+            version={summary.version}
+          />
+          <small>v{summary.version}</small>
+        </div>
 
         {/* The start button gets its own row at the bottom right (Oskar,
             2026-07-26): sharing a line with the version made it look like a
@@ -16815,6 +16900,10 @@ function RoutineDetail({
           </button>
         </div>
       </section>
+      {/* Publishing used to render under EVERY routine card in the list —
+          which, signed out, meant the whole sign-in consent block repeated
+          once per routine. One instance, in the thing it belongs to. */}
+      {extras}
     </div>
   );
 }
@@ -17629,13 +17718,18 @@ function MethodDetail({
   onBack,
   onChanged,
   onCorrectionKept,
+  routines,
 }: {
   method: LibraryMethod;
   onBack: () => void;
   onChanged: (method: LibraryMethod) => void;
   onCorrectionKept: () => void;
+  // Only so this can answer "who uses me" — the question behind "can I delete
+  // this?", which had no answer on this screen at all before it was asked.
+  routines: LibraryRoutineSummary[];
 }) {
   const { lang, t } = useI18n();
+  const zh = lang === "zh";
   const communityVersions = useCommunityVersions();
   const [inputText, setInputText] = useState(() =>
     JSON.stringify(buildInputSkeleton(method.inputSchema), null, 2),
@@ -17745,11 +17839,12 @@ function MethodDetail({
     }
   }
 
+  // Modal content, not a page (Oskar, 2026-08-09). The list stays behind it,
+  // so closing puts you back where you were rather than re-rendering the tab —
+  // and the × plus History back are the two ways out, which is two fewer than
+  // a back button of its own would make.
   return (
-    <div className="library-layout">
-      <button className="text-button library-back" onClick={onBack} type="button">
-        ← All methods
-      </button>
+    <div className="detail-modal">
       <MethodPublishCard method={method} />
       <section className="settings-card">
         {renaming ? (
@@ -17813,6 +17908,22 @@ function MethodDetail({
         )}
         {renameError ? <p className="form-error">{renameError}</p> : null}
         <p className="settings-card-copy">{method.description}</p>
+        {(() => {
+          const users = routines.filter((routine) =>
+            routine.methodIds.includes(method.id),
+          );
+          return (
+            <p className="settings-card-copy text-faint">
+              {users.length > 0
+                ? `${zh ? "被" : "Used by "}${users
+                    .map((routine) => routine.name)
+                    .join(zh ? "、" : ", ")}${zh ? " 使用" : ""}`
+                : zh
+                  ? "没有 Routine 在用 —— 由外部 app 通过 Token 调用"
+                  : "No Routine uses this — an outside app calls it with a Token"}
+            </p>
+          );
+        })()}
         {/* Where a changed copy came from. Written by the server at the moment
             of the fork, shown here, and removable by nobody — community content
             is CC BY 4.0, so the credit is the condition of keeping it. It rides
@@ -19579,12 +19690,12 @@ function CreateChooser({
           type="button"
         >
           <strong>
-            {zh ? "做一个零件给别人组装" : "A part for other people to build with"}
+            {zh ? "做一个 Method 给别人组装" : "A Method for other people to build with"}
           </strong>
           <small>
             {zh
-              ? "一个可复用的小块,别人把它装进自己的成品里。"
-              : "One reusable piece that other people assemble into their own."}
+              ? "一个可复用的零件,别人把它装进自己的 Routine 里。"
+              : "One reusable part that other people assemble into their own Routine."}
           </small>
         </button>
       </div>
@@ -19691,19 +19802,6 @@ function RoutinesPanel({
   }
 
   const openedRoutine = routines.find((routine) => routine.id === opened);
-  if (openedRoutine) {
-    return (
-      <RoutineDetail
-        methods={methods}
-        onBack={() => setOpened(null)}
-        onStart={() => {
-          setOpened(null);
-          onUseRoutine(openedRoutine.id);
-        }}
-        summary={openedRoutine}
-      />
-    );
-  }
 
   return (
     <div className="library-layout">
@@ -19715,7 +19813,7 @@ function RoutinesPanel({
             onClick={() => setCreating(true)}
             type="button"
           >
-            {zh ? "＋ 新建成品" : "+ New routine"}
+            {zh ? "＋ 新建 Routine" : "+ New Routine"}
           </button>
         </div>
       </section>
@@ -19726,83 +19824,74 @@ function RoutinesPanel({
         </div>
       ) : (
         <div className="library-list">
+          {/* MINIMAL CARDS (Oskar, 2026-08-09: 每个卡片都做到最小,点击再弹窗).
+              A card carries the name and NOTHING ELSE except the things that
+              demand action — a new version, and, on Methods, corrections
+              waiting and a failed post-update check. That exception is the
+              whole design: a badge that only appears inside the dialog is a
+              badge nobody sees, so the one class of information that has to
+              reach somebody who is not looking stays on the outside.
+              Description, tags, version, step counts, publishing: all one tap
+              away, in the dialog, where there is room to read them. */}
           {routines.map((routine) => (
-            <div
+            <button
+              className="library-card compact"
               key={routine.id}
-              style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}
+              onClick={() => setOpened(routine.id)}
+              type="button"
             >
-              {/* Opening a Routine explains it first (Oskar, 2026-07-26).
-                  Tapping a card used to drop straight into a chat with it,
-                  which asks someone to use a thing before they know what it
-                  does — Methods have always opened a page first. */}
-              <button
-                className="library-card"
-                onClick={() => setOpened(routine.id)}
-                type="button"
-              >
-                <div className="library-card-head">
-                  <strong>{routine.name}</strong>
-                  <ProvenanceChip
-                    origin={routine.origin}
-                    owner={routine.owner}
-                    published={
-                      publishState?.publishedRoutineIds.includes(routine.id) ??
-                      false
-                    }
-                    version={routine.version}
-                  />
-                  {/* Loud, because unlike the one above it there is something
-                      to do about this. */}
-                  {routine.origin === "community" &&
-                  isLaterVersion(
-                    communityVersions.get(routine.id)?.version ?? "0.0.0",
-                    routine.version,
-                  ) ? (
-                    <AttentionChip tone="new-version">
-                      {zh ? "有新版" : "New version"}
-                    </AttentionChip>
-                  ) : null}
-                </div>
-                <p>{routine.description}</p>
-                {routine.tags.length > 0 ? (
-                  <span className="tag-row">
-                    {routine.tags.map((tag) => (
-                      <span className="tag-chip" key={tag}>
-                        #{tag}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
-                <small>
-                  v{routine.version} · {routine.stepCount}{" "}
-                  {routine.stepCount === 1 ? "step" : "steps"} ·{" "}
-                  {routine.methodIds.length}{" "}
-                  {zh
-                    ? "个零件"
-                    : routine.methodIds.length === 1
-                      ? "part"
-                      : "parts"}{" "}
-                  · {routine.mode === "accumulate" ? "Accumulate" : "One-shot"}
-                </small>
-              </button>
-              <RoutinePublishControl
-                routineId={routine.id}
-                state={publishState}
-                onPublished={reloadPublish}
-              />
-              {routine.origin === "community" ? (
-                <CommunityUpdateNotice
-                  id={routine.id}
-                  installedVersion={routine.version}
-                  kind="routine"
-                  latest={communityVersions.get(routine.id)}
-                  onUpdated={onRoutinesRefresh}
-                />
+              <strong>{routine.name}</strong>
+              {routine.origin === "community" &&
+              isLaterVersion(
+                communityVersions.get(routine.id)?.version ?? "0.0.0",
+                routine.version,
+              ) ? (
+                <AttentionChip tone="new-version">
+                  {zh ? "有新版" : "New version"}
+                </AttentionChip>
               ) : null}
-            </div>
+            </button>
           ))}
         </div>
       )}
+      {openedRoutine ? (
+        <Modal
+          onClose={() => setOpened(null)}
+          title={openedRoutine.name}
+          variant="doc"
+        >
+          <RoutineDetail
+            extras={
+              <RoutinePublishControl
+                routineId={openedRoutine.id}
+                state={publishState}
+                onPublished={reloadPublish}
+              />
+            }
+            methods={methods}
+            notice={
+              openedRoutine.origin === "community" ? (
+                <CommunityUpdateNotice
+                  id={openedRoutine.id}
+                  installedVersion={openedRoutine.version}
+                  kind="routine"
+                  latest={communityVersions.get(openedRoutine.id)}
+                  onUpdated={onRoutinesRefresh}
+                />
+              ) : null
+            }
+            onStart={() => {
+              setOpened(null);
+              onUseRoutine(openedRoutine.id);
+            }}
+            published={
+              publishState?.publishedRoutineIds.includes(openedRoutine.id) ??
+              false
+            }
+            summary={openedRoutine}
+          />
+        </Modal>
+      ) : null}
     </div>
   );
 }
@@ -19853,8 +19942,8 @@ function CommunityFinder({
             ? "从社区找"
             : "Find in the community"
           : zh
-            ? "从社区找零件"
-            : "Find a part in the community"
+            ? "从社区找 Method"
+            : "Find a Method in the community"
       }
     >
       <CataloguePanel
@@ -19927,10 +20016,16 @@ function LibraryArea({
         {/* Permanent, not a dialog. A dialog is shown once and dismissed, and
             this is the sentence somebody needs on the day they come back and
             wonder what the bottom section is for. */}
+        {/* ONE NAME PER THING (Oskar, 2026-08-09). The tabs read 成品 / 钥匙 /
+            零件 in Chinese and Routines / Tokens / Methods in English, so one
+            screen carried two vocabularies and neither was the word he says
+            out loud to a developer. The product word is the label now. The
+            plain-language word moved HERE, into the sentence that explains it,
+            which is the only place a metaphor earns its keep. */}
         <p>
           {zh
-            ? "点开就能用。零件在下面,通常不用管。"
-            : "Open one and it works. The parts are further down; you rarely need them."}
+            ? "Routine 是成品 —— 点开就能用。Method 是它里面的零件,通常不用管。"
+            : "A Routine is the finished thing — open one and it works. A Method is a part inside it; you rarely need to look."}
         </p>
       </section>
 
@@ -19940,21 +20035,21 @@ function LibraryArea({
           onClick={() => setTab("routines")}
           type="button"
         >
-          {zh ? "成品" : "Routines"}
+          {zh ? "Routine" : "Routines"}
         </button>
         <button
           className={tab === "tokens" ? "active" : ""}
           onClick={() => setTab("tokens")}
           type="button"
         >
-          {zh ? "钥匙" : "Tokens"}
+          {zh ? "Token" : "Tokens"}
         </button>
         <button
           className={tab === "methods" ? "active" : ""}
           onClick={() => setTab("methods")}
           type="button"
         >
-          {zh ? "零件" : "Methods"}
+          {zh ? "Method" : "Methods"}
           {pendingTotal > 0 ? (
             <span className="tab-badge">{pendingTotal}</span>
           ) : null}
@@ -20009,7 +20104,7 @@ function LibraryArea({
                 onClick={() => setFinding("methods")}
                 type="button"
               >
-                {zh ? "＋ 从社区找零件" : "+ Find a part"}
+                {zh ? "＋ 从社区找 Method" : "+ Find a Method"}
               </button>
             </div>
           </div>
@@ -20017,8 +20112,8 @@ function LibraryArea({
               make things should be able to stop reading here. */}
           <p className="settings-card-copy text-faint">
             {zh
-              ? "这里是给创作者的。零件是成品内部的说明书 —— 装成品时会自动带来,平时不用管。"
-              : "This tab is for people who make things. A part is the instructions inside a finished Routine: installing one brings its parts with it, and otherwise you can leave them alone."}
+              ? "这里是给创作者的。Method 是 Routine 内部的一个零件 —— 装 Routine 时会自动带来,平时不用管。"
+              : "This tab is for people who make things. A Method is one part inside a Routine: installing a Routine brings its Methods with it, and otherwise you can leave them alone."}
           </p>
           <LibraryPanel
             methods={methods}
@@ -20388,22 +20483,7 @@ function LibraryPanel({
   const [renameFrom, setRenameFrom] = useState("");
   const [draftTag, setDraftTag] = useState("");
   const [savingTag, setSavingTag] = useState(false);
-  const [publishState, setPublishState] = useState<PublishState | null>(null);
   const failedChecks = useFailedChecks();
-
-  useEffect(() => {
-    let active = true;
-    fetchPublishState()
-      .then((next) => {
-        if (active) setPublishState(next);
-      })
-      .catch(() => {
-        if (active) setPublishState(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Every distinct tag across the shelf, for the filter bar + rename picker.
   const allTags = [
@@ -20480,22 +20560,6 @@ function LibraryPanel({
     );
   }
 
-  if (selected) {
-    return (
-      <MethodDetail
-        key={selected.id}
-        method={selected}
-        onBack={() => setSelected(null)}
-        onCorrectionKept={onMethodsRefresh}
-        onChanged={(updated) => {
-          setSelected(updated);
-          // Refresh the summary list so the card name + tags update too.
-          onMethodsRefresh();
-        }}
-      />
-    );
-  }
-
   return (
     <div className="library-layout">
       <section className="library-intro">
@@ -20505,7 +20569,7 @@ function LibraryPanel({
             onClick={() => setCreating(true)}
             type="button"
           >
-            {zh ? "＋ 新建零件" : "+ New method"}
+            {zh ? "＋ 新建 Method" : "+ New Method"}
           </button>
         </div>
       </section>
@@ -20601,86 +20665,67 @@ function LibraryPanel({
               </button>
             </div>
           ) : null}
+          {/* MINIMAL CARDS. The name, and only the things that demand action:
+              a correction waiting to be looked at (A9) and a post-update check
+              whose answers moved (C7). Everything else — description, tags,
+              version, who uses it, the recipe, the test run — is one tap away
+              in the dialog. The two chips are the deliberate exception: a badge
+              that only appears once you have opened the thing is a badge for
+              somebody who was already looking. */}
           <div className="library-list">
             {visible.map((method) => (
               <button
-                className="library-card"
+                className="library-card compact"
                 disabled={loadingId === method.id}
                 key={method.id}
                 onClick={() => void openMethod(method.id)}
                 type="button"
               >
-                <div className="library-card-head">
-                  <strong>{method.name}</strong>
-                  <ProvenanceChip
-                    origin={method.origin}
-                    owner={method.owner}
-                    published={
-                      publishState?.publishedMethodIds.includes(method.id) ??
-                      false
-                    }
-                    version={method.version}
-                  />
-                  {/* C7. The last update stopped getting this household's own
-                      answers right. Loud, because there IS something to do
-                      about it — the previous version is one button away. */}
-                  {/* A9. Somebody's correction is sitting here waiting to be
-                      looked at. Actionable, so it is loud. */}
-                  {pendingCorrections.get(method.id) ? (
-                    <AttentionChip tone="review">
-                      {zh
-                        ? `${pendingCorrections.get(method.id)} 条待看`
-                        : `${pendingCorrections.get(method.id)} to review`}
-                    </AttentionChip>
-                  ) : null}
-                  {failedChecks.has(method.id) ? (
-                    <AttentionChip tone="regressed">
-                      {zh
-                        ? `${failedChecks.get(method.id)} 个例子答案变了`
-                        : `${failedChecks.get(method.id)} example(s) changed`}
-                    </AttentionChip>
-                  ) : null}
-                </div>
-                <p>{method.description}</p>
-                {method.tags.length > 0 ? (
-                  <span className="tag-row">
-                    {method.tags.map((tag) => (
-                      <span className="tag-chip" key={tag}>
-                        #{tag}
-                      </span>
-                    ))}
-                  </span>
+                <strong>{method.name}</strong>
+                {pendingCorrections.get(method.id) ? (
+                  <AttentionChip tone="review">
+                    {zh
+                      ? `${pendingCorrections.get(method.id)} 条待看`
+                      : `${pendingCorrections.get(method.id)} to review`}
+                  </AttentionChip>
                 ) : null}
-                <small>
-                  v{method.version}
-                  {loadingId === method.id ? " · Loading..." : ""}
-                </small>
-                {(() => {
-                  const users = routines.filter((routine) =>
-                    routine.methodIds.includes(method.id),
-                  );
-                  if (users.length > 0) {
-                    return (
-                      <small className="text-faint">
-                        {zh ? "被" : "Used by "}
-                        {users.map((routine) => routine.name).join("、")}
-                        {zh ? "使用" : ""}
-                      </small>
-                    );
-                  }
-                  return (
-                    <small className="text-faint">
-                      {zh
-                        ? "没有成品在用 —— 由外部 app 通过钥匙调用"
-                        : "No Routine uses this — an outside app calls it with a key"}
-                    </small>
-                  );
-                })()}
+                {failedChecks.has(method.id) ? (
+                  <AttentionChip tone="regressed">
+                    {zh
+                      ? `${failedChecks.get(method.id)} 个例子答案变了`
+                      : `${failedChecks.get(method.id)} example(s) changed`}
+                  </AttentionChip>
+                ) : null}
+                {loadingId === method.id ? (
+                  <small className="text-faint">
+                    {zh ? "打开中…" : "Opening…"}
+                  </small>
+                ) : null}
               </button>
             ))}
           </div>
         </>
       )}
+      {selected ? (
+        <Modal
+          onClose={() => setSelected(null)}
+          title={selected.name}
+          variant="doc"
+        >
+          <MethodDetail
+            key={selected.id}
+            method={selected}
+            onBack={() => setSelected(null)}
+            onCorrectionKept={onMethodsRefresh}
+            routines={routines}
+            onChanged={(updated) => {
+              setSelected(updated);
+              // Refresh the summary list so the card name updates too.
+              onMethodsRefresh();
+            }}
+          />
+        </Modal>
+      ) : null}
     </div>
   );
 }

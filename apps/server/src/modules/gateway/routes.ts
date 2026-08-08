@@ -705,7 +705,7 @@ const METHOD_RUN_ERROR_COPY: Record<string, string> = {
   CODEX_TURN_CANCELLED: "The method run was cancelled.",
 };
 
-// How many examples to hand an app in a Mode B recipe fetch (few-shot for its
+// How many examples to hand an app in a Type B recipe fetch (few-shot for its
 // own model). Bounded so a method with many flywheel examples stays reasonable.
 const FETCH_RECIPE_EXAMPLE_LIMIT = 10;
 
@@ -7796,7 +7796,7 @@ export async function registerGatewayRoutes(
     },
   );
 
-  // Edit an existing App Profile's Method scope + Mode B / memory permissions.
+  // Edit an existing App Profile's Method scope + Type B / memory permissions.
   // The token (identity) is never reissued; only the capability grant changes,
   // re-pinning each Method's current content hash.
   app.put<{ Params: { id: string }; Body: UpdateAppProfileRequest }>(
@@ -11828,11 +11828,11 @@ export async function registerGatewayRoutes(
     },
   );
 
-  // App-facing Mode B (library-architecture §13): a permitted app fetches a
+  // App-facing Type B (library-architecture §13): a permitted app fetches a
   // method's recipe + schemas + examples to run on ITS OWN model. FORCED token;
   // requires the fetchRecipe permission + the method on the allowlist at the
   // granted version. No 200 response schema (schemas/examples are arbitrary
-  // JSON). Mode A (/run) is unaffected.
+  // JSON). Type A (/run) is unaffected.
   app.get<{ Params: { id: string } }>(
     "/v1/library/methods/:id/recipe",
     {

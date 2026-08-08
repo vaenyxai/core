@@ -174,7 +174,13 @@ Read this inside the app: **Settings → Manual**.
   like a chat that grows extra buttons (Journal, Gallery) as you use it.
 - **Make one** — describe the steps in chat. One step becomes a Method, several
   become a Routine. Vaenyx drafts it and offers a test run before saving.
-- **Where they live** — the **Library** screen.
+- **Where they live** — the **Library** screen, in three tabs: Routines,
+  Tokens, Methods.
+- **Cards carry the name only** — click one and everything about it opens in
+  a dialog: description, steps, tags, version, publishing. The only things
+  kept on the outside are the ones that need you to do something: a new
+  version, corrections waiting, examples whose answers changed. Close the
+  dialog with the ×, or with the back button on a phone.
 - **Edit a recipe** — Library → the Method → **Edit recipe**.
 - **Corrections waiting for you** — when an app sends back a corrected answer,
   it waits inside that Method until you look at it. The **Methods** tab carries

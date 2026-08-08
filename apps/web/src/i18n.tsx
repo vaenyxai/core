@@ -131,9 +131,13 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.error": "Something went wrong. Please try again.",
     "apps.token.externalNote":
       "A Token is for an external app. You don't need a Token to use Methods inside Vaenyx's own web app — just open the Library.",
-    "apps.token.fetchRecipe.label": "Fetch recipe (Mode B)",
+    // TYPE A / TYPE B are the names the Owner uses when he talks to a
+    // developer, so they are the names on screen. The consequence sentence
+    // stays underneath: the label is what you say out loud, the sentence is
+    // what you actually decide on.
+    "apps.token.fetchRecipe.label": "Fetch recipe (Type B)",
     "apps.token.fetchRecipe.desc":
-      "Mode A (default): Run in Vaenyx. Mode B (this box): Run in the third-party app with their own AI model.",
+      "Type A (default): Run in Vaenyx. Type B (this box): Run in the third-party app with their own AI model.",
     "apps.token.sendFeedback.label": "Send corrections",
     "apps.token.sendFeedback.desc":
       "Let this external app send users' corrections back to Vaenyx to feed the flywheel, so the method gets better. The app must already be allowed to use that method.",
@@ -499,9 +503,9 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.error": "出了点问题,请重试。",
     "apps.token.externalNote":
       "Token 是给【外部 app】用的。在 Vaenyx 自己的网页里用 Method 不需要 Token —— 打开 Library 直接用即可。",
-    "apps.token.fetchRecipe.label": "取走配方(Mode B)",
+    "apps.token.fetchRecipe.label": "取走配方(Type B)",
     "apps.token.fetchRecipe.desc":
-      "Mode A(默认):在 Vaenyx 里跑。Mode B(勾这个):在第三方 app 里、用它们自己的 AI 模型跑。",
+      "Type A(默认):在 Vaenyx 里跑。Type B(勾这个):在第三方 app 里、用它们自己的 AI 模型跑。",
     "apps.token.sendFeedback.label": "回传纠错",
     "apps.token.sendFeedback.desc":
       "让这个外部 app 把用户的纠错回传给 Vaenyx、喂飞轮,让配方越用越好。需该 app 已获授权使用对应 method。",

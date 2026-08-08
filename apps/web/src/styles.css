@@ -8136,3 +8136,51 @@ html, body { overscroll-behavior-y: none; }
   gap: var(--space-2);
   align-items: flex-start;
 }
+
+/* Type A / Type B. Small, in front of the plain-language name, because it is
+   the word the Owner says to a developer — not the word he decides with. */
+.token-kind-tag {
+  display: inline-block;
+  margin-right: var(--space-2);
+  padding: 0 0.4em;
+  border: 0.5px solid currentColor;
+  border-radius: var(--r-pill, 999px);
+  opacity: 0.75;
+  font-size: var(--fs-xs, 0.72rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* MINIMAL CARDS (Oskar, 2026-08-09). The name and, when there is one, the chip
+   that says something needs doing. Everything else is one tap away, so the card
+   has no reason to be tall — twenty of them should fit on a screen.
+
+   A modifier, not a change to .library-card: the same class dresses the install
+   cards inside the community dialog, which DO need their description because
+   you are choosing something you have never seen. */
+.library-card.compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.library-card.compact strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+/* Detail dialogs. The bodies were written as page sections, so inside a modal
+   every one of them drew a card inside a card. Flatten them and let the modal
+   be the only box on screen. */
+.detail-modal {
+  display: grid;
+  gap: 18px;
+}
+
+.detail-modal > .settings-card {
+  padding: 0;
+  border: 0;
+  background: none;
+}

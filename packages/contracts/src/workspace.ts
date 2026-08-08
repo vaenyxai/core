@@ -982,7 +982,7 @@ export const AppProfileSchema = Type.Object(
     // starting point and the honest answer for every key issued before the
     // Owner had a screen to tick one — a key never gains reach by itself.
     capabilities: Type.Array(Type.String()),
-    // Mode B: may this app fetch a method's recipe (instructions + schemas +
+    // Type B: may this app fetch a method's recipe (instructions + schemas +
     // examples) to run on its own model, instead of only Vaenyx running it?
     fetchRecipe: Type.Boolean(),
     // Flywheel return (§10): may this app send users' corrections back to feed
@@ -1327,7 +1327,7 @@ export const VisionUploadResponseSchema = Type.Object(
 );
 
 // Edit an existing App Profile's capability scope. The token (identity) never
-// changes; only the Methods it may use and its Mode B / memory permissions do.
+// changes; only the Methods it may use and its Type B / memory permissions do.
 // Re-granting Methods re-pins each one's current content hash.
 // Edit a Token. The kind is fixed at creation; only the grant changes — a Method
 // Token edits its Methods + fetchRecipe, a Routine Token edits which Routine.
@@ -2175,7 +2175,7 @@ export const RunMethodResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
-// Mode B (GET /v1/library/methods/:id/recipe): the recipe + schemas + a few
+// Type B (GET /v1/library/methods/:id/recipe): the recipe + schemas + a few
 // examples for a permitted app to run on its own model. inputSchema/outputSchema
 // and example entries are arbitrary author JSON.
 export const FetchMethodRecipeResponseSchema = Type.Object(
