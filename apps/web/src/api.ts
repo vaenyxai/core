@@ -260,6 +260,57 @@ export function approveFactCandidate(id: string): Promise<{ facts: FactRow[] }> 
   });
 }
 
+// UPDATING A COMMUNITY ITEM. The dialog asks what it would cost BEFORE
+// offering the button, because a version number is not a decision anybody can
+// make and the three things that are — your edits, your app keys, your
+// examples — are invisible otherwise.
+export interface UpdateOffer {
+  currentVersion: string;
+  examplesKept: number;
+  keysNeedingReapproval: string[];
+  locallyEdited: boolean;
+  newVersion: string;
+  recommended: "keep-both" | "update";
+  rollbackAvailable: boolean;
+}
+
+export function previewUpdate(
+  id: string,
+  kind: "method" | "routine",
+  version: string,
+): Promise<{ offer: UpdateOffer | null }> {
+  return requestJson(
+    `/v1/library/updates/preview?id=${encodeURIComponent(id)}&kind=${kind}&version=${encodeURIComponent(version)}`,
+  );
+}
+
+export function updateMethodFromCommunity(methodId: string): Promise<unknown> {
+  return requestJson("/v1/library/methods/update", {
+    method: "POST",
+    body: JSON.stringify({ methodId }),
+  });
+}
+
+/** Undo. Works with no network — the previous version is on this disk. */
+export function rollbackMethod(methodId: string): Promise<unknown> {
+  return requestJson("/v1/library/methods/rollback", {
+    method: "POST",
+    body: JSON.stringify({ methodId }),
+  });
+}
+
+export function setUpdatePolicy(body: {
+  id: string;
+  kind: "method" | "routine";
+  policy: "follow" | "locked" | "skipped";
+  version?: string;
+}): Promise<unknown> {
+  return requestJson("/v1/library/updates/policy", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 /** What the installer's component page was ticked for, and how each went. */
 export function fetchInstalledComponents(): Promise<{
   current: string | null;

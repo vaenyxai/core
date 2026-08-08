@@ -458,6 +458,11 @@ import { ensureClaudeSdkInstalled } from "../models/claude-sdk.js";
 import { componentProgress } from "../core/wanted-components.js";
 import { updateMethod } from "../core/catalogue.js";
 import {
+  describeUpdate,
+  recommendedAction,
+} from "../core/community-updates.js";
+import {
+  availableRollback,
   getInstalledItem,
   keepRollback,
   listInstalledItems,
@@ -8607,6 +8612,57 @@ export async function registerGatewayRoutes(
           .code(502)
           .send({ error: "Could not install from the community catalogue." });
       }
+    },
+  );
+
+  // WHAT AN UPDATE WOULD COST, before it is pressed.
+  //
+  // A version number is not a decision anybody can make. These three are:
+  // whether the Owner's own edits get overwritten, which app keys stop working
+  // until re-approved, and how many examples survive. The last one is the
+  // reassuring half and is said out loud for that reason.
+  //
+  // Read-only. Nothing here changes anything.
+  app.get<{ Querystring: { id: string; kind: "method" | "routine"; version: string } }>(
+    "/v1/library/updates/preview",
+    {
+      schema: {
+        querystring: Type.Object(
+          {
+            id: Type.String({ minLength: 1 }),
+            kind: Type.Union([Type.Literal("method"), Type.Literal("routine")]),
+            version: Type.String({ minLength: 1, maxLength: 60 }),
+          },
+          { additionalProperties: false },
+        ),
+        response: { 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+
+      const loaded =
+        request.query.kind === "method"
+          ? loadMethod(context.config.libraryDirectory, request.query.id)
+          : null;
+      const consequences = describeUpdate(context.database, {
+        availableVersion: request.query.version,
+        exampleCount: loaded?.exampleCount ?? 0,
+        id: request.query.id,
+        kind: request.query.kind,
+        libraryDirectory: context.config.libraryDirectory,
+        rollbackAvailable: Boolean(
+          availableRollback(context.database, request.query.id, request.query.kind),
+        ),
+      });
+      if (!consequences) return { offer: null };
+      return {
+        offer: {
+          ...consequences,
+          recommended: recommendedAction(consequences),
+        },
+      };
     },
   );
 

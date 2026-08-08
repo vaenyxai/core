@@ -122,6 +122,11 @@ import {
   attachRoutineToChat,
   classifyMessage,
   fetchFactHistory,
+  previewUpdate,
+  rollbackMethod,
+  setUpdatePolicy,
+  updateMethodFromCommunity,
+  type UpdateOffer,
   fetchFacts,
   fetchInstalledComponents,
   forgetFact,
@@ -17049,6 +17054,187 @@ function isLaterVersion(candidate: string, installed: string): boolean {
   return false;
 }
 
+// THE UPDATE DIALOG — consequences, not a version number.
+//
+// "v1.2.0 -> v1.4.0" tells somebody nothing they can act on. Three things do,
+// and none of them are visible anywhere else:
+//
+//   • the edits you made to this recipe will be overwritten
+//   • the keys you gave other apps stop working until you approve them again
+//   • your accumulated examples are kept
+//
+// The middle one is the reason this screen exists at all. The re-approval rule
+// is already settled — a self-made Method silently re-locks, a community one
+// forces the Owner to approve again — and an app that starts answering 409 an
+// hour later is not obviously connected to a button pressed earlier. Saying it
+// here is the difference between a rule and a trap.
+//
+// An edited item defaults to KEEPING BOTH rather than updating. Once somebody
+// has changed a recipe they and the author have diverged, and merging by force
+// makes them re-make the same decision at every release.
+function UpdateDialog({
+  id,
+  kind,
+  latest,
+  onClose,
+  onUpdated,
+}: {
+  id: string;
+  kind: "method" | "routine";
+  latest: { description: string; version: string };
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const { lang, t } = useI18n();
+  const zh = lang === "zh";
+  const [offer, setOffer] = useState<UpdateOffer | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void previewUpdate(id, kind, latest.version)
+      .then((result) => {
+        if (active) setOffer(result.offer);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, kind, latest.version]);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      onUpdated();
+      onClose();
+    } catch {
+      setError(zh ? "没能完成。" : "That did not go through.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} title={zh ? "有新版" : "A newer version"}>
+      {loading ? (
+        <p className="library-note">{zh ? "正在看要动到什么…" : "Working out what would change…"}</p>
+      ) : !offer ? (
+        <p className="library-note">
+          {zh ? "已经是最新的了。" : "This is already the current version."}
+        </p>
+      ) : (
+        <>
+          <p className="settings-card-copy">
+            {zh
+              ? `你在用 v${offer.currentVersion} · 作者发布了 v${offer.newVersion}`
+              : `You have v${offer.currentVersion} · the author published v${offer.newVersion}`}
+          </p>
+          {latest.description ? (
+            <p className="settings-card-copy">
+              {zh ? "作者说改了什么:" : "The author says: "}
+              {latest.description}
+            </p>
+          ) : null}
+
+          <div className="update-consequences">
+            <strong>{zh ? "更新之后:" : "After updating:"}</strong>
+            <ul>
+              {offer.locallyEdited ? (
+                <li>
+                  {zh
+                    ? "你对这份配方做过的改动会被覆盖"
+                    : "The changes you made to this recipe will be overwritten"}
+                </li>
+              ) : null}
+              {offer.keysNeedingReapproval.length > 0 ? (
+                <li>
+                  {zh
+                    ? `${offer.keysNeedingReapproval.length} 个 app 的钥匙需要你重新批准(${offer.keysNeedingReapproval.join("、")})`
+                    : `${offer.keysNeedingReapproval.length} app key(s) will need approving again (${offer.keysNeedingReapproval.join(", ")})`}
+                </li>
+              ) : null}
+              <li>
+                {zh
+                  ? `你积累的 ${offer.examplesKept} 个例子会保留`
+                  : `Your ${offer.examplesKept} accumulated example(s) are kept`}
+              </li>
+            </ul>
+          </div>
+
+          <p className="context-disclaimer">
+            {t("legal.notice.community.updateAvailable")}
+          </p>
+
+          <div className="model-card-actions">
+            <button
+              className={
+                offer.recommended === "update" ? "primary-button" : "secondary-button"
+              }
+              disabled={busy}
+              onClick={() =>
+                void run(() =>
+                  kind === "method"
+                    ? updateMethodFromCommunity(id)
+                    : installRoutineFromCatalogue(id),
+                )
+              }
+              type="button"
+            >
+              {zh ? "更新" : "Update"}
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() =>
+                void run(() =>
+                  setUpdatePolicy({ id, kind, policy: "skipped", version: offer.newVersion }),
+                )
+              }
+              type="button"
+            >
+              {zh ? "这次跳过" : "Skip this one"}
+            </button>
+            <button
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => void run(() => setUpdatePolicy({ id, kind, policy: "locked" }))}
+              type="button"
+            >
+              {zh ? "锁在这个版本" : "Lock to this version"}
+            </button>
+          </div>
+
+          {offer.locallyEdited ? (
+            <p className="settings-card-copy text-faint">
+              {zh
+                ? "你改过它 —— 建议先把你的版本另存一份再更新,否则你的改动会没了。"
+                : "You have edited this. Save your version somewhere before updating, or your changes go."}
+            </p>
+          ) : null}
+          {offer.rollbackAvailable ? (
+            <button
+              className="text-button"
+              disabled={busy}
+              onClick={() => void run(() => rollbackMethod(id))}
+              type="button"
+            >
+              {zh ? "换回上一个版本" : "Put the previous version back"}
+            </button>
+          ) : null}
+          {error ? <p className="form-error">{error}</p> : null}
+        </>
+      )}
+    </Modal>
+  );
+}
+
 // The notice on an installed community item when a newer version exists.
 //
 // Deliberately NOT an update prompt. Vaenyx has not reviewed the new version
@@ -17074,26 +17260,8 @@ function CommunityUpdateNotice({
 }) {
   const { t } = useI18n();
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   if (!latest || !isLaterVersion(latest.version, installedVersion)) return null;
-
-  async function update() {
-    setBusy(true);
-    try {
-      if (kind === "method") {
-        await installMethodFromCatalogue(id);
-      } else {
-        await installRoutineFromCatalogue(id);
-      }
-      setConfirming(false);
-      onUpdated();
-    } catch {
-      // The failed request already raised a toast.
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="update-notice">
@@ -17115,31 +17283,19 @@ function CommunityUpdateNotice({
       >
         {t("community.update.action")}
       </button>
+      {/* This used to open a plain confirm whose button called the INSTALL
+          endpoint — which refuses when the item is already there, so it
+          answered 409 every single time. The screen was complete and the
+          thing underneath it did not exist. It now opens the dialog that
+          says what the update would cost and can actually apply it. */}
       {confirming ? (
-        <Modal onClose={() => setConfirming(false)} title={t("community.update.action")}>
-          {/* An update IS an install of someone else's content, so D2 is shown
-              again exactly as it was the first time. */}
-          <p className="settings-card-copy">
-            {t("legal.disclaimer.community.install")}
-          </p>
-          <div className="modal-actions">
-            <button
-              className="text-button"
-              onClick={() => setConfirming(false)}
-              type="button"
-            >
-              {t("routine.confirm.cancel")}
-            </button>
-            <button
-              className="primary-button"
-              disabled={busy}
-              onClick={() => void update()}
-              type="button"
-            >
-              {busy ? "…" : t("community.update.action")}
-            </button>
-          </div>
-        </Modal>
+        <UpdateDialog
+          id={id}
+          kind={kind}
+          latest={latest}
+          onClose={() => setConfirming(false)}
+          onUpdated={onUpdated}
+        />
       ) : null}
     </div>
   );

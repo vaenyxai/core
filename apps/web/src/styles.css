@@ -7949,3 +7949,19 @@ html, body { overscroll-behavior-y: none; }
   justify-content: flex-end;
   flex-wrap: wrap;
 }
+
+/* What an update would cost. A list, because these are things that happen to
+   you rather than prose to be read. */
+.update-consequences {
+  margin: var(--space-2) 0;
+  padding: var(--space-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  font-size: var(--fs-sm);
+}
+
+.update-consequences ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-3);
+}
