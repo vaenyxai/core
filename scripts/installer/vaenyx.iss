@@ -135,6 +135,8 @@ english.PickVoiceEn=Offline English voice   +60 MB
 chinesesimplified.PickVoiceEn=英文离线语音   +60 MB
 english.PickVoiceNote=Speak without the internet. Both languages share one engine.
 chinesesimplified.PickVoiceNote=不联网也能说话。两种语言共用一个引擎。
+english.PickFolder=Vaenyx goes here. Press Browse to put it somewhere else.
+chinesesimplified.PickFolder=Vaenyx 会装到这里。想换位置就点 Browse。
 english.PickInstalled=already installed
 chinesesimplified.PickInstalled=已安装
 english.NoRoom=There is not enough free space on drive %1.%n%nVaenyx needs about %2 MB there and %3 MB is free.%n%nFree some space, or choose a folder on another drive.
@@ -265,6 +267,9 @@ begin
   NoteLabel.Width := WizardForm.SelectDirPage.Width - ScaleX(18);
   NoteLabel.Caption := Note;
   NoteLabel.Font.Color := clGrayText;
+  // A size up from the stock small: this is the text somebody reads to decide
+  // what to download, and it was the smallest thing on the page.
+  NoteLabel.Font.Size := WizardForm.Font.Size + 1;
   // WRAPS, and it did not. The first version had these as full sentences with
   // wrapping off, so on the Owner's screen every one of them ran off the right
   // edge and was cut mid-word: "You sign in to your own fre", "downloads it
@@ -284,6 +289,7 @@ begin
   TotalLabel.Top := ScaleY(4);
   TotalLabel.Width := WizardForm.SelectDirPage.Width;
   TotalLabel.Font.Style := [fsBold];
+  TotalLabel.Font.Size := WizardForm.Font.Size + 2;
 
   Y := ScaleY(30);
   Step := ScaleY(32);
@@ -318,11 +324,17 @@ begin
   CbTail.Checked := True;
 
   // The stock install-location controls move below the ticks.
+  // One sentence about the folder, not three. The stock page says it in the
+  // heading, then again in SelectDirLabel, then again in
+  // SelectDirBrowseLabel — on a page whose top half is now the tick boxes.
+  WizardForm.SelectDirLabel.Caption := CustomMessage('PickFolder');
+  WizardForm.SelectDirLabel.Font.Size := WizardForm.Font.Size + 1;
+  WizardForm.SelectDirBrowseLabel.Visible := False;
+  WizardForm.DiskSpaceLabel.Font.Size := WizardForm.Font.Size + 1;
   WizardForm.SelectDirLabel.Top := Y;
-  WizardForm.SelectDirBrowseLabel.Top := Y + ScaleY(18);
-  WizardForm.DirEdit.Top := Y + ScaleY(40);
-  WizardForm.DirBrowseButton.Top := Y + ScaleY(38);
-  WizardForm.DiskSpaceLabel.Top := Y + ScaleY(70);
+  WizardForm.DirEdit.Top := Y + ScaleY(26);
+  WizardForm.DirBrowseButton.Top := Y + ScaleY(24);
+  WizardForm.DiskSpaceLabel.Top := Y + ScaleY(56);
   UpdateTotal(nil);
 end;
 
