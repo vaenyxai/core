@@ -119,22 +119,22 @@ english.PickTotal=Will download about %1 MB
 chinesesimplified.PickTotal=将下载约 %1 MB
 english.PickTail=Use Vaenyx on my phone (Tailscale)   +37 MB
 chinesesimplified.PickTail=在手机上用 Vaenyx(Tailscale)   +37 MB
-english.PickTailNote=Installs Tailscale so your phone reaches this computer from any network. You sign in to your own free Tailscale account in the next screen - installing it is not the same as being connected.
-chinesesimplified.PickTailNote=装上 Tailscale,手机在任何网络下都能安全连回这台电脑。下一步会用你自己的免费 Tailscale 账号登录一次 —— 装上不等于已经连通。
+english.PickTailNote=Reach this computer from your phone. You sign in on the next screen.
+chinesesimplified.PickTailNote=让手机能连回这台电脑。下一步登录一次才算连通。
 english.PickCodex=Use my ChatGPT subscription   +248 MB
 chinesesimplified.PickCodex=用我的 ChatGPT 订阅   +248 MB
-english.PickCodexNote=Only useful if you already pay for ChatGPT Plus or Pro. Leave it off and Vaenyx downloads it the first time you connect.
-chinesesimplified.PickCodexNote=只有你已经在付 ChatGPT Plus / Pro 才用得上。不勾也行 —— 以后第一次连接时会自动下载。
+english.PickCodexNote=Only if you already pay for ChatGPT. Otherwise it downloads later.
+chinesesimplified.PickCodexNote=只有已经在付 ChatGPT 才用得上。不勾以后也能补。
 english.PickClaude=Use my Claude subscription   +297 MB
 chinesesimplified.PickClaude=用我的 Claude 订阅   +297 MB
-english.PickClaudeNote=Only useful if you already pay for Claude Pro or Max. Leave it off and Vaenyx downloads it the first time you connect.
-chinesesimplified.PickClaudeNote=只有你已经在付 Claude Pro / Max 才用得上。不勾也行 —— 以后第一次连接时会自动下载。
+english.PickClaudeNote=Only if you already pay for Claude. Otherwise it downloads later.
+chinesesimplified.PickClaudeNote=只有已经在付 Claude 才用得上。不勾以后也能补。
 english.PickVoiceZh=Offline Chinese voice   +60 MB
 chinesesimplified.PickVoiceZh=中文离线语音   +60 MB
 english.PickVoiceEn=Offline English voice   +60 MB
 chinesesimplified.PickVoiceEn=英文离线语音   +60 MB
-english.PickVoiceNote=Lets Vaenyx speak without the internet. Without them, reading aloud goes through the model you connect. The speech engine (21 MB) is shared, so a second language adds only 60 MB.
-chinesesimplified.PickVoiceNote=让 Vaenyx 不联网也能说话。不装的话,朗读走你连接的云端模型。语音引擎(21 MB)两种语言共用,所以加第二种语言只多 60 MB。
+english.PickVoiceNote=Speak without the internet. Both languages share one engine.
+chinesesimplified.PickVoiceNote=不联网也能说话。两种语言共用一个引擎。
 english.PickInstalled=already installed
 chinesesimplified.PickInstalled=已安装
 english.NoRoom=There is not enough free space on drive %1.%n%nVaenyx needs about %2 MB there and %3 MB is free.%n%nFree some space, or choose a folder on another drive.
@@ -265,7 +265,13 @@ begin
   NoteLabel.Width := WizardForm.SelectDirPage.Width - ScaleX(18);
   NoteLabel.Caption := Note;
   NoteLabel.Font.Color := clGrayText;
-  NoteLabel.WordWrap := False;
+  // WRAPS, and it did not. The first version had these as full sentences with
+  // wrapping off, so on the Owner's screen every one of them ran off the right
+  // edge and was cut mid-word: "You sign in to your own fre", "downloads it
+  // the first". The notes are now one short line each AND the label wraps, so
+  // a longer translation cannot bring the fault back.
+  NoteLabel.WordWrap := True;
+  NoteLabel.Height := ScaleY(28);
 end;
 
 procedure InitializeWizard;
@@ -275,11 +281,11 @@ begin
   TotalLabel := TLabel.Create(WizardForm);
   TotalLabel.Parent := WizardForm.SelectDirPage;
   TotalLabel.Left := 0;
-  TotalLabel.Top := 0;
+  TotalLabel.Top := ScaleY(4);
   TotalLabel.Width := WizardForm.SelectDirPage.Width;
   TotalLabel.Font.Style := [fsBold];
 
-  Y := ScaleY(22);
+  Y := ScaleY(30);
   Step := ScaleY(32);
   // Tailscale first and ON by default: using Vaenyx from a phone is one of the
   // things it is FOR, it is the smallest of the five, and it is the only one

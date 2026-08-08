@@ -12,7 +12,10 @@
 //     own lookup resolves through MagicDNS back inside the tailnet), so no
 //     field claims public reachability — the UI tells the owner the phone is
 //     the only real test.
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { execFile, spawn } from "node:child_process";
 import { join } from "node:path";
 
@@ -160,12 +163,25 @@ interface InstallState {
 
 const installState: InstallState = { phase: "idle", detail: null };
 
-// Starts `winget install tailscale.tailscale` in the background; the status
-// endpoint reports progress. Deliberately fire-and-poll rather than a
-// long-hanging request: the download takes minutes on a slow line. The
-// failure detail is formatted in the language of the click that started the
-// install — the exit lands after that request has answered, so the closure
-// keeps the language the Owner was reading at the time.
+// INSTALLING TAILSCALE, from Tailscale's own MSI.
+//
+// It used to shell out to `winget install --id tailscale.tailscale`, and on
+// the Owner's machine that answered "No package found matching input
+// criteria" and did nothing (2026-08-08). winget is not a dependable way to
+// fetch one specific thing: the package id has to exist in whatever source
+// that account has configured, the source has to be accepted, and the whole
+// mechanism is missing entirely for the SYSTEM account the watchdog usually
+// runs Vaenyx under.
+//
+// The MSI is the vendor's own permanent URL, always the current version, and
+// msiexec is in every Windows install. Verified: 36.6 MB, HTTP 200.
+//
+// Fire-and-poll rather than a long-hanging request: the download takes minutes
+// on a slow line. The failure detail is formatted in the language of the click
+// that started it, because the exit lands after that request has answered.
+const TAILSCALE_MSI_URL =
+  "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi";
+
 export function installTailscale(lang: PhoneLang = "en"): InstallState {
   if (installState.phase === "installing") return installState;
   if (findTailscaleCommand()) {
@@ -175,55 +191,61 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
   }
   installState.phase = "installing";
   installState.detail = null;
-  const child = spawn(
-    "winget",
-    [
-      "install",
-      "--id",
-      "tailscale.tailscale",
-      "-e",
-      "--silent",
-      "--accept-source-agreements",
-      "--accept-package-agreements",
-    ],
-    { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
-  );
-  let output = "";
-  const collect = (chunk: unknown) => {
-    output = (output + String(chunk)).slice(-2000);
-  };
-  child.stdout?.on("data", collect);
-  child.stderr?.on("data", collect);
-  child.once("error", (error) => {
-    installState.phase = "failed";
-    // The usual cause: winget is not available to the account Vaenyx runs
-    // under. The UI pairs this with the manual-download fallback.
-    installState.detail =
-      lang === "zh"
-        ? `无法启动 winget(${error.message.slice(0, 120)})。`
-        : `Could not start winget (${error.message.slice(0, 120)}).`;
-  });
-  child.once("exit", (code) => {
-    if (code === 0) {
-      installState.phase = "idle";
-      installState.detail = null;
+
+  void (async () => {
+    const target = join(tmpdir(), `vaenyx-tailscale-${randomUUID()}.msi`);
+    try {
+      const response = await fetch(TAILSCALE_MSI_URL, { redirect: "follow" });
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      await writeFile(target, Buffer.from(await response.arrayBuffer()));
+    } catch (error) {
+      installState.phase = "failed";
+      installState.detail =
+        lang === "zh"
+          ? `没能下载 Tailscale 安装包(${String(error).slice(0, 100)})。`
+          : `Could not download the Tailscale installer (${String(error).slice(0, 100)}).`;
       return;
     }
-    if (installState.phase === "installing") {
+
+    // /quiet needs elevation. The watchdog runs Vaenyx as SYSTEM, which has
+    // it; an instance started by hand from a normal account does not, and
+    // msiexec answers 1603 or 1625. Both cases end at the same place: the
+    // manual download link the UI already shows beside this.
+    const child = spawn(
+      "msiexec",
+      ["/i", target, "/quiet", "/norestart"],
+      { stdio: ["ignore", "ignore", "ignore"], windowsHide: true },
+    );
+    child.once("error", (error) => {
       installState.phase = "failed";
-      const lastLine =
-        output
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .pop() ??
-        (lang === "zh"
-          ? `winget 退出了,代码 ${code}。`
-          : `winget exited with code ${code}.`);
-      installState.detail = lastLine.slice(0, 300);
-    }
-  });
-  child.unref();
+      installState.detail =
+        lang === "zh"
+          ? `没能运行安装程序(${error.message.slice(0, 120)})。`
+          : `Could not run the installer (${error.message.slice(0, 120)}).`;
+    });
+    child.once("exit", (code) => {
+      void rm(target, { force: true });
+      // The command appearing is the only proof that counts — msiexec can
+      // report success and still have put nothing where we look.
+      if (findTailscaleCommand()) {
+        installState.phase = "idle";
+        installState.detail = null;
+        return;
+      }
+      installState.phase = "failed";
+      installState.detail =
+        code === 1603 || code === 1625
+          ? lang === "zh"
+            ? "安装需要管理员权限。请用下面的链接自己装一次,然后回来点「再查一次」。"
+            : "Installing it needs administrator rights. Use the link below to install it yourself, then press Check Again."
+          : lang === "zh"
+            ? `安装程序退出,代码 ${code}。`
+            : `The installer exited with code ${code}.`;
+    });
+  })();
+
   return installState;
 }
 

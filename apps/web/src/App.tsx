@@ -779,7 +779,7 @@ function AuthScreen({
                 autoComplete="name"
                 maxLength={80}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Oskar"
+                placeholder="John"
                 required
                 value={name}
               />
@@ -22155,12 +22155,12 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
 
         <section className="wizard-option">
           <strong>
-            {zh ? "① 用 ChatGPT 登录" : "1. Sign in with ChatGPT"}
+            {zh ? "① 用你已有的订阅" : "1. Use a subscription you pay for"}
           </strong>
           <p className="settings-card-copy">
             {zh
-              ? "有 ChatGPT 订阅就选这个:不用 API key,浏览器登录一次即可。"
-              : "Best if you have a ChatGPT subscription: no API key, just one browser sign-in."}
+              ? "不用 API key,浏览器登录一次就好。"
+              : "No API key. One browser sign-in."}
           </p>
           {codexProvider?.healthy ? (
             <span className="library-chip chip-published">
@@ -22196,21 +22196,9 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
               {zh ? "没弹出窗口?点这里打开登录页 ↗" : "No window? Open the sign-in page ↗"}
             </a>
           ) : null}
-        </section>
 
-        {/* The other subscription. It was missing here while ChatGPT was
-            offered — so an Owner who pays for Claude and not for ChatGPT was
-            shown a sign-in they could not use and a key box they did not
-            need (Oskar, 2026-08-07). Same shape, same step, one screen. */}
-        <section className="wizard-option">
-          <strong>
-            {zh ? "① 用 Claude 登录" : "1. Sign in with Claude"}
-          </strong>
-          <p className="settings-card-copy">
-            {zh
-              ? "有 Claude 订阅就选这个:同样不用 API key,用你自己的 Claude 方案。"
-              : "Best if you have a Claude subscription: no API key either, and it uses your own Claude plan."}
-          </p>
+          {/* The second subscription sits in the SAME box, because it is the
+              same decision. Two boxes made the screen count 1, 1, 3. */}
           {claudeProvider?.healthy ? (
             <span className="library-chip chip-published">
               {zh ? "已连接" : "Connected"}
@@ -22269,7 +22257,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
         </section>
 
         <section className="wizard-option">
-          <strong>{zh ? "③ 粘一个 API key" : "3. Paste an API key"}</strong>
+          <strong>{zh ? "② 粘一个 API key" : "2. Paste an API key"}</strong>
           <p className="settings-card-copy">
             {zh
               ? "Gemini 和 Groq 有免费额度,不用信用卡。"
