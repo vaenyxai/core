@@ -291,6 +291,13 @@ export function updateMethodFromCommunity(methodId: string): Promise<unknown> {
   });
 }
 
+export function updateRoutineFromCommunity(routineId: string): Promise<unknown> {
+  return requestJson("/v1/library/routines/update", {
+    method: "POST",
+    body: JSON.stringify({ routineId }),
+  });
+}
+
 /** Undo. Works with no network — the previous version is on this disk. */
 export function rollbackMethod(methodId: string): Promise<unknown> {
   return requestJson("/v1/library/methods/rollback", {

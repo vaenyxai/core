@@ -340,3 +340,100 @@ export async function updateMethod(
   if (!method) throw new Error(`UPDATE_LOAD_FAILED:${methodId}`);
   return toLibraryMethod(method);
 }
+
+// UPDATING A COMMUNITY ROUTINE.
+//
+// This was missing and the gap was not theoretical: the update dialog offered
+// the button for Routines too, and it called installRoutine, which refuses
+// when the folder is already there. Every press answered 409.
+//
+// A Routine is not one file, so updating it is not one download:
+//
+//   • its own routine.json pins the VERSION of each Method it uses, so the
+//     new Routine may need Methods the machine does not have yet, or newer
+//     copies of ones it does
+//   • a Method that some OTHER Routine also uses must not be quietly moved
+//     underneath it — that Routine's author never tested the new one
+//
+// So: the Routine folder is replaced, missing dependencies are downloaded, and
+// a dependency that is already installed is LEFT ALONE and reported. The Owner
+// updates those deliberately, one at a time, seeing each one's consequences —
+// which is the same rule as everywhere else here, for the same reason.
+export async function updateRoutine(
+  baseUrl: string,
+  routinesDirectory: string,
+  libraryDirectory: string,
+  routineId: string,
+  options: {
+    keepRollback: (folder: string) => void;
+    signal?: AbortSignal;
+  },
+  fetchImpl: FetchLike = fetch,
+): Promise<InstallRoutineResponse> {
+  assertSafeId(routineId);
+  const routineDir = join(routinesDirectory, routineId);
+  if (!existsSync(routineDir)) {
+    throw new Error(`ROUTINE_MISSING:${routineId}`);
+  }
+
+  // A way back FIRST: if the download dies half way, what is on disk is still
+  // the version that was working.
+  options.keepRollback(routineDir);
+
+  const routineJson = await fetchFile(
+    fetchImpl,
+    `${baseUrl}/routines/${routineId}/routine.json`,
+    true,
+    options.signal,
+  );
+  const routineManifest = await fetchFile(
+    fetchImpl,
+    `${baseUrl}/routines/${routineId}/manifest.json`,
+    false,
+    options.signal,
+  );
+
+  let meta: Record<string, unknown>;
+  try {
+    meta = JSON.parse(routineJson ?? "{}") as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(`ROUTINE_PARSE_FAILED:${routineId}`, { cause: error });
+  }
+
+  const installedMethods: string[] = [];
+  const skippedMethods: string[] = [];
+  for (const dep of Array.isArray(meta.deps) ? meta.deps : []) {
+    const methodId =
+      dep && typeof dep === "object"
+        ? (dep as Record<string, unknown>).methodId
+        : undefined;
+    if (typeof methodId !== "string") continue;
+    assertSafeId(methodId);
+    if (loadMethod(libraryDirectory, methodId)) {
+      // Already here. NOT overwritten: another Routine may depend on this
+      // exact version, and the Owner's own examples live in it.
+      skippedMethods.push(methodId);
+      continue;
+    }
+    await downloadMethod(fetchImpl, baseUrl, libraryDirectory, methodId, options.signal);
+    installedMethods.push(methodId);
+  }
+
+  mkdirSync(routineDir, { recursive: true });
+  writeFileSync(
+    join(routineDir, "routine.json"),
+    stampCommunityOrigin("routine.json", routineJson as string),
+    "utf8",
+  );
+  if (routineManifest !== null) {
+    writeFileSync(join(routineDir, "manifest.json"), routineManifest, "utf8");
+  }
+
+  const routine = loadRoutine(routinesDirectory, libraryDirectory, routineId);
+  if (!routine) throw new Error(`UPDATE_LOAD_FAILED:${routineId}`);
+  return {
+    routine: toLibraryRoutine(routine),
+    installedMethods,
+    skippedMethods,
+  };
+}

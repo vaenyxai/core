@@ -126,6 +126,7 @@ import {
   rollbackMethod,
   setUpdatePolicy,
   updateMethodFromCommunity,
+  updateRoutineFromCommunity,
   type UpdateOffer,
   fetchFacts,
   fetchInstalledComponents,
@@ -17182,7 +17183,7 @@ function UpdateDialog({
                 void run(() =>
                   kind === "method"
                     ? updateMethodFromCommunity(id)
-                    : installRoutineFromCatalogue(id),
+                    : updateRoutineFromCommunity(id),
                 )
               }
               type="button"

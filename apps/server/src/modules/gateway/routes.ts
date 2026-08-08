@@ -456,7 +456,7 @@ import {
 } from "../models/claude-login.js";
 import { ensureClaudeSdkInstalled } from "../models/claude-sdk.js";
 import { componentProgress } from "../core/wanted-components.js";
-import { updateMethod } from "../core/catalogue.js";
+import { updateMethod, updateRoutine } from "../core/catalogue.js";
 import {
   describeUpdate,
   recommendedAction,
@@ -8791,6 +8791,79 @@ export async function registerGatewayRoutes(
         const message = error instanceof Error ? error.message : "";
         if (message.startsWith("METHOD_MISSING")) {
           return reply.code(404).send({ error: "That Method is not installed." });
+        }
+        return reply.code(502).send({
+          error: "Could not update from the community catalogue.",
+        });
+      }
+    },
+  );
+
+  app.post<{ Body: { routineId: string } }>(
+    "/v1/library/routines/update",
+    {
+      schema: {
+        body: Type.Object(
+          { routineId: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+      try {
+        const before = getInstalledItem(
+          context.database,
+          request.body.routineId,
+          "routine",
+        );
+        const result = await updateRoutine(
+          context.config.catalogueBaseUrl,
+          context.config.routinesDirectory,
+          context.config.libraryDirectory,
+          request.body.routineId,
+          {
+            keepRollback: (folder) =>
+              keepRollback(context.database, {
+                folder,
+                id: request.body.routineId,
+                kind: "routine",
+                version: before?.installedVersion ?? "0.0.0",
+              }),
+            signal: controller.signal,
+          },
+        );
+        recordInstall(context.database, {
+          id: request.body.routineId,
+          kind: "routine",
+          sourceUrl: `${context.config.catalogueBaseUrl}/routines/${request.body.routineId}`,
+          version: result.routine.version,
+        });
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "library.routine.update",
+          decision: "allowed",
+          reason: `Owner updated Routine "${request.body.routineId}" to ${result.routine.version}.`,
+          resourceType: "routine",
+          resourceId: request.body.routineId,
+        });
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.startsWith("ROUTINE_MISSING")) {
+          return reply.code(404).send({ error: "That Routine is not installed." });
         }
         return reply.code(502).send({
           error: "Could not update from the community catalogue.",
