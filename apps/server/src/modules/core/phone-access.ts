@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 import type {
@@ -45,10 +45,21 @@ export function findTailscaleCommand(): string | null {
   if (override) return override;
   if (process.env.NODE_ENV === "test") return null;
   if (process.platform === "win32") {
-    for (const root of [
+    // 🔴 NOT ONLY THE ENV VARS. Vaenyx runs as SYSTEM under the watchdog, and
+    // that account's environment does not reliably carry ProgramFiles — so
+    // this returned null on a machine where Tailscale was installed, running
+    // and serving. The consequences were not cosmetic: the screen said
+    // "Tailscale is not on this computer yet", and the install button then
+    // reinstalled it over the top and wiped the Owner's serve configuration,
+    // taking his phone access down (2026-08-08). A lookup that reports
+    // "absent" for something present is worse than one that fails loudly.
+    const roots = [
       process.env.ProgramFiles,
       process.env["ProgramFiles(x86)"],
-    ]) {
+      `${process.env.SystemDrive ?? "C:"}\\Program Files`,
+      `${process.env.SystemDrive ?? "C:"}\\Program Files (x86)`,
+    ];
+    for (const root of roots) {
       if (!root) continue;
       const candidate = join(root, "Tailscale", "tailscale.exe");
       if (existsSync(candidate)) return candidate;
@@ -58,6 +69,25 @@ export function findTailscaleCommand(): string | null {
   // On other platforms the CLI is on PATH when installed; `run` treats a
   // spawn failure as "not installed".
   return "tailscale";
+}
+
+/** Does Windows know about a Tailscale service? A second, independent answer
+ *  to "is it installed", so one lookup failing cannot green-light an install
+ *  that destroys a working configuration. */
+export function tailscaleServiceExists(): boolean {
+  if (process.platform !== "win32") return false;
+  try {
+    const result = spawnSync("sc.exe", ["query", "Tailscale"], {
+      encoding: "utf8",
+      timeout: 5000,
+      windowsHide: true,
+    });
+    // 1060 = "the specified service does not exist"; anything else means
+    // Windows has a record of it.
+    return result.status === 0;
+  } catch {
+    return false;
+  }
 }
 
 interface RunResult {
@@ -184,7 +214,13 @@ const TAILSCALE_MSI_URL =
 
 export function installTailscale(lang: PhoneLang = "en"): InstallState {
   if (installState.phase === "installing") return installState;
-  if (findTailscaleCommand()) {
+  // 🔴 TWO INDEPENDENT WAYS OF ASKING "IS IT ALREADY HERE", because getting
+  // this wrong is destructive rather than merely useless. Running the MSI over
+  // a working Tailscale is an upgrade-in-place that resets its serve
+  // configuration — the Owner's phone access vanished exactly that way. The
+  // executable lookup missed it once already, so the service registration is
+  // asked as well: either one saying "installed" is enough to refuse.
+  if (findTailscaleCommand() || tailscaleServiceExists()) {
     installState.phase = "idle";
     installState.detail = null;
     return installState;
