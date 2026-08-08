@@ -22224,6 +22224,9 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   // Step 5, optional: the phone step — the same panel Settings → Phone
   // Access keeps permanently, so skipping here loses nothing.
   const [phoneSetup, setPhoneSetup] = useState(false);
+  // Asked once. "Answered" covers both yes and no, so a household that
+  // skipped is never asked a second time.
+  const [phoneAnswered, setPhoneAnswered] = useState(false);
 
   useEffect(() => {
     void fetchModelProviders()
@@ -22239,11 +22242,12 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   // connected, and a half-done phone setup is the failure this whole step
   // exists to avoid.
   useEffect(() => {
-    void fetchInstalledComponents()
-      .then((components) => {
-        if (components.wanted.includes("tailscale")) setPhoneSetup(true);
-      })
-      .catch(() => undefined);
+    // The installer's tick only decides whether Tailscale is already
+    // INSTALLED by the time we get here. Whether the step is shown does not
+    // depend on it: installing it is not the same as being able to use it,
+    // and the person who did not tick is the one who most needs telling what
+    // it is for.
+    void fetchInstalledComponents().catch(() => undefined);
   }, []);
 
   const zh = lang === "zh";
@@ -22386,6 +22390,58 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   // step — detect, install, sign in, tunnel, then the QR — driven by the
   // shared Phone Access panel. Always skippable; Done and Skip both land in
   // the workspace, and Settings → Phone Access carries the same flow forever.
+  // The step after the model, shown to everybody exactly once.
+  if (finished && !phoneAnswered) {
+    return (
+      <main className="acceptance-screen">
+        <div className="acceptance-card">
+          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <h2>{zh ? "在手机上用 Vaenyx" : "Use Vaenyx from your phone"}</h2>
+          <p className="settings-card-copy">
+            {zh
+              ? "Vaenyx 只监听这台电脑本机,从不向网络开放端口。想在手机上用,就要一条你自己的加密通道 —— Tailscale 是免费的,登录一次就好。"
+              : "Vaenyx listens only on this computer and never opens a port to the network. To reach it from your phone you need an encrypted channel of your own — Tailscale is free, and it is one sign-in."}
+          </p>
+          <p className="settings-card-copy text-faint">
+            {zh
+              ? "装上不等于能用 —— 还要用你自己的免费账号登录一次,下一屏就是。"
+              : "Installing it is not the same as being connected: it also needs one sign-in with your own free account, on the next screen."}
+          </p>
+          <div className="model-card-actions">
+            <button
+              className="primary-button"
+              onClick={() => {
+                setPhoneAnswered(true);
+                setPhoneSetup(true);
+              }}
+              type="button"
+            >
+              {zh ? "装上并登录" : "Set it up"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                // Final. Settings keeps the same panel for ever, and asking a
+                // household that already said no is how a prompt becomes
+                // something people learn to dismiss without reading.
+                setPhoneAnswered(true);
+                setPhoneSetup(false);
+              }}
+              type="button"
+            >
+              {zh ? "跳过" : "Skip"}
+            </button>
+          </div>
+          <p className="acceptance-fine">
+            {zh
+              ? "跳过没关系:设置 → 手机访问 里随时能做,而且不会再问你。"
+              : "Skipping is fine: Settings → Phone Access does the same thing whenever you want, and you will not be asked again."}
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   if (finished && phoneSetup) {
     return (
       <main className="acceptance-screen">
@@ -22439,26 +22495,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
             </p>
           </section>
 
-          <section className="wizard-option">
-            <strong>{zh ? "想在手机上用?" : "Want it on your phone?"}</strong>
-            <p className="settings-card-copy">
-              {zh
-                ? "三步把 Vaenyx 加到手机主屏:装上 Tailscale、登录、开启加密通道,然后用手机扫一个码。全程在这里引导完成。"
-                : "Three steps put Vaenyx on the phone's Home Screen: install Tailscale, sign in, turn on the encrypted channel — then scan one code with the phone. Everything is guided right here."}
-            </p>
-            <button
-              className="secondary-button"
-              onClick={() => setPhoneSetup(true)}
-              type="button"
-            >
-              {zh ? "现在设置手机" : "Set Up The Phone Now"}
-            </button>
-            <p className="acceptance-fine">
-              {zh
-                ? "可选,随时都能做:以后在 设置 → 手机访问 里也是同一套流程。"
-                : "Optional, any time: Settings → Phone Access keeps this exact flow."}
-            </p>
-          </section>
+          
 
           <button
             className="primary-button acceptance-continue"
