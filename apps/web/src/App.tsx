@@ -9531,6 +9531,12 @@ const modalStack: symbol[] = [];
 // real close ends with the entry gone.
 const pendingModalPops = new Map<symbol, number>();
 
+// How many popstate events WE caused and must therefore ignore. Only ever
+// incremented immediately before a history.back() that we make ourselves, and
+// spent by the next popstate — so a press the Owner actually made can never be
+// swallowed by a stale count.
+let selfInflictedPops = 0;
+
 // Lightweight modal: centered dialog, top-right ×, closes on × or Esc, never on
 // outside click (per the app's modal rules). Tap targets stay ≥44px.
 function Modal({
@@ -9556,6 +9562,12 @@ function Modal({
   useEffect(() => {
     const id = idRef.current;
     modalStack.push(id);
+    // The page behind a dialog is not part of the dialog. Marking the app root
+    // inert takes it out of the tab order and out of the accessibility tree
+    // for as long as ANY dialog is open — the count matters, because a nested
+    // dialog closing must not hand the page back while its parent is still up.
+    const root = document.getElementById("root");
+    if (root && modalStack.length === 1) root.inert = true;
 
     // BACK CLOSES THE DIALOG, not the app (native feel; it matters most on the
     // phone, where back IS the close button and the × is a small target in a
@@ -9572,6 +9584,14 @@ function Modal({
       window.history.pushState({ vaenyxModal: true }, "");
     }
     const onPop = () => {
+      // Our own doing, retiring an entry for a dialog that has already gone.
+      // Spend it and change nothing: the guard below cannot tell the two apart
+      // on its own, because the dialog that caused this is already off the
+      // stack and the one underneath looks exactly like the top.
+      if (selfInflictedPops > 0) {
+        selfInflictedPops -= 1;
+        return;
+      }
       if (modalStack[modalStack.length - 1] !== id) return;
       popped = true;
       closeRef.current();
@@ -9586,6 +9606,7 @@ function Modal({
     return () => {
       const at = modalStack.indexOf(id);
       if (at >= 0) modalStack.splice(at, 1);
+      if (root && modalStack.length === 0) root.inert = false;
       window.removeEventListener("popstate", onPop);
       document.removeEventListener("keydown", onKey);
       // Closed some other way (×, Escape, an action inside it): take our own
@@ -9597,6 +9618,7 @@ function Modal({
           id,
           window.setTimeout(() => {
             pendingModalPops.delete(id);
+            selfInflictedPops += 1;
             window.history.back();
           }, 0),
         );
@@ -16831,23 +16853,8 @@ function RoutineDetail({
   // you back exactly where you were instead of re-rendering the whole tab.
   return (
     <div className="detail-modal">
-      {notice}
       <section className="settings-card">
-        <p className="settings-card-copy">{summary.description}</p>
-        {summary.tags.length > 0 ? (
-          <span className="tag-row">
-            {summary.tags.map((tag) => (
-              <span className="tag-chip" key={tag}>
-                #{tag}
-              </span>
-            ))}
-          </span>
-        ) : null}
-        <p className="settings-card-copy">
-          {summary.mode === "accumulate"
-            ? t("routine.open.mode.accumulate")
-            : t("routine.open.mode.oneShot")}
-        </p>
+        <p className="detail-lede">{summary.description}</p>
 
         <p className="eyebrow">{t("routine.open.steps")}</p>
         {full ? (
@@ -16871,6 +16878,24 @@ function RoutineDetail({
           </p>
         )}
 
+        {summary.tags.length > 0 ? (
+          <span className="tag-row">
+            {summary.tags.map((tag) => (
+              <span className="tag-chip" key={tag}>
+                #{tag}
+              </span>
+            ))}
+          </span>
+        ) : null}
+
+        {/* Everything else, in one block below the three things somebody
+            actually came here to read. */}
+        {notice}
+        <p className="settings-card-copy">
+          {summary.mode === "accumulate"
+            ? t("routine.open.mode.accumulate")
+            : t("routine.open.mode.oneShot")}
+        </p>
         {full && full.deps.length > 0 ? (
           <p className="settings-card-copy">
             {t("routine.open.uses")}:{" "}
@@ -16888,7 +16913,8 @@ function RoutineDetail({
             published={published}
             version={summary.version}
           />
-          <small>v{summary.version}</small>
+          {published ? null : <small>v{summary.version}</small>}
+          {summary.owner ? <small>by {summary.owner}</small> : null}
         </div>
 
         {/* The start button gets its own row at the bottom right (Oskar,
@@ -17845,8 +17871,66 @@ function MethodDetail({
   // a back button of its own would make.
   return (
     <div className="detail-modal">
-      <MethodPublishCard method={method} />
       <section className="settings-card">
+        <p className="detail-lede">{method.description}</p>
+
+        <p className="eyebrow">{zh ? "步骤" : "Step by step"}</p>
+        <pre className="library-recipe">{method.recipe}</pre>
+
+        {/* Explanation, steps, hashtags, then everything else (Oskar,
+            2026-08-09). The tag editor used to sit below the rename row, the
+            provenance chip, the corrections and the export button - four
+            blocks of housekeeping between the two things somebody opens this
+            to read. */}
+        <div className="method-tag-editor">
+          <span className="method-picker-label">Tags</span>
+          <div className="tag-row">
+            {method.tags.length === 0 ? (
+              <span className="library-note">No tags yet.</span>
+            ) : (
+              method.tags.map((tag) => (
+                <span className="tag-chip editable" key={tag}>
+                  #{tag}
+                  <button
+                    aria-label={`Remove ${tag}`}
+                    className="tag-chip-remove"
+                    disabled={tagBusy}
+                    onClick={() => removeTag(tag)}
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+          <div className="method-tag-add">
+            <input
+              className="method-rename-input"
+              disabled={tagBusy}
+              maxLength={120}
+              onChange={(event) => setDraftTag(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addTag();
+                }
+              }}
+              placeholder="Add a tag"
+              value={draftTag}
+            />
+            <button
+              className="secondary-button"
+              disabled={tagBusy || !draftTag.trim()}
+              onClick={addTag}
+              type="button"
+            >
+              Add
+            </button>
+          </div>
+          {tagError ? <p className="form-error">{tagError}</p> : null}
+        </div>
+
         {renaming ? (
           <div className="method-rename">
             <input
@@ -17884,7 +17968,6 @@ function MethodDetail({
           </div>
         ) : (
           <div className="method-title-row">
-            <h2>{method.name}</h2>
             <ProvenanceChip
               origin={method.origin}
               owner={method.owner}
@@ -17907,7 +17990,6 @@ function MethodDetail({
           </div>
         )}
         {renameError ? <p className="form-error">{renameError}</p> : null}
-        <p className="settings-card-copy">{method.description}</p>
         {(() => {
           const users = routines.filter((routine) =>
             routine.methodIds.includes(method.id),
@@ -17965,54 +18047,6 @@ function MethodDetail({
             </p>
           </div>
         ) : null}
-        <div className="method-tag-editor">
-          <span className="method-picker-label">Tags</span>
-          <div className="tag-row">
-            {method.tags.length === 0 ? (
-              <span className="library-note">No tags yet.</span>
-            ) : (
-              method.tags.map((tag) => (
-                <span className="tag-chip editable" key={tag}>
-                  #{tag}
-                  <button
-                    aria-label={`Remove ${tag}`}
-                    className="tag-chip-remove"
-                    disabled={tagBusy}
-                    onClick={() => removeTag(tag)}
-                    type="button"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))
-            )}
-          </div>
-          <div className="method-tag-add">
-            <input
-              className="method-rename-input"
-              disabled={tagBusy}
-              maxLength={120}
-              onChange={(event) => setDraftTag(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  addTag();
-                }
-              }}
-              placeholder="Add a tag"
-              value={draftTag}
-            />
-            <button
-              className="secondary-button"
-              disabled={tagBusy || !draftTag.trim()}
-              onClick={addTag}
-              type="button"
-            >
-              Add
-            </button>
-          </div>
-          {tagError ? <p className="form-error">{tagError}</p> : null}
-        </div>
         <dl className="settings-list">
           <div>
             <dt>Version</dt>
@@ -18087,11 +18121,6 @@ function MethodDetail({
         ) : null}
       </section>
       <section className="settings-card">
-        <p className="eyebrow">Recipe</p>
-        <h2>How it works</h2>
-        <pre className="library-recipe">{method.recipe}</pre>
-      </section>
-      <section className="settings-card">
         <p className="eyebrow">Input</p>
         <h2>What it takes</h2>
         <MethodFieldTable schema={method.inputSchema} />
@@ -18106,6 +18135,9 @@ function MethodDetail({
         <h2>Permissions &amp; learning</h2>
         <MethodManifest manifest={method.manifest} />
       </section>
+      {/* Publishing last, like the Routine dialog: it is the rarest thing
+          anybody does in here and it was the first thing they met. */}
+      <MethodPublishCard method={method} />
     </div>
   );
 }
@@ -19651,58 +19683,10 @@ function RoutinePublishControl({
 // "Installed" or "Private" in exactly the tone the one card with three
 // corrections waiting needed to use, so the card with something to do looked
 // like all the others.
-// A8: ONE "New", and it asks what the thing is FOR.
-//
-// "Do you want to build a Method or a Routine?" is a question about our data
-// model. Nobody outside this codebase can answer it, and being asked it on the
-// way in is how a person decides the whole area is not for them. What anybody
-// can answer is what they are trying to make — and the answer maps onto the
-// type without them ever meeting the word.
-function CreateChooser({
-  onClose,
-  onPick,
-}: {
-  onClose: () => void;
-  onPick: (kind: "method" | "routine") => void;
-}) {
-  const { lang } = useI18n();
-  const zh = lang === "zh";
-  return (
-    <Modal onClose={onClose} title={zh ? "新建" : "Make something"}>
-      <div className="create-purpose">
-        <button
-          className="create-purpose-option primary"
-          onClick={() => onPick("routine")}
-          type="button"
-        >
-          <strong>
-            {zh ? "做一个我自己要用的东西" : "Something I want to use"}
-          </strong>
-          <small>
-            {zh
-              ? "打开就能用。绝大多数情况选这个。"
-              : "Open it and it works. This is almost always the one."}
-          </small>
-        </button>
-        <button
-          className="create-purpose-option"
-          onClick={() => onPick("method")}
-          type="button"
-        >
-          <strong>
-            {zh ? "做一个 Method 给别人组装" : "A Method for other people to build with"}
-          </strong>
-          <small>
-            {zh
-              ? "一个可复用的零件,别人把它装进自己的 Routine 里。"
-              : "One reusable part that other people assemble into their own Routine."}
-          </small>
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
+// A8 RETIRED (Oskar, 2026-08-09). The chooser existed so nobody had to answer
+// "Method or Routine?" on the way in. Now each tab has its own New button, so
+// being on the tab IS the answer and the question never gets asked - which is
+// what A8 wanted, one dialog cheaper.
 function ProvenanceChip({
   origin,
   owner,
@@ -19753,11 +19737,17 @@ function AttentionChip({
 function RoutinesPanel({
   routines,
   methods,
+  creating,
+  onCreatingChange,
   onRoutinesRefresh,
   onUseRoutine,
 }: {
   routines: LibraryRoutineSummary[];
   methods: LibraryMethodSummary[];
+  // Owned by the tab, not by the panel: one row of buttons per tab, above the
+  // list, so "new" is in one place instead of two.
+  creating: boolean;
+  onCreatingChange: (creating: boolean) => void;
   onRoutinesRefresh: () => void;
   onUseRoutine: (routineId: string) => void;
 }) {
@@ -19766,10 +19756,6 @@ function RoutinesPanel({
   const communityVersions = useCommunityVersions();
   // Which Routine's description is open. Null = the list.
   const [opened, setOpened] = useState<string | null>(null);
-  // A chat create-offer opens the create flow directly, description pre-filled.
-  const [creating, setCreating] = useState(
-    () => peekCreateIntent()?.kind === "routine",
-  );
   const [publishState, setPublishState] = useState<PublishState | null>(null);
 
   useEffect(() => {
@@ -19795,7 +19781,7 @@ function RoutinesPanel({
   if (creating) {
     return (
       <CreateRoutinePanel
-        onDone={() => setCreating(false)}
+        onDone={() => onCreatingChange(false)}
         onRoutinesRefresh={onRoutinesRefresh}
       />
     );
@@ -19805,25 +19791,17 @@ function RoutinesPanel({
 
   return (
     <div className="library-layout">
-      <section className="library-intro">
-        <div className="library-intro-head">
-          <button
-            className="primary-button"
-            disabled={methods.length === 0}
-            onClick={() => setCreating(true)}
-            type="button"
-          >
-            {zh ? "＋ 新建 Routine" : "+ New Routine"}
-          </button>
-        </div>
-      </section>
       {routines.length === 0 ? (
         <div className="empty-state">
-          <strong>No routines yet</strong>
-          <p>When a Routine is added to the library, it will appear here.</p>
+          <strong>{zh ? "还没有 Routine" : "No Routines yet"}</strong>
+          <p>
+            {zh
+              ? "用上面的按钮做一个,或者从社区找一个。"
+              : "Make one with the button above, or find one in the community."}
+          </p>
         </div>
       ) : (
-        <div className="library-list">
+        <div className="library-list pills">
           {/* MINIMAL CARDS (Oskar, 2026-08-09: 每个卡片都做到最小,点击再弹窗).
               A card carries the name and NOTHING ELSE except the things that
               demand action — a new version, and, on Methods, corrections
@@ -19988,15 +19966,28 @@ function LibraryArea({
   const { lang } = useI18n();
   const zh = lang === "zh";
   const [finding, setFinding] = useState<"methods" | "routines" | null>(null);
-  const [choosing, setChoosing] = useState(false);
   // Three tabs rather than three stacked sections. Stacking them put the whole
   // library on one very long page — the parts, which most people never need,
   // sat under everything else and made the screen feel like a filing system
   // again. The tab ORDER still carries the argument: finished things first,
   // keys for other apps second, the insides last.
-  const [tab, setTab] = useState<"methods" | "routines" | "tokens">(() =>
-    peekCreateIntent()?.kind === "method" ? "methods" : "routines",
+  const [tab, setTab] = useState<
+    "community" | "methods" | "routines" | "tokens"
+  >(() => (peekCreateIntent()?.kind === "method" ? "methods" : "routines"));
+  // Creating is the TAB's business, not the panel's. Each panel used to own a
+  // "New" button of its own, so the Routines tab showed two of them in two
+  // places — one that asked what you were making and one that had already
+  // decided. One row of buttons per tab, above the list.
+  const [creatingRoutine, setCreatingRoutine] = useState(
+    () => peekCreateIntent()?.kind === "routine",
   );
+  const [creatingMethod, setCreatingMethod] = useState(
+    () => peekCreateIntent()?.kind === "method",
+  );
+  // Importing a SKILL.md was a permanently-open fold above the list: a
+  // heading, a paragraph, a URL field, a textarea and two buttons, for a thing
+  // almost nobody does. It is a button in the same row as the others now.
+  const [importing, setImporting] = useState(false);
   // A9. Corrections sit inside individual Methods doing nothing until somebody
   // looks at them, and the Methods tab is the one people open least. Without a
   // number on the tab the local half of the flywheel runs on remembering.
@@ -20012,23 +20003,10 @@ function LibraryArea({
 
   return (
     <div className="library-area">
-      <section className="library-intro">
-        {/* Permanent, not a dialog. A dialog is shown once and dismissed, and
-            this is the sentence somebody needs on the day they come back and
-            wonder what the bottom section is for. */}
-        {/* ONE NAME PER THING (Oskar, 2026-08-09). The tabs read 成品 / 钥匙 /
-            零件 in Chinese and Routines / Tokens / Methods in English, so one
-            screen carried two vocabularies and neither was the word he says
-            out loud to a developer. The product word is the label now. The
-            plain-language word moved HERE, into the sentence that explains it,
-            which is the only place a metaphor earns its keep. */}
-        <p>
-          {zh
-            ? "Routine 是成品 —— 点开就能用。Method 是它里面的零件,通常不用管。"
-            : "A Routine is the finished thing — open one and it works. A Method is a part inside it; you rarely need to look."}
-        </p>
-      </section>
-
+      {/* NO SHARED PREAMBLE (Oskar, 2026-08-09). One paragraph above the tabs
+          had to describe all of them at once, so it explained the tab you were
+          not on and pushed the one you were on down the screen. Each tab says
+          what it is on its own first line instead. */}
       <nav aria-label={zh ? "资源库" : "Library"} className="library-subtabs">
         <button
           className={tab === "routines" ? "active" : ""}
@@ -20054,30 +20032,48 @@ function LibraryArea({
             <span className="tab-badge">{pendingTotal}</span>
           ) : null}
         </button>
+        {/* The community account was a card in the basement under everything
+            else, which is where you put something nobody should need — and it
+            IS something nobody should need to use the community, only to
+            publish. But a card nobody can find is not restraint, it is just
+            lost, so it gets a tab and the tab says what it costs you: nothing,
+            until you publish. */}
+        <button
+          className={tab === "community" ? "active" : ""}
+          onClick={() => setTab("community")}
+          type="button"
+        >
+          Community
+        </button>
       </nav>
 
       {tab === "routines" ? (
         <section className="library-section">
-          <div className="library-section-head">
-            <div className="library-section-actions">
-              <button
-                className="primary-button"
-                onClick={() => setChoosing(true)}
-                type="button"
-              >
-                {zh ? "＋ 新建" : "+ New"}
-              </button>
-              <button
-                className="secondary-button"
-                onClick={() => setFinding("routines")}
-                type="button"
-              >
-                {zh ? "＋ 从社区找" : "+ Find in the community"}
-              </button>
-            </div>
+          <p className="library-lede">
+            {zh
+              ? "成品 —— 点开就能用。绝大多数时候你只需要这一页。"
+              : "The finished things. Open one and it works — most of the time this is the only tab you need."}
+          </p>
+          <div className="library-section-actions">
+            <button
+              className="primary-button"
+              onClick={() => setCreatingRoutine(true)}
+              type="button"
+            >
+              {zh ? "＋ 新建 Routine" : "+ New Routine"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => setFinding("routines")}
+              type="button"
+            >
+              {zh ? "＋ 从社区找" : "+ Find in the community"}
+            </button>
           </div>
           <RoutinesPanel
+            creating={creatingRoutine}
             methods={methods}
+            onCreatingChange={setCreatingRoutine}
             onRoutinesRefresh={onRoutinesRefresh}
             onUseRoutine={onUseRoutine}
             routines={routines}
@@ -20085,6 +20081,11 @@ function LibraryArea({
         </section>
       ) : tab === "tokens" ? (
         <section className="library-section">
+          <p className="library-lede">
+            {zh
+              ? "给外部 app 的钥匙 —— 在 Vaenyx 自己的网页里用东西不需要钥匙。"
+              : "Keys for outside apps. Nothing inside Vaenyx's own web app needs one."}
+          </p>
           <AppsPanel
             methods={methods}
             onCreate={onAppCreate}
@@ -20095,28 +20096,53 @@ function LibraryArea({
             routines={routines}
           />
         </section>
+      ) : tab === "community" ? (
+        <section className="library-section">
+          <p className="library-lede">
+            {zh
+              ? "你的社区账号。只有发布才需要登录 —— 用社区里的东西不需要账号。"
+              : "Your community account. Only publishing needs it — using what other people published needs no account at all."}
+          </p>
+          <CommunityIdentityBar />
+        </section>
       ) : (
         <section className="library-section">
-          <div className="library-section-head">
-            <div className="library-section-actions">
-              <button
-                className="secondary-button"
-                onClick={() => setFinding("methods")}
-                type="button"
-              >
-                {zh ? "＋ 从社区找 Method" : "+ Find a Method"}
-              </button>
-            </div>
-          </div>
           {/* Says who this is for in its first sentence. Somebody who does not
               make things should be able to stop reading here. */}
-          <p className="settings-card-copy text-faint">
+          <p className="library-lede">
             {zh
-              ? "这里是给创作者的。Method 是 Routine 内部的一个零件 —— 装 Routine 时会自动带来,平时不用管。"
-              : "This tab is for people who make things. A Method is one part inside a Routine: installing a Routine brings its Methods with it, and otherwise you can leave them alone."}
+              ? "给做东西的人。Method 是 Routine 内部的一个零件 —— 装 Routine 时会自动带来,平时不用管。"
+              : "For people who make things. A Method is one part inside a Routine: installing a Routine brings its Methods with it, and otherwise you can leave them alone."}
           </p>
+          <div className="library-section-actions">
+            <button
+              className="primary-button"
+              onClick={() => setCreatingMethod(true)}
+              type="button"
+            >
+              {zh ? "＋ 新建 Method" : "+ New Method"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => setFinding("methods")}
+              type="button"
+            >
+              {zh ? "＋ 从社区找" : "+ Find in the community"}
+            </button>
+            {CAPABILITIES.skillInterop ? (
+              <button
+                className="secondary-button"
+                onClick={() => setImporting(true)}
+                type="button"
+              >
+                {zh ? "导入 SKILL.md" : "Import SKILL.md"}
+              </button>
+            ) : null}
+          </div>
           <LibraryPanel
+            creating={creatingMethod}
             methods={methods}
+            onCreatingChange={setCreatingMethod}
             onMethodsRefresh={onMethodsRefresh}
             pendingCorrections={pendingCorrections}
             routines={routines}
@@ -20124,36 +20150,19 @@ function LibraryArea({
         </section>
       )}
 
-      {/* THE ACCOUNT GOES LAST, and says why it is there. At the top it reads
-          as "sign in to use this", which is the opposite of true and exactly
-          what turns a household away: using the community needs no account at
-          all. Only publishing does. */}
-      <section className="library-account-row">
-        <CommunityIdentityBar />
-      </section>
-
-      {choosing ? (
-        <CreateChooser
-          onClose={() => setChoosing(false)}
-          onPick={(picked) => {
-            setChoosing(false);
-            // The panels already read this on mount and open their own create
-            // screen; this only decides which one, so the person never meets
-            // the words Method or Routine at the moment of choosing.
-            try {
-              localStorage.setItem(
-                CREATE_INTENT,
-                JSON.stringify({ description: "", kind: picked }),
-              );
-            } catch {
-              // Private-mode storage: the section still opens, just without a
-              // pre-filled description.
-            }
-            setTab(picked === "method" ? "methods" : "routines");
-            if (picked === "method") onMethodsRefresh();
-            else onRoutinesRefresh();
-          }}
-        />
+      {importing ? (
+        <Modal
+          onClose={() => setImporting(false)}
+          title={zh ? "导入 SKILL.md" : "Import SKILL.md"}
+          variant="doc"
+        >
+          <SkillImportPanel
+            onImported={() => {
+              onMethodsRefresh();
+              setImporting(false);
+            }}
+          />
+        </Modal>
       ) : null}
 
       {finding ? (
@@ -20455,12 +20464,17 @@ function CreateMethodPanel({
 }
 
 function LibraryPanel({
+  creating,
   methods,
+  onCreatingChange,
   onMethodsRefresh,
   pendingCorrections,
   routines,
 }: {
+  // Owned by the tab: one row of buttons above the list, not one per panel.
+  creating: boolean;
   methods: LibraryMethodSummary[];
+  onCreatingChange: (creating: boolean) => void;
   onMethodsRefresh: () => void;
   // How many corrections are waiting on each Method, counted once for the
   // whole Library rather than per card.
@@ -20474,10 +20488,6 @@ function LibraryPanel({
   const [selected, setSelected] = useState<LibraryMethod | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // A chat create-offer opens the create flow directly, description pre-filled.
-  const [creating, setCreating] = useState(
-    () => peekCreateIntent()?.kind === "method",
-  );
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameFrom, setRenameFrom] = useState("");
@@ -20554,7 +20564,7 @@ function LibraryPanel({
   if (creating) {
     return (
       <CreateMethodPanel
-        onDone={() => setCreating(false)}
+        onDone={() => onCreatingChange(false)}
         onMethodsRefresh={onMethodsRefresh}
       />
     );
@@ -20562,34 +20572,15 @@ function LibraryPanel({
 
   return (
     <div className="library-layout">
-      <section className="library-intro">
-        <div className="library-intro-head">
-          <button
-            className="primary-button"
-            onClick={() => setCreating(true)}
-            type="button"
-          >
-            {zh ? "＋ 新建 Method" : "+ New Method"}
-          </button>
-        </div>
-      </section>
       {error ? <p className="form-error">{error}</p> : null}
-      {/* Folded away. It was a heading, a paragraph, a URL field, a large
-          textarea and two buttons, permanently open and ABOVE the parts
-          themselves, on a section that already says who it is for. One line
-          until somebody wants it. */}
-      <details className="skill-import-fold">
-        <summary>
-          {zh
-            ? "从别的 AI 工具的 SKILL.md 导入"
-            : "Import from another AI tool's SKILL.md"}
-        </summary>
-        <SkillImportPanel onImported={onMethodsRefresh} />
-      </details>
       {methods.length === 0 ? (
         <div className="empty-state">
-          <strong>No Methods yet</strong>
-          <p>When a Method is added to the library, it will appear here.</p>
+          <strong>{zh ? "还没有 Method" : "No Methods yet"}</strong>
+          <p>
+            {zh
+              ? "装一个 Routine 就会带来它用到的 Method,你也可以用上面的按钮自己做一个。"
+              : "Installing a Routine brings its Methods with it, or make one with the button above."}
+          </p>
         </div>
       ) : (
         <>
@@ -20672,7 +20663,7 @@ function LibraryPanel({
               in the dialog. The two chips are the deliberate exception: a badge
               that only appears once you have opened the thing is a badge for
               somebody who was already looking. */}
-          <div className="library-list">
+          <div className="library-list pills">
             {visible.map((method) => (
               <button
                 className="library-card compact"

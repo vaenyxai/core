@@ -6469,6 +6469,10 @@ select {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  /* The card is fixed and the BODY scrolls. Without this the detail dialogs
+     clipped everything below the fold with no way to reach it — the legal
+     reader never noticed because .legal-doc-body carries its own scroller. */
+  overflow-y: auto;
 }
 
 .modal-head {
@@ -7902,54 +7906,6 @@ html, body { overscroll-behavior-y: none; }
   margin-top: var(--space-4);
 }
 
-.library-section-head {
-  display: flex;
-  gap: var(--space-2);
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-}
-
-.library-section-head h3 {
-  margin: 0;
-  font-size: var(--fs-lg);
-}
-
-/* The account line, last on the page and quiet. At the top it would read as
-   "sign in to use this", which is the opposite of true. */
-.library-account-row {
-  margin-top: var(--space-5);
-  padding-top: var(--space-3);
-  border-top: 0.5px solid var(--border);
-}
-
-/* The SKILL.md import, folded. One line until somebody wants it — it used to
-   sit permanently open above the parts themselves. */
-.skill-import-fold {
-  border: 0.5px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: var(--space-2);
-}
-
-.skill-import-fold > summary {
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
-.skill-import-fold[open] > summary {
-  margin-bottom: var(--space-2);
-}
-
-/* The action row left behind once a panel's own heading moved up into the
-   section header: a button on its own, right-aligned. */
-.library-intro-head {
-  display: flex;
-  gap: var(--space-2);
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
 /* What an update would cost. A list, because these are things that happen to
    you rather than prose to be read. */
 .update-consequences {
@@ -8002,37 +7958,6 @@ html, body { overscroll-behavior-y: none; }
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
-}
-
-/* Making something: asked by purpose, so the two answers are sentences rather
-   than type names, and the common one is visibly the common one. */
-.create-purpose {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.create-purpose-option {
-  display: grid;
-  gap: 4px;
-  padding: var(--space-3);
-  border: 0.5px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--bg-raised);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.create-purpose-option.primary strong {
-  font-size: var(--fs-lg);
-}
-
-.create-purpose-option small {
-  color: var(--text-muted);
-}
-
-.create-purpose-option:hover {
-  border-color: var(--text-faint);
 }
 
 /* WHERE A CHANGED COPY CAME FROM. Quiet, but never hidden: it is a permanent
@@ -8160,6 +8085,7 @@ html, body { overscroll-behavior-y: none; }
    you are choosing something you have never seen. */
 .library-card.compact {
   display: flex;
+  min-height: 44px;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
@@ -8183,4 +8109,61 @@ html, body { overscroll-behavior-y: none; }
   padding: 0;
   border: 0;
   background: none;
+}
+
+/* ── The Library, after the shrink (Oskar, 2026-08-09) ────────────────────── */
+
+/* Each tab says what it is on its own first line. One shared paragraph above
+   the tabs had to describe all four at once, so it explained the tab you were
+   not on and pushed the one you were on down the screen. */
+.library-lede {
+  margin: 0 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+
+/* PILLS, NOT PANELS. Once a card carries only a name, a grid column stretches
+   it into a long empty capsule — a 260px box with eight characters in it. So
+   the list flows instead: each one is as wide as its own name, and twenty fit
+   where six used to. */
+.library-list.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  grid-template-columns: none;
+}
+
+.library-list.pills .library-card.compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  /* Roomy enough to hit with a thumb (>=44px tall with the 13px name), tight
+     enough that the name is the thing you see. */
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+}
+
+.library-list.pills .library-card.compact strong {
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* The one exception to "the name and nothing else". A chip here means somebody
+   has to do something, so it may not shrink into the name beside it. */
+.library-list.pills .library-card.compact .library-chip {
+  flex: none;
+}
+
+/* THE FIRST SENTENCE OF A DIALOG IS THE ANSWER TO "what is this?", and it was
+   being set in the same faint 11px as the footnotes under it. Bigger, and in
+   the body colour: everything below it is detail, and detail can be small. */
+.detail-lede {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-lg);
+  line-height: 1.55;
 }
