@@ -7922,3 +7922,30 @@ html, body { overscroll-behavior-y: none; }
   padding-top: var(--space-3);
   border-top: 0.5px solid var(--border);
 }
+
+/* The SKILL.md import, folded. One line until somebody wants it — it used to
+   sit permanently open above the parts themselves. */
+.skill-import-fold {
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: var(--space-2);
+}
+
+.skill-import-fold > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.skill-import-fold[open] > summary {
+  margin-bottom: var(--space-2);
+}
+
+/* The action row left behind once a panel's own heading moved up into the
+   section header: a button on its own, right-aligned. */
+.library-intro-head {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}

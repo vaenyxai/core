@@ -3569,10 +3569,7 @@ function AppsPanel({
 
       <section className="profiles-section">
         <div className="section-title">
-          <div>
-            <p className="eyebrow">Approved connections</p>
-            <h2>Tokens</h2>
-          </div>
+          <p className="eyebrow">Approved connections</p>
         </div>
         {profiles.length === 0 ? (
           <div className="empty-state">
@@ -19113,25 +19110,15 @@ function RoutinesPanel({
     <div className="library-layout">
       <section className="library-intro">
         <div className="library-intro-head">
-          <div>
-            <p className="eyebrow">Routines</p>
-            <h2>Your routines</h2>
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button
-              className="primary-button"
-              disabled={methods.length === 0}
-              onClick={() => setCreating(true)}
-              type="button"
-            >
-              + New routine
-            </button>
-          </div>
+          <button
+            className="primary-button"
+            disabled={methods.length === 0}
+            onClick={() => setCreating(true)}
+            type="button"
+          >
+            {zh ? "＋ 新建成品" : "+ New routine"}
+          </button>
         </div>
-        <p>
-          A Routine is a ready-to-use product: feed it something, it runs its
-          steps and keeps a log you can revisit. Tap one to see what it does.
-        </p>
       </section>
       {routines.length === 0 ? (
         <div className="empty-state">
@@ -19820,26 +19807,28 @@ function LibraryPanel({
     <div className="library-layout">
       <section className="library-intro">
         <div className="library-intro-head">
-          <div>
-            <p className="eyebrow">Methods</p>
-            <h2>Your methods</h2>
-          </div>
           <button
             className="primary-button"
             onClick={() => setCreating(true)}
             type="button"
           >
-            + New method
+            {zh ? "＋ 新建零件" : "+ New method"}
           </button>
         </div>
-        <p>
-          A Method is a building block — a single reusable part that Routines are
-          built from. Most people just use Routines; Methods are here for when you
-          want to build your own.
-        </p>
       </section>
       {error ? <p className="form-error">{error}</p> : null}
-      <SkillImportPanel onImported={onMethodsRefresh} />
+      {/* Folded away. It was a heading, a paragraph, a URL field, a large
+          textarea and two buttons, permanently open and ABOVE the parts
+          themselves, on a section that already says who it is for. One line
+          until somebody wants it. */}
+      <details className="skill-import-fold">
+        <summary>
+          {zh
+            ? "从别的 AI 工具的 SKILL.md 导入"
+            : "Import from another AI tool's SKILL.md"}
+        </summary>
+        <SkillImportPanel onImported={onMethodsRefresh} />
+      </details>
       {methods.length === 0 ? (
         <div className="empty-state">
           <strong>No Methods yet</strong>
