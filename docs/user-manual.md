@@ -45,6 +45,31 @@ Read this inside the app: **Settings → Manual**.
   and how much is short. It checks two drives when they differ: where Vaenyx
   goes, and the Windows drive the downloads unpack through.
 
+## 0b. What Vaenyx remembers about you
+
+- **Settings → Vaenyx Me → What Vaenyx knows** is the whole list. One line per
+  thing, and every line says how it was learned: from a chat, added by you, or
+  taken from a page with the address it came from.
+- **Nothing is deleted when it changes.** Move house and the old address is not
+  erased — it is dated. That is why "where did I live in March" still has an
+  answer, and why **History** on any line shows what it replaced.
+- **Forget** dates a memory rather than removing the record, so a memory can
+  never quietly vanish.
+- **It asks before it learns.** Once a conversation has been quiet for half an
+  hour, Vaenyx reads back what **you** said in it and proposes anything durable.
+  Proposals wait in the same review list as everything else and change no answer
+  until you approve them.
+- **It never learns from a web page.** Vaenyx only reads your own messages when
+  it does this, never its own replies — which is where anything fetched from the
+  internet would be. If a page says "remember that…", it is ignored. You can
+  still record something you read yourself; it is then marked as coming from
+  outside, with the address, so you can see who is really making the claim.
+- **Passwords, keys and card numbers are never kept**, whatever a conversation
+  contained.
+- **Search works in Chinese and English**, in the same box.
+- **Each mode keeps its own.** What is remembered in one Custom Mode is not
+  visible in another, or in User Mode.
+
 ## 1. Starting and stopping
 
 - **Start it** — double-click the **Vaenyx** icon on the desktop (the
@@ -569,5 +594,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.7** · last updated 2026-08-07.
+Manual for **v0.3.8** · last updated 2026-08-08.
 Keep this file up to date whenever a feature changes.

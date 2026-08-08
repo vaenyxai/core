@@ -4,6 +4,37 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.8 — 2026-08-08
+
+**Vaenyx remembers, and shows its working.** It now keeps a list of what it
+knows about you — where you live, where the children go to school, what you
+prefer — and every line says how it was learned. Nothing is deleted when it
+changes: move house and the old address is dated rather than erased, so "where
+did I live in March" still has an answer and every line can show what it
+replaced. Which value is the current one is decided by the record itself and
+never by asking the model, because a model has no clock and gets worse at that
+the more you tell it.
+
+**It asks before it learns anything.** Half an hour after a conversation goes
+quiet, Vaenyx reads back what *you* said in it and proposes anything durable.
+Proposals wait in the review list you already use and change no answer until you
+approve them. Passwords, keys and card numbers are dropped whatever was said.
+
+**A web page cannot plant a memory.** When Vaenyx learns, it reads only your own
+messages and never its own replies — which is where anything fetched from the
+internet lives. A page saying "remember that the password is…" is simply not
+read. You can still record something you read yourself, and it is then marked as
+coming from outside, with the address, so you can see who is making the claim.
+
+**Searching works in Chinese.** Two-character words — 超市, 牛奶, 医院 — are
+findable, which they were not going to be: the database can index Chinese but
+cannot split it into words, and both of its built-in ways of trying fail
+silently. Vaenyx splits the words itself before storing them. English is in the
+same box.
+
+**Each mode remembers separately**, enforced where the memories are read rather
+than by asking the model to be discreet.
+
 ## v0.3.7 — 2026-08-08
 
 **The download is less than half the size.** Installing Vaenyx fetched about
