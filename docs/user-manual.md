@@ -174,8 +174,12 @@ Read this inside the app: **Settings → Manual**.
   like a chat that grows extra buttons (Journal, Gallery) as you use it.
 - **Make one** — describe the steps in chat. One step becomes a Method, several
   become a Routine. Vaenyx drafts it and offers a test run before saving.
-- **Where they live** — the **Library** screen, in three tabs: Routines,
-  Tokens, Methods.
+- **Where they live** — the **Library** screen, in four tabs: Routines, Tokens,
+  Methods, Community. Each tab says what it is on its own first line, and each
+  has the same two buttons above its list: make a new one, or find one in the
+  community. The Methods tab has a third, for importing a SKILL.md.
+- **Community** is where your community account lives. You only need it to
+  publish — using what other people published needs no account at all.
 - **Cards carry the name only** — click one and everything about it opens in
   a dialog: description, steps, tags, version, publishing. The only things
   kept on the outside are the ones that need you to do something: a new
