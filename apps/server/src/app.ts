@@ -1,4 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import cors from "@fastify/cors";
@@ -259,17 +261,59 @@ export async function buildApp(
     renewSessionOnUse(database, request, reply);
   });
 
+  // THE CSP SCRIPT HASH IS COMPUTED, NOT WRITTEN DOWN.
+  //
+  // It used to be a literal in this file — the sha256 of an inline script that
+  // lives in a different package (apps/web/index.html). Editing that file
+  // therefore broke the whole app, silently and completely: the browser
+  // refuses the inline script, nothing boots, the page is blank, and NOTHING
+  // in the build says a word. That is exactly what happened (2026-08-08, the
+  // Owner got a white screen and a CSP error in the console).
+  //
+  // So the header is built at startup from the file actually being served. A
+  // hash that is derived can never disagree with the thing it describes.
+  const inlineScriptHashes = (() => {
+    try {
+      const html = readFileSync(
+        resolve(config.webDistDirectory, "index.html"),
+        "utf8",
+      );
+      const hashes: string[] = [];
+      // Inline only: a <script> with a src is covered by 'self'.
+      for (const match of html.matchAll(
+        /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g,
+      )) {
+        const body = match[1] ?? "";
+        if (!body.trim()) continue;
+        hashes.push(
+          `'sha256-${createHash("sha256").update(body, "utf8").digest("base64")}'`,
+        );
+      }
+      return hashes;
+    } catch {
+      // No built web app (a server-only test run). No inline script to allow.
+      return [];
+    }
+  })();
+
+  const contentSecurityPolicy = [
+    "default-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    `script-src 'self'${inlineScriptHashes.length ? ` ${inlineScriptHashes.join(" ")}` : ""}`,
+    "connect-src 'self'",
+    // blob: in img-src carries the instant photo thumbnail (a local object
+    // URL shown while the upload runs) — same-origin blobs only, no remote
+    // fetch is opened up by it.
+    "img-src 'self' data: blob:",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+
   app.addHook("onSend", async (_request, reply) => {
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "DENY");
     reply.header("referrer-policy", "no-referrer");
-    reply.header(
-      "content-security-policy",
-      // blob: in img-src carries the instant photo thumbnail (a local object
-      // URL shown while the upload runs) — same-origin blobs only, no remote
-      // fetch is opened up by it.
-      "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-Cc6SW17wUziVQgAlHEal9mloRMoe9l5ARVVylyZsQWA='; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; frame-ancestors 'none'",
-    );
+    reply.header("content-security-policy", contentSecurityPolicy);
 
     // The HTML shell references hash-named assets, so it must never be cached
     // or a device can get stuck on a stale build. Hashed assets stay cacheable.
