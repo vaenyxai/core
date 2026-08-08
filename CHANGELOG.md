@@ -4,6 +4,25 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.3.9 — 2026-08-08
+
+**"Install it" now installs Tailscale.** Pressing it did nothing at all and
+answered with a line of red about a package that could not be found. It was
+asking Windows' own app store for it, which needs that exact name to be in
+whatever catalogue your computer happens to be set up with — and the account
+Vaenyx runs under does not have that store at all. It now fetches Tailscale's
+own installer, straight from Tailscale, and runs it. If your Windows account is
+not allowed to install software, it says exactly that and points at the link to
+do it yourself.
+
+**The installer's explanations were being cut off mid-word.** "You sign in to
+your own fre". Each line is now short enough to read at a glance, and they wrap
+rather than running off the edge.
+
+**The first screen counted 1, 1, 3.** Signing in with ChatGPT and signing in
+with Claude were two boxes both numbered one. They are the same choice — use
+something you already pay for — so they are one box with both buttons in it.
+
 ## v0.3.8 — 2026-08-08
 
 **Vaenyx remembers, and shows its working.** It now keeps a list of what it
