@@ -8054,3 +8054,44 @@ html, body { overscroll-behavior-y: none; }
   width: 100%;
   margin-top: var(--space-1);
 }
+
+/* C7 — the answer moved. Red is reserved for this: something that WAS right
+   is now wrong, and the previous version is one button away. */
+.library-chip.chip-regressed {
+  color: #d9534f;
+}
+
+.check-result {
+  margin: var(--space-2) 0;
+  font-weight: 600;
+}
+
+.check-pass {
+  color: var(--text-faint);
+}
+
+.check-fail {
+  color: #d9534f;
+}
+
+/* Both answers, side by side. A person can only judge whether an update
+   broke something if they can see what it used to say. */
+.check-cases {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.check-cases li {
+  margin-bottom: var(--space-1);
+}
+
+.check-was,
+.check-now {
+  display: block;
+  word-break: break-word;
+}
+
+.check-was {
+  color: var(--text-faint);
+}

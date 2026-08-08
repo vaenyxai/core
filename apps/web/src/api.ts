@@ -90,6 +90,8 @@ import type {
   PhoneAccessStatus,
   PhoneLoginResponse,
   PhoneTunnelResponse,
+  RegressionListResponse,
+  RegressionResult,
 } from "@vaenyx/contracts";
 
 export type {
@@ -282,6 +284,22 @@ export function previewUpdate(
   return requestJson(
     `/v1/library/updates/preview?id=${encodeURIComponent(id)}&kind=${kind}&version=${encodeURIComponent(version)}`,
   );
+}
+
+// C7 — re-run this household's own examples against the recipe now installed.
+// Each case is a real model call, so this is only ever called from a button
+// somebody pressed: the product does not spend their money to reassure itself.
+export function checkMethodAgainstExamples(
+  methodId: string,
+): Promise<RegressionResult> {
+  return requestJson<RegressionResult>(
+    `/v1/library/methods/${encodeURIComponent(methodId)}/check`,
+    { method: "POST" },
+  );
+}
+
+export function fetchRegressionChecks(): Promise<RegressionListResponse> {
+  return requestJson<RegressionListResponse>("/v1/library/checks");
 }
 
 export function updateMethodFromCommunity(methodId: string): Promise<unknown> {

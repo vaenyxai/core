@@ -176,6 +176,13 @@ Read this inside the app: **Settings → Manual**.
   become a Routine. Vaenyx drafts it and offers a test run before saving.
 - **Where they live** — the **Library** screen.
 - **Edit a recipe** — Library → the Method → **Edit recipe**.
+- **After updating a community Method, check it against your own examples.**
+  The dialog offers it the moment the update lands. It re-runs up to six of the
+  examples you accumulated and compares the answers — the author could not have
+  checked this for you, because they tested against their cases and not yours.
+  If an answer moved, the card shows a red mark and the previous version is one
+  button away. Each example is one real model call, so it only runs when you
+  press the button.
 - **Editing a Method that came from the community makes your own copy.** Theirs
   is never changed: it stays installed, and it keeps receiving its author's
   updates. Your copy is named by you, credits the original author permanently,

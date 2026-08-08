@@ -1936,6 +1936,78 @@ export const RecipeEditDraftSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// DID THE NEW VERSION BREAK WHAT THIS HOUSEHOLD USES IT FOR? (C7)
+//
+// An update keeps the Owner's examples. Keeping them is not the same as still
+// getting them right, and the author cannot check that for anybody — they
+// tested their recipe against their own cases, not against the correction
+// somebody here made about a local convention. So the examples are re-run and
+// compared, and the answer turns on a light. It never moves anything: undo is
+// already one button away, and which way to go is the Owner's call.
+export const RegressionCaseSchema = Type.Object(
+  {
+    file: Type.String(),
+    matched: Type.Boolean(),
+    // Both answers, so the Owner sees WHICH number moved rather than being
+    // told that something vague went wrong.
+    expected: Type.Unknown(),
+    got: Type.Unknown(),
+  },
+  { additionalProperties: false },
+);
+
+export const RegressionResultSchema = Type.Object(
+  {
+    // 'error' is not a verdict about the recipe - the model could not answer.
+    // Shown differently on purpose: reporting it as a failure would talk
+    // somebody into rolling back a version that was fine.
+    state: Type.Union([
+      Type.Literal("pass"),
+      Type.Literal("fail"),
+      Type.Literal("error"),
+    ]),
+    // How many actually ran. Each one is a real model call, so there is a cap -
+    // and a cap must never be able to read as a clean bill of health.
+    checkedCount: Type.Integer(),
+    failedCount: Type.Integer(),
+    version: Type.String(),
+    checkedAt: Type.String(),
+    cases: Type.Array(RegressionCaseSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const RegressionCheckSchema = Type.Object(
+  {
+    id: Type.String(),
+    kind: Type.Union([Type.Literal("method"), Type.Literal("routine")]),
+    state: Type.Union([
+      Type.Literal("pass"),
+      Type.Literal("fail"),
+      Type.Literal("error"),
+    ]),
+    version: Type.String(),
+    checkedAt: Type.String(),
+    checkedCount: Type.Integer(),
+    failedCount: Type.Integer(),
+    // The checked version is no longer the installed one, so this verdict
+    // describes something that is not running. A stale red light is a lie that
+    // costs more than silence, so the UI shows nothing rather than this.
+    stale: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export const RegressionListResponseSchema = Type.Object(
+  { checks: Type.Array(RegressionCheckSchema) },
+  { additionalProperties: false },
+);
+
+export type RegressionCase = Static<typeof RegressionCaseSchema>;
+export type RegressionResult = Static<typeof RegressionResultSchema>;
+export type RegressionCheck = Static<typeof RegressionCheckSchema>;
+export type RegressionListResponse = Static<typeof RegressionListResponseSchema>;
+
 export const UpdateRecipeRequestSchema = Type.Object(
   {
     recipe: Type.String({ minLength: 1 }),

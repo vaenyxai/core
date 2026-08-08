@@ -63,6 +63,7 @@ import type {
   RelayPanel as RelayPanelData,
   RelaySettings,
   CapabilityTestResult,
+  RegressionResult,
 } from "@vaenyx/contracts";
 
 import {
@@ -105,6 +106,7 @@ import {
   recordLegalAck,
   setSharingPreference,
   draftRecipeEdit,
+  checkMethodAgainstExamples,
   updateMethodRecipe,
   fetchPublishPause,
   setPublishPause,
@@ -130,6 +132,7 @@ import {
   type UpdateOffer,
   fetchFacts,
   fetchInstalledComponents,
+  fetchRegressionChecks,
   forgetFact,
   searchFacts,
   type FactRow,
@@ -17067,6 +17070,34 @@ function MethodCorrections({ methodId }: { methodId: string }) {
 // D6 (copy pack): what the community currently publishes, for items installed
 // from it. Fetched once per screen and best-effort — an unreachable catalogue
 // means no notice, never an error in the Owner's face.
+// C7 — which installed items last failed their own examples.
+//
+// Only failures, and only about the version actually installed. A verdict on a
+// version that has since been replaced is marked stale by the server and
+// dropped here: a red light nobody can act on truthfully is worse than none.
+function useFailedChecks(): Map<string, number> {
+  const [failed, setFailed] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let active = true;
+    void fetchRegressionChecks()
+      .then((result) => {
+        if (!active) return;
+        const next = new Map<string, number>();
+        for (const check of result.checks) {
+          if (check.state === "fail" && !check.stale) {
+            next.set(check.id, check.failedCount);
+          }
+        }
+        setFailed(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return failed;
+}
+
 function useCommunityVersions(): Map<string, { version: string; description: string }> {
   const [versions, setVersions] = useState<
     Map<string, { version: string; description: string }>
@@ -17143,6 +17174,12 @@ function UpdateDialog({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // C7. The update landed; the dialog stays open to offer the one thing only
+  // this machine can answer - whether the new recipe still gets THIS
+  // household's answers right. The author could not have checked that.
+  const [updated, setUpdated] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [check, setCheck] = useState<RegressionResult | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -17159,13 +17196,14 @@ function UpdateDialog({
     };
   }, [id, kind, latest.version]);
 
-  async function run(action: () => Promise<unknown>) {
+  async function run(action: () => Promise<unknown>, stayOpen = false) {
     setBusy(true);
     setError(null);
     try {
       await action();
       onUpdated();
-      onClose();
+      if (stayOpen) setUpdated(true);
+      else onClose();
     } catch {
       setError(zh ? "没能完成。" : "That did not go through.");
     } finally {
@@ -17173,10 +17211,122 @@ function UpdateDialog({
     }
   }
 
+  async function runCheck() {
+    setChecking(true);
+    setError(null);
+    try {
+      setCheck(await checkMethodAgainstExamples(id));
+    } catch {
+      setError(zh ? "没能跑完。" : "That check could not finish.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
   return (
     <Modal onClose={onClose} title={zh ? "有新版" : "A newer version"}>
       {loading ? (
         <p className="library-note">{zh ? "正在看要动到什么…" : "Working out what would change…"}</p>
+      ) : updated ? (
+        /* C7 — the update is in. The one question left is the one only this
+           machine can answer: does the new recipe still get THIS household's
+           answers right? The author tested against their own cases, never
+           against the correction somebody here made. It is a button and not
+           an automatic step because each case is a real model call. */
+        <>
+          <p className="settings-card-copy">
+            {zh
+              ? `已经更新到 v${latest.version}。`
+              : `Updated to v${latest.version}.`}
+          </p>
+          {!check ? (
+            <>
+              <p className="settings-card-copy">
+                {zh
+                  ? "要不要拿你自己的例子跑一遍,看看新版本答得还对不对?作者没法替你查这个 —— 他测的是他自己的例子。"
+                  : "Re-run your own examples against it? The author could not check this for you — they tested against their own cases, not yours."}
+              </p>
+              <p className="context-disclaimer">
+                {zh
+                  ? "每个例子都是一次真实的模型调用,最多跑 6 个。"
+                  : "Each example is one real model call, up to 6 of them."}
+              </p>
+              <div className="model-card-actions">
+                <button
+                  className="primary-button"
+                  disabled={checking}
+                  onClick={() => void runCheck()}
+                  type="button"
+                >
+                  {checking
+                    ? zh
+                      ? "正在跑…"
+                      : "Running…"
+                    : zh
+                      ? "拿我的例子跑一遍"
+                      : "Re-run my examples"}
+                </button>
+                <button className="secondary-button" onClick={onClose} type="button">
+                  {zh ? "以后再说" : "Not now"}
+                </button>
+              </div>
+            </>
+          ) : check.state === "error" ? (
+            /* Not a verdict about the recipe. Saying "failed" here would talk
+               somebody into undoing a version that was fine. */
+            <p className="library-note">
+              {zh
+                ? "模型这次没答上来,所以什么都没测出来 —— 这不代表新版本有问题。晚点再试。"
+                : "The model could not answer, so nothing was measured — that is not a verdict about the new version. Try again later."}
+            </p>
+          ) : check.state === "pass" ? (
+            <p className="check-result check-pass">
+              {zh
+                ? `跑了 ${check.checkedCount} 个例子,答案都和以前一样。`
+                : `Re-ran ${check.checkedCount} example(s); every answer is the same as before.`}
+            </p>
+          ) : (
+            <>
+              <p className="check-result check-fail">
+                {zh
+                  ? `跑了 ${check.checkedCount} 个,有 ${check.failedCount} 个答案变了。`
+                  : `Re-ran ${check.checkedCount}; ${check.failedCount} answer(s) changed.`}
+              </p>
+              {/* WHICH answer moved, not "something went wrong". A person can
+                  only judge this if they can see both numbers. */}
+              <ul className="check-cases">
+                {check.cases
+                  .filter((entry) => !entry.matched)
+                  .map((entry) => (
+                    <li key={entry.file}>
+                      <span className="check-was">
+                        {zh ? "以前:" : "was: "}
+                        {JSON.stringify(entry.expected)}
+                      </span>
+                      <span className="check-now">
+                        {zh ? "现在:" : "now: "}
+                        {JSON.stringify(entry.got)}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+              <div className="model-card-actions">
+                <button
+                  className="primary-button"
+                  disabled={busy}
+                  onClick={() => void run(() => rollbackMethod(id))}
+                  type="button"
+                >
+                  {zh ? "换回上一个版本" : "Put the previous version back"}
+                </button>
+                <button className="secondary-button" onClick={onClose} type="button">
+                  {zh ? "先留着新版" : "Keep the new one"}
+                </button>
+              </div>
+            </>
+          )}
+          {error ? <p className="form-error">{error}</p> : null}
+        </>
       ) : !offer ? (
         <p className="library-note">
           {zh ? "已经是最新的了。" : "This is already the current version."}
@@ -17231,10 +17381,14 @@ function UpdateDialog({
               }
               disabled={busy}
               onClick={() =>
-                void run(() =>
-                  kind === "method"
-                    ? updateMethodFromCommunity(id)
-                    : updateRoutineFromCommunity(id),
+                void run(
+                  () =>
+                    kind === "method"
+                      ? updateMethodFromCommunity(id)
+                      : updateRoutineFromCommunity(id),
+                  // A Method can be re-run against the examples; a Routine has
+                  // no single answer to compare, so that dialog just closes.
+                  kind === "method" && offer.examplesKept > 0,
                 )
               }
               type="button"
@@ -19361,7 +19515,7 @@ function AttentionChip({
   tone,
 }: {
   children: ReactNode;
-  tone: "edited" | "new-version" | "review";
+  tone: "edited" | "new-version" | "regressed" | "review";
 }) {
   return <span className={`library-chip chip-attention chip-${tone}`}>{children}</span>;
 }
@@ -20100,6 +20254,7 @@ function LibraryPanel({
   const [draftTag, setDraftTag] = useState("");
   const [savingTag, setSavingTag] = useState(false);
   const [publishState, setPublishState] = useState<PublishState | null>(null);
+  const failedChecks = useFailedChecks();
 
   useEffect(() => {
     let active = true;
@@ -20330,6 +20485,16 @@ function LibraryPanel({
                     }
                     version={method.version}
                   />
+                  {/* C7. The last update stopped getting this household's own
+                      answers right. Loud, because there IS something to do
+                      about it — the previous version is one button away. */}
+                  {failedChecks.has(method.id) ? (
+                    <AttentionChip tone="regressed">
+                      {zh
+                        ? `${failedChecks.get(method.id)} 个例子答案变了`
+                        : `${failedChecks.get(method.id)} example(s) changed`}
+                    </AttentionChip>
+                  ) : null}
                 </div>
                 <p>{method.description}</p>
                 {method.tags.length > 0 ? (

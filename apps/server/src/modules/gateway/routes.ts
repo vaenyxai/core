@@ -188,6 +188,8 @@ import {
   type AdoptCorrectionRequest,
   type PreviewSkillRequest,
   type ImportSkillRequest,
+  RegressionListResponseSchema,
+  RegressionResultSchema,
   type UpdateRecipeRequest,
   type PublishAcceptanceRequest,
   type SetMethodTagsRequest,
@@ -478,6 +480,18 @@ import {
   suggestForkName,
   toFolderId,
 } from "../core/fork-method.js";
+import { listExampleProvenance } from "../core/example-origin.js";
+import {
+  clearRegression,
+  listRegressions,
+  recordRegression,
+  runRegression,
+} from "../core/update-regression.js";
+
+// Six cases is the cap on one check: enough that a broken update shows up, few
+// enough that pressing the button is never a decision worth agonising over.
+// Each one is a real model call somebody pays for.
+const REGRESSION_CASE_LIMIT = 6;
 import { approveFactCandidate } from "../core/facts-extract.js";
 import {
   listCurrentFacts,
@@ -8743,6 +8757,117 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // C7 — DID THE NEW VERSION BREAK WHAT THIS HOUSEHOLD USES IT FOR?
+  //
+  // Deliberately a button and not an automatic step after every update. Each
+  // case is a real model call the Owner pays for, and this product does not
+  // spend somebody's money on their behalf without asking. The offer appears
+  // the moment an update lands, which is when the answer is worth the most.
+  app.post<{ Params: { id: string } }>(
+    "/v1/library/methods/:id/check",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: RegressionResultSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      const method = loadMethod(
+        context.config.libraryDirectory,
+        request.params.id,
+      );
+      if (!method) return reply.code(404).send({ error: "Method not found." });
+
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+
+      const authorFiles = new Set(
+        listExampleProvenance(context.database, request.params.id)
+          .filter((entry) => entry.origin === "author")
+          .map((entry) => entry.exampleFile),
+      );
+      const allowed = decideCapabilities(
+        context.database,
+        capabilitiesFromManifest(method.manifest).capabilities,
+        owner.modeId ?? null,
+      );
+
+      const result = await runRegression(
+        method,
+        listMethodExamples(context.config.libraryDirectory, request.params.id),
+        async (subject, fewShot, input) => {
+          const run = await executeMethod(
+            subject,
+            fewShot,
+            input,
+            controller.signal,
+            allowed.allowed,
+          );
+          return { output: run.output };
+        },
+        {
+          authorFiles,
+          // Six is the cap. Enough that a broken update shows up, few enough
+          // that pressing the button is never a decision worth agonising over.
+          limit: REGRESSION_CASE_LIMIT,
+          now: new Date().toISOString(),
+          version: method.version,
+        },
+      );
+      recordRegression(context.database, request.params.id, "method", result);
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "library.method.check",
+        decision: "allowed",
+        reason: `Owner re-ran ${result.checkedCount} of their own example(s) against "${request.params.id}" v${method.version}: ${result.state}.`,
+        resourceType: "method",
+        resourceId: request.params.id,
+      });
+      return result;
+    },
+  );
+
+  // The lights. A verdict about a version that has since been replaced is
+  // marked stale rather than shown, because a red light nobody can act on
+  // truthfully is worse than no light at all.
+  app.get(
+    "/v1/library/checks",
+    { schema: { response: { 200: RegressionListResponseSchema, 401: ErrorResponseSchema } } },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const installed = new Map(
+        listInstalledItems(context.database).map((item) => [
+          `${item.kind}:${item.id}`,
+          item,
+        ]),
+      );
+      return {
+        checks: listRegressions(context.database).map((check) => {
+          const current =
+            check.kind === "method"
+              ? loadMethod(context.config.libraryDirectory, check.id)?.version
+              : installed.get(`${check.kind}:${check.id}`)?.installedVersion;
+          return { ...check, stale: !current || current !== check.version };
+        }),
+      };
+    },
+  );
+
   // ---- Community updates: offer, apply, undo ----
   //
   // EVERY ONE OF THESE IS PRESSED BY THE OWNER. There is no timer, no startup
@@ -8853,6 +8978,10 @@ export async function registerGatewayRoutes(
           sourceUrl: `${context.config.catalogueBaseUrl}/methods/${request.body.methodId}`,
           version: method.version,
         });
+        // The recipe just changed, so any verdict about the old one is about
+        // something that is no longer running. A stale light is worse than
+        // none, so it goes rather than lingering.
+        clearRegression(context.database, request.body.methodId, "method");
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
@@ -8972,6 +9101,10 @@ export async function registerGatewayRoutes(
         "method",
         join(context.config.libraryDirectory, request.body.methodId),
       );
+      // Putting the old version back also puts the question back: whatever the
+      // check said about the version being removed no longer describes what is
+      // on disk.
+      if (restored) clearRegression(context.database, request.body.methodId, "method");
       if (!restored) {
         return reply
           .code(404)
