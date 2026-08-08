@@ -35,6 +35,13 @@ same box.
 **Each mode remembers separately**, enforced where the memories are read rather
 than by asking the model to be discreet.
 
+**Fixed: approving a second thing about yourself deleted the first.** Vaenyx Me
+starts as seven blanks, one per part of a person, and approving something fills
+the blank for its part. It filled the first row in that group whatever was
+already in it — so approving a second insight about, say, how you like to be
+talked to quietly wrote over one you had already accepted, with nothing left to
+say it had ever existed. A group whose blank is taken now gains another line.
+
 ## v0.3.7 — 2026-08-08
 
 **The download is less than half the size.** Installing Vaenyx fetched about

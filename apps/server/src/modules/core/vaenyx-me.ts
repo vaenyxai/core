@@ -432,11 +432,24 @@ export function approveVaenyxMeCandidate(
   database.sqlite.exec("BEGIN IMMEDIATE;");
 
   try {
+    // 🔴 FILL AN EMPTY SLOT, NEVER OVERWRITE A LEARNED ONE.
+    //
+    // Vaenyx Me starts as seven placeholders, one per category, at
+    // 'not_learned' (0009). Approving something is meant to FILL the empty one
+    // for its category — and that is what this query used to do for the first
+    // approval and only the first. It took the first row in the category
+    // whatever its state, so approving a SECOND insight about, say,
+    // communication silently overwrote the first with no record anywhere that
+    // it had ever existed. The Owner had approved it; it was simply gone.
+    //
+    // So: an unlearned placeholder is filled, and a category whose placeholder
+    // is already taken gains another row instead. Seven is where the screen
+    // starts, not a ceiling — the chat context already reads up to twelve.
     const existingItem = database.sqlite
       .prepare(
         `SELECT id
          FROM vaenyx_me_items
-         WHERE category = ?
+         WHERE category = ? AND status <> 'approved'
          ORDER BY sort_order, title
          LIMIT 1`,
       )
