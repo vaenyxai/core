@@ -1570,6 +1570,12 @@ export const LibraryRoutineSummarySchema = Type.Object(
     tags: Type.Array(Type.String()),
     mode: RoutineModeSchema,
     stepCount: Type.Integer({ minimum: 0 }),
+    // Which Methods this Routine is built out of, de-duplicated and in the
+    // order they first appear. Two screens need it and neither should have to
+    // load every Routine in full just to draw a card: the Routine card says
+    // how many parts it has, and a Method card says which Routines use it —
+    // the question "can I delete this?" has no other answer.
+    methodIds: Type.Array(Type.String()),
     view: Type.Optional(Type.Unknown()),
     origin: ItemOriginSchema,
     // What this Routine plugs into beyond text (step 4, Oskar 2026-07-28):

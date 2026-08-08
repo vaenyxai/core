@@ -235,6 +235,10 @@ function toSummary(
     tags: readStringArray(meta.tags),
     mode: readMode(meta.mode),
     stepCount: readFlow(meta.flow).length,
+    // De-duplicated: a Routine that uses the same Method twice has one part,
+    // not two. "3 steps" and "2 parts" are both true and mean different
+    // things, which is why both are here.
+    methodIds: [...new Set(readFlow(meta.flow).map((step) => step.methodId))],
     // The declarative View rides along (routine.json is already read here) so
     // the chat/Gallery can render results from a summary alone.
     view: meta.view ?? null,

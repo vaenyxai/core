@@ -7891,3 +7891,34 @@ html, body { overscroll-behavior-y: none; }
   padding-left: var(--space-3);
   font-size: var(--fs-sm);
 }
+
+/* THE LIBRARY'S THREE SECTIONS. Stacked on one page rather than behind tabs:
+   the complaint that started this rework was that the same two words appeared
+   in two places and you had to remember which page you were on. One page with
+   a fixed order removes the question instead of answering it. */
+.library-section {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.library-section-head {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.library-section-head h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+/* The account line, last on the page and quiet. At the top it would read as
+   "sign in to use this", which is the opposite of true. */
+.library-account-row {
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 0.5px solid var(--border);
+}

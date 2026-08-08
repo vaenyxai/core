@@ -292,7 +292,6 @@ type Screen =
   | "ask-vaenyx"
   | "projects"
   | "library"
-  | "community"
   | "discord"
   | "modes"
   | "settings"
@@ -306,7 +305,6 @@ type Screen =
 const RESTORABLE_SCREENS: Screen[] = [
   "projects",
   "library",
-  "community",
   "discord",
   "modes",
   "settings",
@@ -17493,40 +17491,6 @@ function MethodDetail({
 // offers an owner-only test run.
 // Skills sub-view: imported capability packs (SKILL.md / MCP / Hermes converted
 // to Vaenyx's format). Import is a later phase; built-in skills show now.
-function SkillsLibrary({ skills }: { skills: Workspace["skills"] }) {
-  return (
-    <div className="library-layout">
-      <section className="library-intro">
-        <p className="eyebrow">Skills</p>
-        <h2>Skills</h2>
-        <p>
-          Skills are lightweight capability packs. Importing external skills
-          (SKILL.md / MCP / Hermes) and converting them to Vaenyx's format is
-          coming; the built-in skills available now are listed below.
-        </p>
-      </section>
-      {skills.length === 0 ? (
-        <div className="empty-state">
-          <strong>No skills yet</strong>
-          <p>Imported skills will appear here.</p>
-        </div>
-      ) : (
-        <div className="library-list">
-          {skills.map((skill) => (
-            <div className="library-card library-card-static" key={skill.id}>
-              <div className="library-card-head">
-                <strong>{skill.name}</strong>
-                <span className="library-chip">built-in</span>
-              </div>
-              <p>{skill.description}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // Routines tab: the user-facing products. Browse, open one, feed it (a Journal
 // entry), run its flow, and revisit its Gallery (results) + Journal (inputs).
 // Create a Routine from plain language (③ slice 2): describe → Vaenyx plans the
@@ -18578,72 +18542,6 @@ function CommunityIdentityBar() {
 // Community — the shared catalogue, a top-level peer of the Library. Same
 // look-and-feel as the Library (intro + subtabs + cards); the intro's first
 // paragraph states the Community-vs-Library difference.
-function CommunityArea({
-  methods,
-  routines,
-  onMethodsRefresh,
-  onRoutinesRefresh,
-}: {
-  methods: LibraryMethodSummary[];
-  routines: LibraryRoutineSummary[];
-  onMethodsRefresh: () => void;
-  onRoutinesRefresh: () => void;
-}) {
-  const { t } = useI18n();
-  const [tab, setTab] = useState<"routines" | "methods" | "account">(
-    "routines",
-  );
-  return (
-    <div className="library-area">
-      {/* Same skeleton as Library (Oskar, 2026-07-27): one line saying what
-          this place is, then straight to the tabs, then search and the list.
-          Discord moved to its own screen. */}
-      <section className="library-intro community-intro">
-        <p>{t("community.intro")}</p>
-        <p className="context-disclaimer">
-          {t("legal.disclaimer.community.browse")}
-        </p>
-      </section>
-      <nav aria-label="Community sections" className="library-subtabs">
-        <button
-          className={tab === "routines" ? "active" : ""}
-          onClick={() => setTab("routines")}
-          type="button"
-        >
-          Routines
-        </button>
-        <button
-          className={tab === "methods" ? "active" : ""}
-          onClick={() => setTab("methods")}
-          type="button"
-        >
-          Methods
-        </button>
-        <button
-          className={tab === "account" ? "active" : ""}
-          onClick={() => setTab("account")}
-          type="button"
-        >
-          Account
-        </button>
-      </nav>
-      {tab === "account" ? (
-        <CommunityIdentityBar />
-      ) : (
-        <CataloguePanel
-          installedIds={[
-            ...methods.map((method) => method.id),
-            ...routines.map((routine) => routine.id),
-          ]}
-          kind={tab}
-          onMethodsRefresh={onMethodsRefresh}
-          onRoutinesRefresh={onRoutinesRefresh}
-        />
-      )}
-    </div>
-  );
-}
-
 // D4 (copy pack): the report channel has to be reachable from every community
 // item, or the takedown discipline in the Terms has nothing to trigger it from
 // inside the app. On-demand: the notice travels with this control.
@@ -19156,6 +19054,8 @@ function RoutinesPanel({
   onRoutinesRefresh: () => void;
   onUseRoutine: (routineId: string) => void;
 }) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
   const communityVersions = useCommunityVersions();
   // Which Routine's description is open. Null = the list.
   const [opened, setOpened] = useState<string | null>(null);
@@ -19279,7 +19179,13 @@ function RoutinesPanel({
                 <small>
                   v{routine.version} · {routine.stepCount}{" "}
                   {routine.stepCount === 1 ? "step" : "steps"} ·{" "}
-                  {routine.mode === "accumulate" ? "Accumulate" : "One-shot"}
+                  {routine.methodIds.length}{" "}
+                  {zh
+                    ? "个零件"
+                    : routine.methodIds.length === 1
+                      ? "part"
+                      : "parts"}{" "}
+                  · {routine.mode === "accumulate" ? "Accumulate" : "One-shot"}
                 </small>
               </button>
               <RoutinePublishControl
@@ -19307,11 +19213,73 @@ function RoutinesPanel({
 // The Library area: Methods (ours), Apps (who may call them), and Skills
 // (imported capability packs). Apps live here because an App Profile is just the
 // keyed access to Methods (see docs/library-architecture.md §10).
+// THE LIBRARY - one page, three sections, in a fixed order.
+//
+// It used to be two top-level screens with the same two words in each:
+//
+//   Library:    Routines - Methods - Tokens
+//   Community:  Routines - Methods - Account
+//
+// Six tabs, and "Routines" meant something different depending on which page
+// you were on. The person who designed it had to stop and think, which is the
+// whole test this rework has to pass.
+//
+// So Community stops being a PLACE and becomes a SOURCE: each section has one
+// button that opens the community in a dialog, and whatever you install lands
+// in the list you were already looking at. No page to come back from, and no
+// wondering where the thing went.
+//
+// The order is fixed and it is an argument: Routines are the finished things
+// you use, Tokens are for handing one to another app, and Methods are the
+// insides - last, because most people never need to open them.
+function CommunityFinder({
+  installedIds,
+  kind,
+  onClose,
+  onMethodsRefresh,
+  onRoutinesRefresh,
+}: {
+  installedIds: string[];
+  kind: "methods" | "routines";
+  onClose: () => void;
+  onMethodsRefresh: () => void;
+  onRoutinesRefresh: () => void;
+}) {
+  const { lang, t } = useI18n();
+  const zh = lang === "zh";
+  return (
+    <Modal
+      onClose={onClose}
+      title={
+        kind === "routines"
+          ? zh
+            ? "从社区找"
+            : "Find in the community"
+          : zh
+            ? "从社区找零件"
+            : "Find a part in the community"
+      }
+    >
+      <CataloguePanel
+        installedIds={installedIds}
+        kind={kind}
+        onMethodsRefresh={onMethodsRefresh}
+        onRoutinesRefresh={onRoutinesRefresh}
+      />
+      {/* D1 (copy pack): the browse notice used to live on the Community
+          page, and that page is gone. It sits here now, where browsing
+          actually happens, and it is permanent rather than dismissible. */}
+      <p className="context-disclaimer">
+        {t("legal.disclaimer.community.browse")}
+      </p>
+    </Modal>
+  );
+}
+
 function LibraryArea({
   methods,
   routines,
   appProfiles,
-  skills,
   onAppCreate,
   onAppDisable,
   onAppUpdate,
@@ -19323,7 +19291,6 @@ function LibraryArea({
   methods: LibraryMethodSummary[];
   routines: LibraryRoutineSummary[];
   appProfiles: AppProfile[];
-  skills: Workspace["skills"];
   onAppCreate: (result: CreateAppProfileResponse) => void;
   onAppDisable: (profile: AppProfile) => void;
   onAppUpdate: (profile: AppProfile) => void;
@@ -19332,57 +19299,50 @@ function LibraryArea({
   onRoutinesRefresh: () => void;
   onUseRoutine: (routineId: string) => void;
 }) {
-  const [tab, setTab] = useState<
-    "methods" | "routines" | "token" | "skills"
-  >(() =>
-    // A chat create-offer landed here: open on the tab it wants to create in.
-    peekCreateIntent()?.kind === "method" ? "methods" : "routines",
-  );
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  const [finding, setFinding] = useState<"methods" | "routines" | null>(null);
+  const installedIds = [
+    ...methods.map((method) => method.id),
+    ...routines.map((routine) => routine.id),
+  ];
 
   return (
     <div className="library-area">
-      {/* Mirrors the Community screen's skeleton: one line on what this place
-          is, then the tabs. */}
       <section className="library-intro">
+        {/* Permanent, not a dialog. A dialog is shown once and dismissed, and
+            this is the sentence somebody needs on the day they come back and
+            wonder what the bottom section is for. */}
         <p>
-          Your own Methods and Routines, on this machine — yours to use, edit
-          and publish.
+          {zh
+            ? "点开就能用。零件在下面,通常不用管。"
+            : "Open one and it works. The parts are further down; you rarely need them."}
         </p>
       </section>
-      <nav aria-label="Library sections" className="library-subtabs">
-        <button
-          className={tab === "routines" ? "active" : ""}
-          onClick={() => setTab("routines")}
-          type="button"
-        >
-          Routines
-        </button>
-        <button
-          className={tab === "methods" ? "active" : ""}
-          onClick={() => setTab("methods")}
-          type="button"
-        >
-          Methods
-        </button>
-        <button
-          className={tab === "token" ? "active" : ""}
-          onClick={() => setTab("token")}
-          type="button"
-        >
-          Token
-        </button>
-      </nav>
 
-      {tab === "methods" ? (
-        <LibraryPanel methods={methods} onMethodsRefresh={onMethodsRefresh} />
-      ) : tab === "routines" ? (
+      <section className="library-section">
+        <div className="library-section-head">
+          <h3>{zh ? "成品" : "Routines"}</h3>
+          <button
+            className="secondary-button"
+            onClick={() => setFinding("routines")}
+            type="button"
+          >
+            {zh ? "＋ 从社区找" : "+ Find in the community"}
+          </button>
+        </div>
         <RoutinesPanel
           methods={methods}
           onRoutinesRefresh={onRoutinesRefresh}
           onUseRoutine={onUseRoutine}
           routines={routines}
         />
-      ) : tab === "token" ? (
+      </section>
+
+      <section className="library-section">
+        <div className="library-section-head">
+          <h3>{zh ? "钥匙" : "Tokens"}</h3>
+        </div>
         <AppsPanel
           methods={methods}
           onCreate={onAppCreate}
@@ -19392,10 +19352,54 @@ function LibraryArea({
           profiles={appProfiles}
           routines={routines}
         />
-      ) : (
+      </section>
 
-        <SkillsLibrary skills={skills} />
-      )}
+      <section className="library-section">
+        <div className="library-section-head">
+          <h3>{zh ? "零件" : "Methods"}</h3>
+          <button
+            className="secondary-button"
+            onClick={() => setFinding("methods")}
+            type="button"
+          >
+            {zh ? "＋ 从社区找零件" : "+ Find a part"}
+          </button>
+        </div>
+        {/* Says who this is for in the first sentence. Somebody who does not
+            make things should be able to stop reading here. */}
+        <p className="settings-card-copy text-faint">
+          {zh
+            ? "这里是给创作者的。零件是成品内部的说明书 —— 装成品时会自动带来,平时不用管。"
+            : "This part is for people who make things. A part is the instructions inside a finished Routine: installing one brings its parts with it, and otherwise you can leave them alone."}
+        </p>
+        <LibraryPanel
+          methods={methods}
+          onMethodsRefresh={onMethodsRefresh}
+          routines={routines}
+        />
+      </section>
+
+      {/* THE ACCOUNT GOES LAST, and says why it is there. At the top it reads
+          as "sign in to use this", which is the opposite of true and exactly
+          what turns a household away: using the community needs no account at
+          all. Only publishing does. */}
+      <section className="library-account-row">
+        <CommunityIdentityBar />
+      </section>
+
+      {finding ? (
+        <CommunityFinder
+          installedIds={installedIds}
+          kind={finding}
+          onClose={() => {
+            // Whatever was installed is already in the list behind this
+            // dialog, so closing IS the return trip.
+            setFinding(null);
+          }}
+          onMethodsRefresh={onMethodsRefresh}
+          onRoutinesRefresh={onRoutinesRefresh}
+        />
+      ) : null}
     </div>
   );
 }
@@ -19684,10 +19688,16 @@ function CreateMethodPanel({
 function LibraryPanel({
   methods,
   onMethodsRefresh,
+  routines,
 }: {
   methods: LibraryMethodSummary[];
   onMethodsRefresh: () => void;
+  // Only so each part can answer "who uses me" — the question behind "can I
+  // delete this?", which had no answer on this screen at all.
+  routines: LibraryRoutineSummary[];
 }) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
   const [selected, setSelected] = useState<LibraryMethod | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19944,6 +19954,27 @@ function LibraryPanel({
                   v{method.version}
                   {loadingId === method.id ? " · Loading..." : ""}
                 </small>
+                {(() => {
+                  const users = routines.filter((routine) =>
+                    routine.methodIds.includes(method.id),
+                  );
+                  if (users.length > 0) {
+                    return (
+                      <small className="text-faint">
+                        {zh ? "被" : "Used by "}
+                        {users.map((routine) => routine.name).join("、")}
+                        {zh ? "使用" : ""}
+                      </small>
+                    );
+                  }
+                  return (
+                    <small className="text-faint">
+                      {zh
+                        ? "没有成品在用 —— 由外部 app 通过钥匙调用"
+                        : "No Routine uses this — an outside app calls it with a key"}
+                    </small>
+                  );
+                })()}
               </button>
             ))}
           </div>
@@ -20953,13 +20984,6 @@ function VaenyxWorkspace({
     refreshLibraryData();
   }
 
-  function openCommunity() {
-    setSelectedThreadId(null);
-    setMobileSidebarOpen(false);
-    setScreen("community");
-    refreshLibraryData();
-  }
-
   function openScreen(nextScreen: Screen) {
     setSelectedThreadId(null);
     setFocusedTaskId(null);
@@ -21465,13 +21489,6 @@ function VaenyxWorkspace({
                 {t("title.library")}
               </button>
               <button
-                className={screen === "community" ? "active" : ""}
-                onClick={() => void openCommunity()}
-                type="button"
-              >
-                {t("title.community")}
-              </button>
-              <button
                 className={screen === "discord" ? "active" : ""}
                 onClick={() => openScreen("discord")}
                 type="button"
@@ -21615,19 +21632,7 @@ function VaenyxWorkspace({
             onRoutinesRefresh={() => {
               void fetchLibraryRoutines().then(setLibraryRoutines);
             }}
-            skills={workspace.skills}
-          />
-        ) : screen === "community" ? (
-          <CommunityArea
-            methods={libraryMethods}
-            routines={libraryRoutines}
-            onMethodsRefresh={() => {
-              void fetchLibraryMethods().then(setLibraryMethods);
-            }}
-            onRoutinesRefresh={() => {
-              void fetchLibraryRoutines().then(setLibraryRoutines);
-            }}
-          />
+            />
         ) : screen === "discord" ? (
           // Discord got its own screen (Oskar, 2026-07-27): what it is, the
           // link, and the third-party notice that travels with it (D5) —
