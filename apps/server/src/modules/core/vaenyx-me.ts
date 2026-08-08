@@ -54,7 +54,14 @@ interface ApprovedItemRow {
 const candidateSelect = `
   SELECT id, category, title, proposed_summary, proposed_evidence,
          source_type, source_id, confidence, status, review_note, created_by,
-         reviewed_by, reviewed_at, created_at, updated_at
+         reviewed_by, reviewed_at, created_at, updated_at,
+         -- 🔴 These three decide WHICH approval path a candidate takes, so
+         -- leaving them out of the SELECT silently merged the two: every fact
+         -- proposal arrived at the client looking like a trait proposal and
+         -- was approved as one, landing in vaenyx_me_items instead of facts.
+         -- 0059 says in as many words that the shared table is split by
+         -- proposed_slot; this is the line that has to read it.
+         proposed_slot, proposed_value, proposed_event_time
   FROM vaenyx_me_candidates
 `;
 

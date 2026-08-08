@@ -131,6 +131,7 @@ import {
   updateRoutineFromCommunity,
   type UpdateOffer,
   fetchFacts,
+  approveFactCandidate,
   fetchInstalledComponents,
   fetchPendingCorrections,
   fetchRegressionChecks,
@@ -15619,6 +15620,8 @@ function VaenyxMePanel({
   onProfileRefresh: () => Promise<void>;
   profile: Workspace["vaenyxMe"];
 }) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
   const items = profile.items;
   const [candidates, setCandidates] = useState<VaenyxMeCandidate[]>([]);
   const [category, setCategory] = useState(defaultVaenyxMeCategory.id);
@@ -15723,6 +15726,24 @@ function VaenyxMePanel({
     setCandidateError(null);
 
     try {
+      // 🔴 TWO KINDS SHARE ONE QUEUE, AND ONLY ONE OF THEM IS A PROFILE TRAIT.
+      //
+      // Migration 0059 put fact proposals in vaenyx_me_candidates beside
+      // profile proposals and split them by proposed_slot. Every candidate was
+      // being approved down the profile path, so an approved FACT became a
+      // Vaenyx Me item and never reached the facts table — the bitemporal
+      // memory the extractor exists to fill. It stayed invisible because the
+      // API never returned proposed_slot, so nothing here could tell them
+      // apart.
+      if (candidate.proposedSlot) {
+        await approveFactCandidate(candidate.id);
+        setCandidates((current) =>
+          current.filter((item) => item.id !== candidate.id),
+        );
+        setEditingCandidateId(null);
+        await onProfileRefresh();
+        return;
+      }
       const updated = await approveVaenyxMeCandidate(candidate.id, input);
       setCandidates((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
@@ -15939,6 +15960,26 @@ function VaenyxMePanel({
                   <h3>{candidate.title}</h3>
                   <p>{candidate.proposedSummary}</p>
                   <dl className="settings-list">
+                    {/* A fact proposal is a slot and a value, and approving it
+                        writes exactly those into the memory table. Showing
+                        only the trait fields described the wrong thing. */}
+                    {candidate.proposedSlot ? (
+                      <>
+                        <div>
+                          <dt>{zh ? "记住这一条" : "Remember this"}</dt>
+                          <dd>
+                            <code>{candidate.proposedSlot}</code> ={" "}
+                            {candidate.proposedValue}
+                          </dd>
+                        </div>
+                        {candidate.proposedEventTime ? (
+                          <div>
+                            <dt>{zh ? "从什么时候起" : "True since"}</dt>
+                            <dd>{candidate.proposedEventTime}</dd>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : null}
                     <div>
                       <dt>Category</dt>
                       <dd>{candidate.category}</dd>
@@ -15956,7 +15997,8 @@ function VaenyxMePanel({
                       <dd>{candidate.sourceType}</dd>
                     </div>
                   </dl>
-                  {editingCandidateId === candidate.id ? (
+                  {editingCandidateId === candidate.id &&
+                  !candidate.proposedSlot ? (
                     <form
                       className="memory-form"
                       onSubmit={(event) => {
@@ -16058,13 +16100,20 @@ function VaenyxMePanel({
                       >
                         Approve
                       </button>
-                      <button
-                        className="text-button"
-                        onClick={() => startApprovalEdit(candidate)}
-                        type="button"
-                      >
-                        Edit and approve
-                      </button>
+                      {/* Editing is a profile-proposal affordance. The fact
+                          path takes the slot and the value as proposed and
+                          ignores title, summary and confidence — offering the
+                          form here would be offering edits that get thrown
+                          away without saying so. */}
+                      {candidate.proposedSlot ? null : (
+                        <button
+                          className="text-button"
+                          onClick={() => startApprovalEdit(candidate)}
+                          type="button"
+                        >
+                          Edit and approve
+                        </button>
+                      )}
                       <button
                         className="text-button"
                         onClick={() => void rejectCandidate(candidate)}
