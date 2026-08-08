@@ -242,6 +242,15 @@ Read this inside the app: **Settings → Manual**.
 - **Corrections you make can become shared examples** — always stripped of
   personal detail first, and you can withdraw one afterwards (Settings →
   Sharing → the flywheel list).
+- **See exactly what would be sent** — open **See exactly what would be sent**
+  on any waiting item. That is the actual text that leaves, not a summary of
+  it, plus what the stripper masked. The stripper is not perfect, which is why
+  the 48-hour wait exists and why this is worth opening.
+- **Anything touching health, family or money never goes on its own.** It is
+  held and shown to you, and you allow that one item after reading it. There is
+  no setting that answers this in advance, on purpose — each one is its own
+  decision. Allowing one does not send it early: it still waits out the window
+  and you can still pull it back.
 
 ## 8. Tasks and schedules
 

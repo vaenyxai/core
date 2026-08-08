@@ -1710,9 +1710,19 @@ export function fetchCorrections(
 export interface FlywheelItem {
   id: string;
   methodId: string;
+  // Exactly what would be sent — the de-identified pair, byte for byte. Shown
+  // in full on request: "a preview of what would be sent" that only counts the
+  // changes is not a preview, it is a reassurance.
+  input: unknown;
+  output: unknown;
   note: string | null;
   redactions: number;
+  // What the stripper thought it found ("email", "phone"...). Never the
+  // original fragments: those are the thing being protected.
+  redactionKinds: string[];
   sensitive: boolean;
+  // A held item the Owner has already read in full and allowed (G4).
+  released: boolean;
   createdAt: string;
   sendAfter: string;
 }
@@ -1728,6 +1738,15 @@ export interface FlywheelState {
 
 export function fetchFlywheel(): Promise<FlywheelState> {
   return requestJson<FlywheelState>("/v1/flywheel");
+}
+
+// G4 — the Owner allowing ONE held item, having read it. There is deliberately
+// no call that answers this in advance for a whole category.
+export function allowFlywheelItem(id: string): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(
+    `/v1/flywheel/${encodeURIComponent(id)}/allow`,
+    { method: "POST" },
+  );
 }
 
 export function withdrawFlywheelItem(id: string): Promise<{ ok: boolean }> {

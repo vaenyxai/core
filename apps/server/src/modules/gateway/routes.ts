@@ -432,6 +432,7 @@ import {
   getContributorId,
   listQueue,
   queueExample,
+  releaseSensitive,
   withdrawQueued,
 } from "../core/flywheel.js";
 import {
@@ -9605,6 +9606,11 @@ export async function registerGatewayRoutes(
       windowHours: WINDOW_HOURS,
       contributorId: getContributorId(context.database),
       configured: context.config.publishServiceUrl !== null,
+      // EXACTLY WHAT WOULD BE SENT, not a summary of it. input/output are the
+      // de-identified pair as stored, byte for byte what leaves; the kinds say
+      // what the stripper thought it found. The original fragments are NOT
+      // returned - they are the thing being protected, and the Owner can see
+      // them in the correction itself, which never leaves this machine.
       items: listQueue(context.database).map((item) => ({
         id: item.id,
         methodId: item.methodId,
@@ -9612,7 +9618,9 @@ export async function registerGatewayRoutes(
         output: item.output,
         note: item.note,
         redactions: item.redactions.length,
+        redactionKinds: [...new Set(item.redactions.map((entry) => entry.kind))],
         sensitive: item.sensitive,
+        released: item.releasedAt !== null,
         createdAt: item.createdAt,
         sendAfter: item.sendAfter,
       })),
@@ -9637,6 +9645,38 @@ export async function registerGatewayRoutes(
         action: "flywheel.withdraw",
         decision: "allowed",
         reason: "Owner withdrew a queued example before it was sent.",
+        resourceType: "flywheel",
+        resourceId: request.params.id,
+      });
+      return { ok: true };
+    },
+  );
+
+  // THE ALWAYS-ASK, ANSWERED (G4). A held item is health, family or finance,
+  // so it never goes on its own. This is the Owner saying yes to THIS one,
+  // having read exactly what it says — and there is deliberately no setting
+  // that answers it in advance. The window is not shortened by saying yes: it
+  // still waits, and it can still be pulled back.
+  app.post<{ Params: { id: string } }>(
+    "/v1/flywheel/:id/allow",
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (!releaseSensitive(context.database, request.params.id)) {
+        return reply
+          .code(404)
+          .send({ error: "That item is not waiting to be asked about." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "flywheel.allow",
+        decision: "allowed",
+        reason:
+          "Owner read a held example in full and allowed that one to be sent; held items are asked about individually and there is no setting that answers in advance.",
         resourceType: "flywheel",
         resourceId: request.params.id,
       });

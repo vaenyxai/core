@@ -1,0 +1,20 @@
+-- THE ALWAYS-ASK (G4), WHICH HAD NOWHERE TO RECORD ITS ANSWER.
+--
+-- Health, family and finance never ride the automatic path. 0045 held them
+-- correctly — sensitive rows are skipped by the sweep — and then the design
+-- stopped: they were to wait for "a separate, per-item question with no always
+-- allow", and that question was never built. So they waited forever. The queue
+-- filled with items the Owner could only delete, and the one thing the rule
+-- was protecting (their judgement, case by case) was never actually asked for.
+--
+-- released_at is that answer, and only that answer:
+--
+--   • per item, never a setting. There is no column for "always allow" and
+--     there must never be one — the whole point of the category is that each
+--     case is looked at.
+--   • NULL means not asked or not agreed, and NULL is what every existing row
+--     has. Nothing is ever released by a migration.
+--   • it does not shorten the window. A released item still waits out its 48
+--     hours, because the answer being given here is "this may go", not "go
+--     now" — and the Owner can still pull it back the whole time.
+ALTER TABLE flywheel_queue ADD COLUMN released_at TEXT;

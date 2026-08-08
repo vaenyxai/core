@@ -14,6 +14,7 @@ import {
   listQueue,
   looksSensitive,
   queueExample,
+  releaseSensitive,
   stripPersonalDetails,
   withdrawQueued,
 } from "../src/modules/core/flywheel.js";
@@ -140,6 +141,93 @@ describe("the withdrawal window", () => {
     expect(
       listDue(database, now + (WINDOW_HOURS + 24 * 365) * 60 * 60 * 1000),
     ).toHaveLength(0);
+    database.close();
+  });
+
+  // THE ALWAYS-ASK (G4). Holding was only ever half the rule: the other half is
+  // that the Owner gets asked about the held item, one at a time. Before
+  // released_at existed the question had nowhere to go, so held items simply
+  // accumulated and the judgement the category exists to protect was never
+  // actually sought.
+  it("sends a held item once the Owner has allowed that one", () => {
+    const database = makeDatabase();
+    const now = Date.parse("2026-07-27T00:00:00Z");
+    const queued = queueExample(
+      database,
+      {
+        methodId: "m",
+        input: { text: "my daughter's teacher said" },
+        output: { text: "ok" },
+      },
+      now,
+    );
+    const after = now + (WINDOW_HOURS + 1) * 60 * 60 * 1000;
+
+    expect(listDue(database, after)).toHaveLength(0);
+    expect(releaseSensitive(database, queued.id, "2026-07-27T01:00:00Z")).toBe(
+      true,
+    );
+    expect(listDue(database, after).map((item) => item.id)).toEqual([queued.id]);
+    database.close();
+  });
+
+  it("🔴 allowing one does not shorten its window", () => {
+    // The answer given is "this may go", not "go now". The Owner keeps the
+    // whole 48 hours to change their mind, exactly as with any other item.
+    const database = makeDatabase();
+    const now = Date.parse("2026-07-27T00:00:00Z");
+    const queued = queueExample(
+      database,
+      { methodId: "m", input: { text: "bank loan" }, output: { ok: true } },
+      now,
+    );
+    releaseSensitive(database, queued.id, "2026-07-27T00:05:00Z");
+
+    expect(listDue(database, now + 60 * 60 * 1000)).toHaveLength(0);
+    expect(withdrawQueued(database, queued.id)).toBe(true);
+    expect(listDue(database, now + (WINDOW_HOURS + 1) * 60 * 60 * 1000)).toHaveLength(
+      0,
+    );
+    database.close();
+  });
+
+  it("🔴 allowing is per item and cannot be answered in advance", () => {
+    // Two held items; saying yes to one says nothing about the other. There is
+    // no call that releases a category, and there must never be one.
+    const database = makeDatabase();
+    const now = Date.parse("2026-07-27T00:00:00Z");
+    const first = queueExample(
+      database,
+      { methodId: "m", input: { text: "my son" }, output: { ok: true } },
+      now,
+    );
+    const second = queueExample(
+      database,
+      { methodId: "m", input: { text: "my son again" }, output: { ok: true } },
+      now,
+    );
+    releaseSensitive(database, first.id, "2026-07-27T00:05:00Z");
+
+    expect(
+      listDue(database, now + (WINDOW_HOURS + 1) * 60 * 60 * 1000).map(
+        (item) => item.id,
+      ),
+    ).toEqual([first.id]);
+    expect(
+      listQueue(database).find((item) => item.id === second.id)?.releasedAt,
+    ).toBeNull();
+    database.close();
+  });
+
+  it("does not release something that was never held", () => {
+    const database = makeDatabase();
+    const queued = queueExample(database, {
+      methodId: "m",
+      input: { area: 10 },
+      output: { total: 20 },
+    });
+    expect(queued.sensitive).toBe(false);
+    expect(releaseSensitive(database, queued.id)).toBe(false);
     database.close();
   });
 

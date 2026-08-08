@@ -201,6 +201,7 @@ import {
   updateRelaySettings,
   fetchManual,
   type FreePicksState,
+  allowFlywheelItem,
   withdrawFlywheelItem,
   type FlywheelState,
   fetchImageEngine,
@@ -9692,6 +9693,25 @@ function HelpPage() {
 //                        re-consent)
 //
 // Turning on the first time records BOTH the K3 activation consent and the
+/** What the de-identifier says it found, in words rather than a field name.
+ *  Never the fragment itself: the point of removing it was that it should not
+ *  be repeated, and the Owner can always read the original correction, which
+ *  never leaves this machine. */
+function redactionLabel(kind: string, zh: boolean): string {
+  const labels: Record<string, [string, string]> = {
+    address: ["an address", "地址"],
+    card: ["a card number", "卡号"],
+    email: ["an email address", "邮箱"],
+    "id-number": ["an ID number", "证件号"],
+    money: ["an amount", "金额"],
+    phone: ["a phone number", "电话"],
+    url: ["a link", "链接"],
+  };
+  const entry = labels[kind];
+  if (!entry) return kind;
+  return zh ? entry[1] : entry[0];
+}
+
 // Automatic mode, so the panel lands in a fully-described ON state instead of
 // morphing into unexplained new controls.
 function SharingPanel() {
@@ -9781,6 +9801,20 @@ function SharingPanel() {
     await recordChoice("legal.consent.flywheel", next);
     refresh();
     setBusy(false);
+  }
+
+  // G4 — one held item, allowed by name after being read. There is no call
+  // that answers this for a whole category, and there must never be one.
+  async function allow(id: string) {
+    setBusy(true);
+    try {
+      await allowFlywheelItem(id);
+      refresh();
+    } catch {
+      setError(zh ? "这一条没能放行。" : "That item could not be allowed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function withdraw(id: string) {
@@ -9943,7 +9977,7 @@ function SharingPanel() {
                     <strong>{item.methodId}</strong>
                     {item.note ? <span> — {item.note}</span> : null}
                     <p className="text-faint">
-                      {item.sensitive
+                      {item.sensitive && !item.released
                         ? t("flywheel.queue.held")
                         : `${zh ? "发送时间" : "Sends after"} ${new Date(
                             item.sendAfter,
@@ -9952,15 +9986,63 @@ function SharingPanel() {
                         ? ` · ${item.redactions} ${zh ? "处细节已移除" : "detail(s) removed"}`
                         : ""}
                     </p>
+                    {/* 🔴 EXACTLY WHAT WOULD BE SENT. A preview that only
+                        counts the changes is not a preview, it is a
+                        reassurance — and the stripper is imperfect, which is
+                        the entire reason the window exists. Folded rather than
+                        hidden: open on request, never a click into somewhere
+                        else. */}
+                    <details className="flywheel-preview">
+                      <summary>
+                        {zh ? "看看会发出去什么" : "See exactly what would be sent"}
+                      </summary>
+                      <pre className="correction-body">
+                        {JSON.stringify(
+                          { input: item.input, output: item.output, note: item.note },
+                          null,
+                          2,
+                        )}
+                      </pre>
+                      {item.redactionKinds.length > 0 ? (
+                        <p className="text-faint">
+                          {zh ? "已经遮掉:" : "Masked: "}
+                          {item.redactionKinds
+                            .map((kind) => redactionLabel(kind, zh))
+                            .join(zh ? "、" : ", ")}
+                        </p>
+                      ) : null}
+                    </details>
+                    {/* G4. Health, family and finance never go on their own.
+                        This asks about THIS one, and nothing anywhere answers
+                        it in advance — that is what the category is for. */}
+                    {item.sensitive && !item.released ? (
+                      <p className="settings-card-copy">
+                        {zh
+                          ? "这一条看起来涉及健康、家人或钱。它不会自己发出去 —— 你看过之后,才由你决定。"
+                          : "This one looks like it touches health, family or money. It never goes on its own — you read it, then you decide."}
+                      </p>
+                    ) : null}
                   </div>
-                  <button
-                    className="secondary-button"
-                    disabled={busy}
-                    onClick={() => void withdraw(item.id)}
-                    type="button"
-                  >
-                    {zh ? "移除" : "Remove"}
-                  </button>
+                  <div className="flywheel-item-actions">
+                    {item.sensitive && !item.released ? (
+                      <button
+                        className="secondary-button"
+                        disabled={busy}
+                        onClick={() => void allow(item.id)}
+                        type="button"
+                      >
+                        {zh ? "这条可以发" : "Allow this one"}
+                      </button>
+                    ) : null}
+                    <button
+                      className="secondary-button"
+                      disabled={busy}
+                      onClick={() => void withdraw(item.id)}
+                      type="button"
+                    >
+                      {zh ? "移除" : "Remove"}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

@@ -136,6 +136,10 @@ export interface QueuedExample {
   note: string | null;
   redactions: Redaction[];
   sensitive: boolean;
+  // G4. A sensitive item goes nowhere until the Owner has looked at THIS one
+  // and said yes. Null on everything else, and on every sensitive item that
+  // has not been asked about yet.
+  releasedAt: string | null;
   createdAt: string;
   sendAfter: string;
   state: "waiting" | "withdrawn" | "sent" | "failed";
@@ -189,6 +193,7 @@ export function queueExample(
     note: input.note ?? null,
     redactions,
     sensitive,
+    releasedAt: null,
     createdAt: new Date(nowMs).toISOString(),
     sendAfter,
     state: "waiting",
@@ -210,10 +215,41 @@ export function listQueue(database: DatabaseHandle): QueuedExample[] {
     note: row.note === null ? null : String(row.note),
     redactions: parse(String(row.redactions), []) as Redaction[],
     sensitive: row.sensitive === 1,
+    releasedAt: row.released_at === null ? null : String(row.released_at),
     createdAt: String(row.created_at),
     sendAfter: String(row.send_after),
     state: "waiting",
   }));
+}
+
+/**
+ * THE ALWAYS-ASK, ANSWERED (G4).
+ *
+ * Health, family and finance never ride the automatic path. Until this
+ * existed, the holding was the whole feature: those items sat in the queue
+ * forever and the only thing the Owner could do was delete them — so the
+ * judgement the rule was protecting was never actually asked for.
+ *
+ * 🔴 Per item, and there is no setting. No "always allow" exists anywhere in
+ * this file and none may be added: the entire reason this category is held is
+ * that each case deserves to be looked at.
+ *
+ * The window is NOT shortened. The answer is "this may go", not "go now", so
+ * the item still waits out its 48 hours and can still be withdrawn.
+ */
+export function releaseSensitive(
+  database: DatabaseHandle,
+  id: string,
+  when = new Date().toISOString(),
+): boolean {
+  const result = database.sqlite
+    .prepare(
+      `UPDATE flywheel_queue SET released_at = ?
+        WHERE id = ? AND state = 'waiting' AND sensitive = 1
+          AND released_at IS NULL`,
+    )
+    .run(when, id);
+  return (result.changes ?? 0) > 0;
 }
 
 // The Owner pulling an item out. Withdrawal is the point of the window, so it
@@ -230,9 +266,14 @@ export function withdrawQueued(
   return (result.changes ?? 0) > 0;
 }
 
-// What is ready to go: past its window, still waiting, and not sensitive.
-// Sensitive items are NEVER swept — they wait for the always-ask (G4), which
-// is a separate, per-item question with no "always allow".
+// What is ready to go: past its window, still waiting, and either not
+// sensitive or released by name.
+//
+// A sensitive item is never swept on its own. It waits for the always-ask
+// (G4): a separate question about THAT item, with no "always allow" anywhere —
+// answering it writes released_at and nothing else. Being released does not
+// shorten the window either; the answer given is "this may go", not "go now",
+// so the Owner can still pull it back for the rest of the 48 hours.
 export function listDue(
   database: DatabaseHandle,
   nowMs = Date.now(),
@@ -241,7 +282,8 @@ export function listDue(
   const rows = database.sqlite
     .prepare(
       `SELECT * FROM flywheel_queue
-        WHERE state = 'waiting' AND sensitive = 0 AND send_after <= ?
+        WHERE state = 'waiting' AND send_after <= ?
+          AND (sensitive = 0 OR released_at IS NOT NULL)
         ORDER BY send_after ASC`,
     )
     .all(now) as Record<string, unknown>[];
@@ -252,7 +294,8 @@ export function listDue(
     output: parse(String(row.output)),
     note: row.note === null ? null : String(row.note),
     redactions: parse(String(row.redactions), []) as Redaction[],
-    sensitive: false,
+    sensitive: row.sensitive === 1,
+    releasedAt: row.released_at === null ? null : String(row.released_at),
     createdAt: String(row.created_at),
     sendAfter: String(row.send_after),
     state: "waiting",
