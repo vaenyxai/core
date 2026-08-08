@@ -425,6 +425,7 @@ const DIGEST_OPTIONS = [
   { label: "Off", value: "off" },
   { label: "Daily", value: "daily" },
   { label: "Weekly", value: "weekly" },
+  { label: "Monthly", value: "monthly" },
 ];
 
 const WEEKDAY_OPTIONS: { label: string; value: number }[] = [
@@ -4400,7 +4401,9 @@ function ModesPanel() {
   const [enterPin, setEnterPin] = useState("");
   const [exitPin, setExitPin] = useState("");
   const [newAgentName, setNewAgentName] = useState("");
-  const [newDigest, setNewDigest] = useState<"off" | "daily" | "weekly">("off");
+  const [newDigest, setNewDigest] = useState<
+    "off" | "daily" | "weekly" | "monthly"
+  >("off");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Which mode's Enter is asking for its PIN right now (null = none).
@@ -4636,7 +4639,9 @@ function ModesPanel() {
   const [editLockSettings, setEditLockSettings] = useState(false);
   const [editLocalOnly, setEditLocalOnly] = useState(false);
   const [editAgentName, setEditAgentName] = useState("");
-  const [editDigest, setEditDigest] = useState<"off" | "daily" | "weekly">(
+  const [editDigest, setEditDigest] = useState<
+    "off" | "daily" | "weekly" | "monthly"
+  >(
     "off",
   );
   const [editEnterPin, setEditEnterPin] = useState("");
@@ -4815,7 +4820,7 @@ function ModesPanel() {
               ariaLabel="Activity summary to User Mode"
               className="task-select"
               onChange={(next) =>
-                setNewDigest(next as "off" | "daily" | "weekly")
+                setNewDigest(next as "off" | "daily" | "weekly" | "monthly")
               }
               options={DIGEST_OPTIONS}
               value={newDigest}
@@ -5036,7 +5041,9 @@ function ModesPanel() {
                         ariaLabel="Activity summary to User Mode"
                         className="task-select"
                         onChange={(next) =>
-                          setEditDigest(next as "off" | "daily" | "weekly")
+                          setEditDigest(
+                            next as "off" | "daily" | "weekly" | "monthly",
+                          )
                         }
                         options={DIGEST_OPTIONS}
                         value={editDigest}

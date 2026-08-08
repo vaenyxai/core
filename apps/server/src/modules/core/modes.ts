@@ -41,7 +41,9 @@ function toMode(row: ModeRow): Mode {
     hasExitPin: row.exit_pin_hash !== null,
     agentName: row.agent_name,
     digestCadence:
-      row.digest_cadence === "daily" || row.digest_cadence === "weekly"
+      row.digest_cadence === "daily" ||
+      row.digest_cadence === "weekly" ||
+      row.digest_cadence === "monthly"
         ? row.digest_cadence
         : "off",
     createdAt: row.created_at,
@@ -291,6 +293,44 @@ const DIGEST_INTERVAL_MS: Record<string, number> = {
   weekly: 7 * 24 * 60 * 60 * 1000,
 };
 
+/**
+ * Is this Mode's digest due?
+ *
+ * Monthly is not 30 days. A fixed interval drifts — twelve 30-day periods land
+ * five days short of a year, so a digest that started on the 1st walks
+ * backwards through the month until it stops meaning "monthly" to the person
+ * reading it. One calendar month from the last one, clamped when the target
+ * month is short (the 31st becomes the 30th, or the 28th in February) so
+ * January never skips a turn.
+ */
+export function digestIsDue(
+  cadence: string,
+  since: string,
+  nowMs: number,
+): boolean {
+  const last = new Date(since).getTime();
+  if (Number.isNaN(last)) return false;
+  if (cadence === "monthly") {
+    // UTC arithmetic, deliberately. Doing this in local time makes the answer
+    // depend on daylight saving: the last Sunday in March moves the clock, so
+    // "one month after 31 March" came out an hour late and the check said not
+    // yet — on this machine, in April, and nowhere else. A monthly summary
+    // does not care which hour it lands on; a test that passes in Sydney and
+    // fails in CI cares a great deal.
+    const next = new Date(since);
+    const day = next.getUTCDate();
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    // setUTCMonth rolls a short month over into the next one (31 Jan + 1 month
+    // becomes 3 March); pull it back to the last day the month actually has,
+    // so February never goes without one.
+    if (next.getUTCDate() !== day) next.setUTCDate(0);
+    return nowMs >= next.getTime();
+  }
+  const interval = DIGEST_INTERVAL_MS[cadence];
+  if (!interval) return false;
+  return nowMs - last >= interval;
+}
+
 export function runDueModeDigests(database: DatabaseHandle): void {
   const rows = database.sqlite
     .prepare(
@@ -304,10 +344,8 @@ export function runDueModeDigests(database: DatabaseHandle): void {
   }[];
   const now = Date.now();
   for (const row of rows) {
-    const interval = DIGEST_INTERVAL_MS[row.digest_cadence];
-    if (!interval) continue;
     const since = row.digest_last_at ?? new Date(now).toISOString();
-    if (now - new Date(since).getTime() < interval) continue;
+    if (!digestIsDue(row.digest_cadence, since, now)) continue;
 
     const messages = (
       database.sqlite

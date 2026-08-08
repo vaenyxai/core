@@ -790,6 +790,10 @@ const DigestCadenceSchema = Type.Union([
   Type.Literal("off"),
   Type.Literal("daily"),
   Type.Literal("weekly"),
+  // Monthly is for a Mode that ticks along quietly — a household member's own
+  // Vaenyx that nobody needs a weekly readout on, but which should not go
+  // unwatched for a year either (Oskar, 2026-08-09).
+  Type.Literal("monthly"),
 ]);
 
 export const ModeSchema = Type.Object(
