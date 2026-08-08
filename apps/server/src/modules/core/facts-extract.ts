@@ -320,6 +320,7 @@ export function extractionPrompt(slots: string[], messages: OwnerMessage[]): str
     "When the message says WHEN something became true, give event_time as far as it is stated:",
     '"we moved last March" in 2026 means event_time 2025-03. Leave it out if unstated.',
     "",
+    "confidence is a whole number from 0 to 100, where 100 is certain.",
     'Answer as JSON only: {"facts":[{"slot":"","value":"","event_time":"","evidence":"","confidence":0}]}',
     "An empty list is the right answer when nothing durable was said.",
     "",
@@ -347,9 +348,16 @@ export function parseProposedFacts(text: string): ProposedFact[] {
     const slot = typeof item.slot === "string" ? item.slot : "";
     const value = typeof item.value === "string" ? item.value : "";
     if (!slot || !value) continue;
+    // Belt and braces: the prompt now states the scale, but a model that
+    // answers 0.9 anyway must not be recorded as "1 out of 100". Nothing real
+    // lands between 0 and 1 on a 0-100 scale, so reading that range as a
+    // probability costs nothing and saves the whole score.
+    const rawConfidence =
+      typeof item.confidence === "number" ? item.confidence : 50;
     proposals.push({
-      confidence:
-        typeof item.confidence === "number" ? item.confidence : 50,
+      confidence: rawConfidence > 0 && rawConfidence <= 1
+        ? rawConfidence * 100
+        : rawConfidence,
       eventTime:
         typeof item.event_time === "string" && item.event_time.trim()
           ? item.event_time.trim()
