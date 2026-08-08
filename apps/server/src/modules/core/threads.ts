@@ -169,7 +169,16 @@ export function updateVaenyxThreadStatus(
   ownerId: string,
   input: UpdateVaenyxThreadStatusRequest,
 ): VaenyxThread {
-  getThreadRow(database, threadId, ownerId);
+  const row = getThreadRow(database, threadId, ownerId);
+
+  // 🔴 The Mode's permanent conversation stays pinned. Archiving it would take
+  // it off the screen, which is deleting it as far as anybody looking can
+  // tell, and un-pinning it would bury the one place Vaenyx speaks from under
+  // whatever was talked about most recently.
+  if (row.kind === "inbox") {
+    throw new Error("THREAD_PROTECTED");
+  }
+
   const now = new Date().toISOString();
 
   database.sqlite

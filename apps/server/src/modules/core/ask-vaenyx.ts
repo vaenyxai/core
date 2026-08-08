@@ -12,6 +12,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import { isProtectedThread } from "./inbox-thread.js";
 import type { ModelProvider } from "../models/provider.js";
 import { getModelRegistry, resolveProvider } from "../models/registry.js";
 import { recordAudit } from "../guard/audit.js";
@@ -644,6 +645,15 @@ export function deleteAskVaenyxConversation(
   const conversation = toConversation(
     getConversationRow(database, conversationId, ownerId),
   );
+
+  // 🔴 The Mode's permanent conversation cannot be deleted. This is the guard
+  // that matters, because deleting the CONVERSATION is how a thread actually
+  // dies — the thread row cascades from it, and there is no delete-thread
+  // route at all. Enforced from kind = 'inbox' rather than from a title or a
+  // known id: the title is the agent's name and the Owner can rename it.
+  if (isProtectedThread(database, conversationId)) {
+    throw new Error("CONVERSATION_PROTECTED");
+  }
 
   database.sqlite
     .prepare(

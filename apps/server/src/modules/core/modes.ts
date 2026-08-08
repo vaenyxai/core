@@ -13,6 +13,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import { deleteInboxThreadForMode } from "./inbox-thread.js";
 import { sendPushToAllDevices } from "./push.js";
 
 interface ModeRow {
@@ -392,6 +393,16 @@ export function deleteMode(database: DatabaseHandle, modeId: string): Mode {
   if (!mode) {
     throw new Error("MODE_NOT_FOUND");
   }
+  // 🔴 The Mode's own inbox goes FIRST, before anything is moved.
+  //
+  // The loop below sets mode_id = NULL across five tables, which would drag
+  // this Mode's permanent conversation into User Mode — where one already
+  // exists, and where 0066's unique index refuses a second. The delete would
+  // then fail part-way through, with some tables moved and some not. Deleting
+  // it up front is also the right answer on its own terms: the conversation
+  // belonged to a Mode that is being removed, and its contents are that Mode's.
+  deleteInboxThreadForMode(database, modeId);
+
   // Devices pointing at this mode fall back to User Mode (spec 建议 G).
   database.sqlite
     .prepare("UPDATE device_modes SET mode_id = NULL WHERE mode_id = ?")
