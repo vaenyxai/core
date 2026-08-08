@@ -71,6 +71,28 @@ export function findTailscaleCommand(): string | null {
   return "tailscale";
 }
 
+/** Has Windows queued file replacements for the next boot? An MSI that
+ *  upgrades a driver in use does exactly this, and nothing it installed works
+ *  properly until the machine restarts. */
+export function windowsHasPendingFileRename(): boolean {
+  if (process.platform !== "win32") return false;
+  try {
+    const result = spawnSync(
+      "reg.exe",
+      [
+        "query",
+        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager",
+        "/v",
+        "PendingFileRenameOperations",
+      ],
+      { encoding: "utf8", timeout: 5000, windowsHide: true },
+    );
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Does Windows know about a Tailscale service? A second, independent answer
  *  to "is it installed", so one lookup failing cannot green-light an install
  *  that destroys a working configuration. */
@@ -263,6 +285,28 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
     });
     child.once("exit", (code) => {
       void rm(target, { force: true });
+      // 🔴 SAY IT NEEDS A RESTART RATHER THAN CLAIMING SUCCESS.
+      //
+      // /norestart is right — a household assistant does not get to reboot
+      // somebody's computer — but suppressing the restart is only half the
+      // job. Tailscale installs a network driver, and Windows cannot replace
+      // files that are in use: it queues them for the next boot and sets
+      // PendingFileRenameOperations. Until that boot the daemon never reaches
+      // a working state. Reporting "installed" there is a lie the Owner then
+      // spends an evening on (2026-08-08): the button looked like it had
+      // worked, the phone address stayed dead, and restarting the service
+      // could not have helped.
+      //
+      // 3010 is msiexec's own "success, reboot required"; the queued-rename
+      // flag catches the case where it exits 0 and defers anyway.
+      if (code === 3010 || windowsHasPendingFileRename()) {
+        installState.phase = "failed";
+        installState.detail =
+          lang === "zh"
+            ? "Tailscale 装好了,但要重启电脑才能用 —— Windows 得在重启时替换正在使用的网络驱动。重启后回来点「再查一次」。"
+            : "Tailscale is installed, but the computer has to be restarted before it works — Windows replaces the network driver it is using at the next boot. Restart, then press Check Again.";
+        return;
+      }
       // The command appearing is the only proof that counts — msiexec can
       // report success and still have put nothing where we look.
       if (findTailscaleCommand()) {

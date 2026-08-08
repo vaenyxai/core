@@ -3152,8 +3152,12 @@ function AppsPanel({
   onDelete: (profileId: string) => void;
 }) {
   const { lang, t } = useI18n();
+  const zh = lang === "zh";
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<AppProfileKind>("routine");
+  // Always "routine" now. Method Tokens are retired: there was never one on
+  // any machine, and one kind of key means the form can ask what the app is
+  // FOR instead of which of our internal shapes it wants.
+  const [kind] = useState<AppProfileKind>("routine");
   const [routineId, setRoutineId] = useState("");
   const [allowedMethodIds, setAllowedMethodIds] = useState<string[]>([]);
   const [fetchRecipe, setFetchRecipe] = useState(false);
@@ -3386,29 +3390,40 @@ function AppsPanel({
             />
           </label>
 
+          {/* HOW THE APP USES IT, described by consequence.
+              The old control asked "Mode A or Mode B", which is a name for a
+              decision rather than the decision itself. What actually differs
+              is where the recipe lives and therefore what stops working when
+              this machine is off. */}
           <div className="token-kind-field">
-            <span className="method-picker-label">Token type</span>
+            <span className="method-picker-label">
+              {zh ? "这个 app 怎么用它?" : "How does the app use it?"}
+            </span>
             <div className="token-kind-options">
               <button
-                className={`token-kind-option ${kind === "routine" ? "active" : ""}`}
-                onClick={() => setKind("routine")}
+                className={`token-kind-option ${fetchRecipe ? "" : "active"}`}
+                onClick={() => setFetchRecipe(false)}
                 type="button"
               >
-                <strong>Routine Token</strong>
+                <strong>{zh ? "Vaenyx 帮它跑" : "Vaenyx runs it"}</strong>
                 <small>
-                  Pick one Routine. The app calls it as a black box and Vaenyx runs
-                  the whole thing, returning the result.
+                  {zh
+                    ? "配方留在这里。app 送数据进来、拿结果回去,用你连接的模型和你的额度。需要这台机器开着,而且 app 那台设备连着 Tailscale。"
+                    : "The recipe stays here. The app sends data in and takes the result back, on the model and allowance you connected. Needs this machine on, and the app's device on your Tailscale."}
                 </small>
               </button>
               <button
-                className={`token-kind-option ${kind === "method" ? "active" : ""}`}
-                onClick={() => setKind("method")}
+                className={`token-kind-option ${fetchRecipe ? "active" : ""}`}
+                onClick={() => setFetchRecipe(true)}
                 type="button"
               >
-                <strong>Method Token</strong>
+                <strong>
+                  {zh ? "把配方交给它自己跑" : "Hand the recipe over"}
+                </strong>
                 <small>
-                  Pick one or more Methods (building blocks). The app composes and
-                  runs them itself in its own code.
+                  {zh
+                    ? "app 取走配方,在它自己的模型上跑。这台机器关着也能用 —— 但配方离开了这台机器。"
+                    : "The app takes the recipe and runs it on its own model. Works with this machine off — but the recipe has left it."}
                 </small>
               </button>
             </div>
@@ -3440,7 +3455,7 @@ function AppsPanel({
             </label>
           ) : (
             <>
-              <div className="method-picker-field">
+              <div className="method-picker-field" hidden>
                 <span className="method-picker-label">Allowed Methods</span>
                 <button
                   className="secondary-button"
@@ -3570,6 +3585,11 @@ function AppsPanel({
       <section className="profiles-section">
         <div className="section-title">
           <p className="eyebrow">Approved connections</p>
+          <p className="settings-card-copy text-faint">
+            {zh
+              ? "这些钥匙是给外部 app 的。在 Vaenyx 自己的网页里用东西,不需要任何钥匙。"
+              : "These keys are for other apps. Nothing inside Vaenyx's own pages needs one."}
+          </p>
         </div>
         {profiles.length === 0 ? (
           <div className="empty-state">

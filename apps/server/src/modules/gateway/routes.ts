@@ -456,6 +456,16 @@ import {
 } from "../models/claude-login.js";
 import { ensureClaudeSdkInstalled } from "../models/claude-sdk.js";
 import { componentProgress } from "../core/wanted-components.js";
+import { updateMethod } from "../core/catalogue.js";
+import {
+  getInstalledItem,
+  keepRollback,
+  listInstalledItems,
+  recordInstall,
+  restoreRollback,
+  setUpdatePolicy,
+} from "../core/install-ledger.js";
+import { methodContentHash } from "../core/methods.js";
 import { approveFactCandidate } from "../core/facts-extract.js";
 import {
   listCurrentFacts,
@@ -8556,6 +8566,16 @@ export async function registerGatewayRoutes(
           request.body.methodId,
           controller.signal,
         );
+        recordInstall(context.database, {
+          hash: methodContentHash(
+            context.config.libraryDirectory,
+            request.body.methodId,
+          ),
+          id: request.body.methodId,
+          kind: "method",
+          sourceUrl: `${context.config.catalogueBaseUrl}/methods/${request.body.methodId}`,
+          version: method.version,
+        });
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
@@ -8587,6 +8607,181 @@ export async function registerGatewayRoutes(
           .code(502)
           .send({ error: "Could not install from the community catalogue." });
       }
+    },
+  );
+
+  // ---- Community updates: offer, apply, undo ----
+  //
+  // EVERY ONE OF THESE IS PRESSED BY THE OWNER. There is no timer, no startup
+  // check that acts, and no "keep my things up to date" setting. An author can
+  // change their repository and still cannot reach anybody's machine, and that
+  // only stays true while nothing here moves by itself.
+  app.get(
+    "/v1/library/updates",
+    { schema: { response: { 401: ErrorResponseSchema } } },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      return { items: listInstalledItems(context.database) };
+    },
+  );
+
+  app.post<{
+    Body: {
+      id: string;
+      kind: "method" | "routine";
+      policy: "follow" | "locked" | "skipped";
+      version?: string;
+    };
+  }>(
+    "/v1/library/updates/policy",
+    {
+      schema: {
+        body: Type.Object(
+          {
+            id: Type.String({ minLength: 1 }),
+            kind: Type.Union([Type.Literal("method"), Type.Literal("routine")]),
+            policy: Type.Union([
+              Type.Literal("follow"),
+              Type.Literal("locked"),
+              Type.Literal("skipped"),
+            ]),
+            version: Type.Optional(Type.String({ maxLength: 60 })),
+          },
+          { additionalProperties: false },
+        ),
+        response: { 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      setUpdatePolicy(
+        context.database,
+        request.body.id,
+        request.body.kind,
+        request.body.policy,
+        request.body.version ?? null,
+      );
+      return { items: listInstalledItems(context.database) };
+    },
+  );
+
+  app.post<{ Body: { methodId: string } }>(
+    "/v1/library/methods/update",
+    {
+      schema: {
+        body: Type.Object(
+          { methodId: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+      try {
+        const before = getInstalledItem(
+          context.database,
+          request.body.methodId,
+          "method",
+        );
+        const method = await updateMethod(
+          context.config.catalogueBaseUrl,
+          context.config.libraryDirectory,
+          request.body.methodId,
+          {
+            keepRollback: (folder) =>
+              keepRollback(context.database, {
+                folder,
+                id: request.body.methodId,
+                kind: "method",
+                version: before?.installedVersion ?? "0.0.0",
+              }),
+            signal: controller.signal,
+          },
+        );
+        recordInstall(context.database, {
+          hash: methodContentHash(
+            context.config.libraryDirectory,
+            request.body.methodId,
+          ),
+          id: request.body.methodId,
+          kind: "method",
+          sourceUrl: `${context.config.catalogueBaseUrl}/methods/${request.body.methodId}`,
+          version: method.version,
+        });
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "library.method.update",
+          decision: "allowed",
+          reason: `Owner updated Method "${request.body.methodId}" to ${method.version}.`,
+          resourceType: "method",
+          resourceId: request.body.methodId,
+        });
+        return method;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.startsWith("METHOD_MISSING")) {
+          return reply.code(404).send({ error: "That Method is not installed." });
+        }
+        return reply.code(502).send({
+          error: "Could not update from the community catalogue.",
+        });
+      }
+    },
+  );
+
+  // Undo. Deliberately offline: everything needed is already on this disk,
+  // because the moment somebody wants an update undone is usually the moment
+  // they are trying to get something done.
+  app.post<{ Body: { methodId: string } }>(
+    "/v1/library/methods/rollback",
+    {
+      schema: {
+        body: Type.Object(
+          { methodId: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: { 401: ErrorResponseSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      const restored = restoreRollback(
+        context.database,
+        request.body.methodId,
+        "method",
+        join(context.config.libraryDirectory, request.body.methodId),
+      );
+      if (!restored) {
+        return reply
+          .code(404)
+          .send({ error: "There is no previous version kept for that." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "library.method.rollback",
+        decision: "allowed",
+        reason: `Owner rolled Method "${request.body.methodId}" back a version.`,
+        resourceType: "method",
+        resourceId: request.body.methodId,
+      });
+      return { items: listInstalledItems(context.database) };
     },
   );
 
@@ -11038,6 +11233,108 @@ export async function registerGatewayRoutes(
         });
         return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
       }
+    },
+  );
+
+  // HANDING THE RECIPE OVER, for a Routine.
+  //
+  // This moved off the Method Token, which is retired. The Owner's choice on
+  // the key is now "Vaenyx runs it" or "hand the recipe over", and this is the
+  // second one: the app takes the instructions and runs them on its own model,
+  // so it keeps working when this machine is off — and the recipe has left
+  // this machine, which is the part the Owner is told before they choose.
+  //
+  // A MULTI-STEP ROUTINE RETURNS AN ORDERED CHAIN, not one recipe. That is the
+  // honest shape: a Routine IS its steps in order, each with its own schema,
+  // and an app given only the first step would produce something that looks
+  // like a result and is not one. The order is the flow's order, and each
+  // entry names its step id so a correction coming back can say which step it
+  // belongs to rather than being guessed at.
+  app.get<{ Params: { id: string } }>(
+    "/v1/library/routines/:id/recipe",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const profile = authenticateAppProfile(context.database, request);
+      if (!profile) {
+        return reply.code(401).send({ error: "A valid App Token is required." });
+      }
+      if (!profile.fetchRecipe) {
+        recordAudit(context.database, {
+          actorType: "app",
+          actorId: profile.id,
+          actorName: profile.name,
+          action: "library.routine.fetchRecipe",
+          decision: "denied",
+          reason: "This key was not given the recipe.",
+          resourceType: "routine",
+          resourceId: request.params.id,
+        });
+        return reply.code(403).send({
+          error: "This key runs on Vaenyx; it was not given the recipe.",
+        });
+      }
+      // One key, one Routine. A key for one thing must not read another.
+      if (profile.allowedRoutineId !== request.params.id) {
+        recordAudit(context.database, {
+          actorType: "app",
+          actorId: profile.id,
+          actorName: profile.name,
+          action: "library.routine.fetchRecipe",
+          decision: "denied",
+          reason: "This key is for a different Routine.",
+          resourceType: "routine",
+          resourceId: request.params.id,
+        });
+        return reply.code(403).send({ error: "This key is for a different Routine." });
+      }
+
+      const routine = loadRoutine(
+        context.config.routinesDirectory,
+        context.config.libraryDirectory,
+        request.params.id,
+      );
+      if (!routine) {
+        return reply.code(404).send({ error: "That Routine is not here." });
+      }
+
+      const steps = routine.flow.map((step) => {
+        const method = loadMethod(context.config.libraryDirectory, step.methodId);
+        return {
+          // The step id travels with it: a correction that comes back has to
+          // say WHICH step it is about, or a multi-step Routine learns the
+          // wrong lesson silently.
+          stepId: step.id,
+          methodId: step.methodId,
+          version: method?.version ?? null,
+          recipe: method?.recipe ?? null,
+          inputSchema: method?.inputSchema ?? null,
+          outputSchema: method?.outputSchema ?? null,
+        };
+      });
+
+      recordAudit(context.database, {
+        actorType: "app",
+        actorId: profile.id,
+        actorName: profile.name,
+        action: "library.routine.fetchRecipe",
+        decision: "allowed",
+        reason: `Handed over the ${steps.length}-step recipe chain.`,
+        resourceType: "routine",
+        resourceId: request.params.id,
+      });
+      return { routineId: routine.id, steps, version: routine.version };
     },
   );
 

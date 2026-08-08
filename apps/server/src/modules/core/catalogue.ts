@@ -12,7 +12,14 @@
 // files — so the existing loaders and the content-hash version lock accept them
 // unchanged. fetch is injectable for tests.
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import type {
@@ -122,6 +129,10 @@ async function downloadMethod(
   libraryDirectory: string,
   methodId: string,
   signal?: AbortSignal,
+  // Where to write. An update downloads into a scratch folder first so a
+  // failure part way through cannot leave a half-replaced Method on disk —
+  // the shape that loads fine and then behaves like neither version.
+  targetDirectory?: string,
 ): Promise<void> {
   const files: Record<string, string> = {};
   for (const file of METHOD_REQUIRED) {
@@ -140,7 +151,7 @@ async function downloadMethod(
   );
   if (manifest !== null) files["manifest.json"] = manifest;
 
-  const methodDir = join(libraryDirectory, methodId);
+  const methodDir = targetDirectory ?? join(libraryDirectory, methodId);
   mkdirSync(methodDir, { recursive: true });
   for (const [file, text] of Object.entries(files)) {
     writeFileSync(join(methodDir, file), stampCommunityOrigin(file, text), "utf8");
@@ -266,4 +277,66 @@ export async function installRoutine(
     installedMethods,
     skippedMethods,
   };
+}
+
+// UPDATING A COMMUNITY METHOD — the path that did not exist.
+//
+// installMethod refuses point-blank when the folder is already there, which is
+// right for an install and left "update" with nowhere to go: the front end has
+// had the whole update-detection UI for months, and its button called the
+// install endpoint and therefore always answered 409. The feature was complete
+// on screen and absent underneath.
+//
+// The difference between this and install is not the download. It is the two
+// things that happen around it: the outgoing version is kept so the Owner can
+// go back without a network, and the Owner's examples are left exactly where
+// they are. A recipe belongs to its author; the examples never did.
+export async function updateMethod(
+  baseUrl: string,
+  libraryDirectory: string,
+  methodId: string,
+  options: {
+    /** Called with the current folder before it is replaced, so the caller can
+     *  keep a way back. Separated out because catalogue.ts has no database. */
+    keepRollback: (folder: string) => void;
+    signal?: AbortSignal;
+  },
+  fetchImpl: FetchLike = fetch,
+): Promise<LibraryMethod> {
+  assertSafeId(methodId);
+  const folder = join(libraryDirectory, methodId);
+  if (!existsSync(folder)) {
+    throw new Error(`METHOD_MISSING:${methodId}`);
+  }
+
+  // A way back FIRST. If the download fails half way, the copy on disk is
+  // still the one that was working.
+  options.keepRollback(folder);
+
+  // Downloaded into a scratch folder and moved into place, so a failure part
+  // way through cannot leave a half-updated Method behind — the shape that
+  // would pass the loader and fail at run time.
+  const staging = join(libraryDirectory, `.updating-${methodId}`);
+  rmSync(staging, { force: true, recursive: true });
+  try {
+    await downloadMethod(fetchImpl, baseUrl, libraryDirectory, methodId, options.signal, staging);
+    // The Owner's examples stay: they are theirs, they are not in the author's
+    // package, and they are the regression suite the new version has to pass.
+    const examples = join(folder, "examples");
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      if (entry.name === "examples") continue;
+      rmSync(join(folder, entry.name), { force: true, recursive: true });
+    }
+    for (const entry of readdirSync(staging, { withFileTypes: true })) {
+      if (entry.name === "examples") continue;
+      renameSync(join(staging, entry.name), join(folder, entry.name));
+    }
+    void examples;
+  } finally {
+    rmSync(staging, { force: true, recursive: true });
+  }
+
+  const method = loadMethod(libraryDirectory, methodId);
+  if (!method) throw new Error(`UPDATE_LOAD_FAILED:${methodId}`);
+  return toLibraryMethod(method);
 }
