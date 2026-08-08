@@ -469,6 +469,26 @@ export const CreateAskVaenyxMessageResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// THE PERMANENT CONVERSATION, AS THE SIDEBAR NEEDS IT.
+//
+// One per Mode. `waiting` is the number of things that need the Owner, counted
+// in SQL from candidate status — never stored, never incremented, never asked
+// of the model. A stored counter drifts the first time an approve fails half
+// way; a derived one cannot.
+export const InboxSummarySchema = Type.Object(
+  {
+    conversationId: Type.String(),
+    threadId: Type.String(),
+    title: Type.String(),
+    // Zero is a real answer and means the row shows with no number on it. An
+    // empty badge is a badge nobody learns to read.
+    waiting: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
+export type InboxSummary = Static<typeof InboxSummarySchema>;
+
 export const VaenyxThreadKindSchema = Type.Union([
   Type.Literal("chat"),
   Type.Literal("task"),

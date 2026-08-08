@@ -188,6 +188,7 @@ import {
   type AdoptCorrectionRequest,
   type PreviewSkillRequest,
   type ImportSkillRequest,
+  InboxSummarySchema,
   PendingCorrectionsResponseSchema,
   RegressionListResponseSchema,
   RegressionResultSchema,
@@ -489,6 +490,7 @@ import {
   toFolderId,
 } from "../core/fork-method.js";
 import { listExampleProvenance } from "../core/example-origin.js";
+import { ensureInboxThread } from "../core/inbox-thread.js";
 import {
   clearRegression,
   listRegressions,
@@ -9733,6 +9735,58 @@ export async function registerGatewayRoutes(
           note: row.note,
           createdAt: row.createdAt,
         })),
+      };
+    },
+  );
+
+  // THE PERMANENT CONVERSATION FOR THE MODE THE OWNER IS IN.
+  //
+  // Made on first ask rather than by a migration: a migration cannot know the
+  // agent's name, and a Mode nobody has opened does not need one yet.
+  //
+  // 🔴 THE COUNT IS SQL, AND ONLY SQL. It is derived from candidate status
+  // every time it is asked for, so it cannot drift from what the list actually
+  // shows — a stored counter goes wrong the first time an approve fails part
+  // way through, and then two numbers on one screen disagree forever. The
+  // model is never asked how many things are waiting.
+  app.get(
+    "/v1/inbox",
+    { schema: { response: { 200: InboxSummarySchema, 401: ErrorResponseSchema } } },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+
+      const modeId = owner.modeId ?? null;
+      const mode = modeId ? findMode(context.database, modeId) : null;
+      const title =
+        mode?.agentName?.trim() ||
+        getInstanceSettings(context.config, context.database).agentName ||
+        "Vaenyx";
+
+      const inbox = ensureInboxThread(
+        context.database,
+        owner.id,
+        modeId,
+        title,
+      );
+
+      // Scoped to this Mode, with IS rather than = because User Mode is NULL
+      // and = never matches NULL — the version of this filter that reads
+      // correctly returns zero for the Mode every household actually uses.
+      const waiting = (
+        context.database.sqlite
+          .prepare(
+            `SELECT COUNT(*) AS n FROM vaenyx_me_candidates
+              WHERE status = 'pending_review' AND mode_id IS ?`,
+          )
+          .get(modeId) as { n: number }
+      ).n;
+
+      return {
+        conversationId: inbox.conversationId,
+        threadId: inbox.id,
+        title,
+        waiting,
       };
     },
   );
