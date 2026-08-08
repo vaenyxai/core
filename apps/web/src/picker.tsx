@@ -15,15 +15,23 @@ export interface PickerOption {
 
 export function Picker({
   ariaLabel,
+  className,
   disabled = false,
   onChange,
   options,
+  title,
   value,
 }: {
   ariaLabel: string;
+  /** A sizing class the old <select> at this spot already had, so replacing
+   *  it changes what the popup looks like and nothing else. Both existing
+   *  ones (.task-select, .composer-level-select) are defined after
+   *  .picker-button in the stylesheet, so they win where they disagree. */
+  className?: string;
   disabled?: boolean;
   onChange: (next: string) => void;
   options: PickerOption[];
+  title?: string;
   value: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -53,9 +61,10 @@ export function Picker({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
-        className="picker-button"
+        className={className ? `picker-button ${className}` : "picker-button"}
         disabled={disabled}
         onClick={() => setOpen((was) => !was)}
+        title={title}
         type="button"
       >
         <span className="picker-value">{current ? current.label : "—"}</span>

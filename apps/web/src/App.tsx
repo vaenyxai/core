@@ -396,6 +396,22 @@ const SCHEDULE_OPTIONS: {
   { label: "Monthly", value: "monthly" },
 ];
 
+// How often a restricted mode reports its activity to User Mode. Written
+// once because the same three appear when a mode is made and when it is
+// edited, and the two must never drift apart.
+// Fast / Balanced / Deep, shown on the home composer and the open chat.
+const EFFORT_OPTIONS = [
+  { label: "Fast", value: "low" },
+  { label: "Balanced", value: "medium" },
+  { label: "Deep", value: "high" },
+];
+
+const DIGEST_OPTIONS = [
+  { label: "Off", value: "off" },
+  { label: "Daily", value: "daily" },
+  { label: "Weekly", value: "weekly" },
+];
+
 const WEEKDAY_OPTIONS: { label: string; value: number }[] = [
   { label: "Sun", value: 0 },
   { label: "Mon", value: 1 },
@@ -3049,19 +3065,18 @@ function EditAppProfileModal({
         The token stays the same. Only what it grants changes.
       </p>
       {isRoutine ? (
-        <label className="token-routine-field">
+        <div className="token-routine-field">
           <span className="method-picker-label">Routine</span>
-          <select
-            onChange={(event) => setRoutineId(event.target.value)}
+          <Picker
+            ariaLabel="Routine"
+            onChange={(next) => setRoutineId(next)}
+            options={routines.map((routine) => ({
+              label: routine.name,
+              value: routine.id,
+            }))}
             value={routineId}
-          >
-            {routines.map((routine) => (
-              <option key={routine.id} value={routine.id}>
-                {routine.name}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
       ) : (
         <>
           <MethodToggleList
@@ -3402,17 +3417,18 @@ function AppsPanel({
               {routines.length === 0 ? (
                 <p className="library-note">No routines in the Library yet.</p>
               ) : (
-                <select
-                  onChange={(event) => setRoutineId(event.target.value)}
+                <Picker
+                  ariaLabel="Routine"
+                  onChange={(next) => setRoutineId(next)}
+                  options={[
+                    { label: "Choose a routine…", value: "" },
+                    ...routines.map((routine) => ({
+                      label: routine.name,
+                      value: routine.id,
+                    })),
+                  ]}
                   value={routineId}
-                >
-                  <option value="">Choose a routine…</option>
-                  {routines.map((routine) => (
-                    <option key={routine.id} value={routine.id}>
-                      {routine.name}
-                    </option>
-                  ))}
-                </select>
+                />
               )}
               <small className="token-kind-hint">
                 The app calls <code>POST /v1/library/routines/:id/run</code> with
@@ -4746,20 +4762,18 @@ function ModesPanel() {
               value={newAgentName}
             />
           </label>
-          <label>
-            Activity summary to User Mode
-            <select
+          <div className="chat-font-field">
+            <span>Activity summary to User Mode</span>
+            <Picker
+              ariaLabel="Activity summary to User Mode"
               className="task-select"
-              onChange={(event) =>
-                setNewDigest(event.target.value as "off" | "daily" | "weekly")
+              onChange={(next) =>
+                setNewDigest(next as "off" | "daily" | "weekly")
               }
+              options={DIGEST_OPTIONS}
               value={newDigest}
-            >
-              <option value="off">Off</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </select>
-          </label>
+            />
+          </div>
           <label>
             Enter PIN (optional)
             <input
@@ -4834,27 +4848,25 @@ function ModesPanel() {
                     value={deviceNames[device.deviceId] ?? device.label}
                   />
                 </label>
-                <label className="chat-font-field">
-                  Opens in
-                  <select
+                <div className="chat-font-field">
+                  <span>Opens in</span>
+                  <Picker
+                    ariaLabel="Opens in"
                     className="task-select"
                     disabled={busy}
-                    onChange={(event) =>
-                      void applyDeviceDefault(
-                        device.deviceId,
-                        event.target.value || null,
-                      )
+                    onChange={(next) =>
+                      void applyDeviceDefault(device.deviceId, next || null)
                     }
+                    options={[
+                      { label: "User Mode (no restriction)", value: "" },
+                      ...modes.map((mode) => ({
+                        label: mode.name,
+                        value: mode.id,
+                      })),
+                    ]}
                     value={device.modeId ?? ""}
-                  >
-                    <option value="">User Mode (no restriction)</option>
-                    {modes.map((mode) => (
-                      <option key={mode.id} value={mode.id}>
-                        {mode.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  />
+                </div>
               </article>
             ))}
           </div>
@@ -4971,22 +4983,18 @@ function ModesPanel() {
                         value={editAgentName}
                       />
                     </label>
-                    <label>
-                      Activity summary to User Mode
-                      <select
+                    <div className="chat-font-field">
+                      <span>Activity summary to User Mode</span>
+                      <Picker
+                        ariaLabel="Activity summary to User Mode"
                         className="task-select"
-                        onChange={(event) =>
-                          setEditDigest(
-                            event.target.value as "off" | "daily" | "weekly",
-                          )
+                        onChange={(next) =>
+                          setEditDigest(next as "off" | "daily" | "weekly")
                         }
+                        options={DIGEST_OPTIONS}
                         value={editDigest}
-                      >
-                        <option value="off">Off</option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                      </select>
-                    </label>
+                      />
+                    </div>
                     <label>
                       Enter PIN — blank keeps the current one
                       <input
@@ -7796,70 +7804,65 @@ function AskVaenyxPanel({
             // Identical to the conversation composer's picker row (Oskar,
             // dev.159): backend · model version · reasoning level.
             <div className="composer-status">
-              <select
-                aria-label="Model"
+              <Picker
+                ariaLabel="Model"
                 className="composer-level-select"
-                onChange={(event) => {
-                  setNewChatProviderId(event.target.value || null);
+                onChange={(next) => {
+                  setNewChatProviderId(next || null);
                   setNewChatModelName(null);
                 }}
+                options={[
+                  {
+                    label: `${
+                      chatProviders.find((provider) => provider.isDefault)
+                        ?.name ?? "Codex"
+                    } (Default)`,
+                    value: "",
+                  },
+                  ...chatProviders
+                    .filter((provider) => !provider.isDefault)
+                    .map((provider) => ({
+                      label: provider.name,
+                      value: provider.id,
+                    })),
+                ]}
                 title={t("legal.notice.modelPicker")}
                 value={newChatProviderId ?? ""}
-              >
-                <option value="">
-                  {chatProviders.find((provider) => provider.isDefault)?.name ??
-                    "Codex"}{" "}
-                  (Default)
-                </option>
-                {chatProviders
-                  .filter((provider) => !provider.isDefault)
-                  .map((provider) => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.name}
-                    </option>
-                  ))}
-              </select>
+              />
               {newChatModelChoices.length > 0 && newChatEffective ? (
                 <>
                   <span aria-hidden="true" className="composer-sep">
                     ·
                   </span>
-                  <select
-                    aria-label="Model version"
+                  <Picker
+                    ariaLabel="Model version"
                     className="composer-level-select"
-                    onChange={(event) =>
-                      setNewChatModelName(event.target.value || null)
-                    }
+                    onChange={(next) => setNewChatModelName(next || null)}
+                    options={[
+                      {
+                        label: `${
+                          newChatEffective.model ?? "provider default"
+                        } (Default)`,
+                        value: "",
+                      },
+                      ...newChatModelChoices
+                        .filter((choice) => choice !== newChatEffective.model)
+                        .map((choice) => ({ label: choice, value: choice })),
+                    ]}
                     value={newChatModelName ?? ""}
-                  >
-                    <option value="">
-                      {newChatEffective.model ?? "provider default"} (Default)
-                    </option>
-                    {newChatModelChoices
-                      .filter((choice) => choice !== newChatEffective.model)
-                      .map((choice) => (
-                        <option key={choice} value={choice}>
-                          {choice}
-                        </option>
-                      ))}
-                  </select>
+                  />
                 </>
               ) : null}
               <span aria-hidden="true" className="composer-sep">
                 ·
               </span>
-              <select
-                aria-label="Reasoning level"
+              <Picker
+                ariaLabel="Reasoning level"
                 className="composer-level-select"
-                onChange={(event) =>
-                  setNewChatEffort(event.target.value as ReasoningEffort)
-                }
+                onChange={(next) => setNewChatEffort(next as ReasoningEffort)}
+                options={EFFORT_OPTIONS}
                 value={newChatEffort ?? "medium"}
-              >
-                <option value="low">Fast</option>
-                <option value="medium">Balanced</option>
-                <option value="high">Deep</option>
-              </select>
+              />
             </div>
           ) : null}
 
@@ -8709,12 +8712,12 @@ function AskVaenyxPanel({
         >
           <div className="composer-status">
             {chatProviders.length > 1 ? (
-              <select
-                aria-label="Model"
+              <Picker
+                ariaLabel="Model"
                 className="composer-level-select"
                 disabled={!activeConversationId}
-                onChange={(event) => {
-                  const next = event.target.value || null;
+                onChange={(chosen) => {
+                  const next = chosen || null;
                   if (!activeConversationId) return;
                   onConversationsChange(
                     conversations.map((conversation) =>
@@ -8728,24 +8731,26 @@ function AskVaenyxPanel({
                   void setChatProvider(activeConversationId, next);
                   void setChatModel(activeConversationId, null);
                 }}
+                // The default backend IS the empty choice — one entry,
+                // marked inline, never listed twice (Oskar, dev.159).
+                options={[
+                  {
+                    label: `${
+                      chatProviders.find((provider) => provider.isDefault)
+                        ?.name ?? "Codex"
+                    } (Default)`,
+                    value: "",
+                  },
+                  ...chatProviders
+                    .filter((provider) => !provider.isDefault)
+                    .map((provider) => ({
+                      label: provider.name,
+                      value: provider.id,
+                    })),
+                ]}
                 title={t("legal.notice.modelPicker")}
                 value={activeConversation?.modelProviderId ?? ""}
-              >
-                {/* The default backend IS the empty choice — one entry,
-                    marked inline, never listed twice (Oskar, dev.159). */}
-                <option value="">
-                  {chatProviders.find((provider) => provider.isDefault)?.name ??
-                    "Codex"}{" "}
-                  (Default)
-                </option>
-                {chatProviders
-                  .filter((provider) => !provider.isDefault)
-                  .map((provider) => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.name}
-                    </option>
-                  ))}
-              </select>
+              />
             ) : hasUsableModel ? (
               <span className="composer-model">
                 {chatProviders[0]?.name ?? "ChatGPT"}
@@ -8783,12 +8788,12 @@ function AskVaenyxPanel({
                   <span aria-hidden="true" className="composer-sep">
                     ·
                   </span>
-                  <select
-                    aria-label="Model version"
+                  <Picker
+                    ariaLabel="Model version"
                     className="composer-level-select"
                     disabled={!activeConversationId}
-                    onChange={(event) => {
-                      const next = event.target.value || null;
+                    onChange={(chosen) => {
+                      const next = chosen || null;
                       if (!activeConversationId) return;
                       onConversationsChange(
                         conversations.map((conversation) =>
@@ -8799,31 +8804,29 @@ function AskVaenyxPanel({
                       );
                       void setChatModel(activeConversationId, next);
                     }}
+                    options={[
+                      {
+                        label: `${effective.model ?? "provider default"} (Default)`,
+                        value: "",
+                      },
+                      ...choices
+                        .filter((choice) => choice !== effective.model)
+                        .map((choice) => ({ label: choice, value: choice })),
+                    ]}
                     value={activeConversation?.modelName ?? ""}
-                  >
-                    <option value="">
-                      {effective.model ?? "provider default"} (Default)
-                    </option>
-                    {choices
-                      .filter((choice) => choice !== effective.model)
-                      .map((choice) => (
-                        <option key={choice} value={choice}>
-                          {choice}
-                        </option>
-                      ))}
-                  </select>
+                  />
                 </>
               );
             })()}
             <span aria-hidden="true" className="composer-sep">
               ·
             </span>
-            <select
-              aria-label="Reasoning level"
+            <Picker
+              ariaLabel="Reasoning level"
               className="composer-level-select"
               disabled={!activeConversationId}
-              onChange={(event) => {
-                const next = event.target.value as ReasoningEffort;
+              onChange={(chosen) => {
+                const next = chosen as ReasoningEffort;
                 if (!activeConversationId) return;
                 onConversationsChange(
                   conversations.map((conversation) =>
@@ -8834,12 +8837,9 @@ function AskVaenyxPanel({
                 );
                 void setReasoningEffort(activeConversationId, next);
               }}
+              options={EFFORT_OPTIONS}
               value={activeConversation?.reasoningEffort ?? "medium"}
-            >
-              <option value="low">Fast</option>
-              <option value="medium">Balanced</option>
-              <option value="high">Deep</option>
-            </select>
+            />
             <span aria-hidden="true" className="composer-sep">
               ·
             </span>
@@ -8952,13 +8952,13 @@ function AskVaenyxPanel({
               </div>
               {focusedTask.harness === "codex-harness" ? (
                 <div className="task-toolbar">
-                  <select
-                    aria-label="Schedule"
+                  <Picker
+                    ariaLabel="Schedule"
                     className="task-select"
-                    onChange={(event) =>
+                    onChange={(next) =>
                       void applyTaskSchedule(
                         focusedTask.id,
-                        (event.target.value || null) as
+                        (next || null) as
                           | "hourly"
                           | "daily"
                           | "weekly"
@@ -8971,18 +8971,16 @@ function AskVaenyxPanel({
                         },
                       )
                     }
+                    options={SCHEDULE_OPTIONS.map((option) => ({
+                      label: option.label,
+                      value: option.value ?? "",
+                    }))}
                     value={
                       focusedTask.scheduleEnabled
                         ? focusedTask.scheduleCadence ?? ""
                         : ""
                     }
-                  >
-                    {SCHEDULE_OPTIONS.map((option) => (
-                      <option key={option.label} value={option.value ?? ""}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   {focusedTask.scheduleEnabled &&
                   focusedTask.scheduleCadence &&
                   focusedTask.scheduleCadence !== "hourly" ? (
@@ -9006,23 +9004,21 @@ function AskVaenyxPanel({
                   ) : null}
                   {focusedTask.scheduleEnabled &&
                   focusedTask.scheduleCadence === "weekly" ? (
-                    <select
-                      aria-label="Day of week"
+                    <Picker
+                      ariaLabel="Day of week"
                       className="task-select"
-                      onChange={(event) =>
+                      onChange={(next) =>
                         void applyTaskSchedule(focusedTask.id, "weekly", {
                           time: focusedTask.scheduleTime ?? "09:00",
-                          dayOfWeek: Number.parseInt(event.target.value, 10),
+                          dayOfWeek: Number.parseInt(next, 10),
                         })
                       }
-                      value={focusedTask.scheduleDayOfWeek ?? 1}
-                    >
-                      {WEEKDAY_OPTIONS.map((day) => (
-                        <option key={day.value} value={day.value}>
-                          {day.label}
-                        </option>
-                      ))}
-                    </select>
+                      options={WEEKDAY_OPTIONS.map((day) => ({
+                        label: day.label,
+                        value: String(day.value),
+                      }))}
+                      value={String(focusedTask.scheduleDayOfWeek ?? 1)}
+                    />
                   ) : null}
                   {focusedTask.scheduleEnabled &&
                   focusedTask.scheduleCadence === "monthly" ? (
@@ -9816,26 +9812,32 @@ function SharingPanel() {
             {t("flywheel.queue.window")}
           </p>
           <div className="sharing-actions">
-            <label className="chat-font-field sharing-mode-field">
-              {zh ? "方式" : "Mode"}
-              <select
+            <div className="chat-font-field sharing-mode-field">
+              <span>{zh ? "方式" : "Mode"}</span>
+              <Picker
+                ariaLabel={zh ? "分享方式" : "Sharing mode"}
                 className="task-select"
                 disabled={busy}
-                onChange={(event) =>
-                  void setSharingMode(
-                    event.target.value as "automatic" | "review-each",
-                  )
+                onChange={(next) =>
+                  void setSharingMode(next as "automatic" | "review-each")
                 }
+                options={[
+                  {
+                    label: zh
+                      ? "自动(等待期后发送)"
+                      : "Automatic — sends after the wait",
+                    value: "automatic",
+                  },
+                  {
+                    label: zh
+                      ? "逐条审(每条经你确认)"
+                      : "Review Each — you confirm every one",
+                    value: "review-each",
+                  },
+                ]}
                 value={mode ?? "automatic"}
-              >
-                <option value="automatic">
-                  {zh ? "自动(等待期后发送)" : "Automatic — sends after the wait"}
-                </option>
-                <option value="review-each">
-                  {zh ? "逐条审(每条经你确认)" : "Review Each — you confirm every one"}
-                </option>
-              </select>
-            </label>
+              />
+            </div>
             <button
               className="secondary-button"
               disabled={busy}
@@ -13474,34 +13476,30 @@ function BackupPanel() {
           {t("settings.backup.schedule")}
         </label>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <select
+          <Picker
+            ariaLabel={t("settings.backup.schedule")}
             className="composer-level-select"
-            onChange={(event) =>
-              setScheduleCadence(
-                event.target.value as "off" | "daily" | "weekly",
-              )
+            onChange={(next) =>
+              setScheduleCadence(next as "off" | "daily" | "weekly")
             }
+            options={[
+              { label: t("settings.backup.scheduleOff"), value: "off" },
+              { label: t("settings.backup.scheduleDaily"), value: "daily" },
+              { label: t("settings.backup.scheduleWeekly"), value: "weekly" },
+            ]}
             value={scheduleCadence}
-          >
-            <option value="off">{t("settings.backup.scheduleOff")}</option>
-            <option value="daily">{t("settings.backup.scheduleDaily")}</option>
-            <option value="weekly">
-              {t("settings.backup.scheduleWeekly")}
-            </option>
-          </select>
+          />
           {scheduleCadence !== "off" ? (
-            <select
-              aria-label={t("settings.backup.scheduleHour")}
+            <Picker
+              ariaLabel={t("settings.backup.scheduleHour")}
               className="composer-level-select"
-              onChange={(event) => setScheduleHour(event.target.value)}
+              onChange={(next) => setScheduleHour(next)}
+              options={Array.from({ length: 24 }, (_, hour) => ({
+                label: `${String(hour).padStart(2, "0")}:00`,
+                value: String(hour),
+              }))}
               value={scheduleHour}
-            >
-              {Array.from({ length: 24 }, (_, hour) => (
-                <option key={hour} value={String(hour)}>
-                  {String(hour).padStart(2, "0")}:00
-                </option>
-              ))}
-            </select>
+            />
           ) : null}
         </div>
         {scheduleCadence !== "off" ? (
@@ -14633,40 +14631,38 @@ function SettingsPanel({
           Font and size for the conversation area. Saved on this device.
         </p>
         <div className="chat-font-controls">
-          <label className="chat-font-field">
-            Size
-            <select
+          <div className="chat-font-field">
+            <span>Size</span>
+            <Picker
+              ariaLabel="Chat text size"
               className="task-select"
-              onChange={(event) => {
-                setChatFontSize(event.target.value);
-                applyChatFont(event.target.value, chatFontFamily);
+              onChange={(next) => {
+                setChatFontSize(next);
+                applyChatFont(next, chatFontFamily);
               }}
+              options={CHAT_FONT_SIZES.map((option) => ({
+                label: option.label,
+                value: option.id,
+              }))}
               value={chatFontSize}
-            >
-              {CHAT_FONT_SIZES.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="chat-font-field">
-            Font
-            <select
+            />
+          </div>
+          <div className="chat-font-field">
+            <span>Font</span>
+            <Picker
+              ariaLabel="Chat font"
               className="task-select"
-              onChange={(event) => {
-                setChatFontFamily(event.target.value);
-                applyChatFont(chatFontSize, event.target.value);
+              onChange={(next) => {
+                setChatFontFamily(next);
+                applyChatFont(chatFontSize, next);
               }}
+              options={CHAT_FONT_FAMILIES.map((option) => ({
+                label: option.label,
+                value: option.id,
+              }))}
               value={chatFontFamily}
-            >
-              {CHAT_FONT_FAMILIES.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
         </div>
         <div className="settings-card-divider" />
         <h3 className="settings-subhead">{t("settings.language.title")}</h3>
@@ -15405,26 +15401,24 @@ function VaenyxMePanel({
             below before it changes Vaenyx Me.
           </p>
           <form className="memory-form" onSubmit={submitCandidate}>
-            <label>
-              Category
-              <select
-                onChange={(event) => {
-                  const nextCategory = event.target.value;
-                  setCategory(nextCategory);
+            <div className="chat-font-field">
+              <span>Category</span>
+              <Picker
+                ariaLabel="Category"
+                onChange={(next) => {
+                  setCategory(next);
                   setTitle(
-                    vaenyxMeCategories.find((item) => item.id === nextCategory)
+                    vaenyxMeCategories.find((item) => item.id === next)
                       ?.label ?? "",
                   );
                 }}
+                options={vaenyxMeCategories.map((item) => ({
+                  label: item.label,
+                  value: item.id,
+                }))}
                 value={category}
-              >
-                {vaenyxMeCategories.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
             <label>
               What should Vaenyx know?
               <textarea
@@ -18533,22 +18527,21 @@ function CommunityReportLink({
           <p className="settings-card-copy">
             {t("legal.notice.community.report")}
           </p>
-          <label className="report-category">
+          <div className="report-category">
             <span className="eyebrow">{t("community.report.category")}</span>
-            <select
-              onChange={(event) =>
-                setCategory(event.target.value as ReportCategory | "")
-              }
+            <Picker
+              ariaLabel={t("community.report.category")}
+              onChange={(next) => setCategory(next as ReportCategory | "")}
+              options={[
+                { label: t("community.report.categoryPrompt"), value: "" },
+                ...REPORT_CATEGORIES.map((value) => ({
+                  label: t(`community.report.category.${value}`),
+                  value,
+                })),
+              ]}
               value={category}
-            >
-              <option value="">{t("community.report.categoryPrompt")}</option>
-              {REPORT_CATEGORIES.map((value) => (
-                <option key={value} value={value}>
-                  {t(`community.report.category.${value}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
           {/* No "your email" field: the mail client puts the sender in the From
               header already, and a redundant field is one more reason not to
               finish (D4a). */}
@@ -19677,16 +19670,15 @@ function LibraryPanel({
           ) : null}
           {renameOpen ? (
             <div className="library-tag-rename">
-              <select
-                onChange={(event) => setRenameFrom(event.target.value)}
+              <Picker
+                ariaLabel="Tag to rename"
+                onChange={(next) => setRenameFrom(next)}
+                options={allTags.map((tag) => ({
+                  label: `#${tag}`,
+                  value: tag,
+                }))}
                 value={renameFrom}
-              >
-                {allTags.map((tag) => (
-                  <option key={tag} value={tag}>
-                    #{tag}
-                  </option>
-                ))}
-              </select>
+              />
               <span>→</span>
               <input
                 className="method-rename-input"
