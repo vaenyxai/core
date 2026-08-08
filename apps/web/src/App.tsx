@@ -22082,24 +22082,28 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
               ? "Gemini 和 Groq 有免费额度,不用信用卡。"
               : "Gemini and Groq have a free tier and need no credit card."}
           </p>
-          <label className="chat-font-field">
-            {zh ? "选择" : "Provider"}
-            <select
-              className="task-select"
-              onChange={(event) => {
-                setChoice(event.target.value);
+          {/* The app's own drop-down, not the browser's: a native <select>
+              paints its option list white on this dark theme no matter what
+              the stylesheet says, because the popup is drawn outside the page.
+              A wrapping <label> would not associate with it either — Picker
+              renders a button — so the caption is a sibling and the name goes
+              through ariaLabel, the same shape every other Picker here uses. */}
+          <div className="chat-font-field">
+            <span>{zh ? "选择" : "Provider"}</span>
+            <Picker
+              ariaLabel={zh ? "选择模型服务商" : "Choose a model provider"}
+              onChange={(next) => {
+                setChoice(next);
                 setApiKey("");
                 setError(null);
               }}
+              options={WIZARD_KEY_PROVIDERS.map((provider) => ({
+                label: `${provider.label} — ${provider.note}`,
+                value: provider.id,
+              }))}
               value={choice}
-            >
-              {WIZARD_KEY_PROVIDERS.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.label} — {provider.note}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
           {keyUrl ? (
             <a
               className="model-key-link"
