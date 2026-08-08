@@ -19190,6 +19190,68 @@ function RoutinePublishControl({
 // A small chip showing an item's provenance: installed from the community
 // Library (with the creator), published to the community, or a private local
 // item. Uses the shared library-chip style.
+// TWO KINDS OF BADGE, and they must not look alike.
+//
+// WHERE IT CAME FROM is a permanent property and it is quiet: it never changes
+// and there is nothing to do about it. NEEDS ATTENTION is temporary and it is
+// loud: a new version, corrections waiting, a recipe the Owner has edited.
+//
+// Mixed into one visual weight, the loud ones drown. Every card said
+// "Installed" or "Private" in exactly the tone the one card with three
+// corrections waiting needed to use, so the card with something to do looked
+// like all the others.
+// A8: ONE "New", and it asks what the thing is FOR.
+//
+// "Do you want to build a Method or a Routine?" is a question about our data
+// model. Nobody outside this codebase can answer it, and being asked it on the
+// way in is how a person decides the whole area is not for them. What anybody
+// can answer is what they are trying to make — and the answer maps onto the
+// type without them ever meeting the word.
+function CreateChooser({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (kind: "method" | "routine") => void;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  return (
+    <Modal onClose={onClose} title={zh ? "新建" : "Make something"}>
+      <div className="create-purpose">
+        <button
+          className="create-purpose-option primary"
+          onClick={() => onPick("routine")}
+          type="button"
+        >
+          <strong>
+            {zh ? "做一个我自己要用的东西" : "Something I want to use"}
+          </strong>
+          <small>
+            {zh
+              ? "打开就能用。绝大多数情况选这个。"
+              : "Open it and it works. This is almost always the one."}
+          </small>
+        </button>
+        <button
+          className="create-purpose-option"
+          onClick={() => onPick("method")}
+          type="button"
+        >
+          <strong>
+            {zh ? "做一个零件给别人组装" : "A part for other people to build with"}
+          </strong>
+          <small>
+            {zh
+              ? "一个可复用的小块,别人把它装进自己的成品里。"
+              : "One reusable piece that other people assemble into their own."}
+          </small>
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function ProvenanceChip({
   origin,
   owner,
@@ -19201,19 +19263,40 @@ function ProvenanceChip({
   published: boolean;
   version: string;
 }) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
   if (origin === "community") {
     return (
-      <span className="library-chip chip-installed">
-        Installed{owner ? ` · by ${owner}` : ""}
+      <span className="library-chip chip-origin">
+        {zh ? "社区" : "Community"}
+        {owner ? ` · ${owner}` : ""}
       </span>
     );
   }
   if (published) {
     return (
-      <span className="library-chip chip-published">Published · v{version}</span>
+      <span className="library-chip chip-origin">
+        {zh ? `已发布 · v${version}` : `Published · v${version}`}
+      </span>
     );
   }
-  return <span className="library-chip chip-private">Private</span>;
+  return (
+    <span className="library-chip chip-origin">
+      {zh ? "自己写的" : "Yours"}
+    </span>
+  );
+}
+
+/** The other kind: something is waiting for the Owner. Loud on purpose — this
+ *  is the badge that has to survive being on a page full of quiet ones. */
+function AttentionChip({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: "edited" | "new-version" | "review";
+}) {
+  return <span className={`library-chip chip-attention chip-${tone}`}>{children}</span>;
 }
 
 function RoutinesPanel({
@@ -19328,6 +19411,17 @@ function RoutinesPanel({
                     }
                     version={routine.version}
                   />
+                  {/* Loud, because unlike the one above it there is something
+                      to do about this. */}
+                  {routine.origin === "community" &&
+                  isLaterVersion(
+                    communityVersions.get(routine.id)?.version ?? "0.0.0",
+                    routine.version,
+                  ) ? (
+                    <AttentionChip tone="new-version">
+                      {zh ? "有新版" : "New version"}
+                    </AttentionChip>
+                  ) : null}
                 </div>
                 <p>{routine.description}</p>
                 {routine.tags.length > 0 ? (
@@ -19465,6 +19559,7 @@ function LibraryArea({
   const { lang } = useI18n();
   const zh = lang === "zh";
   const [finding, setFinding] = useState<"methods" | "routines" | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const installedIds = [
     ...methods.map((method) => method.id),
     ...routines.map((routine) => routine.id),
@@ -19486,13 +19581,22 @@ function LibraryArea({
       <section className="library-section">
         <div className="library-section-head">
           <h3>{zh ? "成品" : "Routines"}</h3>
-          <button
-            className="secondary-button"
-            onClick={() => setFinding("routines")}
-            type="button"
-          >
-            {zh ? "＋ 从社区找" : "+ Find in the community"}
-          </button>
+          <div className="library-section-actions">
+            <button
+              className="primary-button"
+              onClick={() => setChoosing(true)}
+              type="button"
+            >
+              {zh ? "＋ 新建" : "+ New"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => setFinding("routines")}
+              type="button"
+            >
+              {zh ? "＋ 从社区找" : "+ Find in the community"}
+            </button>
+          </div>
         </div>
         <RoutinesPanel
           methods={methods}
@@ -19549,6 +19653,29 @@ function LibraryArea({
       <section className="library-account-row">
         <CommunityIdentityBar />
       </section>
+
+      {choosing ? (
+        <CreateChooser
+          onClose={() => setChoosing(false)}
+          onPick={(picked) => {
+            setChoosing(false);
+            // The panels already read this on mount and open their own create
+            // screen; this only decides which one, so the person never meets
+            // the words Method or Routine at the moment of choosing.
+            try {
+              localStorage.setItem(
+                CREATE_INTENT,
+                JSON.stringify({ description: "", kind: picked }),
+              );
+            } catch {
+              // Private-mode storage: the section still opens, just without a
+              // pre-filled description.
+            }
+            if (picked === "method") onMethodsRefresh();
+            else onRoutinesRefresh();
+          }}
+        />
+      ) : null}
 
       {finding ? (
         <CommunityFinder

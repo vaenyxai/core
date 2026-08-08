@@ -7965,3 +7965,72 @@ html, body { overscroll-behavior-y: none; }
   margin: var(--space-1) 0 0;
   padding-left: var(--space-3);
 }
+
+/* TWO KINDS OF BADGE, deliberately different weights.
+
+   Origin is a permanent property with nothing to do about it, so it recedes.
+   Attention is temporary and actionable, so it does not. When both were the
+   same weight the one card with corrections waiting looked exactly like the
+   twenty that just said where they came from. */
+.library-chip.chip-origin {
+  border: 0.5px solid var(--border);
+  background: transparent;
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.library-chip.chip-attention {
+  border: 0.5px solid currentColor;
+  background: transparent;
+  font-weight: 600;
+}
+
+.library-chip.chip-new-version {
+  color: var(--accent, #6ea8ff);
+}
+
+.library-chip.chip-review {
+  color: #d9a441;
+}
+
+.library-chip.chip-edited {
+  color: #d98341;
+}
+
+/* The two actions a section can offer, side by side. */
+.library-section-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Making something: asked by purpose, so the two answers are sentences rather
+   than type names, and the common one is visibly the common one. */
+.create-purpose {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.create-purpose-option {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.create-purpose-option.primary strong {
+  font-size: var(--fs-lg);
+}
+
+.create-purpose-option small {
+  color: var(--text-muted);
+}
+
+.create-purpose-option:hover {
+  border-color: var(--text-faint);
+}
