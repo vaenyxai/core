@@ -28,6 +28,12 @@ export interface RecordMethodFeedbackInput {
   correctedOutput: unknown;
   // true/false if correctedOutput was schema-checked (version matched), else null.
   outputValid: boolean | null;
+  // WHICH STEP OF WHICH ROUTINE. Absent for a Method used on its own; for a
+  // multi-step Routine it is the difference between a correction landing on
+  // the part that produced the mistake and landing on whichever part the app
+  // found easiest to name.
+  routineId?: string | null;
+  stepId?: string | null;
   note: string | null;
   occurredAt: string | null;
 }
@@ -148,8 +154,8 @@ export function recordMethodFeedback(
       `INSERT INTO method_feedback (
         id, method_id, app_profile_id, app_profile_name, version, content_hash,
         version_matched, reaction, input, ai_output, corrected_output,
-        output_valid, note, occurred_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        output_valid, note, occurred_at, routine_id, step_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -166,6 +172,10 @@ export function recordMethodFeedback(
       input.outputValid === null ? null : input.outputValid ? 1 : 0,
       input.note,
       input.occurredAt,
+      // Which step of which Routine this came from. Null for a correction
+      // about a Method used on its own, which is unambiguous anyway.
+      input.routineId ?? null,
+      input.stepId ?? null,
     );
   return { id };
 }

@@ -10215,6 +10215,11 @@ export async function registerGatewayRoutes(
         outputValid,
         note: body.note ?? null,
         occurredAt: body.occurredAt ?? null,
+        // D2: which step of which Routine. Without it a multi-step Routine
+        // files every correction against whichever Method the app named, and
+        // the wrong part quietly learns the wrong lesson.
+        routineId: body.routineId ?? null,
+        stepId: body.stepId ?? null,
       });
 
       // The flywheel's local half, automatic by default (Oskar, 2026-07-26).
@@ -10236,6 +10241,10 @@ export async function registerGatewayRoutes(
         body.correctedOutput !== undefined
       ) {
         try {
+          // D3 was already here: the example file itself records `source`
+          // and `contributor`, which is what makes a contradiction between two
+          // apps — one says DD/MM, the other MM/DD — resolvable by a person
+          // rather than silently averaged away. Not duplicated into a table.
           addMethodExample(context.config.libraryDirectory, methodId, {
             input: body.input,
             output: body.correctedOutput,
@@ -10267,7 +10276,12 @@ export async function registerGatewayRoutes(
         resourceId: methodId,
       });
 
-      const response: SendMethodFeedbackResponse = { id };
+      // D1: an explicit acceptance, so an app knows when it is safe to clear
+      // its queue. Clearing on "the request did not throw" loses corrections
+      // whenever a connection drops mid-reply — silently, which is the worst
+      // way to lose them. The rule for the app side is: hold the queue until
+      // this field comes back true.
+      const response: SendMethodFeedbackResponse = { accepted: true, id };
       return reply.code(200).send(response);
     },
   );

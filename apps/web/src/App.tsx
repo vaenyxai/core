@@ -19560,6 +19560,14 @@ function LibraryArea({
   const zh = lang === "zh";
   const [finding, setFinding] = useState<"methods" | "routines" | null>(null);
   const [choosing, setChoosing] = useState(false);
+  // Three tabs rather than three stacked sections. Stacking them put the whole
+  // library on one very long page — the parts, which most people never need,
+  // sat under everything else and made the screen feel like a filing system
+  // again. The tab ORDER still carries the argument: finished things first,
+  // keys for other apps second, the insides last.
+  const [tab, setTab] = useState<"methods" | "routines" | "tokens">(() =>
+    peekCreateIntent()?.kind === "method" ? "methods" : "routines",
+  );
   const installedIds = [
     ...methods.map((method) => method.id),
     ...routines.map((routine) => routine.id),
@@ -19578,73 +19586,96 @@ function LibraryArea({
         </p>
       </section>
 
-      <section className="library-section">
-        <div className="library-section-head">
-          <h3>{zh ? "成品" : "Routines"}</h3>
-          <div className="library-section-actions">
-            <button
-              className="primary-button"
-              onClick={() => setChoosing(true)}
-              type="button"
-            >
-              {zh ? "＋ 新建" : "+ New"}
-            </button>
-            <button
-              className="secondary-button"
-              onClick={() => setFinding("routines")}
-              type="button"
-            >
-              {zh ? "＋ 从社区找" : "+ Find in the community"}
-            </button>
+      <nav aria-label={zh ? "资源库" : "Library"} className="library-subtabs">
+        <button
+          className={tab === "routines" ? "active" : ""}
+          onClick={() => setTab("routines")}
+          type="button"
+        >
+          {zh ? "成品" : "Routines"}
+        </button>
+        <button
+          className={tab === "tokens" ? "active" : ""}
+          onClick={() => setTab("tokens")}
+          type="button"
+        >
+          {zh ? "钥匙" : "Tokens"}
+        </button>
+        <button
+          className={tab === "methods" ? "active" : ""}
+          onClick={() => setTab("methods")}
+          type="button"
+        >
+          {zh ? "零件" : "Methods"}
+        </button>
+      </nav>
+
+      {tab === "routines" ? (
+        <section className="library-section">
+          <div className="library-section-head">
+            <div className="library-section-actions">
+              <button
+                className="primary-button"
+                onClick={() => setChoosing(true)}
+                type="button"
+              >
+                {zh ? "＋ 新建" : "+ New"}
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => setFinding("routines")}
+                type="button"
+              >
+                {zh ? "＋ 从社区找" : "+ Find in the community"}
+              </button>
+            </div>
           </div>
-        </div>
-        <RoutinesPanel
-          methods={methods}
-          onRoutinesRefresh={onRoutinesRefresh}
-          onUseRoutine={onUseRoutine}
-          routines={routines}
-        />
-      </section>
-
-      <section className="library-section">
-        <div className="library-section-head">
-          <h3>{zh ? "钥匙" : "Tokens"}</h3>
-        </div>
-        <AppsPanel
-          methods={methods}
-          onCreate={onAppCreate}
-          onDisable={onAppDisable}
-          onUpdate={onAppUpdate}
-          onDelete={onAppDelete}
-          profiles={appProfiles}
-          routines={routines}
-        />
-      </section>
-
-      <section className="library-section">
-        <div className="library-section-head">
-          <h3>{zh ? "零件" : "Methods"}</h3>
-          <button
-            className="secondary-button"
-            onClick={() => setFinding("methods")}
-            type="button"
-          >
-            {zh ? "＋ 从社区找零件" : "+ Find a part"}
-          </button>
-        </div>
-        {/* Says who this is for in the first sentence. Somebody who does not
-            make things should be able to stop reading here. */}
-        <p className="settings-card-copy text-faint">
-          {zh
-            ? "这里是给创作者的。零件是成品内部的说明书 —— 装成品时会自动带来,平时不用管。"
-            : "This part is for people who make things. A part is the instructions inside a finished Routine: installing one brings its parts with it, and otherwise you can leave them alone."}
-        </p>
-        <LibraryPanel
-          methods={methods}
-          onMethodsRefresh={onMethodsRefresh}
-          routines={routines}
-        />
-      </section>
+          <RoutinesPanel
+            methods={methods}
+            onRoutinesRefresh={onRoutinesRefresh}
+            onUseRoutine={onUseRoutine}
+            routines={routines}
+          />
+        </section>
+      ) : tab === "tokens" ? (
+        <section className="library-section">
+          <AppsPanel
+            methods={methods}
+            onCreate={onAppCreate}
+            onDisable={onAppDisable}
+            onUpdate={onAppUpdate}
+            onDelete={onAppDelete}
+            profiles={appProfiles}
+            routines={routines}
+          />
+        </section>
+      ) : (
+        <section className="library-section">
+          <div className="library-section-head">
+            <div className="library-section-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setFinding("methods")}
+                type="button"
+              >
+                {zh ? "＋ 从社区找零件" : "+ Find a part"}
+              </button>
+            </div>
+          </div>
+          {/* Says who this is for in its first sentence. Somebody who does not
+              make things should be able to stop reading here. */}
+          <p className="settings-card-copy text-faint">
+            {zh
+              ? "这里是给创作者的。零件是成品内部的说明书 —— 装成品时会自动带来,平时不用管。"
+              : "This tab is for people who make things. A part is the instructions inside a finished Routine: installing one brings its parts with it, and otherwise you can leave them alone."}
+          </p>
+          <LibraryPanel
+            methods={methods}
+            onMethodsRefresh={onMethodsRefresh}
+            routines={routines}
+          />
+        </section>
+      )}
 
       {/* THE ACCOUNT GOES LAST, and says why it is there. At the top it reads
           as "sign in to use this", which is the opposite of true and exactly
@@ -19671,6 +19702,7 @@ function LibraryArea({
               // Private-mode storage: the section still opens, just without a
               // pre-filled description.
             }
+            setTab(picked === "method" ? "methods" : "routines");
             if (picked === "method") onMethodsRefresh();
             else onRoutinesRefresh();
           }}

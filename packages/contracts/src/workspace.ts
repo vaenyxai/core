@@ -2090,6 +2090,13 @@ export const SendMethodFeedbackRequestSchema = Type.Object(
     reaction: MethodFeedbackReactionSchema,
     occurredAt: Type.Optional(Type.String()),
     note: Type.Optional(Type.String({ maxLength: 2000 })),
+    // 🔴 WHICH STEP THIS IS ABOUT. A one-step Routine is unambiguous; a
+    // multi-step one is not, and a correction that does not say which step it
+    // came from gets filed against the wrong part — silently, and the wrong
+    // part then learns the wrong lesson. The recipe chain handed to an app
+    // carries these ids for exactly this return trip.
+    routineId: Type.Optional(Type.String({ maxLength: 200 })),
+    stepId: Type.Optional(Type.String({ maxLength: 200 })),
   },
   { additionalProperties: false },
 );
@@ -2097,6 +2104,10 @@ export const SendMethodFeedbackRequestSchema = Type.Object(
 export const SendMethodFeedbackResponseSchema = Type.Object(
   {
     id: Type.String(),
+    // 🔴 The app clears its queue only when it has THIS. An app that empties
+    // its outbox on "the request did not throw" loses corrections whenever a
+    // connection drops mid-reply, and loses them silently.
+    accepted: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
