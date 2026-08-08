@@ -163,7 +163,13 @@ Read this inside the app: **Settings → Manual**.
 - **What it is** — facts about you that Vaenyx has noticed, which it then uses
   in every chat.
 - **Where** — the **Vaenyx Me** screen.
-- **Nothing is used until you approve it.** Each candidate has Approve / Reject.
+- **Nothing is used until you approve it.** Each one shows the sentence you
+  actually said, and what Vaenyx made of it. Two answers: keep it, or say it is
+  wrong.
+- **Listed by day**, newest first, so it reads like a diary rather than a pile
+  of work.
+- **Each Mode only ever learns from itself.** Nothing said inside a Custom Mode
+  becomes a proposal about you.
 - **Remove one later** — the same screen; delete it.
 - **Add one yourself** — the manual form on that screen.
 

@@ -82,7 +82,6 @@ import {
   createRoutine,
   createTask,
   createVaenyxMeCandidate,
-  deleteVaenyxMeCandidate,
   deleteMemory,
   deleteAppProfile,
   disableAppProfile,
@@ -15784,14 +15783,22 @@ function VaenyxMePanel({
   const [candidateError, setCandidateError] = useState<string | null>(null);
   const [creatingCandidate, setCreatingCandidate] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [editingCandidateId, setEditingCandidateId] = useState<string | null>(
-    null,
-  );
-  const [approvalTitle, setApprovalTitle] = useState("");
-  const [approvalSummary, setApprovalSummary] = useState("");
-  const [approvalEvidence, setApprovalEvidence] = useState("");
-  const [approvalConfidence, setApprovalConfidence] = useState(50);
-  const [approvalReviewNote, setApprovalReviewNote] = useState("");
+  // 🔴 NO CONFIDENCE ANYWHERE ON THIS SCREEN (Oskar, 2026-08-09).
+  //
+  // The number was never measured. vaenyx-me.ts writes the literal 40 for
+  // anything read out of a chat and 45 for anything read out of a task result,
+  // so every card was asking the Owner to weigh a constant — and Google's own
+  // guidance calls a displayed numeric confidence risky even when it IS real,
+  // because a low one makes people reject accurate suggestions.
+  //
+  // The evidence quote does the job the number was pretending to do, and it
+  // does it honestly: it is the Owner's own sentence, so he can judge the
+  // inference instead of trusting a percentage about it.
+
+
+
+
+
   const pendingCandidates = candidates.filter(
     (candidate) => candidate.status === "pending_review",
   );
@@ -15856,15 +15863,6 @@ function VaenyxMePanel({
     }
   }
 
-  function startApprovalEdit(candidate: VaenyxMeCandidate) {
-    setEditingCandidateId(candidate.id);
-    setApprovalTitle(candidate.title);
-    setApprovalSummary(candidate.proposedSummary);
-    setApprovalEvidence(candidate.proposedEvidence);
-    setApprovalConfidence(candidate.confidence);
-    setApprovalReviewNote("");
-  }
-
   async function approveCandidate(
     candidate: VaenyxMeCandidate,
     input: {
@@ -15892,7 +15890,6 @@ function VaenyxMePanel({
         setCandidates((current) =>
           current.filter((item) => item.id !== candidate.id),
         );
-        setEditingCandidateId(null);
         await onProfileRefresh();
         return;
       }
@@ -15900,7 +15897,6 @@ function VaenyxMePanel({
       setCandidates((current) =>
         current.map((item) => (item.id === updated.id ? updated : item)),
       );
-      setEditingCandidateId(null);
       await onProfileRefresh();
     } catch (error) {
       setCandidateError(
@@ -15937,28 +15933,11 @@ function VaenyxMePanel({
     }
   }
 
-  async function removeCandidate(candidate: VaenyxMeCandidate) {
-    const confirmed = window.confirm(
-      "Delete this candidate from the Vaenyx Me review queue?",
-    );
-
-    if (!confirmed) return;
-
-    setCandidateError(null);
-
-    try {
-      await deleteVaenyxMeCandidate(candidate.id);
-      setCandidates((current) =>
-        current.filter((item) => item.id !== candidate.id),
-      );
-    } catch (error) {
-      setCandidateError(
-        error instanceof Error
-          ? error.message
-          : "Vaenyx Me candidate could not be deleted.",
-      );
-    }
-  }
+  // Delete is gone with the old queue, and deliberately not replaced. It was a
+  // fourth button doing almost what the third one did — "that's wrong" already
+  // resolves the item, and it does it reversibly, with a record of what was
+  // proposed. A hard row delete behind a browser confirm() was the only
+  // irreversible thing on the screen and the least useful.
 
   return (
     <div className="future-layout">
@@ -16003,7 +15982,6 @@ function VaenyxMePanel({
                   <div>
                     <span
                       className={`vaenyx-me-state vaenyx-me-state--${state.key}`}
-                      title={`${item.confidence}% confidence`}
                     >
                       <span className="vaenyx-me-dot" />
                       {state.label}
@@ -16116,205 +16094,11 @@ function VaenyxMePanel({
         {/* The old queue, kept intact and folded away while the two shapes are
             compared. It is the same data and the same buttons — including
             "Edit and approve", which the ledger deliberately does not offer. */}
-        <details className="me-old-queue">
-          <summary>
-            {zh
-              ? "旧的审批列表(对照用)"
-              : "The old review queue (for comparison)"}
-          </summary>
-          {pendingCandidates.length === 0 ? (
-            <div className="empty-state">
-              <strong>No Vaenyx Me candidates waiting</strong>
-              <p>
-                Vaenyx Me will stay unchanged until a candidate is created and
-                approved.
-              </p>
-            </div>
-          ) : (
-            <div className="memory-list">
-              {pendingCandidates.map((candidate) => (
-                <article className="memory-card" key={candidate.id}>
-                  <span className="task-status">
-                    {getVaenyxMeCandidateStatusCopy(candidate.status)}
-                  </span>
-                  <h3>{candidate.title}</h3>
-                  <p>{candidate.proposedSummary}</p>
-                  <dl className="settings-list">
-                    {/* A fact proposal is a slot and a value, and approving it
-                        writes exactly those into the memory table. Showing
-                        only the trait fields described the wrong thing. */}
-                    {candidate.proposedSlot ? (
-                      <>
-                        <div>
-                          <dt>{zh ? "记住这一条" : "Remember this"}</dt>
-                          <dd>
-                            <code>{candidate.proposedSlot}</code> ={" "}
-                            {candidate.proposedValue}
-                          </dd>
-                        </div>
-                        {candidate.proposedEventTime ? (
-                          <div>
-                            <dt>{zh ? "从什么时候起" : "True since"}</dt>
-                            <dd>{candidate.proposedEventTime}</dd>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
-                    <div>
-                      <dt>Category</dt>
-                      <dd>{candidate.category}</dd>
-                    </div>
-                    <div>
-                      <dt>Evidence</dt>
-                      <dd>{candidate.proposedEvidence}</dd>
-                    </div>
-                    <div>
-                      <dt>Confidence</dt>
-                      <dd>{candidate.confidence}%</dd>
-                    </div>
-                    <div>
-                      <dt>Source</dt>
-                      <dd>{candidate.sourceType}</dd>
-                    </div>
-                  </dl>
-                  {editingCandidateId === candidate.id &&
-                  !candidate.proposedSlot ? (
-                    <form
-                      className="memory-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void approveCandidate(candidate, {
-                          title: approvalTitle,
-                          summary: approvalSummary,
-                          evidence: approvalEvidence,
-                          confidence: approvalConfidence,
-                          reviewNote: approvalReviewNote,
-                        });
-                      }}
-                    >
-                      <label>
-                        Approved title
-                        <input
-                          maxLength={120}
-                          onChange={(event) =>
-                            setApprovalTitle(event.target.value)
-                          }
-                          required
-                          value={approvalTitle}
-                        />
-                      </label>
-                      <label>
-                        Approved summary
-                        <textarea
-                          maxLength={2_000}
-                          onChange={(event) =>
-                            setApprovalSummary(event.target.value)
-                          }
-                          required
-                          rows={4}
-                          value={approvalSummary}
-                        />
-                      </label>
-                      <label>
-                        Approved evidence
-                        <textarea
-                          maxLength={2_000}
-                          onChange={(event) =>
-                            setApprovalEvidence(event.target.value)
-                          }
-                          required
-                          rows={3}
-                          value={approvalEvidence}
-                        />
-                      </label>
-                      <label>
-                        Confidence
-                        <input
-                          max={100}
-                          min={0}
-                          onChange={(event) =>
-                            setApprovalConfidence(Number(event.target.value))
-                          }
-                          required
-                          type="number"
-                          value={approvalConfidence}
-                        />
-                      </label>
-                      <label>
-                        Review note
-                        <input
-                          maxLength={2_000}
-                          onChange={(event) =>
-                            setApprovalReviewNote(event.target.value)
-                          }
-                          placeholder="Optional note"
-                          value={approvalReviewNote}
-                        />
-                      </label>
-                      <div className="card-actions">
-                        <button className="primary-button" type="submit">
-                          Save approved Vaenyx Me
-                        </button>
-                        <button
-                          className="text-button"
-                          onClick={() => setEditingCandidateId(null)}
-                          type="button"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <div className="card-actions">
-                      <button
-                        className="primary-button"
-                        onClick={() =>
-                          void approveCandidate(candidate, {
-                            title: candidate.title,
-                            summary: candidate.proposedSummary,
-                            evidence: candidate.proposedEvidence,
-                            confidence: candidate.confidence,
-                          })
-                        }
-                        type="button"
-                      >
-                        Approve
-                      </button>
-                      {/* Editing is a profile-proposal affordance. The fact
-                          path takes the slot and the value as proposed and
-                          ignores title, summary and confidence — offering the
-                          form here would be offering edits that get thrown
-                          away without saying so. */}
-                      {candidate.proposedSlot ? null : (
-                        <button
-                          className="text-button"
-                          onClick={() => startApprovalEdit(candidate)}
-                          type="button"
-                        >
-                          Edit and approve
-                        </button>
-                      )}
-                      <button
-                        className="text-button"
-                        onClick={() => void rejectCandidate(candidate)}
-                        type="button"
-                      >
-                        Reject
-                      </button>
-                      <button
-                        className="danger-button"
-                        onClick={() => void removeCandidate(candidate)}
-                        type="button"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          )}
-        </details>
+        {/* The old review queue is gone (Oskar, 2026-08-09). It was 31
+            identically-shaped cards, four buttons each, and a confidence
+            percentage that was a hardcoded constant — and in weeks not one of
+            them was touched. The list above is the same data and the same two
+            outcomes; what it drops is the homework. */}
 
         {reviewedCandidates.length > 0 ? (
             <section className="recent-section">

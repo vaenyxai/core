@@ -172,8 +172,8 @@ export function createVaenyxMeCandidate(
     .prepare(
       `INSERT INTO vaenyx_me_candidates (
         id, category, title, proposed_summary, proposed_evidence, source_type,
-        source_id, confidence, status, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?)`,
+        source_id, confidence, status, created_by, mode_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)`,
     )
     .run(
       id,
@@ -185,6 +185,9 @@ export function createVaenyxMeCandidate(
       input.sourceId ?? null,
       input.confidence,
       ownerId,
+      // Which Mode this belongs to. NULL is User Mode and is a real value
+      // here, not "unknown" — it is what every existing row already means.
+      input.modeId ?? null,
     );
 
   return mapCandidate(getCandidateRow(database, id)!);
@@ -281,6 +284,7 @@ async function extractTrait(
 export async function scanVaenyxMeFromTasks(
   database: DatabaseHandle,
   ownerId: string,
+  modeId: string | null,
   signal?: AbortSignal,
 ): Promise<{ created: number }> {
   const tasks = database.sqlite
@@ -289,6 +293,8 @@ export async function scanVaenyxMeFromTasks(
        FROM tasks
        WHERE status = 'completed'
          AND TRIM(result) != ''
+         -- IS, not =, because User Mode is NULL and = never matches NULL.
+         AND mode_id IS ?
          AND id NOT IN (
            SELECT source_id FROM vaenyx_me_candidates
            WHERE source_type = 'task_result' AND source_id IS NOT NULL
@@ -296,7 +302,7 @@ export async function scanVaenyxMeFromTasks(
        ORDER BY created_at DESC
        LIMIT 4`,
     )
-    .all() as unknown as ScanTaskRow[];
+    .all(modeId) as unknown as ScanTaskRow[];
 
   let created = 0;
   for (const task of tasks) {
@@ -317,6 +323,7 @@ export async function scanVaenyxMeFromTasks(
         sourceType: "task_result",
         sourceId: task.id,
         confidence: 45,
+        modeId,
       },
       ownerId,
     );
@@ -335,6 +342,7 @@ interface ScanChatRow {
 export async function scanVaenyxMeFromChats(
   database: DatabaseHandle,
   ownerId: string,
+  modeId: string | null,
   signal?: AbortSignal,
 ): Promise<{ created: number }> {
   const conversations = database.sqlite
@@ -342,6 +350,8 @@ export async function scanVaenyxMeFromChats(
       `SELECT c.id, c.title
        FROM ask_vaenyx_conversations c
        WHERE c.owner_id = ?
+         -- IS, not =, because User Mode is NULL and = never matches NULL.
+         AND c.mode_id IS ?
          AND c.id NOT IN (
            SELECT source_id FROM vaenyx_me_candidates
            WHERE source_type = 'chat_history' AND source_id IS NOT NULL
@@ -353,7 +363,7 @@ export async function scanVaenyxMeFromChats(
        ORDER BY c.updated_at DESC
        LIMIT 4`,
     )
-    .all(ownerId) as unknown as ScanChatRow[];
+    .all(ownerId, modeId) as unknown as ScanChatRow[];
 
   let created = 0;
   for (const conversation of conversations) {
@@ -387,6 +397,7 @@ export async function scanVaenyxMeFromChats(
         sourceType: "chat_history",
         sourceId: conversation.id,
         confidence: 40,
+        modeId,
       },
       ownerId,
     );
@@ -400,10 +411,21 @@ export async function scanVaenyxMeFromChats(
 export async function scanVaenyxMe(
   database: DatabaseHandle,
   ownerId: string,
+  modeId: string | null,
   signal?: AbortSignal,
 ): Promise<{ created: number }> {
-  const fromTasks = await scanVaenyxMeFromTasks(database, ownerId, signal);
-  const fromChats = await scanVaenyxMeFromChats(database, ownerId, signal);
+  const fromTasks = await scanVaenyxMeFromTasks(
+    database,
+    ownerId,
+    modeId,
+    signal,
+  );
+  const fromChats = await scanVaenyxMeFromChats(
+    database,
+    ownerId,
+    modeId,
+    signal,
+  );
   return { created: fromTasks.created + fromChats.created };
 }
 
@@ -414,7 +436,10 @@ export async function autoScanVaenyxMe(database: DatabaseHandle): Promise<void> 
     .prepare("SELECT id FROM owners ORDER BY created_at ASC LIMIT 1")
     .get() as { id: string } | undefined;
   if (!owner) return;
-  await scanVaenyxMe(database, owner.id);
+  // The background pass runs as the Owner in User Mode. It must not reach into
+  // a Custom Mode: nobody is looking at that screen, and a leak made by a timer
+  // is one nobody would ever catch.
+  await scanVaenyxMe(database, owner.id, null);
 }
 
 export function approveVaenyxMeCandidate(

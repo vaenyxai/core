@@ -689,6 +689,9 @@ export const CreateVaenyxMeCandidateRequestSchema = Type.Object(
       Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     ),
     confidence: Type.Integer({ minimum: 0, maximum: 100 }),
+    // Which Mode the proposal belongs to. NULL is User Mode and is a real
+    // value, not "unknown" — items and counts must never cross this line.
+    modeId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );

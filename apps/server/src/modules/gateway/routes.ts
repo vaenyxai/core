@@ -3690,7 +3690,11 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      await scanVaenyxMe(context.database, owner.id);
+      // Scoped to the Mode the Owner is actually in. User Mode is the god
+      // view for everything else, but not for this: reading a household
+      // member's chats to build a picture of the Owner is not oversight, it is
+      // the wrong person's data in the wrong place.
+      await scanVaenyxMe(context.database, owner.id, owner.modeId ?? null);
       return listVaenyxMeCandidates(context.database);
     },
   );
