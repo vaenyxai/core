@@ -9,7 +9,7 @@ import type { DatabaseHandle } from "../../db/database.js";
 
 interface VaenyxThreadRow {
   id: string;
-  kind: "chat" | "task";
+  kind: "chat" | "task" | "inbox";
   title: string;
   project_id: string | null;
   project_name: string | null;

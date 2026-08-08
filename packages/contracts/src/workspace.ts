@@ -472,6 +472,11 @@ export const CreateAskVaenyxMessageResponseSchema = Type.Object(
 export const VaenyxThreadKindSchema = Type.Union([
   Type.Literal("chat"),
   Type.Literal("task"),
+  // The one permanent conversation per Mode that Vaenyx speaks from. Protected
+  // against delete, archive and duplication ON THE SERVER, from this kind —
+  // never inferred from a title or a hardcoded id, because both of those are
+  // things an Owner can change.
+  Type.Literal("inbox"),
 ]);
 
 export const VaenyxThreadStatusSchema = Type.Union([
