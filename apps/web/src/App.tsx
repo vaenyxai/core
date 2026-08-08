@@ -15621,6 +15621,148 @@ function FactsSection() {
   );
 }
 
+/**
+ * WHAT VAENYX NOTICED, BY DAY — a ledger, not an inbox.
+ *
+ * The old surface was a review queue: 31 identically-shaped cards, each with a
+ * title, a summary, an evidence quote, a category, a confidence percentage and
+ * four buttons demanding a verdict. Nobody touched a single one of them in
+ * weeks, and the research says that is the mechanism working as designed, not
+ * a copywriting failure:
+ *
+ *   • No shipping product gates inferred personal detail behind per-item
+ *     approval. ChatGPT, Claude, Gemini, Kin all write first and let you
+ *     correct after. The one product that shipped an approval prompt got a bug
+ *     report asking for its removal.
+ *   • Cost of interaction governs how much feedback happens, not motivation:
+ *     Netflix's five stars to thumbs was a 200% rise in ratings.
+ *   • 31 identical cards is the worst case in the habituation literature —
+ *     attention to repeated uniform prompts measurably decays within a week.
+ *   • Google's own guidance calls a numeric confidence risky. Ours was worse
+ *     than risky: 40 and 45 are hardcoded constants, so the number on every
+ *     card carried no information at all.
+ *
+ * What survives from the old card is the one thing it had that Facebook and
+ * Google do not offer: the Owner's own sentence, quoted. Showing somebody their
+ * own words back measurably lowers concern; showing them a verdict about
+ * themselves raises it. So the quote leads and the label follows it.
+ *
+ * The gate is UNCHANGED here. Nothing is approved by looking at this, and the
+ * buttons still do exactly what they did. This is the same data, read as a
+ * diary instead of as homework — so the shape can be judged before anybody
+ * decides whether the gate itself should move.
+ */
+function VaenyxMeLedger({
+  candidates,
+  onApprove,
+  onReject,
+}: {
+  candidates: VaenyxMeCandidate[];
+  onApprove: (candidate: VaenyxMeCandidate) => void;
+  onReject: (candidate: VaenyxMeCandidate) => void;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+
+  // Newest first, then grouped by the day it was noticed. A date somebody can
+  // place ("yesterday") beats a timestamp they have to decode.
+  const days = new Map<string, VaenyxMeCandidate[]>();
+  for (const candidate of [...candidates].sort((left, right) =>
+    right.createdAt.localeCompare(left.createdAt),
+  )) {
+    const day = candidate.createdAt.slice(0, 10);
+    const list = days.get(day);
+    if (list) list.push(candidate);
+    else days.set(day, [candidate]);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const dayLabel = (day: string) =>
+    day === today
+      ? zh
+        ? "今天"
+        : "Today"
+      : day === yesterday
+        ? zh
+          ? "昨天"
+          : "Yesterday"
+        : day;
+
+  if (candidates.length === 0) {
+    return (
+      <p className="library-note">
+        {zh
+          ? "最近没有注意到什么新的。"
+          : "Nothing new noticed lately."}
+      </p>
+    );
+  }
+
+  return (
+    <div className="me-ledger">
+      {[...days.entries()].map(([day, entries]) => (
+        <section className="me-ledger-day" key={day}>
+          <p className="me-ledger-date">{dayLabel(day)}</p>
+          {entries.map((candidate) => (
+            <article className="me-ledger-item" key={candidate.id}>
+              {/* THE QUOTE LEADS. It is the Owner's own sentence, and it is the
+                  one thing on the old card that was doing any work — better
+                  provenance than Facebook or Google offer for the same kind of
+                  guess. The claim reads as a consequence of it, not as a
+                  verdict handed down. */}
+              <blockquote className="me-ledger-quote">
+                {candidate.proposedEvidence}
+              </blockquote>
+              <p className="me-ledger-claim">
+                {candidate.proposedSlot ? (
+                  <>
+                    <span className="me-ledger-kind">
+                      {zh ? "想记住" : "Wants to remember"}
+                    </span>{" "}
+                    <code>{candidate.proposedSlot}</code> ={" "}
+                    {candidate.proposedValue}
+                    {candidate.proposedEventTime
+                      ? ` · ${zh ? "从" : "since"} ${candidate.proposedEventTime}`
+                      : ""}
+                  </>
+                ) : (
+                  <>
+                    <span className="me-ledger-kind">
+                      {zh ? "读出来的" : "Read as"}
+                    </span>{" "}
+                    {candidate.proposedSummary}
+                  </>
+                )}
+              </p>
+              {/* Two actions, not four, and no percentage. The old card asked
+                  for a verdict on a number that was a constant. */}
+              <div className="me-ledger-actions">
+                <button
+                  className="text-button"
+                  onClick={() => onApprove(candidate)}
+                  type="button"
+                >
+                  {zh ? "对,记住" : "Yes, keep it"}
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => onReject(candidate)}
+                  type="button"
+                >
+                  {zh ? "这条不对" : "That's wrong"}
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function VaenyxMePanel({
   ownerName,
   onProfileRefresh,
@@ -15947,11 +16089,39 @@ function VaenyxMePanel({
         <section className="memory-list-section">
           <div className="section-title">
             <div>
-              <p className="eyebrow">Owner approval required</p>
-              <h2>Vaenyx Me review queue</h2>
+              <p className="eyebrow">{zh ? "最近" : "Lately"}</p>
+              <h2>{zh ? "Vaenyx 注意到的" : "What Vaenyx noticed"}</h2>
             </div>
             <span className="count-chip">{pendingCandidates.length}</span>
           </div>
+          <p className="settings-card-copy">
+            {zh
+              ? "这些还没生效。每条底下是你自己说过的原话 —— 先看那句,再看它读出了什么。"
+              : "None of these are in use yet. Under each one is your own sentence — read that first, then what it made of it."}
+          </p>
+          <VaenyxMeLedger
+            candidates={pendingCandidates}
+            onApprove={(candidate) =>
+              void approveCandidate(candidate, {
+                title: candidate.title,
+                summary: candidate.proposedSummary,
+                evidence: candidate.proposedEvidence,
+                confidence: candidate.confidence,
+              })
+            }
+            onReject={(candidate) => void rejectCandidate(candidate)}
+          />
+        </section>
+
+        {/* The old queue, kept intact and folded away while the two shapes are
+            compared. It is the same data and the same buttons — including
+            "Edit and approve", which the ledger deliberately does not offer. */}
+        <details className="me-old-queue">
+          <summary>
+            {zh
+              ? "旧的审批列表(对照用)"
+              : "The old review queue (for comparison)"}
+          </summary>
           {pendingCandidates.length === 0 ? (
             <div className="empty-state">
               <strong>No Vaenyx Me candidates waiting</strong>
@@ -16144,8 +16314,9 @@ function VaenyxMePanel({
               ))}
             </div>
           )}
+        </details>
 
-          {reviewedCandidates.length > 0 ? (
+        {reviewedCandidates.length > 0 ? (
             <section className="recent-section">
               <div className="section-title">
                 <div>
@@ -16167,8 +16338,7 @@ function VaenyxMePanel({
                 ))}
               </div>
             </section>
-          ) : null}
-        </section>
+        ) : null}
       </div>
     </div>
   );
