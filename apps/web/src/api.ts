@@ -2016,13 +2016,20 @@ export function draftRecipeEdit(
   );
 }
 
+// forkName is only read when the Method came from the community: the server
+// never edits somebody else's Method in place, it makes this household's copy
+// under this name and leaves the original installed.
 export function updateMethodRecipe(
   methodId: string,
   recipe: string,
+  forkName?: string,
 ): Promise<UpdateRecipeResponse> {
   return requestJson<UpdateRecipeResponse>(
     `/v1/methods/${encodeURIComponent(methodId)}/recipe`,
-    { method: "PUT", body: JSON.stringify({ recipe }) },
+    {
+      method: "PUT",
+      body: JSON.stringify(forkName ? { recipe, forkName } : { recipe }),
+    },
   );
 }
 

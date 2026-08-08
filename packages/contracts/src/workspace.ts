@@ -1368,6 +1368,22 @@ export const ItemOriginSchema = Type.Optional(
   Type.Union([Type.Literal("self"), Type.Literal("community")]),
 );
 
+// WHERE A CHANGED COPY CAME FROM. Written by the server the moment somebody
+// edits a community Method, never by a form, and never removable. Community
+// content is CC BY 4.0: a derivative is allowed WITH credit, so this field is
+// the thing that makes an edited copy legitimate to keep and to publish.
+export const DerivedFromSchema = Type.Object(
+  {
+    // The original author's Vaenyx identity. Empty if it was never published.
+    author: Type.String(),
+    id: Type.String(),
+    version: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export type DerivedFrom = Static<typeof DerivedFromSchema>;
+
 export const LibraryMethodSummarySchema = Type.Object(
   {
     id: Type.String(),
@@ -1380,6 +1396,8 @@ export const LibraryMethodSummarySchema = Type.Object(
     // Owner browses by tag and a method shows under every tag it has.
     tags: Type.Array(Type.String()),
     origin: ItemOriginSchema,
+    // Present only on a copy made by editing somebody else's Method.
+    derivedFrom: Type.Optional(DerivedFromSchema),
   },
   { additionalProperties: false },
 );
@@ -1396,6 +1414,7 @@ export const LibraryMethodSchema = Type.Object(
     owner: Type.String(),
     tags: Type.Array(Type.String()),
     origin: ItemOriginSchema,
+    derivedFrom: Type.Optional(DerivedFromSchema),
     recipe: Type.String(),
     inputSchema: Type.Unknown(),
     outputSchema: Type.Unknown(),
@@ -1903,6 +1922,11 @@ export const RecipeEditDraftSchema = Type.Object(
   {
     methodId: Type.String(),
     methodName: Type.String(),
+    // Whose Method this is. A community one is not edited in place - approving
+    // the change makes this household's own copy - so the approval screen has
+    // to be able to say so, and to name the author being credited.
+    methodOrigin: ItemOriginSchema,
+    methodOwner: Type.String(),
     current: Type.String(),
     proposed: Type.String(),
     diff: Type.Array(RecipeDiffLineSchema),
@@ -1915,6 +1939,10 @@ export const RecipeEditDraftSchema = Type.Object(
 export const UpdateRecipeRequestSchema = Type.Object(
   {
     recipe: Type.String({ minLength: 1 }),
+    // Editing a COMMUNITY Method never changes it - it makes this household's
+    // own copy, and this is what that copy is called. Absent (or editing a
+    // Method that is already yours) writes the edit in place.
+    forkName: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
   },
   { additionalProperties: false },
 );
@@ -1925,6 +1953,9 @@ export const UpdateRecipeResponseSchema = Type.Object(
     contentHash: Type.String(),
     // App Profiles whose grant no longer matches, and must grant again.
     staleGrants: Type.Integer(),
+    // Set when the edit went into a new copy instead: the id of the community
+    // Method it came from, which is still installed and still the author's.
+    forkedFrom: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

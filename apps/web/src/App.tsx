@@ -5890,6 +5890,9 @@ function AskVaenyxPanel({
   const [recipeEdit, setRecipeEdit] = useState<{
     conversationId: string;
     draft: RecipeEditDraft;
+    // Only used when the draft is against a community Method: what this
+    // household's own copy will be called.
+    forkName: string;
   } | null>(null);
   const [applyingEdit, setApplyingEdit] = useState(false);
   // Voice (dev.133): the mic shows once a voice connection exists; the speaker
@@ -6773,7 +6776,16 @@ function AskVaenyxPanel({
         ).catch(() => {});
         return;
       }
-      setRecipeEdit({ conversationId, draft });
+      setRecipeEdit({
+        conversationId,
+        draft,
+        forkName:
+          draft.methodOrigin === "community"
+            ? lang === "zh"
+              ? `${draft.methodName}（我的）`
+              : `${draft.methodName} (mine)`
+            : "",
+      });
     } catch {
       await appendConversationNote(
         conversationId,
@@ -6789,7 +6801,13 @@ function AskVaenyxPanel({
     setApplyingEdit(true);
     const { conversationId, draft } = recipeEdit;
     try {
-      const result = await updateMethodRecipe(draft.methodId, draft.proposed);
+      const result = await updateMethodRecipe(
+        draft.methodId,
+        draft.proposed,
+        draft.methodOrigin === "community"
+          ? recipeEdit.forkName.trim() || draft.methodName
+          : undefined,
+      );
       const changed = draft.diff.filter((line) => line.kind !== "same").length;
       const regrant =
         result.staleGrants > 0
@@ -6798,11 +6816,18 @@ function AskVaenyxPanel({
             : ` ${result.staleGrants} app grant(s) for this Method need granting again.`
           : "";
       setRecipeEdit(null);
+      // A fork is a different event and needs a different sentence: the Owner
+      // has to leave this knowing a NEW thing exists and the old one is intact.
+      const copyName = recipeEdit.forkName.trim() || draft.methodName;
       const note = await appendConversationNote(
         conversationId,
-        lang === "zh"
-          ? `✔ 「${draft.methodName}」的步骤已更新(${changed} 行有变动)。${regrant}`
-          : `✔ "${draft.methodName}" updated (${changed} line(s) changed).${regrant}`,
+        result.forkedFrom
+          ? lang === "zh"
+            ? `✔ 「${draft.methodName}」是社区的,所以改动存成了你自己的副本「${copyName}」(${changed} 行有变动)。原版原样保留,还会继续收到作者的更新。`
+            : `✔ "${draft.methodName}" is the community's, so the change was saved as your own copy "${copyName}" (${changed} line(s) changed). Theirs is untouched and still receives its author's updates.`
+          : lang === "zh"
+            ? `✔ 「${draft.methodName}」的步骤已更新(${changed} 行有变动)。${regrant}`
+            : `✔ "${draft.methodName}" updated (${changed} line(s) changed).${regrant}`,
       );
       setMessages((current) =>
         activeConversationId === conversationId ? [...current, note] : current,
@@ -8171,7 +8196,33 @@ function AskVaenyxPanel({
             title={recipeEdit.draft.methodName}
             variant="doc"
           >
-            <p className="settings-card-copy">{t("legal.notice.method.edit")}</p>
+            {/* Editing somebody else's Method does not edit it. The notice
+                says so BEFORE the diff, because by the time a person has read
+                the changed lines they have already decided. */}
+            <p className="settings-card-copy">
+              {recipeEdit.draft.methodOrigin === "community"
+                ? t("method.fork.notice")
+                : t("legal.notice.method.edit")}
+            </p>
+            {recipeEdit.draft.methodOrigin === "community" ? (
+              <label className="fork-name-field">
+                <span className="method-picker-label">
+                  {t("method.fork.name")}
+                </span>
+                <input
+                  maxLength={120}
+                  onChange={(event) =>
+                    setRecipeEdit((current) =>
+                      current
+                        ? { ...current, forkName: event.target.value }
+                        : current,
+                    )
+                  }
+                  type="text"
+                  value={recipeEdit.forkName}
+                />
+              </label>
+            ) : null}
             <div className="recipe-diff">
               {recipeEdit.draft.diff.map((line, index) => (
                 <div
@@ -17489,6 +17540,21 @@ function MethodDetail({
         )}
         {renameError ? <p className="form-error">{renameError}</p> : null}
         <p className="settings-card-copy">{method.description}</p>
+        {/* Where a changed copy came from. Written by the server at the moment
+            of the fork, shown here, and removable by nobody — community content
+            is CC BY 4.0, so the credit is the condition of keeping it. It rides
+            in method.json, so it travels with the item if this is published. */}
+        {method.derivedFrom ? (
+          <p className="fork-credit">
+            {(method.derivedFrom.author
+              ? t("method.fork.credit").replace(
+                  "{author}",
+                  method.derivedFrom.author,
+                )
+              : t("method.fork.credit.unknown")
+            ).replace("{id}", method.derivedFrom.id)}
+          </p>
+        ) : null}
         {method.origin === "community" ? (
           <CommunityUpdateNotice
             id={method.id}

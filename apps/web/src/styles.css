@@ -8034,3 +8034,23 @@ html, body { overscroll-behavior-y: none; }
 .create-purpose-option:hover {
   border-color: var(--text-faint);
 }
+
+/* WHERE A CHANGED COPY CAME FROM. Quiet, but never hidden: it is a permanent
+   condition of keeping somebody else's work, not a warning. */
+.fork-credit {
+  margin: var(--space-1) 0 0;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+/* Naming your copy, on the approval screen. Sits between the notice and the
+   diff because that is the order the decision is made in. */
+.fork-name-field {
+  display: block;
+  margin: var(--space-3) 0;
+}
+
+.fork-name-field input {
+  width: 100%;
+  margin-top: var(--space-1);
+}

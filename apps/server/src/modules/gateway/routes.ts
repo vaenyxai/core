@@ -471,6 +471,13 @@ import {
   setUpdatePolicy,
 } from "../core/install-ledger.js";
 import { methodContentHash } from "../core/methods.js";
+import {
+  forkMethod,
+  freeForkId,
+  mayReturnCorrectionsUpstream,
+  suggestForkName,
+  toFolderId,
+} from "../core/fork-method.js";
 import { approveFactCandidate } from "../core/facts-extract.js";
 import {
   listCurrentFacts,
@@ -8666,6 +8673,76 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // EDITING SOMEBODY ELSE'S RECIPE MAKES A COPY THAT IS YOURS.
+  //
+  // The rule, in one sentence: examples flow to the author of the recipe that
+  // produced them. An unmodified community Method sends corrections upstream;
+  // a modified one cannot, because those corrections describe a recipe that
+  // author never wrote and they have no way to detect it. And if the modified
+  // one is published, its installers send corrections to whoever modified it,
+  // because that is now the author of the recipe they run.
+  //
+  // That only holds if a changed copy can never still claim to be the
+  // community item — so the fork happens when it is EDITED, not when an update
+  // happens to notice. The original stays installed beside it: the Owner keeps
+  // getting the author's fixes for it, and any Routine still pointing at it
+  // keeps working.
+  app.post<{ Body: { methodId: string; name: string } }>(
+    "/v1/library/methods/fork",
+    {
+      schema: {
+        body: Type.Object(
+          {
+            methodId: Type.String({ minLength: 1 }),
+            name: Type.String({ minLength: 1, maxLength: 120 }),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      const forkId = toFolderId(request.body.name, `${request.body.methodId}-mine`);
+      try {
+        const result = forkMethod({
+          forkId,
+          forkName: request.body.name.trim(),
+          libraryDirectory: context.config.libraryDirectory,
+          originalId: request.body.methodId,
+        });
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "library.method.fork",
+          decision: "allowed",
+          reason: `Owner made "${forkId}" from the community Method "${request.body.methodId}"; the original is kept.`,
+          resourceType: "method",
+          resourceId: forkId,
+        });
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (message.startsWith("FORK_ID_TAKEN")) {
+          return reply
+            .code(409)
+            .send({ error: "Something here already has that name." });
+        }
+        if (message.startsWith("METHOD_MISSING")) {
+          return reply.code(404).send({ error: "That Method is not here." });
+        }
+        return reply.code(400).send({ error: "That could not be copied." });
+      }
+    },
+  );
+
   // ---- Community updates: offer, apply, undo ----
   //
   // EVERY ONE OF THESE IS PRESSED BY THE OWNER. There is no timer, no startup
@@ -9354,6 +9431,15 @@ export async function registerGatewayRoutes(
     try {
       if (sharingChoice().mode === "off") return;
       if (!communityItemIdFor(context.config.libraryDirectory, methodId)) return;
+      // 🔴 A FORK NEVER SENDS ANYTHING UPSTREAM. Once the Owner has changed the
+      // recipe, a correction from it describes something its original author
+      // never wrote — and they have no way to tell. Sending it is not a privacy
+      // problem, it is misinformation: their general recipe would be taught
+      // this household's local convention. The corrections stay here, where
+      // the recipe that produced them lives.
+      if (!mayReturnCorrectionsUpstream(context.config.libraryDirectory, methodId)) {
+        return;
+      }
       queueExample(context.database, {
         methodId,
         input: example.input,
@@ -9665,6 +9751,8 @@ export async function registerGatewayRoutes(
       return {
         methodId: method.id,
         methodName: method.name,
+        methodOrigin: method.origin,
+        methodOwner: method.owner,
         current,
         proposed,
         diff,
@@ -9678,6 +9766,13 @@ export async function registerGatewayRoutes(
   // a conversation. This never publishes - publishing is a separate, deliberate
   // acceptance of the Contributor Agreement (ToS 7.2(d)), and an edit that
   // published itself would make those warranties for the Owner without asking.
+  //
+  // EDITING A COMMUNITY METHOD DOES NOT EDIT IT. It makes this household's own
+  // copy, carrying permanent credit to the author, and leaves theirs installed
+  // and untouched. That is not politeness — it is what keeps the flywheel
+  // honest. Corrections flow to the author of the recipe that produced them, so
+  // a changed recipe must stop being theirs at the moment it changes, or it
+  // would send that author corrections describing steps they never wrote.
   app.put<{ Params: { id: string }; Body: UpdateRecipeRequest }>(
     "/v1/methods/:id/recipe",
     {
@@ -9700,11 +9795,48 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
+      const existing = loadMethod(
+        context.config.libraryDirectory,
+        request.params.id,
+      );
+      if (!existing) {
+        return reply.code(404).send({ error: "Method not found." });
+      }
+
+      let targetId = request.params.id;
+      let forkedFrom: string | undefined;
+      if (existing.origin === "community") {
+        // The name the Owner typed on the approval screen; failing that, one
+        // derived from the original — in its own language, since a Chinese
+        // Method with an English suffix reads like a different thing.
+        const forkName =
+          request.body.forkName?.trim() ||
+          suggestForkName(existing.name, /[一-鿿]/.test(existing.name));
+        const forkId = freeForkId(
+          context.config.libraryDirectory,
+          toFolderId(forkName, `${existing.id}-mine`),
+        );
+        try {
+          forkMethod({
+            forkId,
+            forkName,
+            libraryDirectory: context.config.libraryDirectory,
+            originalId: existing.id,
+          });
+        } catch {
+          return reply
+            .code(400)
+            .send({ error: "Your own copy could not be made." });
+        }
+        targetId = forkId;
+        forkedFrom = existing.id;
+      }
+
       let updated;
       try {
         updated = updateMethodRecipe(
           context.config.libraryDirectory,
-          request.params.id,
+          targetId,
           request.body.recipe,
         );
       } catch (error) {
@@ -9716,8 +9848,10 @@ export async function registerGatewayRoutes(
       }
 
       // Owner's own method: every grant follows the edit right here, so the
-      // reply reports zero stale grants and no app ever sees a 409. Community-
-      // origin methods keep the explicit re-grant flow.
+      // reply reports zero stale grants and no app ever sees a 409. A fork is
+      // "self" too, but it is a brand new id with no grants on it — and the
+      // community original it came from keeps every grant it had, still
+      // pointing at the unchanged recipe those apps were tested against.
       if (updated.origin === "self") {
         relockMethodGrants(context.database, updated.id, updated.contentHash);
       }
@@ -9728,12 +9862,11 @@ export async function registerGatewayRoutes(
         actorName: owner.name,
         action: "library.method.recipe.edit",
         decision: "allowed",
-        reason:
-          updated.origin === "self"
-            ? "Owner approved a recipe edit from chat; grants follow their own edit automatically."
-            : "Owner approved a recipe edit from chat; the content hash moved, so granted App Profiles must grant again.",
+        reason: forkedFrom
+          ? `Owner edited the community Method "${forkedFrom}", so the change went into their own copy "${updated.id}" with credit to the author; the community one is untouched.`
+          : "Owner approved a recipe edit from chat; grants follow their own edit automatically.",
         resourceType: "method",
-        resourceId: request.params.id,
+        resourceId: updated.id,
       });
 
       return {
@@ -9744,6 +9877,7 @@ export async function registerGatewayRoutes(
           updated.id,
           updated.contentHash,
         ),
+        ...(forkedFrom ? { forkedFrom } : {}),
       };
     },
   );

@@ -242,6 +242,14 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "This rewrites what the Method tells the model to do — its steps only. Its inputs, outputs and permissions are unchanged. Apps you granted this Method must be granted it again, because what they were granted has changed. Nothing is published: your Library copy is the only one affected.",
     "method.edit.apply": "Apply These Changes",
+    // Editing somebody else's Method does not edit it. It makes your own copy,
+    // permanently crediting them — which is what CC BY 4.0 asks for, and what
+    // keeps corrections flowing to the author of the recipe that produced them.
+    "method.fork.notice":
+      "This Method came from the community, so your change is saved as your own copy. Theirs stays exactly as it is and keeps receiving their updates. Your copy carries their name permanently, and from now on its corrections stay here instead of going back to them.",
+    "method.fork.name": "Name your copy",
+    "method.fork.credit": "Adapted from \"{id}\" by {author}",
+    "method.fork.credit.unknown": "Adapted from \"{id}\"",
     // Part L surfaces. "Import the instructions from a Skill" — never
     // "Skill compatible" or "runs Skills" (L4).
     "threads.bulk.count": "{n} selected",
@@ -590,6 +598,11 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.notice.method.edit":
       "这只会改写 Method 交给模型的指令(即它的步骤),不会改动它的输入、输出与权限。已授权使用该 Method 的 app 需要重新授权,因为被授权的内容已经变了。这不会发布任何东西:只影响你资源库里的这一份。",
     "method.edit.apply": "应用这些改动",
+    "method.fork.notice":
+      "这个 Method 来自社区,所以你的改动会存成你自己的副本。对方那一份原样保留,也会继续收到作者的更新。你的副本会永久标注作者,并且从现在起,它的修正只留在本机,不再回传给作者。",
+    "method.fork.name": "给你的副本起个名字",
+    "method.fork.credit": "改自 {author} 的「{id}」",
+    "method.fork.credit.unknown": "改自「{id}」",
     "threads.bulk.count": "已选 {n} 个",
     "threads.bulk.archive": "归档",
     "threads.bulk.delete": "删除",

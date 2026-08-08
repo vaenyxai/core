@@ -176,6 +176,11 @@ Read this inside the app: **Settings → Manual**.
   become a Routine. Vaenyx drafts it and offers a test run before saving.
 - **Where they live** — the **Library** screen.
 - **Edit a recipe** — Library → the Method → **Edit recipe**.
+- **Editing a Method that came from the community makes your own copy.** Theirs
+  is never changed: it stays installed, and it keeps receiving its author's
+  updates. Your copy is named by you, credits the original author permanently,
+  and from then on its corrections stay on this computer instead of going back
+  to that author — they describe your steps, not theirs.
 - **Test run** — the same screen. It runs for real but changes nothing. If the
   Method reached for something it did not get, the result says so above the
   output and names which of the three layers said no.
@@ -594,5 +599,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.3.8** · last updated 2026-08-08.
+Manual for **v0.4.0** · last updated 2026-08-09.
 Keep this file up to date whenever a feature changes.
