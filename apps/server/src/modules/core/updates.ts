@@ -72,7 +72,12 @@ export function compareVersions(left: string, right: string): number {
   };
   const a = parse(left);
   const b = parse(right);
-  for (let index = 0; index < 3; index += 1) {
+  // FOUR segments, not three (Oskar, 2026-08-09). The build number is the
+  // fourth: 0.4.0.8 is the eighth build of 0.4.0, and a release bumps the
+  // third and resets it (0.4.1.0). Comparing only three would have made every
+  // build of the same release compare EQUAL, so "there is a newer version"
+  // would have answered no to all of them.
+  for (let index = 0; index < 4; index += 1) {
     const difference = (a.numbers[index] ?? 0) - (b.numbers[index] ?? 0);
     if (difference !== 0) return difference > 0 ? 1 : -1;
   }

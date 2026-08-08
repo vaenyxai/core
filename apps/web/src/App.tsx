@@ -9543,6 +9543,11 @@ function Modal({
   title,
   onClose,
   children,
+  // One control that belongs to the dialog as a whole rather than to any
+  // section of it — publishing, today. It sits on the title row beside the ×
+  // so it is reachable without scrolling a long body, and it is small on
+  // purpose: it is a way out of here, like the × next to it, not a heading.
+  headerAction,
   // "doc" is for long-form reading (the legal documents): a wide card that
   // fills the height it is given, instead of the 420px confirm-dialog box.
   variant,
@@ -9550,6 +9555,7 @@ function Modal({
   title: string;
   onClose: () => void;
   children: ReactNode;
+  headerAction?: ReactNode;
   variant?: "doc";
 }) {
   const idRef = useRef(Symbol("modal"));
@@ -9636,6 +9642,9 @@ function Modal({
       <div className={variant === "doc" ? "modal-card doc" : "modal-card"}>
         <div className="modal-head">
           <h2>{title}</h2>
+          {headerAction ? (
+            <div className="modal-head-action">{headerAction}</div>
+          ) : null}
           <button
             aria-label="Close"
             className="modal-close"
@@ -16253,9 +16262,15 @@ function buildInputSkeleton(schema: unknown): Record<string, unknown> {
 // operative document), and the warranty checkbox — un-pre-selected and actively
 // confirmed on EVERY publish; the publish button stays disabled until ticked.
 function PublishConfirmDialog({
+  notes,
   onCancel,
   onConfirm,
 }: {
+  // The "you have edited this since publishing" (G5) and "this came from a
+  // Skill" (L2) notices. They used to live beside the publish button on the
+  // card; the button is a small one in a title bar now, so they travel here —
+  // in front of the decision, which is where they were always meant to be.
+  notes?: ReactNode;
   onCancel: () => void;
   onConfirm: (acceptance: PublishAcceptance) => void;
 }) {
@@ -16269,6 +16284,7 @@ function PublishConfirmDialog({
         className="legal-doc-body"
         style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
       >
+        {notes}
         <p className="settings-card-copy">{t("legal.notice.publish")}</p>
         <p className="settings-card-copy" style={{ fontSize: "var(--fs-sm)" }}>
           {t("legal.notice.publish.contributorTerms")}{" "}
@@ -16543,7 +16559,18 @@ function PublishSignIn({ state }: { state: PublishState }) {
   );
 }
 
-function MethodPublishCard({ method }: { method: LibraryMethod }) {
+function MethodPublishCard({
+  method,
+  compact,
+}: {
+  method: LibraryMethod;
+  // Title-bar mode (Oskar, 2026-08-09): one small button beside the ×, not a
+  // card at the top of the body. Everything it used to say beside the button
+  // still gets said — the notices ride into the confirm dialog, and signing in
+  // opens the same shared block in its own dialog, so the G3a overseas consent
+  // is never bypassed.
+  compact?: boolean;
+}) {
   const { lang, t } = useI18n();
   const [state, setState] = useState<PublishState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -16554,6 +16581,7 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
   // publish comes back refused; cleared the moment the Owner answers, either
   // way (copy pack N3).
   const [wanted, setWanted] = useState<string[] | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -16570,6 +16598,9 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
   }, []);
 
   if (state && !state.configured) {
+    // Nothing to publish TO. In the title bar that means no button at all
+    // rather than a button that explains why it cannot work.
+    if (compact) return null;
     return (
       <section className="settings-card">
         <p className="eyebrow">{t("publish.title")}</p>
@@ -16636,6 +16667,112 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
     }
   }
 
+  // N3 — asked BEFORE anything is written down. The refusal used to count the
+  // attempt on its way past and then announce that it had; a record made and
+  // reported afterwards is not a choice. Closing the window without answering
+  // counts nothing, exactly like saying no. Shared by both layouts, because a
+  // consent question that only one of them asks is not a consent question.
+  function renderWanted() {
+    return (
+      <Modal
+        onClose={() => setWanted(null)}
+        title={t("legal.consent.capability.wanted.title")}
+      >
+        {t("legal.consent.capability.wanted")
+          .split("\n\n")
+          .map((paragraph) => (
+            <p className="settings-card-copy" key={paragraph.slice(0, 24)}>
+              {paragraph}
+            </p>
+          ))}
+        <div className="modal-actions">
+          <button
+            className="secondary-button"
+            onClick={() => void answerWanted(true)}
+            type="button"
+          >
+            {t("legal.consent.capability.wanted.accept")}
+          </button>
+          <button
+            className="secondary-button"
+            onClick={() => void answerWanted(false)}
+            type="button"
+          >
+            {t("legal.consent.capability.wanted.decline")}
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
+  // The notices that used to sit beside the button. They go with the decision
+  // now, into the confirm dialog, rather than being dropped when the button
+  // moved into the title bar.
+  const notes = (
+    <>
+      {/* G5: states the fact, and offers nothing. Republishing is a fresh
+          acceptance of the Contributor Agreement, so it stays the Owner's
+          deliberate act — never a nudge, never automatic. */}
+      {state?.staleMethodIds.includes(method.id) ? (
+        <p className="context-disclaimer">
+          {t("legal.notice.publish.localChanges")}
+        </p>
+      ) : null}
+      {/* L2: fires on the Method carrying import provenance, never on the
+          publisher remembering where it came from. */}
+      {state?.importedMethodIds.includes(method.id) ? (
+        <p className="context-disclaimer">
+          {t("legal.notice.skill.importedPublish")}
+        </p>
+      ) : null}
+    </>
+  );
+
+  if (compact) {
+    return (
+      <>
+        {!state ? null : !state.signedInAs ? (
+          <button
+            className="secondary-button small-button"
+            onClick={() => setSigningIn(true)}
+            type="button"
+          >
+            {t("publish.button")}
+          </button>
+        ) : (
+          <button
+            className="secondary-button small-button"
+            disabled={busy}
+            onClick={() => setConfirming(true)}
+            type="button"
+          >
+            {busy
+              ? t("publish.publishing")
+              : published
+                ? t("publish.republish")
+                : t("publish.button")}
+          </button>
+        )}
+        {signingIn ? (
+          <Modal onClose={() => setSigningIn(false)} title={t("publish.title")}>
+            <p className="settings-card-copy">{t("publish.intro")}</p>
+            {state ? <PublishSignIn state={state} /> : null}
+          </Modal>
+        ) : null}
+        {confirming ? (
+          <PublishConfirmDialog
+            notes={notes}
+            onCancel={() => setConfirming(false)}
+            onConfirm={(acceptance) => void publish(acceptance)}
+          />
+        ) : null}
+        {wanted ? renderWanted() : null}
+        {error ? <p className="form-error">{error}</p> : null}
+        {done ? <span className="ok-text">{t("publish.done")}</span> : null}
+      </>
+    );
+  }
+
   return (
     <section className="settings-card">
       <p className="eyebrow">{t("publish.title")}</p>
@@ -16696,44 +16833,12 @@ function MethodPublishCard({ method }: { method: LibraryMethod }) {
       {error ? <p className="form-error">{error}</p> : null}
       {confirming ? (
         <PublishConfirmDialog
+          notes={notes}
           onCancel={() => setConfirming(false)}
           onConfirm={(acceptance) => void publish(acceptance)}
         />
       ) : null}
-      {/* N3 — asked BEFORE anything is written down. The refusal used to count
-          the attempt on its way past and then announce that it had; a record
-          made and reported afterwards is not a choice. Closing the window
-          without answering counts nothing, exactly like saying no. */}
-      {wanted ? (
-        <Modal
-          onClose={() => setWanted(null)}
-          title={t("legal.consent.capability.wanted.title")}
-        >
-          {t("legal.consent.capability.wanted")
-            .split("\n\n")
-            .map((paragraph) => (
-              <p className="settings-card-copy" key={paragraph.slice(0, 24)}>
-                {paragraph}
-              </p>
-            ))}
-          <div className="modal-actions">
-            <button
-              className="secondary-button"
-              onClick={() => void answerWanted(true)}
-              type="button"
-            >
-              {t("legal.consent.capability.wanted.accept")}
-            </button>
-            <button
-              className="secondary-button"
-              onClick={() => void answerWanted(false)}
-              type="button"
-            >
-              {t("legal.consent.capability.wanted.decline")}
-            </button>
-          </div>
-        </Modal>
-      ) : null}
+      {wanted ? renderWanted() : null}
     </section>
   );
 }
@@ -16816,7 +16921,6 @@ function RoutineDetail({
   notice,
   onStart,
   published,
-  extras,
 }: {
   summary: LibraryRoutineSummary;
   methods: LibraryMethodSummary[];
@@ -16825,9 +16929,6 @@ function RoutineDetail({
   // it goes at the top where a decision can still be made.
   notice?: ReactNode;
   published: boolean;
-  // Publishing: it belongs to this Routine, so it belongs in the thing you
-  // opened rather than stacked under its card in the list.
-  extras?: ReactNode;
 }) {
   const { t } = useI18n();
   const [full, setFull] = useState<LibraryRoutine | null>(null);
@@ -16926,10 +17027,6 @@ function RoutineDetail({
           </button>
         </div>
       </section>
-      {/* Publishing used to render under EVERY routine card in the list —
-          which, signed out, meant the whole sign-in consent block repeated
-          once per routine. One instance, in the thing it belongs to. */}
-      {extras}
     </div>
   );
 }
@@ -18135,9 +18232,6 @@ function MethodDetail({
         <h2>Permissions &amp; learning</h2>
         <MethodManifest manifest={method.manifest} />
       </section>
-      {/* Publishing last, like the Routine dialog: it is the rarest thing
-          anybody does in here and it was the first thing they met. */}
-      <MethodPublishCard method={method} />
     </div>
   );
 }
@@ -19582,10 +19676,16 @@ function CataloguePanel({
 // state RoutinesPanel fetches once. Sign in with Google, then Publish / update;
 // publishes the Routine + its dependency Methods.
 function RoutinePublishControl({
+  compact,
   routineId,
   state,
   onPublished,
 }: {
+  // Title-bar mode: one small button beside the ×. Signing in still opens the
+  // shared block — in its own dialog rather than in place — because that block
+  // carries the G3 notice and the G3a overseas-consent checkbox that gate the
+  // sign-in buttons, and a bare link here would walk straight past them.
+  compact?: boolean;
   routineId: string;
   state: PublishState | null;
   onPublished: () => void;
@@ -19594,6 +19694,7 @@ function RoutinePublishControl({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
 
   if (!state || !state.configured) return null;
 
@@ -19601,6 +19702,27 @@ function RoutinePublishControl({
     // Always the shared sign-in block: it carries the G3 notice + G3a
     // overseas-consent checkbox that must gate the sign-in buttons (copy pack
     // G3a) — a bare link here would bypass the consent.
+    if (compact) {
+      return (
+        <>
+          <button
+            className="secondary-button small-button"
+            onClick={() => setSigningIn(true)}
+            type="button"
+          >
+            {t("publish.button")}
+          </button>
+          {signingIn ? (
+            <Modal
+              onClose={() => setSigningIn(false)}
+              title={t("publish.title")}
+            >
+              <PublishSignIn state={state} />
+            </Modal>
+          ) : null}
+        </>
+      );
+    }
     return (
       <div style={{ padding: "0 0.25rem" }}>
         <PublishSignIn state={state} />
@@ -19630,16 +19752,21 @@ function RoutinePublishControl({
 
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.4rem",
-        fontSize: "var(--fs-sm)",
-        padding: "0 0.25rem",
-      }}
+      className={compact ? "routine-publish compact" : "routine-publish"}
+      style={
+        compact
+          ? undefined
+          : {
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              fontSize: "var(--fs-sm)",
+              padding: "0 0.25rem",
+            }
+      }
     >
       <button
-        className="text-button"
+        className={compact ? "secondary-button small-button" : "text-button"}
         disabled={busy}
         onClick={() => setConfirming(true)}
         type="button"
@@ -19834,18 +19961,19 @@ function RoutinesPanel({
       )}
       {openedRoutine ? (
         <Modal
+          headerAction={
+            <RoutinePublishControl
+              compact
+              onPublished={reloadPublish}
+              routineId={openedRoutine.id}
+              state={publishState}
+            />
+          }
           onClose={() => setOpened(null)}
           title={openedRoutine.name}
           variant="doc"
         >
           <RoutineDetail
-            extras={
-              <RoutinePublishControl
-                routineId={openedRoutine.id}
-                state={publishState}
-                onPublished={reloadPublish}
-              />
-            }
             methods={methods}
             notice={
               openedRoutine.origin === "community" ? (
@@ -20699,6 +20827,7 @@ function LibraryPanel({
       )}
       {selected ? (
         <Modal
+          headerAction={<MethodPublishCard compact method={selected} />}
           onClose={() => setSelected(null)}
           title={selected.name}
           variant="doc"

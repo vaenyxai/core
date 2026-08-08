@@ -9753,7 +9753,22 @@ export async function registerGatewayRoutes(
       if (!requireOwner(request)) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return { pending: countPendingCorrections(context.database) };
+      // ONLY METHODS THAT ARE STILL HERE. Corrections outlive their Method:
+      // method_feedback keeps every row an app ever sent, and deleting or
+      // renaming a Method does not delete its history. Counting those would
+      // put a number on the tab for work nobody can reach — which is exactly
+      // what happened: a 5 on the tab, and not one card carrying a chip,
+      // because both Methods behind it had been gone for weeks.
+      const installed = new Set(
+        listMethodSummaries(context.config.libraryDirectory).map(
+          (method) => method.id,
+        ),
+      );
+      return {
+        pending: countPendingCorrections(context.database).filter((entry) =>
+          installed.has(entry.methodId),
+        ),
+      };
     },
   );
 

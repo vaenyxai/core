@@ -178,6 +178,7 @@ Read this inside the app: **Settings → Manual**.
   Methods, Community. Each tab says what it is on its own first line, and each
   has the same two buttons above its list: make a new one, or find one in the
   community. The Methods tab has a third, for importing a SKILL.md.
+- **Publishing** — the button is on the title row of the dialog, next to the ×.
 - **Community** is where your community account lives. You only need it to
   publish — using what other people published needs no account at all.
 - **Cards carry the name only** — click one and everything about it opens in

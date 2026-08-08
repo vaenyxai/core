@@ -5,18 +5,21 @@
 # the website's latest/download links point at.
 #
 # Usage, from the repo root, on main, with a clean tree:
-#   powershell -File scripts\Vaenyx-Release.ps1 -Version 0.4.0
+#   powershell -File scripts\Vaenyx-Release.ps1 -Version 0.4.1.0
 #
 # It stops at the first thing that is not right, and in this order:
-#   1. Version is plain x.y.z (production versions never carry a suffix).
+#   1. Version is plain w.x.y.z, four segments (Oskar, 2026-08-09). The fourth
+#      is the build number: 0.4.0.8 is the eighth build of 0.4.0. A release
+#      bumps the THIRD and resets the fourth to 0, so the next one is 0.4.1.0.
+#      Production versions never carry a suffix.
 #   2. Tree is clean, branch is main, origin fetched, main not behind,
 #      tag does not already exist.
-#   3. CHANGELOG.md already has a "## v0.4.0" section - notes first, then the
+#   3. CHANGELOG.md already has a "## v0.4.1.0" section - notes first, then the
 #      button. Commit the notes before releasing.
 #   4. The version is stamped into apps/server/src/config.ts (the single
 #      source of truth the app, the zip build and the exe build all read).
 #   5. npm run check - a broken build must never tag.
-#   6. Commit "release: v0.4.0" (config.ts only), tag v0.4.0, push main and
+#   6. Commit "release: v0.4.1.0" (config.ts only), tag v0.4.1.0, push main and
 #      the tag. The push of the tag is what starts the release workflow.
 [CmdletBinding()]
 param(
@@ -30,8 +33,11 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $root
 
-if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-  throw "Version must be plain x.y.z (got '$Version'). Production versions never carry a -dev suffix."
+if ($Version -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+  throw "Version must be four segments w.x.y.z (got '$Version'). The fourth is the build number; a release bumps the third and resets it to 0, e.g. 0.4.1.0. Production versions never carry a -dev suffix."
+}
+if ($Version -notmatch '\.0$') {
+  Write-Warning "A release normally ends in .0 - the build number resets when the third segment moves. Continuing because you asked for '$Version'."
 }
 $tag = "v$Version"
 

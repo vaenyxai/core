@@ -8167,3 +8167,24 @@ html, body { overscroll-behavior-y: none; }
   font-size: var(--fs-lg);
   line-height: 1.55;
 }
+
+/* One control on the dialog's title row, left of the ×. Small on purpose: it
+   is a way out of here like the × beside it, not a heading. */
+.modal-head-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.small-button {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: var(--fs-sm);
+}
+
+.routine-publish.compact {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
