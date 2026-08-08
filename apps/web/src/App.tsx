@@ -559,8 +559,11 @@ function getSidebarProjectName(project: Project): string {
     return "Unsorted";
   }
 
+  // The first project anybody meets. It was labelled "Testing", which reads
+  // like something half-built that you should not put real work in (Oskar,
+  // 2026-08-09).
   if (project.id === "vaenyx" && project.name === "Vaenyx") {
-    return "Testing";
+    return "Projects";
   }
 
   return project.name;
@@ -19910,11 +19913,43 @@ function AttentionChip({
   return <span className={`library-chip chip-attention chip-${tone}`}>{children}</span>;
 }
 
+/** What to show while the shelf has not been read, and when reading it
+ *  failed. Never "you have none" — that is a claim, and it was being made
+ *  without asking. */
+function LibraryLoadNotice({
+  loadState,
+  onRetry,
+}: {
+  loadState: "loading" | "ready" | "failed";
+  onRetry: () => void;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  if (loadState === "failed") {
+    return (
+      <div className="empty-state">
+        <strong>{zh ? "没能读出来" : "Could not read the Library"}</strong>
+        <p>
+          {zh
+            ? "刚更新过的话,后台可能还在重启。"
+            : "If Vaenyx just updated, it may still be restarting."}
+        </p>
+        <button className="secondary-button" onClick={onRetry} type="button">
+          {zh ? "再试一次" : "Try again"}
+        </button>
+      </div>
+    );
+  }
+  return <p className="library-note">{zh ? "正在读取…" : "Reading…"}</p>;
+}
+
 function RoutinesPanel({
   routines,
   methods,
   creating,
+  loadState,
   onCreatingChange,
+  onRetryLoad,
   onRoutinesRefresh,
   onUseRoutine,
 }: {
@@ -19923,7 +19958,9 @@ function RoutinesPanel({
   // Owned by the tab, not by the panel: one row of buttons per tab, above the
   // list, so "new" is in one place instead of two.
   creating: boolean;
+  loadState: "loading" | "ready" | "failed";
   onCreatingChange: (creating: boolean) => void;
+  onRetryLoad: () => void;
   onRoutinesRefresh: () => void;
   onUseRoutine: (routineId: string) => void;
 }) {
@@ -19967,7 +20004,9 @@ function RoutinesPanel({
 
   return (
     <div className="library-layout">
-      {routines.length === 0 ? (
+      {routines.length === 0 && loadState !== "ready" ? (
+        <LibraryLoadNotice loadState={loadState} onRetry={onRetryLoad} />
+      ) : routines.length === 0 ? (
         <div className="empty-state">
           <strong>{zh ? "还没有 Routine" : "No Routines yet"}</strong>
           <p>
@@ -20118,7 +20157,9 @@ function CommunityFinder({
 }
 
 function LibraryArea({
+  loadState,
   methods,
+  onRetryLoad,
   routines,
   appProfiles,
   onAppCreate,
@@ -20129,7 +20170,11 @@ function LibraryArea({
   onRoutinesRefresh,
   onUseRoutine,
 }: {
+  // Whether the shelf has actually been read yet. Without it an unanswered
+  // fetch and an empty shelf are the same screen, and the empty one lies.
+  loadState: "loading" | "ready" | "failed";
   methods: LibraryMethodSummary[];
+  onRetryLoad: () => void;
   routines: LibraryRoutineSummary[];
   appProfiles: AppProfile[];
   onAppCreate: (result: CreateAppProfileResponse) => void;
@@ -20249,7 +20294,9 @@ function LibraryArea({
           </div>
           <RoutinesPanel
             creating={creatingRoutine}
+            loadState={loadState}
             methods={methods}
+            onRetryLoad={onRetryLoad}
             onCreatingChange={setCreatingRoutine}
             onRoutinesRefresh={onRoutinesRefresh}
             onUseRoutine={onUseRoutine}
@@ -20318,7 +20365,9 @@ function LibraryArea({
           </div>
           <LibraryPanel
             creating={creatingMethod}
+            loadState={loadState}
             methods={methods}
+            onRetryLoad={onRetryLoad}
             onCreatingChange={setCreatingMethod}
             onMethodsRefresh={onMethodsRefresh}
             pendingCorrections={pendingCorrections}
@@ -20642,16 +20691,20 @@ function CreateMethodPanel({
 
 function LibraryPanel({
   creating,
+  loadState,
   methods,
   onCreatingChange,
+  onRetryLoad,
   onMethodsRefresh,
   pendingCorrections,
   routines,
 }: {
   // Owned by the tab: one row of buttons above the list, not one per panel.
   creating: boolean;
+  loadState: "loading" | "ready" | "failed";
   methods: LibraryMethodSummary[];
   onCreatingChange: (creating: boolean) => void;
+  onRetryLoad: () => void;
   onMethodsRefresh: () => void;
   // How many corrections are waiting on each Method, counted once for the
   // whole Library rather than per card.
@@ -20750,7 +20803,9 @@ function LibraryPanel({
   return (
     <div className="library-layout">
       {error ? <p className="form-error">{error}</p> : null}
-      {methods.length === 0 ? (
+      {methods.length === 0 && loadState !== "ready" ? (
+        <LibraryLoadNotice loadState={loadState} onRetry={onRetryLoad} />
+      ) : methods.length === 0 ? (
         <div className="empty-state">
           <strong>{zh ? "还没有 Method" : "No Methods yet"}</strong>
           <p>
@@ -21639,6 +21694,12 @@ function VaenyxWorkspace({
   const [libraryRoutines, setLibraryRoutines] = useState<
     LibraryRoutineSummary[]
   >([]);
+  // "loading" until an answer arrives, and "failed" is its own state so the
+  // screen can offer to try again instead of asserting an emptiness it never
+  // confirmed.
+  const [libraryLoad, setLibraryLoad] = useState<
+    "loading" | "ready" | "failed"
+  >("loading");
   const [settings, setSettings] = useState<InstanceSettings | null>(null);
   const generalProjectId = workspace.projects.find(isGeneralProject)?.id ?? null;
   const defaultProjectId = generalProjectId ?? workspace.projects[0]?.id ?? "";
@@ -21884,12 +21945,14 @@ function VaenyxWorkspace({
   }
 
   function refreshLibraryData(): void {
-    void fetchLibraryMethods()
-      .then(setLibraryMethods)
-      .catch(() => undefined);
-    void fetchLibraryRoutines()
-      .then(setLibraryRoutines)
-      .catch(() => undefined);
+    setLibraryLoad((current) => (current === "ready" ? current : "loading"));
+    void Promise.all([fetchLibraryMethods(), fetchLibraryRoutines()])
+      .then(([methods, routines]) => {
+        setLibraryMethods(methods);
+        setLibraryRoutines(routines);
+        setLibraryLoad("ready");
+      })
+      .catch(() => setLibraryLoad("failed"));
   }
 
   function openLibrary() {
@@ -21898,6 +21961,17 @@ function VaenyxWorkspace({
     setScreen("library");
     refreshLibraryData();
   }
+
+  // Fetched once at start, not only when the Library button is pressed. It is
+  // a 50ms call to this machine, and it means the shelf is already there the
+  // first time anybody looks — including after a refresh that lands straight
+  // on the Library, which used to reach the screen without ever fetching.
+  const bootLibrary = useRef(false);
+  useEffect(() => {
+    if (bootLibrary.current) return;
+    bootLibrary.current = true;
+    refreshLibraryData();
+  });
 
   function openScreen(nextScreen: Screen) {
     setSelectedThreadId(null);
@@ -22516,7 +22590,9 @@ function VaenyxWorkspace({
         ) : screen === "library" ? (
           <LibraryArea
             appProfiles={appProfiles}
+            loadState={libraryLoad}
             methods={libraryMethods}
+            onRetryLoad={refreshLibraryData}
             routines={libraryRoutines}
             onUseRoutine={(id) => void useRoutineInChat(id)}
             onAppCreate={(result) => {
