@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { formatFactsContext, listCurrentFacts } from "./facts.js";
+
 import type {
   AskVaenyxConversation,
   AskVaenyxMessage,
@@ -1152,6 +1154,15 @@ export async function createAskVaenyxMessage(
     // the long-term memory layer: it rides every chat, so something learned
     // once does not have to be repeated in each new conversation.
     const ownerProfile = formatVaenyxMeContext(database);
+    // WHAT IS TRUE RIGHT NOW. One line per fact, straight out of SQL —
+    // `WHERE valid_until IS NULL`, filtered to this conversation's mode. The
+    // model is never handed two versions of the Owner's address and asked to
+    // pick the newer one; that question is settled before it is asked, by a
+    // timestamp comparison, because a model has no clock and gets worse at
+    // this as the context grows.
+    const currentFacts = formatFactsContext(
+      listCurrentFacts(database, modeRow?.id ?? null),
+    );
     // The stand-in is named to the model in the same words the Test button and
     // the manual use, and the model is told to pass it on: the Owner attached a
     // PDF and is about to read an answer written from text alone.
@@ -1173,6 +1184,10 @@ export async function createAskVaenyxMessage(
       [
         historySummary,
         ownerProfile,
+        // After the profile and before the project background: what is true
+        // today outranks what the Owner is generally like, and both outrank
+        // the notes about whatever project this chat sits in.
+        currentFacts,
         projectContext,
         documentContext,
         documentRefusedNote,
