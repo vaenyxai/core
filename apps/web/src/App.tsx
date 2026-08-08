@@ -15736,18 +15736,21 @@ function VaenyxMeLedger({
                   </>
                 )}
               </p>
-              {/* Two actions, not four, and no percentage. The old card asked
-                  for a verdict on a number that was a constant. */}
+              {/* Two actions, not four, and no percentage. Real buttons, not
+                  text links (Oskar, 2026-08-09): this is the one thing on the
+                  screen he is here to do, and it was the smallest thing on it.
+                  Both are the same size — "wrong" is not the lesser answer, and
+                  making it look like one is how you get agreement by default. */}
               <div className="me-ledger-actions">
                 <button
-                  className="text-button"
+                  className="secondary-button me-ledger-answer"
                   onClick={() => onApprove(candidate)}
                   type="button"
                 >
                   {zh ? "对,记住" : "Yes, keep it"}
                 </button>
                 <button
-                  className="text-button"
+                  className="secondary-button me-ledger-answer"
                   onClick={() => onReject(candidate)}
                   type="button"
                 >

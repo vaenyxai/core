@@ -8229,10 +8229,21 @@ html, body { overscroll-behavior-y: none; }
   font-weight: 650;
 }
 
+/* The one thing the Owner is on this screen to do, so it is the biggest thing
+   on the row rather than the smallest. Both answers are the same size on
+   purpose: making "wrong" the lesser-looking one is how you collect agreement
+   by default instead of a decision. */
 .me-ledger-actions {
   display: flex;
-  gap: var(--space-3);
-  margin-top: var(--space-1);
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.me-ledger-answer {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: var(--fs-md, 15px);
 }
 
 /* The old queue, kept for comparison and out of the way. */
