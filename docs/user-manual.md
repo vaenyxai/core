@@ -176,6 +176,10 @@ Read this inside the app: **Settings → Manual**.
   become a Routine. Vaenyx drafts it and offers a test run before saving.
 - **Where they live** — the **Library** screen.
 - **Edit a recipe** — Library → the Method → **Edit recipe**.
+- **Corrections waiting for you** — when an app sends back a corrected answer,
+  it waits inside that Method until you look at it. The **Methods** tab carries
+  the number, and the card says how many. Keeping one turns it into an example
+  and takes it off the list for good.
 - **After updating a community Method, check it against your own examples.**
   The dialog offers it the moment the update lands. It re-runs up to six of the
   examples you accumulated and compares the answers — the author could not have

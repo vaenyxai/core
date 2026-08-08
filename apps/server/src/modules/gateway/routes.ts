@@ -188,6 +188,7 @@ import {
   type AdoptCorrectionRequest,
   type PreviewSkillRequest,
   type ImportSkillRequest,
+  PendingCorrectionsResponseSchema,
   RegressionListResponseSchema,
   RegressionResultSchema,
   type UpdateRecipeRequest,
@@ -355,7 +356,13 @@ import {
   updateMethodRecipe,
   validateAgainstSchema,
 } from "../core/methods.js";
-import { getFeedbackById, listAdoptableFeedback, recordMethodFeedback } from "../core/method-feedback.js";
+import {
+  countPendingCorrections,
+  getFeedbackById,
+  listAdoptableFeedback,
+  markFeedbackAdopted,
+  recordMethodFeedback,
+} from "../core/method-feedback.js";
 import {
   buildGoogleAuthUrl,
   createOAuthState,
@@ -9686,6 +9693,30 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // A9 — HOW MANY CORRECTIONS ARE WAITING FOR YOU, per Method.
+  //
+  // The number behind the badge on the Methods tab. A correction that an app
+  // sent sits here doing nothing until the Owner looks at it, and until this
+  // existed the only way to find one was to open every Method in turn — so in
+  // practice the flywheel's local half ran on the Owner remembering to check.
+  app.get(
+    "/v1/library/corrections/pending",
+    {
+      schema: {
+        response: {
+          200: PendingCorrectionsResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return { pending: countPendingCorrections(context.database) };
+    },
+  );
+
   // The examples this Method has learnt from, newest first, and removing one.
   app.get<{ Params: { id: string } }>(
     "/v1/library/methods/:id/examples",
@@ -9806,6 +9837,15 @@ export async function registerGatewayRoutes(
         }
         return reply.code(400).send({ error: "That example could not be saved." });
       }
+
+      // It has been kept, so it stops waiting. Recorded rather than deleted:
+      // the correction is the evidence of what an app actually sent, and
+      // without this the same one could be kept again on the next reload.
+      markFeedbackAdopted(
+        context.database,
+        request.body.correctionId,
+        new Date().toISOString(),
+      );
 
       queueForSharing(request.params.id, {
         input: correction.input,

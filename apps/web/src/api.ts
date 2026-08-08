@@ -90,6 +90,7 @@ import type {
   PhoneAccessStatus,
   PhoneLoginResponse,
   PhoneTunnelResponse,
+  PendingCorrectionsResponse,
   RegressionListResponse,
   RegressionResult,
 } from "@vaenyx/contracts";
@@ -295,6 +296,14 @@ export function checkMethodAgainstExamples(
   return requestJson<RegressionResult>(
     `/v1/library/methods/${encodeURIComponent(methodId)}/check`,
     { method: "POST" },
+  );
+}
+
+// A9 — how many corrections are waiting, per Method. One request for the whole
+// Library: the alternative was opening every Method to find out.
+export function fetchPendingCorrections(): Promise<PendingCorrectionsResponse> {
+  return requestJson<PendingCorrectionsResponse>(
+    "/v1/library/corrections/pending",
   );
 }
 

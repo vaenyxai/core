@@ -132,6 +132,7 @@ import {
   type UpdateOffer,
   fetchFacts,
   fetchInstalledComponents,
+  fetchPendingCorrections,
   fetchRegressionChecks,
   forgetFact,
   searchFacts,
@@ -16938,7 +16939,16 @@ function SkillImportPanel({ onImported }: { onImported: () => void }) {
 // Nothing here leaves the machine: keeping an example writes one file into the
 // Method's folder, and examples are outside the content hash, so no app grant
 // is disturbed by a Method getting better.
-function MethodCorrections({ methodId }: { methodId: string }) {
+function MethodCorrections({
+  methodId,
+  onKept,
+}: {
+  methodId: string;
+  // Keeping one takes it off the waiting list, so the badge that counts them
+  // has to be told. A number that stays up after the work is done is how
+  // somebody learns to stop reading badges.
+  onKept?: () => void;
+}) {
   const { t } = useI18n();
   const [corrections, setCorrections] = useState<StoredCorrection[]>([]);
   const [examples, setExamples] = useState<MethodExampleEntry[]>([]);
@@ -16986,6 +16996,7 @@ function MethodCorrections({ methodId }: { methodId: string }) {
         contributor: correction.appProfileName,
       });
       setKept((current) => [...current, correction.id]);
+      onKept?.();
     } catch {
       // The failed request already raised a toast.
     } finally {
@@ -17070,6 +17081,30 @@ function MethodCorrections({ methodId }: { methodId: string }) {
 // D6 (copy pack): what the community currently publishes, for items installed
 // from it. Fetched once per screen and best-effort — an unreachable catalogue
 // means no notice, never an error in the Owner's face.
+// A9 — the corrections waiting for the Owner, per Method.
+//
+// Refetched whenever the Library refreshes, so keeping one takes its number
+// away. A badge that keeps showing 3 after the work is done is how somebody
+// learns to stop reading badges.
+function usePendingCorrections(token: unknown): Map<string, number> {
+  const [pending, setPending] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let active = true;
+    void fetchPendingCorrections()
+      .then((result) => {
+        if (!active) return;
+        setPending(
+          new Map(result.pending.map((entry) => [entry.methodId, entry.count])),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [token]);
+  return pending;
+}
+
 // C7 — which installed items last failed their own examples.
 //
 // Only failures, and only about the version actually installed. A verdict on a
@@ -17511,10 +17546,12 @@ function MethodDetail({
   method,
   onBack,
   onChanged,
+  onCorrectionKept,
 }: {
   method: LibraryMethod;
   onBack: () => void;
   onChanged: (method: LibraryMethod) => void;
+  onCorrectionKept: () => void;
 }) {
   const { lang, t } = useI18n();
   const communityVersions = useCommunityVersions();
@@ -17718,7 +17755,7 @@ function MethodDetail({
             onUpdated={onBack}
           />
         ) : null}
-        <MethodCorrections methodId={method.id} />
+        <MethodCorrections methodId={method.id} onKept={onCorrectionKept} />
         {/* L3: the clean direction. A Method is instructions already, so
             nothing is lost and no capability is implied that does not exist. */}
         {CAPABILITIES.skillInterop ? (
@@ -19789,6 +19826,14 @@ function LibraryArea({
   const [tab, setTab] = useState<"methods" | "routines" | "tokens">(() =>
     peekCreateIntent()?.kind === "method" ? "methods" : "routines",
   );
+  // A9. Corrections sit inside individual Methods doing nothing until somebody
+  // looks at them, and the Methods tab is the one people open least. Without a
+  // number on the tab the local half of the flywheel runs on remembering.
+  const pendingCorrections = usePendingCorrections(methods);
+  const pendingTotal = [...pendingCorrections.values()].reduce(
+    (sum, count) => sum + count,
+    0,
+  );
   const installedIds = [
     ...methods.map((method) => method.id),
     ...routines.map((routine) => routine.id),
@@ -19828,6 +19873,9 @@ function LibraryArea({
           type="button"
         >
           {zh ? "零件" : "Methods"}
+          {pendingTotal > 0 ? (
+            <span className="tab-badge">{pendingTotal}</span>
+          ) : null}
         </button>
       </nav>
 
@@ -19893,6 +19941,7 @@ function LibraryArea({
           <LibraryPanel
             methods={methods}
             onMethodsRefresh={onMethodsRefresh}
+            pendingCorrections={pendingCorrections}
             routines={routines}
           />
         </section>
@@ -20231,10 +20280,14 @@ function CreateMethodPanel({
 function LibraryPanel({
   methods,
   onMethodsRefresh,
+  pendingCorrections,
   routines,
 }: {
   methods: LibraryMethodSummary[];
   onMethodsRefresh: () => void;
+  // How many corrections are waiting on each Method, counted once for the
+  // whole Library rather than per card.
+  pendingCorrections: Map<string, number>;
   // Only so each part can answer "who uses me" — the question behind "can I
   // delete this?", which had no answer on this screen at all.
   routines: LibraryRoutineSummary[];
@@ -20351,6 +20404,7 @@ function LibraryPanel({
         key={selected.id}
         method={selected}
         onBack={() => setSelected(null)}
+        onCorrectionKept={onMethodsRefresh}
         onChanged={(updated) => {
           setSelected(updated);
           // Refresh the summary list so the card name + tags update too.
@@ -20488,6 +20542,15 @@ function LibraryPanel({
                   {/* C7. The last update stopped getting this household's own
                       answers right. Loud, because there IS something to do
                       about it — the previous version is one button away. */}
+                  {/* A9. Somebody's correction is sitting here waiting to be
+                      looked at. Actionable, so it is loud. */}
+                  {pendingCorrections.get(method.id) ? (
+                    <AttentionChip tone="review">
+                      {zh
+                        ? `${pendingCorrections.get(method.id)} 条待看`
+                        : `${pendingCorrections.get(method.id)} to review`}
+                    </AttentionChip>
+                  ) : null}
                   {failedChecks.has(method.id) ? (
                     <AttentionChip tone="regressed">
                       {zh

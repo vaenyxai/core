@@ -1,0 +1,17 @@
+-- WHEN WAS THIS CORRECTION KEPT?
+--
+-- Nothing recorded it. Keeping a correction wrote an example and stopped
+-- there, so the correction stayed in the "waiting for you" list forever — the
+-- ✓ next to it lived in the browser's memory and was gone on the next reload.
+-- Two consequences, both real:
+--
+--   • the same correction could be kept twice, quietly adding the same example
+--     again and weighting the few-shot towards one case
+--   • "how many are waiting for you" had no honest answer, so the count badge
+--     that belongs on the Methods tab could not be built without inventing one
+--
+-- NULL means still waiting, which is what every existing row is: nothing has
+-- ever been marked, so nothing can be assumed adopted. That is the safe
+-- direction — showing a correction again is a small annoyance, dropping one
+-- silently is losing something somebody typed.
+ALTER TABLE method_feedback ADD COLUMN adopted_at TEXT;

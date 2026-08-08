@@ -83,6 +83,10 @@ export function listAdoptableFeedback(
          FROM method_feedback
         WHERE method_id = ? AND reaction = 'edited'
           AND input IS NOT NULL AND corrected_output IS NOT NULL
+          -- Already kept ones are not waiting for anybody. Without this the
+          -- same correction could be kept twice, weighting the few-shot
+          -- towards one case, and the tick beside it died on every reload.
+          AND adopted_at IS NULL
         ORDER BY created_at DESC
         LIMIT ?`,
     )
@@ -178,4 +182,44 @@ export function recordMethodFeedback(
       input.stepId ?? null,
     );
   return { id };
+}
+
+/**
+ * This correction has been kept as an example, so it is no longer waiting for
+ * anybody. Recording the moment rather than deleting the row: the correction
+ * is the evidence of what an app actually sent, and the flywheel's own history
+ * is worth more than the row is worth reclaiming.
+ */
+export function markFeedbackAdopted(
+  database: DatabaseHandle,
+  feedbackId: string,
+  when: string,
+): void {
+  database.sqlite
+    .prepare(
+      `UPDATE method_feedback SET adopted_at = ?
+        WHERE id = ? AND adopted_at IS NULL`,
+    )
+    .run(when, feedbackId);
+}
+
+/**
+ * How many corrections are waiting for the Owner, per Method.
+ *
+ * The number behind the badge on the Methods tab. It has to be a real count of
+ * things that can still be acted on — a badge that shows 3 when there is
+ * nothing to do is how people learn to stop looking at badges.
+ */
+export function countPendingCorrections(
+  database: DatabaseHandle,
+): { methodId: string; count: number }[] {
+  return database.sqlite
+    .prepare(
+      `SELECT method_id AS methodId, COUNT(*) AS count
+         FROM method_feedback
+        WHERE reaction = 'edited' AND adopted_at IS NULL
+          AND input IS NOT NULL AND corrected_output IS NOT NULL
+        GROUP BY method_id`,
+    )
+    .all() as { methodId: string; count: number }[];
 }

@@ -1936,6 +1936,25 @@ export const RecipeEditDraftSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// A9 — how many corrections are waiting for the Owner, per Method. The badge
+// on the Methods tab. Until this existed, finding one meant opening every
+// Method in turn, so the flywheel's local half ran on somebody remembering.
+export const PendingCorrectionsResponseSchema = Type.Object(
+  {
+    pending: Type.Array(
+      Type.Object(
+        { methodId: Type.String(), count: Type.Integer() },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type PendingCorrectionsResponse = Static<
+  typeof PendingCorrectionsResponseSchema
+>;
+
 // DID THE NEW VERSION BREAK WHAT THIS HOUSEHOLD USES IT FOR? (C7)
 //
 // An update keeps the Owner's examples. Keeping them is not the same as still
