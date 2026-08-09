@@ -391,7 +391,7 @@ describe("Vaenyx Gateway foundation", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "vaenyx",
-          name: "Vaenyx",
+          name: "Testing Project",
         }),
         expect.objectContaining({
           id: "general",
@@ -463,7 +463,7 @@ describe("Vaenyx Gateway foundation", () => {
     expect(task.statusCode).toBe(200);
     expect(task.json()).toMatchObject({
       status: "completed",
-      projectName: "Vaenyx",
+      projectName: "Testing Project",
       skillName: "General Ask",
       provider: "mock-provider",
       harness: "mock-harness",
@@ -764,7 +764,7 @@ describe("Vaenyx Gateway foundation", () => {
       threadId: linkedTask.json().id,
       threadStatus: "active",
       threadProjectId: "vaenyx",
-      threadProjectName: "Vaenyx",
+      threadProjectName: "Testing Project",
     });
 
     const workspaceAfterLinkedTask = await app.inject({

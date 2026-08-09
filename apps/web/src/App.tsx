@@ -15822,6 +15822,19 @@ function FactsSection() {
  * diary instead of as homework — so the shape can be judged before anybody
  * decides whether the gate itself should move.
  */
+// FOLDING, AND THE FLOOR UNDER IT (H-001 + Oskar, 2026-08-09).
+//
+// Below this score an item starts folded: still counted, still there, one tap
+// from open — folding is a default posture, never a verdict. Exactly 60 is NOT
+// folded; the handoff says so in as many words.
+const INBOX_FOLD_BELOW = 60;
+// But a threshold alone can fold EVERYTHING — the live queue's traits all sit
+// in the 40s — and a first launch where every row is shut is a blank page
+// wearing a number. So the strongest few of each kind stay open regardless:
+// per kind, not overall, because facts and traits score on different habits
+// and an overall top-3 would never include a fact.
+const INBOX_ALWAYS_EXPANDED_PER_GROUP = 3;
+
 function VaenyxMeLedger({
   candidates,
   compact,
@@ -15845,6 +15858,8 @@ function VaenyxMeLedger({
   const { lang } = useI18n();
   const zh = lang === "zh";
   const [showAll, setShowAll] = useState(false);
+  // Rows the Owner opened by hand, on top of the defaults above.
+  const [opened, setOpened] = useState<Set<string>>(new Set());
   // Newest first is already the sort, so "the first five" IS "the five most
   // recent" — the ones most likely to still be about something current.
   const COMPACT_VISIBLE = 5;
@@ -15855,6 +15870,20 @@ function VaenyxMeLedger({
           .slice(0, COMPACT_VISIBLE)
       : candidates;
   const hidden = candidates.length - visible.length;
+
+  // The floor: the strongest few of each kind are always open.
+  const floor = new Set<string>();
+  for (const isFact of [true, false]) {
+    [...candidates]
+      .filter((entry) => Boolean(entry.proposedSlot) === isFact)
+      .sort((left, right) => right.confidence - left.confidence)
+      .slice(0, INBOX_ALWAYS_EXPANDED_PER_GROUP)
+      .forEach((entry) => floor.add(entry.id));
+  }
+  const isFolded = (candidate: VaenyxMeCandidate) =>
+    candidate.confidence < INBOX_FOLD_BELOW &&
+    !floor.has(candidate.id) &&
+    !opened.has(candidate.id);
 
   // Newest first, then grouped by the day it was noticed. A date somebody can
   // place ("yesterday") beats a timestamp they have to decode.
@@ -15898,7 +15927,28 @@ function VaenyxMeLedger({
       {[...days.entries()].map(([day, entries]) => (
         <section className="me-ledger-day" key={day}>
           <p className="me-ledger-date">{dayLabel(day)}</p>
-          {entries.map((candidate) => (
+          {entries.map((candidate) =>
+            isFolded(candidate) ? (
+              // Folded: one line, one tap from open. It stays in every count —
+              // this is a posture, not a resolution.
+              <button
+                className="me-ledger-item me-ledger-item--folded"
+                key={candidate.id}
+                onClick={() =>
+                  setOpened((current) => new Set(current).add(candidate.id))
+                }
+                type="button"
+              >
+                <span className="me-ledger-folded-text">
+                  {candidate.proposedSlot
+                    ? `${candidate.proposedSlot} = ${candidate.proposedValue ?? ""}`
+                    : candidate.proposedSummary}
+                </span>
+                <span className="me-ledger-folded-open">
+                  {zh ? "展开" : "Open"}
+                </span>
+              </button>
+            ) : (
             <article className="me-ledger-item" key={candidate.id}>
               {/* THE QUOTE LEADS. It is the Owner's own sentence, and it is the
                   one thing on the old card that was doing any work — better
@@ -15962,7 +16012,8 @@ function VaenyxMeLedger({
                 ) : null}
               </div>
             </article>
-          ))}
+            ),
+          )}
         </section>
       ))}
       {hidden > 0 ? (
