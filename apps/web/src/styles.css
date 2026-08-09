@@ -132,8 +132,17 @@
 body {
   min-width: 320px;
   min-height: 100vh;
+  /* dvh, because phone browsers lie about vh while the URL bar animates: a
+     body held to 100vh is ~60px taller than the visible screen, so every
+     page scrolled by that much even when its content fit — the "pull to the
+     bottom and the top goes blank" slack (Oskar, 2026-08-09). */
+  min-height: 100dvh;
   margin: 0;
   background: var(--bg);
+  /* Nothing may widen the page. A single wide element used to summon a
+     horizontal scrollbar, and that bar's own height then made 100dvh content
+     overflow vertically by ~15px — the desktop version of the same slack. */
+  overflow-x: clip;
 }
 
 button,
@@ -605,6 +614,7 @@ textarea::placeholder {
   display: grid;
   grid-template-columns: var(--sidebar-width, 300px) minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .sidebar {
@@ -8318,14 +8328,17 @@ html, body { overscroll-behavior-y: none; }
 }
 
 @media (max-width: 900px) {
-  /* The mobile chat screen keeps a 10px top pad (see the mobile portal-content
-     rule), so the surface is that much shorter than the viewport. */
+  /* Everything in flow above the chat, added up exactly: the 10px portal top
+     pad, plus the sidebar toggle — which is position: STICKY, and sticky
+     stays in flow — at 40px tall with a 12px bottom margin. 62px, not 10:
+     the missing 52 was the phone's scroll slack, because the page was that
+     much taller than the screen on every chat (Oskar, 2026-08-09). */
   .portal-content .focused-workspace,
   .portal-content .ask-vaenyx-chat.focused-chat,
   .portal-content .focused-task-panel,
   .portal-content .ask-vaenyx-chat {
-    min-height: calc(100vh - 10px);
-    min-height: calc(100dvh - 10px);
+    min-height: calc(100vh - 62px);
+    min-height: calc(100dvh - 62px);
   }
 }
 
