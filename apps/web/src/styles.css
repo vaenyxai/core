@@ -4004,26 +4004,8 @@ select {
   font-size: 14px;
 }
 
-.thinking-dots {
-  display: inline-flex;
-  gap: 4px;
-}
-
-.thinking-dots span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent, #c9a96a);
-  animation: thinking-bounce 1.2s infinite ease-in-out both;
-}
-
-.thinking-dots span:nth-child(1) {
-  animation-delay: -0.24s;
-}
-
-.thinking-dots span:nth-child(2) {
-  animation-delay: -0.12s;
-}
+/* The three bouncing dots retired in favour of the status orb; their CSS
+   went with them. */
 
 .thinking-label {
   font-weight: 500;
@@ -4056,25 +4038,6 @@ select {
   justify-content: flex-end;
   padding-bottom: 0;
   border-bottom: 0;
-}
-
-@keyframes thinking-bounce {
-  0%,
-  80%,
-  100% {
-    transform: scale(0.55);
-    opacity: 0.45;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .thinking-dots span {
-    animation: none;
-  }
 }
 
 .stop-button.primary-button {

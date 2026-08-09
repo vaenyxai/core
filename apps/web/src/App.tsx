@@ -16,6 +16,7 @@ import {
   AnnotatedPhotoEditor,
 } from "./photo-marks";
 import { encodeQr, qrSvgPath } from "./qr";
+import { StatusOrb } from "./status-orb";
 
 import type {
   AgentProfile,
@@ -520,8 +521,21 @@ const THINKING_PHASES = [
 ];
 
 // No elapsed counter on purpose (Oskar, dev.125): a ticking number reads like a
-// deadline and adds nothing — the moving dots already say "working".
-function ThinkingIndicator(): ReactNode {
+// deadline and adds nothing.
+//
+// The three bouncing dots became the 20px orb (Oskar, 2026-08-09). Same job —
+// "something is genuinely running" — but the orb's animation follows the REAL
+// stream status through StatusOrb's mapping, so what it shows is what is
+// happening, never a mood. The rotating label and its aria-live stay exactly
+// as they were: the words remain the accessible status, the orb is decoration
+// over them and says so with aria-hidden.
+function ThinkingIndicator({
+  status = null,
+  thinking = false,
+}: {
+  status?: string | null;
+  thinking?: boolean;
+}): ReactNode {
   // Start on a random phase so repeated sends don't always open with the same
   // word.
   const [phase, setPhase] = useState(() =>
@@ -537,11 +551,7 @@ function ThinkingIndicator(): ReactNode {
 
   return (
     <p aria-live="polite" className="streaming-pending">
-      <span aria-hidden="true" className="thinking-dots">
-        <span />
-        <span />
-        <span />
-      </span>
+      <StatusOrb code={status} thinking={thinking} />
       <span className="thinking-label">{THINKING_PHASES[phase]}…</span>
     </p>
   );
@@ -8930,7 +8940,7 @@ function AskVaenyxPanel({
                     <div className="ask-vaenyx-message-head">
                       <strong>Vaenyx</strong>
                     </div>
-                    <ThinkingIndicator />
+                    <ThinkingIndicator status={streamStatus} thinking={Boolean(streamThinking)} />
                   </article>
                 ) : null}
               </>
@@ -9003,7 +9013,7 @@ function AskVaenyxPanel({
                 ) : message.content ? (
                   <MarkdownMessage content={message.content} />
                 ) : (
-                  <ThinkingIndicator />
+                  <ThinkingIndicator status={streamStatus} thinking={Boolean(streamThinking)} />
                 )}
                 {message.webSearchUsed ? (
                   <span className="web-search-chip">Web search used</span>
@@ -9582,7 +9592,7 @@ function AskVaenyxPanel({
                   ) : message.content ? (
                     <MarkdownMessage content={message.content} />
                   ) : (
-                    <ThinkingIndicator />
+                    <ThinkingIndicator status={streamStatus} thinking={Boolean(streamThinking)} />
                   )}
                   {message.webSearchUsed ? (
                     <span className="web-search-chip">Web search used</span>
@@ -9624,7 +9634,7 @@ function AskVaenyxPanel({
                 <div className="ask-vaenyx-message-head">
                   <strong>{agentName}</strong>
                 </div>
-                <ThinkingIndicator />
+                <ThinkingIndicator status={streamStatus} thinking={Boolean(streamThinking)} />
                 {/* The run's live thinking, polled while it works — a run is
                     detached from any one screen, so it cannot stream. */}
                 {runThinking ? (
