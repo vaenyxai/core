@@ -8264,6 +8264,11 @@ function AskVaenyxPanel({
             <VaenyxMeLedger
               candidates={inboxCandidates}
               compact
+              onViewSource={(conversationId) => {
+                // The tray stays open: the Owner is checking a claim, and the
+                // claim is still waiting for them when they come back.
+                void openConversation(conversationId);
+              }}
               onApprove={(candidate) => void answerInboxCandidate(candidate, true)}
               onReject={(candidate) => void answerInboxCandidate(candidate, false)}
             />
@@ -15769,6 +15774,7 @@ function VaenyxMeLedger({
   compact,
   onApprove,
   onReject,
+  onViewSource,
 }: {
   candidates: VaenyxMeCandidate[];
   // The tray beside a conversation, where the list is a visitor rather than
@@ -15777,6 +15783,11 @@ function VaenyxMeLedger({
   compact?: boolean;
   onApprove: (candidate: VaenyxMeCandidate) => void;
   onReject: (candidate: VaenyxMeCandidate) => void;
+  // Jump to the conversation the quote came from. Optional because only the
+  // chat surface can navigate; the Settings page passes nothing and shows no
+  // button. Looking at the source resolves nothing and changes no count —
+  // checking a claim must never cost the chance to answer it.
+  onViewSource?: (conversationId: string) => void;
 }) {
   const { lang } = useI18n();
   const zh = lang === "zh";
@@ -15885,6 +15896,17 @@ function VaenyxMeLedger({
                 >
                   {zh ? "这条不对" : "That's wrong"}
                 </button>
+                {onViewSource &&
+                candidate.sourceType === "chat_history" &&
+                candidate.sourceId ? (
+                  <button
+                    className="text-button"
+                    onClick={() => onViewSource(candidate.sourceId as string)}
+                    type="button"
+                  >
+                    {zh ? "看来源" : "View source"}
+                  </button>
+                ) : null}
               </div>
             </article>
           ))}
