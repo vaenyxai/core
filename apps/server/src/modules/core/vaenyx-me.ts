@@ -9,6 +9,13 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import {
+  applyTraitMergeGroups,
+  listMergeableTraits,
+  mergeDuplicateFacts,
+  parseTraitMergeGroups,
+  traitMergePrompt,
+} from "./vaenyx-me-merge.js";
 
 import { getDefaultProvider } from "../models/registry.js";
 
@@ -426,7 +433,61 @@ export async function scanVaenyxMe(
     modeId,
     signal,
   );
-  return { created: fromTasks.created + fromChats.created };
+  const created = fromTasks.created + fromChats.created;
+
+  // Merge at the scan's own cadence (Oskar, 2026-08-09): a pass that added
+  // something is followed by one merge over what is now pending, plus a single
+  // first run over the backlog that existed before merging did. A quiet pass
+  // stays quiet — no model call for a queue that has not changed.
+  const mergedBefore = database.sqlite
+    .prepare("SELECT value FROM instance_settings WHERE key = 'me_merge_ran_at'")
+    .get() as { value: string } | undefined;
+  if (created > 0 || !mergedBefore) {
+    await mergePendingCandidates(database, ownerId, modeId, signal);
+    database.sqlite
+      .prepare(
+        `INSERT INTO instance_settings (key, value, updated_at)
+         VALUES ('me_merge_ran_at', ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+           updated_at = CURRENT_TIMESTAMP`,
+      )
+      .run(new Date().toISOString());
+  }
+  return { created };
+}
+
+/**
+ * One merge pass for one Mode's pending queue.
+ *
+ * Facts first (exact SQL: same slot + same value, newest kept), then traits
+ * (the model groups same-thing proposals; every group is re-validated here and
+ * anything doubtful is dropped rather than repaired). The model only ever
+ * groups and rephrases — nothing it says can approve, reject or delete.
+ */
+export async function mergePendingCandidates(
+  database: DatabaseHandle,
+  ownerId: string,
+  modeId: string | null,
+  signal?: AbortSignal,
+): Promise<{ merged: number }> {
+  let merged = mergeDuplicateFacts(database, modeId);
+
+  const traits = listMergeableTraits(database, modeId);
+  if (traits.length >= 2) {
+    try {
+      const response = await getDefaultProvider().sendChat(
+        [{ role: "owner", content: traitMergePrompt(traits) }],
+        undefined,
+        { signal },
+      );
+      const groups = parseTraitMergeGroups(response.answer, traits);
+      merged += applyTraitMergeGroups(database, groups, traits, modeId, ownerId);
+    } catch {
+      // No model, no merge — the queue is merely longer, never wrong. The next
+      // scan pass tries again.
+    }
+  }
+  return { merged };
 }
 
 // Auto-run entry for the scheduler: resolve the single Owner and scan. No-ops
