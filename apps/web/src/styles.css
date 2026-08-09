@@ -6997,6 +6997,21 @@ select {
     background: #d9d6cc;
   }
 
+  /* On a chat screen the hamburger FLOATS. Sticky kept it in the document
+     flow, so every chat page was one button-row taller than the screen and
+     the top could always scroll a black strip into view above the header
+     (Oskar, 2026-08-09: the button may sit there, but nothing reserves space
+     for it). Fixed takes it out of the flow — same corner, same reach at any
+     scroll depth, zero height. The chat header's 52px left floor is exactly
+     what it floats over. Ordinary pages keep the sticky in-flow button: their
+     headers own their top-left corner and have no floor to hide it against. */
+  .portal-content .mobile-sidebar-toggle {
+    position: fixed;
+    top: 10px;
+    left: 14px;
+    margin-bottom: 0;
+  }
+
   .sidebar-resizer {
     display: none;
   }
@@ -7041,9 +7056,6 @@ select {
     padding-top: 14px;
   }
 
-  .portal-content {
-    padding-top: 10px;
-  }
 
   .workspace-header {
     align-items: end;
@@ -8235,13 +8247,28 @@ html, body { overscroll-behavior-y: none; }
    and, more importantly, the chat is never unmounted to switch between them,
    so its scroll position and anything mid-stream survive being interrupted. */
 .inbox-tray {
+  /* ALWAYS IN FRONT (Oskar, 2026-08-09). It used to sit in the page flow near
+     the composer, so with the conversation scrolled anywhere else the Review
+     button seemed to do nothing — the panel had opened off-screen. Fixed now:
+     it hangs under the sticky header on a desktop, right where the button
+     that opened it lives, at any scroll depth. */
+  position: fixed;
+  z-index: 30;
+  top: 64px;
+  right: 24px;
   overflow-y: auto;
-  max-height: 40vh;
+  /* Contain is CORRECT here and wrong on the message list: this panel floats
+     OVER the page, so its wheel events must never leak through to scroll the
+     conversation behind it. */
+  overscroll-behavior: contain;
+  width: min(430px, calc(100vw - 48px));
+  max-height: calc(100dvh - 88px);
   padding: var(--space-3) var(--space-4);
   border: 0.5px solid var(--border);
   border-radius: 12px;
-  margin: 0 0 var(--space-3);
+  margin: 0;
   background: var(--bg-raised);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
 }
 
 .inbox-tray-head {
@@ -8252,15 +8279,17 @@ html, body { overscroll-behavior-y: none; }
 }
 
 @media (max-width: 767px) {
-  /* Half the screen, over the conversation, dismissible — and the conversation
-     is still mounted underneath it the whole time. */
+  /* Half the screen, over the bottom, dismissible — fixed for the same
+     reason as the desktop panel, and the conversation is still mounted
+     underneath it the whole time. */
   .inbox-tray {
-    position: sticky;
-    z-index: 5;
+    top: auto;
+    right: 0;
     bottom: 0;
+    left: 0;
+    width: auto;
     max-height: 50vh;
     border-radius: 12px 12px 0 0;
-    margin: 0;
   }
 }
 

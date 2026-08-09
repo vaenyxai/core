@@ -8367,28 +8367,28 @@ function AskVaenyxPanel({
               className="chat-chips chat-chips--inline"
             />
             <div className="chat-header-actions">
+              {/* THE TAG, ON THE ONE CONVERSATION THAT HAS ONE.
+                  It is an entrance and a status light, not a second
+                  conversation: opening it does not navigate anywhere and does
+                  not change the count. Looking is not handling. It shares the
+                  title's row, on the right (Oskar, 2026-08-09) — the header
+                  spends one line, not two. */}
+              {isInboxChat && inbox && inbox.waiting > 0 ? (
+                <button
+                  className={
+                    inboxTrayOpen
+                      ? "capability-tab capability-tab--active"
+                      : "capability-tab"
+                  }
+                  onClick={() => setInboxTrayOpen((open) => !open)}
+                  type="button"
+                >
+                  {zh ? "待确认" : "Review"} {inbox.waiting}
+                </button>
+              ) : null}
               {renderThreadHeaderMenu(activeThread)}
             </div>
           </div>
-          {/* THE TAG, ON THE ONE CONVERSATION THAT HAS ONE.
-              It is an entrance and a status light, not a second conversation:
-              opening it does not navigate anywhere and does not change the
-              count. Looking is not handling. */}
-          {isInboxChat && inbox && inbox.waiting > 0 ? (
-            <div className="capability-bar">
-              <button
-                className={
-                  inboxTrayOpen
-                    ? "capability-tab capability-tab--active"
-                    : "capability-tab"
-                }
-                onClick={() => setInboxTrayOpen((open) => !open)}
-                type="button"
-              >
-                {zh ? "待确认" : "Review"} {inbox.waiting}
-              </button>
-            </div>
-          ) : null}
           {isRoutine ? (
             <div className="capability-bar">
               {(["chat", "journal", "gallery"] as const).map((tab) => (
