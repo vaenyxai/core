@@ -121,7 +121,6 @@ import {
   fetchLegalDocument,
   fetchChatRoutineData,
   runRoutineInChat,
-  attachRoutineToChat,
   classifyMessage,
   fetchFactHistory,
   previewUpdate,
@@ -7114,17 +7113,71 @@ function AskVaenyxPanel({
       }
       if (verdict?.decision === "use-routine" && verdict.routineId) {
         try {
-          await attachRoutineToChat(classifyConversationId, verdict.routineId);
-          await onWorkspaceRefresh();
-          setSending(false);
-          await runRoutineMessage(
+          // JUMP TO WHERE THE ROUTINE LIVES (Oskar, 2026-08-09). Saying "use
+          // the quote checker on this" used to convert the CURRENT chat into
+          // that Routine's chat — which buries a general conversation under
+          // one job and scatters the Routine's history across whichever chats
+          // it was mentioned in. Now the message travels to the Routine's own
+          // conversation and runs there, and this chat gets a receipt.
+          //
+          // Already IN that Routine's chat? Run in place — jumping from a
+          // thing to itself is motion with no destination.
+          if (activeThread?.routineId === verdict.routineId) {
+            await runRoutineMessage(
+              classifyConversationId,
+              verdict.routineId,
+              content,
+            );
+            setSending(false);
+            return;
+          }
+          // The Routine's newest existing conversation, or a fresh one. The
+          // message is sent VERBATIM, not summarised: it is one message he
+          // just typed, and a summary can only lose something he said.
+          const existing = workspace.threads
+            .filter(
+              (thread) =>
+                thread.routineId === verdict.routineId &&
+                thread.kind === "chat" &&
+                thread.status !== "archived" &&
+                thread.conversationId,
+            )
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+          let targetId = existing?.conversationId ?? null;
+          if (!targetId) {
+            const routineName = libraryRoutines.find(
+              (routine) => routine.id === verdict.routineId,
+            )?.name;
+            const created = await createAskVaenyxConversation({
+              routineId: verdict.routineId,
+              ...(routineName ? { title: routineName } : {}),
+            });
+            onConversationsChange([
+              created,
+              ...conversations.filter((item) => item.id !== created.id),
+            ]);
+            targetId = created.id;
+          }
+          // The receipt in the chat he spoke in, BEFORE the jump, so it is
+          // there when he comes back — a day later he can still tell what was
+          // sent where.
+          const targetName =
+            libraryRoutines.find(
+              (routine) => routine.id === verdict.routineId,
+            )?.name ?? verdict.routineId;
+          await appendConversationNote(
             classifyConversationId,
-            verdict.routineId,
-            content,
-          );
+            lang === "zh"
+              ? `→ 已把你的要求发给「${targetName}」,并跳了过去。`
+              : `→ Sent your request to "${targetName}" and jumped there.`,
+          ).catch(() => {});
+          await onWorkspaceRefresh();
+          await openConversation(targetId);
+          setSending(false);
+          await runRoutineMessage(targetId, verdict.routineId, content);
           return;
         } catch {
-          // Attach/run failed — fall through to a normal reply.
+          // Jump/run failed — fall through to a normal reply here instead.
         }
       }
       if (verdict?.decision === "use-task" && verdict.taskRequest) {

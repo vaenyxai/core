@@ -168,6 +168,9 @@ Read this inside the app: **Settings → Manual**.
 - **Tap the number** to answer the items beside the conversation, without
   leaving it. The chat stays exactly where it was.
 - **It is a real chat.** Type in it like any other.
+- **Say "use <a Routine>" in any chat** and the request travels to that
+  Routine's own conversation, runs there, and you jump with it. The chat you
+  spoke in keeps a one-line receipt saying what went where.
 
 ## 5. Vaenyx Me
 
