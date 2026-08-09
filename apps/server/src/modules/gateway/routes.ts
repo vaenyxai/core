@@ -9770,6 +9770,19 @@ export async function registerGatewayRoutes(
         title,
       );
 
+      // Renaming the agent renames this conversation. The stored title is only
+      // ever a snapshot; this keeps it in step each time anybody asks.
+      context.database.sqlite
+        .prepare(
+          `UPDATE vaenyx_threads SET title = ? WHERE id = ? AND title != ?`,
+        )
+        .run(title, inbox.id, title);
+      context.database.sqlite
+        .prepare(
+          `UPDATE ask_vaenyx_conversations SET title = ? WHERE id = ? AND title != ?`,
+        )
+        .run(title, inbox.conversationId, title);
+
       // Scoped to this Mode, with IS rather than = because User Mode is NULL
       // and = never matches NULL — the version of this filter that reads
       // correctly returns zero for the Mode every household actually uses.

@@ -8195,7 +8195,11 @@ function AskVaenyxPanel({
         ) : null}
         <header className="ask-vaenyx-chat-header">
           <div className="focused-title-line">
-            <h2>{activeConversation?.title?.trim() || "Vaenyx Chat"}</h2>
+            <h2>
+              {isInboxChat
+                ? agentName
+                : activeConversation?.title?.trim() || "Vaenyx Chat"}
+            </h2>
             <ThreadChipRow
               chips={chatChips}
               className="chat-chips chat-chips--inline"
@@ -21506,10 +21510,14 @@ function IconMoon() {
  */
 function SidebarInboxRow({
   inbox,
+  liveTitle,
   selected,
   onOpen,
 }: {
   inbox: InboxSummary | null;
+  // The agent name as Settings has it RIGHT NOW. The stored title is only the
+  // fallback, because it is written once and goes stale on rename.
+  liveTitle: string | null;
   selected: boolean;
   onOpen: (conversationId: string, threadId: string) => void;
 }) {
@@ -21523,7 +21531,7 @@ function SidebarInboxRow({
       type="button"
     >
       <IconMoon />
-      <span className="sidebar-inbox-title">{inbox.title}</span>
+      <span className="sidebar-inbox-title">{liveTitle || inbox.title}</span>
       {inbox.waiting > 0 ? (
         <span
           className="sidebar-inbox-count"
@@ -21538,6 +21546,7 @@ function SidebarInboxRow({
 
 function SidebarThreadTree({
   inbox,
+  inboxTitle,
   selectedThreadId,
   workspace,
   onOpenChat,
@@ -21549,6 +21558,7 @@ function SidebarThreadTree({
   onBulkDelete,
 }: {
   inbox: InboxSummary | null;
+  inboxTitle: string | null;
   selectedThreadId: string | null;
   workspace: Workspace;
   onOpenChat: (conversationId: string, threadId: string) => void;
@@ -21662,8 +21672,12 @@ function SidebarThreadTree({
     <section className="thread-tree" aria-label="Vaenyx workspace">
       {/* First child, outside every folder. Inside one it could be collapsed
           shut, and a permanent place you can hide is not a permanent place. */}
+      {/* The name is rendered from live settings, not from the stored row:
+          renaming the agent in Settings renames this the same moment, with no
+          write chasing it (Oskar, 2026-08-09). */}
       <SidebarInboxRow
         inbox={inbox}
+        liveTitle={inboxTitle}
         onOpen={onOpenChat}
         selected={selectedThreadId === inbox?.threadId}
       />
@@ -22467,6 +22481,11 @@ function VaenyxWorkspace({
               that lives on the Scheduled screen anyway. */}
           <SidebarThreadTree
             inbox={inbox}
+            inboxTitle={
+              workspace.mode?.agentName?.trim() ||
+              settings?.agentName?.trim() ||
+              null
+            }
             selectedThreadId={selectedThreadId}
             workspace={workspace}
             onMoveThreadProject={(thread, nextProjectId) =>
@@ -22627,7 +22646,11 @@ function VaenyxWorkspace({
 
         {screen === "ask-vaenyx" ? (
           <AskVaenyxPanel
-            agentName={settings?.agentName?.trim() || "Vaenyx"}
+            agentName={
+              workspace.mode?.agentName?.trim() ||
+              settings?.agentName?.trim() ||
+              "Vaenyx"
+            }
             inbox={inbox}
             onInboxChange={refreshInbox}
             composeKey={composeKey}

@@ -8259,14 +8259,14 @@ html, body { overscroll-behavior-y: none; }
 .sidebar-inbox {
   display: flex;
   width: 100%;
-  min-height: 44px;
+  min-height: 48px;
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
-  padding: 8px 10px;
-  border: 0.5px solid var(--accent, #6ea8ff);
+  padding: 10px 12px;
+  border: 1px solid var(--accent, #6ea8ff);
   border-radius: var(--r-md, 10px);
-  background: var(--accent-soft, rgba(110, 168, 255, 0.08));
+  background: var(--accent-soft, rgba(110, 168, 255, 0.14));
   color: inherit;
   cursor: pointer;
   text-align: left;
@@ -8281,7 +8281,8 @@ html, body { overscroll-behavior-y: none; }
 .sidebar-inbox-title {
   overflow: hidden;
   flex: 1;
-  font-weight: 650;
+  font-size: var(--fs-md, 15px);
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
