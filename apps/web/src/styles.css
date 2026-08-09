@@ -3207,24 +3207,11 @@ select {
 
 .simple-compose-shell {
   display: grid;
-  /* Bottom-anchored (Oskar, dev.156): the box hugs the viewport bottom.
-     58px = workspace-content top padding + its (reduced) bottom padding. */
-  min-height: calc(100dvh - 58px);
+  /* Bottom-anchored (Oskar, dev.156): the portal column stretches this
+     surface to the screen bottom — no viewport arithmetic of its own. */
   align-items: end;
   justify-items: center;
   padding: clamp(96px, 18vh, 190px) 0 18px;
-}
-
-/* The generous scroll clearance under normal pages would push the new-chat
-   box back up — drop it on the one view that bottom-anchors. */
-.workspace-content:has(.simple-compose-shell) {
-  padding-bottom: 12px;
-}
-
-/* Focused chat/task views end at the composer — without this, overscrolling
-   shows a dead band below it (the default 80px page clearance). */
-.workspace-content:has(.focused-workspace) {
-  padding-bottom: 10px;
 }
 
 .simple-compose-panel {
@@ -3395,14 +3382,12 @@ select {
 .ask-vaenyx-chat {
   position: relative; /* anchors the chat-area splash */
   display: grid;
-  /* The composer sits at the bottom of the screen, ALWAYS — every width, every
-     amount of content (Oskar, 2026-07-26; re-broken on phones and re-fixed
-     2026-07-28: a mobile override used to drop this, so short chats floated
-     mid-screen). dvh because phone browsers lie about vh while the URL bar
-     animates; the vh line is the fallback for engines without dvh. The middle
-     row absorbs the spare height, which is what pins the composer. */
-  min-height: calc(100vh - 74px);
-  min-height: calc(100dvh - 74px);
+  /* 🔴 No viewport height on any chat surface. The portal column is min-height
+     one screen and stretches these with flex, so "composer on the bottom edge"
+     is already guaranteed — a calc(100dvh - NNpx) here stacked a SECOND,
+     offset screen-height on top of that, and the page overshot the viewport
+     by the difference: the "scroll to the bottom and a little more appears"
+     slack, on every window, phone and desktop (Oskar, 2026-08-09). */
   /* header · messages · composer. */
   grid-template-rows: auto 1fr auto;
   align-content: stretch;
@@ -3414,16 +3399,6 @@ select {
 
 .focused-workspace {
   display: grid;
-  min-height: calc(100vh - 74px);
-  min-height: calc(100dvh - 74px);
-}
-
-/* Same rule in the focused layouts: the composer belongs on the bottom edge,
-   not wherever the content happens to end. */
-.ask-vaenyx-chat.focused-chat,
-.focused-task-panel {
-  min-height: calc(100vh - 74px);
-  min-height: calc(100dvh - 74px);
 }
 
 .focused-title-line {
@@ -7118,17 +7093,6 @@ select {
     font-size: var(--fs-label);
   }
 
-  /* The composer stays pinned on phones too. A `min-height: auto` override
-     here used to undo the pinning, which is exactly the "对话框不在最下面"
-     Oskar kept hitting on mobile (2026-07-28). The phone chrome above the
-     panel is shorter than the desktop's, hence the smaller offset. */
-  .focused-workspace,
-  .ask-vaenyx-chat.focused-chat,
-  .focused-task-panel {
-    min-height: calc(100vh - 46px);
-    min-height: calc(100dvh - 46px);
-  }
-
   .profiles-section {
     grid-column: auto;
   }
@@ -7259,9 +7223,6 @@ select {
   }
 
   .simple-compose-shell {
-    /* 78px = mobile top padding (14) + hamburger row (52) + reduced bottom
-       padding (12); dvh tracks the real visible viewport on phones. */
-    min-height: calc(100dvh - 78px);
     padding: clamp(104px, 22vh, 180px) 0 14px;
   }
 
@@ -8374,21 +8335,6 @@ html, body { overscroll-behavior-y: none; }
   flex-direction: column;
   justify-content: flex-end;
   min-height: 0;
-}
-
-.portal-content .ask-vaenyx-chat {
-  display: flex;
-  flex-direction: column;
-}
-
-/* The ONE thing that scrolls on a chat screen. contain stops a fast fling
-   from handing its momentum to the page behind. */
-.portal-content .ask-vaenyx-messages {
-  overflow-y: auto;
-  min-height: 0;
-  flex: 1;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 
 /* No mobile height arithmetic any more: the toggle sits in the same flex
