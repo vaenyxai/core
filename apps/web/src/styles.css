@@ -131,19 +131,14 @@
 
 body {
   min-width: 320px;
-  height: 100vh;
+  min-height: 100vh;
   /* dvh, because phone browsers lie about vh while the URL bar animates. */
-  height: 100dvh;
+  min-height: 100dvh;
   margin: 0;
   background: var(--bg);
-  /* 🔴 THE ONE-LAYER RULE (Oskar, 2026-08-09). The document itself never
-     scrolls, in either axis. There used to be two nested scroll layers — the
-     page behind and a box inside — and however exactly the inner one was
-     sized, the outer one kept a few pixels of travel that no arithmetic ever
-     fully explained. So the outer layer is gone: the body is a locked frame,
-     the sidebar scrolls itself, ordinary screens scroll in the main column,
-     and a chat screen scrolls only its message list. */
-  overflow: hidden;
+  /* Sideways, never. The one legitimate scroll is the document's own
+     vertical one — see the note on .portal-content. */
+  overflow-x: clip;
 }
 
 button,
@@ -614,8 +609,8 @@ textarea::placeholder {
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width, 300px) minmax(0, 1fr);
-  height: 100vh;
-  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .sidebar {
@@ -3148,12 +3143,9 @@ textarea::placeholder {
 }
 
 .workspace-content {
-  overflow-y: auto;
   width: min(100% - 48px, 1040px);
-  min-height: 0;
   margin: 0 auto;
   padding: 46px 0 80px;
-  scrollbar-width: thin;
 }
 
 .portal-content {
@@ -8319,10 +8311,16 @@ html, body { overscroll-behavior-y: none; }
    on a short chat — and only a long chat, scrolled to its end, ever pushed it
    down where it belonged. Scoped to the chat screen so settings pages keep
    their normal bottom breathing room. */
+/* The chat column: a flex stack at least one screen tall, containing
+   EVERYTHING above the chat (the mobile toggle included), so a short chat is
+   exactly one screen — no slack — and a long one grows the page and scrolls
+   on the document, natively. The composer's own position: sticky keeps it on
+   the bottom edge the whole way. */
 .portal-content {
   display: flex;
-  overflow: hidden;
   flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
   padding-bottom: 0;
 }
 
@@ -8339,14 +8337,27 @@ html, body { overscroll-behavior-y: none; }
 .portal-content .focused-task-panel,
 .portal-content .ask-vaenyx-chat,
 .portal-content .simple-compose-shell {
-  flex: 1;
-  min-height: 0;
+  /* Grow to fill a short screen; grow WITH the content past it. Never a
+     fixed height, never an inner scroller. */
+  flex: 1 0 auto;
 }
 
-/* The focused wrapper passes its height straight through to the chat. */
+/* The focused wrapper passes the stretch straight through to the chat. */
 .portal-content .focused-workspace {
   display: flex;
   flex-direction: column;
+}
+
+.portal-content .ask-vaenyx-chat {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The message list soaks up the spare height on a short chat so the sticky
+   composer sits on the bottom edge; it has no overflow of its own — the
+   document is the scroller. */
+.portal-content .ask-vaenyx-messages {
+  flex: 1 0 auto;
 }
 
 /* The home screen is the same kind of surface as every chat: the greeting
