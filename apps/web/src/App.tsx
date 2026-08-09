@@ -63,6 +63,7 @@ import type {
   RelayPanel as RelayPanelData,
   RelaySettings,
   CapabilityTestResult,
+  InboxSummary,
   RegressionResult,
 } from "@vaenyx/contracts";
 
@@ -131,6 +132,7 @@ import {
   type UpdateOffer,
   fetchFacts,
   approveFactCandidate,
+  fetchInbox,
   fetchInstalledComponents,
   fetchPendingCorrections,
   fetchRegressionChecks,
@@ -21354,7 +21356,75 @@ function ThreadList({
   );
 }
 
+/** The mark on the one conversation Vaenyx speaks from. Stroke-only, like
+ *  every other icon in the app — the house rule is no emoji, and a moon is the
+ *  quiet end of the icon set, which is the point: it is there at night, and it
+ *  is not shouting. */
+function IconMoon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="line-icon"
+      fill="none"
+      height="16"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+      viewBox="0 0 24 24"
+      width="16"
+    >
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" />
+    </svg>
+  );
+}
+
+/**
+ * THE ONE ROW THAT IS ALWAYS THERE.
+ *
+ * Above every project folder, directly under New, and highlighted — this is
+ * where Vaenyx speaks from, and a fixed place only works if it is in the same
+ * fixed place every time. It sits outside the <details> folders on purpose:
+ * inside one, it could be collapsed shut and the whole point of it lost.
+ *
+ * The number is what needs the Owner, counted in SQL server-side. Zero shows
+ * no number at all rather than a "0" — an empty badge is a badge people learn
+ * to stop reading.
+ */
+function SidebarInboxRow({
+  inbox,
+  selected,
+  onOpen,
+}: {
+  inbox: InboxSummary | null;
+  selected: boolean;
+  onOpen: (conversationId: string, threadId: string) => void;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  if (!inbox) return null;
+  return (
+    <button
+      className={`sidebar-inbox${selected ? " active" : ""}`}
+      onClick={() => onOpen(inbox.conversationId, inbox.threadId)}
+      type="button"
+    >
+      <IconMoon />
+      <span className="sidebar-inbox-title">{inbox.title}</span>
+      {inbox.waiting > 0 ? (
+        <span
+          className="sidebar-inbox-count"
+          title={zh ? "等你看的" : "Waiting for you"}
+        >
+          {inbox.waiting}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 function SidebarThreadTree({
+  inbox,
   selectedThreadId,
   workspace,
   onOpenChat,
@@ -21365,6 +21435,7 @@ function SidebarThreadTree({
   onBulkArchive,
   onBulkDelete,
 }: {
+  inbox: InboxSummary | null;
   selectedThreadId: string | null;
   workspace: Workspace;
   onOpenChat: (conversationId: string, threadId: string) => void;
@@ -21476,6 +21547,13 @@ function SidebarThreadTree({
 
   return (
     <section className="thread-tree" aria-label="Vaenyx workspace">
+      {/* First child, outside every folder. Inside one it could be collapsed
+          shut, and a permanent place you can hide is not a permanent place. */}
+      <SidebarInboxRow
+        inbox={inbox}
+        onOpen={onOpenChat}
+        selected={selectedThreadId === inbox?.threadId}
+      />
       {namedProjects.length > 0 ? (
         <div className="project-thread-folders">
           {namedProjects.map((project) => {
@@ -21664,6 +21742,10 @@ function VaenyxWorkspace({
   const [libraryLoad, setLibraryLoad] = useState<
     "loading" | "ready" | "failed"
   >("loading");
+  // The permanent conversation for whichever Mode this session is in. Null
+  // until the first answer arrives, so the row appears rather than flickering
+  // through a wrong title.
+  const [inbox, setInbox] = useState<InboxSummary | null>(null);
   const [settings, setSettings] = useState<InstanceSettings | null>(null);
   const generalProjectId = workspace.projects.find(isGeneralProject)?.id ?? null;
   const defaultProjectId = generalProjectId ?? workspace.projects[0]?.id ?? "";
@@ -21935,7 +22017,17 @@ function VaenyxWorkspace({
     if (bootLibrary.current) return;
     bootLibrary.current = true;
     refreshLibraryData();
+    refreshInbox();
   });
+
+  // Re-read after anything that could change what is waiting. The number is
+  // derived server-side, so asking again is the only way it moves — and the
+  // only way it can be wrong is by not asking.
+  function refreshInbox(): void {
+    void fetchInbox()
+      .then(setInbox)
+      .catch(() => undefined);
+  }
 
   function openScreen(nextScreen: Screen) {
     setSelectedThreadId(null);
@@ -22308,6 +22400,7 @@ function VaenyxWorkspace({
             );
           })()}
           <SidebarThreadTree
+            inbox={inbox}
             selectedThreadId={selectedThreadId}
             workspace={workspace}
             onMoveThreadProject={(thread, nextProjectId) =>

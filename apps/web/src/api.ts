@@ -90,6 +90,7 @@ import type {
   PhoneAccessStatus,
   PhoneLoginResponse,
   PhoneTunnelResponse,
+  InboxSummary,
   PendingCorrectionsResponse,
   RegressionListResponse,
   RegressionResult,
@@ -301,6 +302,13 @@ export function checkMethodAgainstExamples(
 
 // A9 — how many corrections are waiting, per Method. One request for the whole
 // Library: the alternative was opening every Method to find out.
+// The permanent conversation for the Mode this session is in, made on first
+// ask. The count comes back derived from SQL, so it can never disagree with
+// what the list actually shows.
+export function fetchInbox(): Promise<InboxSummary> {
+  return requestJson<InboxSummary>("/v1/inbox");
+}
+
 export function fetchPendingCorrections(): Promise<PendingCorrectionsResponse> {
   return requestJson<PendingCorrectionsResponse>(
     "/v1/library/corrections/pending",
