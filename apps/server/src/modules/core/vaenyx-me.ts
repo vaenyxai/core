@@ -447,24 +447,21 @@ export async function scanVaenyxMe(
   );
   const created = fromTasks.created + fromChats.created;
 
-  // Merge at the scan's own cadence (Oskar, 2026-08-09): a pass that added
-  // something is followed by one merge over what is now pending, plus a single
-  // first run over the backlog that existed before merging did. A quiet pass
-  // stays quiet — no model call for a queue that has not changed.
-  const mergedBefore = database.sqlite
-    .prepare("SELECT value FROM instance_settings WHERE key = 'me_merge_ran_at'")
-    .get() as { value: string } | undefined;
-  if (created > 0 || !mergedBefore) {
-    await mergePendingCandidates(database, ownerId, modeId, signal);
-    database.sqlite
-      .prepare(
-        `INSERT INTO instance_settings (key, value, updated_at)
-         VALUES ('me_merge_ran_at', ?, CURRENT_TIMESTAMP)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value,
-           updated_at = CURRENT_TIMESTAMP`,
-      )
-      .run(new Date().toISOString());
-  }
+  // Merge on EVERY pass, not only ones that added something (Oskar,
+  // 2026-08-09, second ruling — the first pass left pairs he could see were
+  // the same thing, and a merge gated on "something new arrived" can never
+  // take a second look at what is already sitting there). The scan is daily
+  // now, so the worst case is one model call a day, and only when at least
+  // two traits are pending. The timestamp is observability, not a gate.
+  await mergePendingCandidates(database, ownerId, modeId, signal);
+  database.sqlite
+    .prepare(
+      `INSERT INTO instance_settings (key, value, updated_at)
+       VALUES ('me_merge_ran_at', ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+         updated_at = CURRENT_TIMESTAMP`,
+    )
+    .run(new Date().toISOString());
   return { created };
 }
 

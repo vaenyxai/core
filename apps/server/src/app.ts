@@ -148,12 +148,15 @@ export async function buildApp(
   schedulerTick.unref();
 
   // Auto-learn: periodically infer Vaenyx Me traits from recent activity so the
-  // Owner only approves/rejects (never fills forms). Throttled — model calls cost.
+  // Owner only approves/rejects (never fills forms). Once a day (Oskar,
+  // 2026-08-09; was 6-hourly) — the queue only needs to be fresher than the
+  // Owner's attention, and he looks at it daily at most. The startup warmup
+  // below still gives an immediate pass after every update.
   const vaenyxMeScanTick = setInterval(
     () => {
       void autoScanVaenyxMe(database).catch((error) => app.log.error(error));
     },
-    6 * 60 * 60_000,
+    24 * 60 * 60_000,
   );
   vaenyxMeScanTick.unref();
   const vaenyxMeWarmup = setTimeout(
