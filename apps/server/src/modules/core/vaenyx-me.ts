@@ -197,6 +197,18 @@ export function createVaenyxMeCandidate(
       input.modeId ?? null,
     );
 
+  // The inbox's own record of the reference (H-001): one row per Mode and
+  // source, deduplicated by the unique index rather than by hoping. OR IGNORE
+  // because a merged replacement can share a source lineage with what it
+  // replaced, and a duplicate reference is a fact already on file, not an
+  // error.
+  database.sqlite
+    .prepare(
+      `INSERT OR IGNORE INTO inbox_items (id, mode_id, source_kind, source_id)
+       VALUES (?, ?, 'vaenyx_me_candidate', ?)`,
+    )
+    .run(`inbox-${id}`, input.modeId ?? null, id);
+
   return mapCandidate(getCandidateRow(database, id)!);
 }
 
