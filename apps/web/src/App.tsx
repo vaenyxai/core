@@ -21885,7 +21885,6 @@ function VaenyxWorkspace({
   );
   const [composeKey, setComposeKey] = useState(0);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [scheduledExpanded, setScheduledExpanded] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const savedWidth = window.localStorage.getItem("vaenyx.sidebarWidth");
     const parsedWidth = savedWidth ? Number.parseInt(savedWidth, 10) : 320;
@@ -22463,55 +22462,9 @@ function VaenyxWorkspace({
               <span className="nav-label">New</span>
             </button>
           </div>
-          {(() => {
-            const scheduledTasks = workspace.tasks.filter(
-              (task) => task.scheduleEnabled && task.scheduleCadence,
-            );
-            if (scheduledTasks.length === 0) return null;
-            return (
-              <div className="sidebar-scheduled">
-                <button
-                  aria-expanded={scheduledExpanded}
-                  className="sidebar-scheduled-toggle"
-                  onClick={() => setScheduledExpanded((open) => !open)}
-                  type="button"
-                >
-                  <span
-                    className={`sidebar-caret ${scheduledExpanded ? "open" : ""}`}
-                  />
-                  <span className="nav-label">Scheduled</span>
-                  <span className="sidebar-scheduled-count">
-                    {scheduledTasks.length}
-                  </span>
-                </button>
-                {scheduledExpanded ? (
-                  <div className="sidebar-scheduled-list">
-                    {scheduledTasks.map((task) => {
-                      const thread = workspace.threads.find(
-                        (candidate) => candidate.taskId === task.id,
-                      );
-                      return (
-                        <button
-                          className="sidebar-scheduled-item"
-                          key={task.id}
-                          onClick={() => {
-                            if (thread) openThreadTask(task.id, thread.id);
-                          }}
-                          title={describeSchedule(task)}
-                          type="button"
-                        >
-                          <span className="sidebar-scheduled-name">
-                            {task.title}
-                          </span>
-                          <small>{describeSchedule(task)}</small>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })()}
+          {/* The Scheduled block is gone (Oskar, 2026-08-09). It sat between
+              New and the permanent conversation, pushing both down for a list
+              that lives on the Scheduled screen anyway. */}
           <SidebarThreadTree
             inbox={inbox}
             selectedThreadId={selectedThreadId}
