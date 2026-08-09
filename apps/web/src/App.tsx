@@ -2474,77 +2474,145 @@ const GEMINI_TTS_VOICES = [
 // in AI Settings → Capabilities; this page is the map, the suggestion channel,
 // and the safety line: tools ship only from Vaenyx, and community content can
 // only NAME tools from this list, never bring its own.
+// THE TOOLS PAGE IS A CATALOG AND A SAFETY BOUNDARY, NOT A CONTROL PANEL
+// (H-002). A Tool is a Vaenyx-built, Vaenyx-reviewed behavior; it ships as
+// part of the product, so there is nothing to install, uninstall or switch —
+// which is why every chip here says what a row IS, never what state it is in.
+// "Always On" looked like a switch stuck on; "Built In" is a fact.
+//
+// Some Tools will need a Connection (a calendar account, a device login).
+// That is a dependency OF the Tool, named on its row — never a competing
+// top-level category, and never a fake Connect button before the Tool ships.
 function ToolsPanel() {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  const builtIn = [
+    {
+      key: "marks",
+      text: zh
+        ? "Photo Marks — 在任何照片上打点、标名字;可以自己改名、增删。"
+        : "Photo Marks — dots and names on any photo; rename, add or remove them yourself.",
+    },
+    {
+      key: "viewer",
+      text: zh
+        ? "Photo Viewer — 点任何照片全屏打开、可缩放。"
+        : "Photo Viewer — tap any photo to open it full screen and zoom.",
+    },
+    {
+      // The row states the Tool's actual rule, which is more than a speaker
+      // button: spoken in answers aloud, typed in stays text, and the button
+      // is the explicit ask. H-002 locks this behavior; the code already does
+      // it (the classify path's voice branch), so only the description moved.
+      key: "spoken",
+      text: zh
+        ? "Spoken Replies — 你用语音说的,回复自动读出来;打字问的保持文字,想听就按那条回复自己的喇叭按钮。"
+        : "Spoken Replies — a reply to spoken input is read aloud automatically; a typed question stays text unless you press that reply's own speaker button.",
+    },
+    {
+      key: "document",
+      text: zh
+        ? "Document Reading — 像发照片一样发 PDF。长文档会花你自己模型连接的真金白银,所以 Vaenyx 先告诉你页数、问过你才读。"
+        : "Document Reading — send a PDF the way you send a photo. A long document costs real money on your own model connection, so Vaenyx shows you its page count and asks first.",
+    },
+  ];
+  const comingSoon = [
+    {
+      key: "calendar",
+      text: zh
+        ? "Calendar & Reminders — 懂你家日程的 Routine。"
+        : "Calendar & Reminders — Routines that know your family's schedule.",
+      // A real future dependency, stated as metadata — no fake Connect button
+      // before the Tool exists.
+      connection: zh ? "需要连接日历账号" : "Will need a calendar connection",
+    },
+    {
+      key: "web",
+      text: zh
+        ? "Web Page Reading — 给 Vaenyx 一个链接,不用再贴文字。"
+        : "Web Page Reading — hand Vaenyx a link instead of pasting text.",
+      // Internet access alone is not an account Connection (H-002), so no
+      // dependency line here.
+      connection: null,
+    },
+    {
+      key: "weather",
+      text: zh
+        ? "Weather — 给 Routine 用的本地天气。"
+        : "Weather — local conditions for planning Routines.",
+      // Only a Connection if the chosen provider actually demands an account;
+      // none has been chosen, so no claim is made.
+      connection: null,
+    },
+    {
+      key: "home",
+      text: zh
+        ? "Smart Home — 读取并操作你逐个批准的设备。"
+        : "Smart Home — read and act on devices you approve, one by one.",
+      connection: zh
+        ? "需要连接账号与设备,并逐个授权"
+        : "Will need an account/device connection, approved per device",
+    },
+  ];
   return (
     <section className="settings-card" id="tools">
       <p className="eyebrow">App</p>
       <h2>Tools</h2>
+      {/* The old intro claimed built-in tools "never leave this machine" —
+          untrue as a blanket: Document Reading, for one, runs on whatever
+          model the Owner connected, which may be a cloud one. The honest
+          version says who builds Tools; data movement is explained per Tool,
+          on the rows whose behavior actually supports the claim. */}
       <p className="settings-card-copy">
-        What Vaenyx can do beyond chat. Built-in tools are always on and never
-        leave this machine. Hearing, speaking and pictures are set up on their
-        own rows under AI Settings → Capabilities.
+        {zh
+          ? "聊天之外 Vaenyx 会做的事。每个 Tool 都由 Vaenyx 自己构建和审查,随产品一起装好 —— 不用装、不用卸、也没有开关。听、说、看图这些能力在 AI Settings → Capabilities 里各自设置。"
+          : "What Vaenyx can do beyond chat. Every Tool is built and reviewed by Vaenyx and ships with the product — nothing to install, uninstall or switch. Hearing, speaking and pictures are set up on their own rows under AI Settings → Capabilities."}
       </p>
 
       <section className="engine-section">
-        <h3 className="settings-subhead">Built-In</h3>
-        <div className="engine-row">
-          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
-            Photo Marks — dots and names on any photo; rename, add or remove
-            them yourself.
-          </p>
-          <span className="library-chip chip-published">Always On</span>
-        </div>
-        <div className="engine-row">
-          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
-            Photo Viewer — tap any photo to open it full screen and zoom.
-          </p>
-          <span className="library-chip chip-published">Always On</span>
-        </div>
-        <div className="engine-row">
-          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
-            Spoken Replies — any reply or result read aloud from its own
-            speaker button.
-          </p>
-          <span className="library-chip chip-published">Always On</span>
-        </div>
-        <div className="engine-row">
-          <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
-            Document Reading — send a PDF the way you send a photo. A long
-            document costs real money on your own model connection, so Vaenyx
-            shows you its page count and asks first.
-          </p>
-          <span className="library-chip chip-published">Always On</span>
-        </div>
+        <h3 className="settings-subhead">{zh ? "内建" : "Built In"}</h3>
+        {builtIn.map((tool) => (
+          <div className="engine-row" key={tool.key}>
+            <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
+              {tool.text}
+            </p>
+            <span className="library-chip chip-published">
+              {zh ? "内建" : "Built In"}
+            </span>
+          </div>
+        ))}
       </section>
 
       <section className="engine-section">
         <h3 className="settings-subhead">Coming Soon</h3>
-        {[
-          "Calendar & Reminders — Routines that know your family's schedule.",
-          "Web Page Reading — hand Vaenyx a link instead of pasting text.",
-          "Weather — local conditions for planning Routines.",
-          "Smart Home — read and act on devices you approve, one by one.",
-        ].map((line) => (
-          <div className="engine-row" key={line}>
+        {comingSoon.map((tool) => (
+          <div className="engine-row" key={tool.key}>
             <p className="settings-card-copy" style={{ margin: 0, flex: 1 }}>
-              {line}
+              {tool.text}
+              {tool.connection ? (
+                <span className="text-faint"> · {tool.connection}</span>
+              ) : null}
             </p>
             <span className="library-chip">Coming Soon</span>
           </div>
         ))}
+        {/* The safety statement (H-002): the wording may be polished, the
+            trust boundary may not weaken. */}
         <p className="settings-card-copy text-faint">
-          Every new tool is built and reviewed by Vaenyx — Routines and
-          Community content can only use tools from this list, never bring
-          their own. That is the household safety line.
+          {zh
+            ? "每一个新 Tool 都由 Vaenyx 构建和审查 —— Routine 和社区内容只能使用这个清单里的 Tool,永远不能自带。这是这个家的安全线。"
+            : "Every new tool is built and reviewed by Vaenyx — Routines and Community content can only use tools from this list, never bring their own. That is the household safety line."}
         </p>
       </section>
 
       <p className="settings-card-copy text-faint">
-        Missing a tool you need? Suggest it on{" "}
+        {zh ? "缺一个你需要的 Tool?来 " : "Missing a tool you need? Suggest it on "}
         <a href="https://vaenyx.ai/discord" rel="noopener" target="_blank">
           Discord
         </a>{" "}
-        or email <a href="mailto:hello@vaenyx.ai">hello@vaenyx.ai</a>.
+        {zh ? "提,或写邮件到 " : "or email "}
+        <a href="mailto:hello@vaenyx.ai">hello@vaenyx.ai</a>
+        {zh ? "。" : "."}
       </p>
     </section>
   );
