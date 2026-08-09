@@ -4,6 +4,36 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.1.0 — 2026-08-09
+
+**Pick what to download at install time.** The installer asks which optional
+pieces you want — Tailscale for phone access (on by default, 37 MB), the
+ChatGPT and Claude subscription channels, and offline voices — with a live
+download total. The exe asks with checkboxes; the ZIP asks the same questions
+as text after you pick a language. Anything you skip installs later from
+Settings.
+
+**Vaenyx now speaks from one permanent conversation.** A pinned row with a
+moon sits under New, one per Mode, and cannot be deleted or archived. When
+Vaenyx notices things worth remembering, a Review tag appears there; answer
+items in a panel beside the chat without leaving it. Same-thing proposals are
+merged automatically once a day, and each one shows your own sentence as its
+evidence.
+
+**Say where to go, and go there.** "Use the dinner planner on this" jumps the
+request to that Routine's own chat and runs it there, leaving a receipt.
+"Change the agent's name" grows a Take-me-there button under the reply.
+
+**The Library reads simpler.** Four tabs — Routines, Tokens, Methods,
+Community — with name-only cards; everything about an item opens in a dialog.
+Editing a community Method now makes your own credited copy, updates can be
+re-checked against your own examples, and app tokens are labelled Type A and
+Type B.
+
+**Plus:** a real status orb instead of the three dots, an honest Tools page,
+monthly activity summaries for Custom Modes, chat windows sized exactly to the
+screen, and versioned download names beside the fixed ones.
+
 ## v0.3.9 — 2026-08-08
 
 **"Install it" now installs Tailscale.** Pressing it did nothing at all and
