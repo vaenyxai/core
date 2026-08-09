@@ -561,13 +561,6 @@ function getSidebarProjectName(project: Project): string {
     return "Unsorted";
   }
 
-  // The first project anybody meets. It was labelled "Testing", which reads
-  // like something half-built that you should not put real work in (Oskar,
-  // 2026-08-09).
-  if (project.id === "vaenyx" && project.name === "Vaenyx") {
-    return "Projects";
-  }
-
   return project.name;
 }
 
