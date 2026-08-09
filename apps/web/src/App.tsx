@@ -21721,7 +21721,13 @@ function SidebarThreadTree({
       .map((thread) => thread.id),
   );
   const visibleThreads = workspace.threads.filter(
-    (thread) => thread.status !== "archived",
+    (thread) =>
+      thread.status !== "archived" &&
+      // The permanent conversation already has its own row above every folder.
+      // Listed here too it would appear twice — and the second copy would sit
+      // inside a folder that can collapse, which is everything the fixed row
+      // exists to prevent (Oskar, 2026-08-09).
+      thread.kind !== "inbox",
   );
   const archivedThreads = workspace.threads.filter(
     (thread) => thread.status === "archived",
