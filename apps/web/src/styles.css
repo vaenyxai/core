@@ -8365,3 +8365,19 @@ html, body { overscroll-behavior-y: none; }
     min-height: calc(100dvh - 10px);
   }
 }
+
+/* The ledger as a visitor in the tray: normal-size type, tighter rows. The
+   full-size treatment belongs to the Vaenyx Me page, where it IS the page. */
+.me-ledger--compact .me-ledger-quote {
+  font-size: var(--fs-sm);
+}
+
+.me-ledger--compact .me-ledger-item {
+  padding: var(--space-2) 0;
+}
+
+.me-ledger--compact .me-ledger-answer {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: var(--fs-sm);
+}

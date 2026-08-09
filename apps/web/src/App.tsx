@@ -8263,6 +8263,7 @@ function AskVaenyxPanel({
             </div>
             <VaenyxMeLedger
               candidates={inboxCandidates}
+              compact
               onApprove={(candidate) => void answerInboxCandidate(candidate, true)}
               onReject={(candidate) => void answerInboxCandidate(candidate, false)}
             />
@@ -15765,20 +15766,36 @@ function FactsSection() {
  */
 function VaenyxMeLedger({
   candidates,
+  compact,
   onApprove,
   onReject,
 }: {
   candidates: VaenyxMeCandidate[];
+  // The tray beside a conversation, where the list is a visitor rather than
+  // the page: quieter type, and only the newest few until asked for the rest.
+  // A panel that pours out 31 items over a chat is louder than the chat.
+  compact?: boolean;
   onApprove: (candidate: VaenyxMeCandidate) => void;
   onReject: (candidate: VaenyxMeCandidate) => void;
 }) {
   const { lang } = useI18n();
   const zh = lang === "zh";
+  const [showAll, setShowAll] = useState(false);
+  // Newest first is already the sort, so "the first five" IS "the five most
+  // recent" — the ones most likely to still be about something current.
+  const COMPACT_VISIBLE = 5;
+  const visible =
+    compact && !showAll
+      ? [...candidates]
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+          .slice(0, COMPACT_VISIBLE)
+      : candidates;
+  const hidden = candidates.length - visible.length;
 
   // Newest first, then grouped by the day it was noticed. A date somebody can
   // place ("yesterday") beats a timestamp they have to decode.
   const days = new Map<string, VaenyxMeCandidate[]>();
-  for (const candidate of [...candidates].sort((left, right) =>
+  for (const candidate of [...visible].sort((left, right) =>
     right.createdAt.localeCompare(left.createdAt),
   )) {
     const day = candidate.createdAt.slice(0, 10);
@@ -15813,7 +15830,7 @@ function VaenyxMeLedger({
   }
 
   return (
-    <div className="me-ledger">
+    <div className={compact ? "me-ledger me-ledger--compact" : "me-ledger"}>
       {[...days.entries()].map(([day, entries]) => (
         <section className="me-ledger-day" key={day}>
           <p className="me-ledger-date">{dayLabel(day)}</p>
@@ -15873,6 +15890,15 @@ function VaenyxMeLedger({
           ))}
         </section>
       ))}
+      {hidden > 0 ? (
+        <button
+          className="text-button"
+          onClick={() => setShowAll(true)}
+          type="button"
+        >
+          {zh ? `还有 ${hidden} 条，展开` : `Show ${hidden} more`}
+        </button>
+      ) : null}
     </div>
   );
 }
