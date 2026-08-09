@@ -113,28 +113,20 @@ Name: "{commonprograms}\Vaenyx"; Filename: "{app}\Vaenyx-Start.cmd"; WorkingDir:
 Filename: "{app}\Vaenyx-Start.cmd"; Description: "{cm:OpenVaenyx}"; Flags: postinstall nowait shellexec skipifsilent; Check: SetupStepSucceeded
 
 [CustomMessages]
-english.PickTitle=Choose what to download
-chinesesimplified.PickTitle=选择要下载的组件
-english.PickTotal=Will download about %1 MB
-chinesesimplified.PickTotal=将下载约 %1 MB
-english.PickTail=Use Vaenyx on my phone (Tailscale)   +37 MB
-chinesesimplified.PickTail=在手机上用 Vaenyx(Tailscale)   +37 MB
-english.PickTailNote=So your phone can reach this computer. Installing it is not enough: one sign-in follows, in Vaenyx.
-chinesesimplified.PickTailNote=为了让手机能连回这台电脑。装上还不够,装完在 Vaenyx 里还要登录一次。
-english.PickCodex=Use my ChatGPT subscription   +247 MB
-chinesesimplified.PickCodex=用我的 ChatGPT 订阅   +247 MB
-english.PickCodexNote=Only if you already pay for ChatGPT. Otherwise it downloads later.
-chinesesimplified.PickCodexNote=只有已经在付 ChatGPT 才用得上。不勾以后也能补。
-english.PickClaude=Use my Claude subscription   +297 MB
-chinesesimplified.PickClaude=用我的 Claude 订阅   +297 MB
-english.PickClaudeNote=Only if you already pay for Claude. Otherwise it downloads later.
-chinesesimplified.PickClaudeNote=只有已经在付 Claude 才用得上。不勾以后也能补。
-english.PickVoiceZh=Offline Chinese voice   +60 MB
-chinesesimplified.PickVoiceZh=中文离线语音   +60 MB
-english.PickVoiceEn=Offline English voice   +60 MB
-chinesesimplified.PickVoiceEn=英文离线语音   +60 MB
-english.PickVoiceNote=Speak without the internet. Both languages share one engine.
-chinesesimplified.PickVoiceNote=不联网也能说话。两种语言共用一个引擎。
+; Five sentences, one per tick — no sizes, no notes, no heading (Oskar,
+; 2026-08-09: the picker is five choices a person can read, not a spec sheet).
+; Mirrored word for word in scripts/Vaenyx-Setup.ps1 ($Script:ComponentCopy)
+; and held there by its self-test.
+english.PickTail=Use Vaenyx on my phone (installs Tailscale)
+chinesesimplified.PickTail=在手机上用 Vaenyx(装 Tailscale)
+english.PickCodex=Use my ChatGPT subscription (installs Codex)
+chinesesimplified.PickCodex=用我的 ChatGPT 订阅(装 Codex)
+english.PickClaude=Use my Claude subscription (installs Claude Code)
+chinesesimplified.PickClaude=用我的 Claude 订阅(装 Claude Code)
+english.PickVoiceZh=Offline Chinese voice (speaks without the internet)
+chinesesimplified.PickVoiceZh=中文离线语音(不联网也能说话)
+english.PickVoiceEn=Offline English voice (speaks without the internet)
+chinesesimplified.PickVoiceEn=英文离线语音(不联网也能说话)
 english.PickFolder=Vaenyx goes here. Press Browse to put it somewhere else.
 chinesesimplified.PickFolder=Vaenyx 会装到这里。想换位置就点 Browse。
 english.PickInstalled=already installed
@@ -179,18 +171,18 @@ end;
 
 // ---- What to download (the install-location page's upper half) ----
 //
-// It shares that page rather than having one of its own: measured, five ticks
-// with a line of explanation each end 64px above where the page runs out, so
-// a second page would only be a second Next to press.
+// It shares that page rather than having one of its own: five one-line ticks
+// end well above where the page runs out, so a second page would only be a
+// second Next to press.
 //
-// The total is COMPUTED HERE and not by Inno. Inno's own component sizes count
-// files packed INTO the installer; every one of these is fetched afterwards,
-// so its numbers would all read zero. Sizes are measured, not estimated
-// (2026-08-07): codex 247 MB on disk, the Claude component 297 MB, the
-// Tailscale MSI 36.6 MB, the speech engine 21.4 MB and each voice 60.3 MB.
+// Nothing on the page says a size any more (Oskar, 2026-08-09) — but the
+// sizes still EXIST, because the free-space checks below need them. They are
+// measured, not estimated (2026-08-07): codex 247 MB on disk, the Claude
+// component 297 MB, the Tailscale MSI 36.6 MB, the speech engine 21.4 MB and
+// each voice 60.3 MB. Inno's own component sizing would read zero for every
+// one of them - they are fetched after install, never packed into the exe.
 var
   CbCodex, CbClaude, CbTail, CbVoiceZh, CbVoiceEn: TCheckBox;
-  TotalLabel: TLabel;
 
 function ComponentMb(Box: TCheckBox; Size: Integer): Integer;
 begin
@@ -208,12 +200,6 @@ begin
   if (CbVoiceZh.Checked and CbVoiceZh.Enabled)
     or (CbVoiceEn.Checked and CbVoiceEn.Enabled) then
     Result := Result + 21;
-end;
-
-procedure UpdateTotal(Sender: TObject);
-begin
-  TotalLabel.Caption := FmtMessage(CustomMessage('PickTotal'), [
-    IntToStr(DownloadMb())]);
 end;
 
 // The comma-separated list handed to Vaenyx-Setup.ps1. Nothing is downloaded
@@ -247,52 +233,33 @@ begin
     or (Pos('\iclouddrive\', Normalised) > 0);
 end;
 
-function MakeComponentBox(Top: Integer; Caption, Note: String): TCheckBox;
-var
-  NoteLabel: TLabel;
+function MakeComponentBox(Top: Integer; Caption: String): TCheckBox;
 begin
   Result := TCheckBox.Create(WizardForm);
   Result.Parent := WizardForm.SelectDirPage;
   Result.Left := 0;
   Result.Top := Top;
   Result.Width := WizardForm.SelectDirPage.Width;
-  Result.Height := ScaleY(17);
+  // Tall rows, and the caption two sizes up from stock: the five lines ARE
+  // the page, the room is there, and small print on this page has earned
+  // three strikes from the Owner. The whole caption is the click target, so
+  // the bigger row is also a bigger thing to hit.
+  Result.Height := ScaleY(24);
+  Result.Font.Size := WizardForm.Font.Size + 2;
   Result.Caption := Caption;
-  Result.OnClick := @UpdateTotal;
-
-  NoteLabel := TLabel.Create(WizardForm);
-  NoteLabel.Parent := WizardForm.SelectDirPage;
-  NoteLabel.Left := ScaleX(18);
-  NoteLabel.Top := Top + ScaleY(16);
-  NoteLabel.Width := WizardForm.SelectDirPage.Width - ScaleX(18);
-  NoteLabel.Caption := Note;
-  NoteLabel.Font.Color := clGrayText;
-  // A size up from the stock small: this is the text somebody reads to decide
-  // what to download, and it was the smallest thing on the page.
-  NoteLabel.Font.Size := WizardForm.Font.Size + 1;
-  // WRAPS, and it did not. The first version had these as full sentences with
-  // wrapping off, so on the Owner's screen every one of them ran off the right
-  // edge and was cut mid-word: "You sign in to your own fre", "downloads it
-  // the first". The notes are now one short line each AND the label wraps, so
-  // a longer translation cannot bring the fault back.
-  NoteLabel.WordWrap := True;
-  NoteLabel.Height := ScaleY(28);
 end;
 
 procedure InitializeWizard;
 var
   Y, Step: Integer;
 begin
-  TotalLabel := TLabel.Create(WizardForm);
-  TotalLabel.Parent := WizardForm.SelectDirPage;
-  TotalLabel.Left := 0;
-  TotalLabel.Top := ScaleY(4);
-  TotalLabel.Width := WizardForm.SelectDirPage.Width;
-  TotalLabel.Font.Style := [fsBold];
-  TotalLabel.Font.Size := WizardForm.Font.Size + 2;
+  // The bold download total and the stock yellow folder icon both used to sit
+  // above the ticks; the Owner struck both (2026-08-09). The page opens
+  // straight with the five choices.
+  WizardForm.SelectDirBitmapImage.Visible := False;
 
-  Y := ScaleY(30);
-  Step := ScaleY(32);
+  Y := ScaleY(8);
+  Step := ScaleY(34);
   // Tailscale first and ON by default: using Vaenyx from a phone is one of the
   // things it is FOR, it is the smallest of the five, and it is the only one
   // that is a capability rather than support for one particular provider. The
@@ -300,27 +267,17 @@ begin
   // 250 MB each and are of use only to somebody already paying for that
   // service, so leaving one off costs that person a single download later,
   // while ticking them by default would cost everybody else half a gigabyte.
-  CbTail := MakeComponentBox(Y, CustomMessage('PickTail'),
-    CustomMessage('PickTailNote'));
+  CbTail := MakeComponentBox(Y, CustomMessage('PickTail'));
   Y := Y + Step;
-  CbCodex := MakeComponentBox(Y, CustomMessage('PickCodex'),
-    CustomMessage('PickCodexNote'));
+  CbCodex := MakeComponentBox(Y, CustomMessage('PickCodex'));
   Y := Y + Step;
-  CbClaude := MakeComponentBox(Y, CustomMessage('PickClaude'),
-    CustomMessage('PickClaudeNote'));
+  CbClaude := MakeComponentBox(Y, CustomMessage('PickClaude'));
   Y := Y + Step;
-  // The two voices are one idea in two ticks, so they sit together with a
-  // single note under the pair.
-  CbVoiceZh := MakeComponentBox(Y, CustomMessage('PickVoiceZh'), '');
-  Y := Y + ScaleY(18);
-  CbVoiceEn := MakeComponentBox(Y, CustomMessage('PickVoiceEn'),
-    CustomMessage('PickVoiceNote'));
-  Y := Y + Step + ScaleY(8);
+  CbVoiceZh := MakeComponentBox(Y, CustomMessage('PickVoiceZh'));
+  Y := Y + Step;
+  CbVoiceEn := MakeComponentBox(Y, CustomMessage('PickVoiceEn'));
+  Y := Y + Step + ScaleY(10);
 
-  // ⚠ TICKED ONLY NOW, once all five exist. Setting Checked fires OnClick,
-  // OnClick totals every box, and a box that has not been created yet is nil —
-  // doing this beside CbTail's creation crashed the whole installer before it
-  // drew a single page ("Could not call proc", caught in rehearsal).
   CbTail.Checked := True;
 
   // The stock install-location controls move below the ticks.
@@ -335,7 +292,6 @@ begin
   WizardForm.DirEdit.Top := Y + ScaleY(26);
   WizardForm.DirBrowseButton.Top := Y + ScaleY(24);
   WizardForm.DiskSpaceLabel.Top := Y + ScaleY(56);
-  UpdateTotal(nil);
 end;
 
 // An upgrade must not offer to download what this instance already has. Read
@@ -356,7 +312,6 @@ begin
   MarkOne(CbClaude, Dir + '\userdata\tools\node_modules\@anthropic-ai\claude-agent-sdk');
   MarkOne(CbVoiceZh, Dir + '\userdata\tts\voices\zh_CN-chaowen-medium.onnx');
   MarkOne(CbVoiceEn, Dir + '\userdata\tts\voices\en_US-amy-medium.onnx');
-  UpdateTotal(nil);
 end;
 
 // SPACE IS CHECKED ON TWO DRIVES, not one. The components are unpacked through

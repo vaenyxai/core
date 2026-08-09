@@ -131,56 +131,34 @@ function Get-LanguageChoice {
 # -- The ZIP's component questions (H-003) ----
 #
 # The exe installer has a checkbox page; a person who double-clicks the ZIP
-# gets the same choice as text, with the SAME defaults, the same copy and the
-# same arithmetic - one decision, two skins. The strings below are the exe's
-# own PickX messages from scripts\installer\vaenyx.iss, held in parity by a
-# self-test that reads that file when it is present (a repo checkout has it;
-# the shipped ZIP does not, and the test skips there rather than lying).
+# gets the same choice as text, with the SAME defaults and the same copy -
+# one decision, two skins. The strings below are the exe's own PickX messages
+# from scripts\installer\vaenyx.iss, held in parity by a self-test that reads
+# that file when it is present (a repo checkout has it; the shipped ZIP does
+# not, and the test skips there rather than lying).
 #
-# Sizes are the measured numbers the exe uses: codex 247, claude 297,
-# tailscale 37, each voice 60, and the speech engine both voices share is 21 -
-# counted ONCE, which is why a second language adds 60 and not 81.
+# Five sentences, no sizes, no notes (Oskar, 2026-08-09): the picker is five
+# choices a person can read, not a spec sheet. Download sizes still exist
+# where they matter - the exe's free-space checks - just never on screen.
+# PickLater is the one ZIP-only line: it replaces the finished page's context
+# and has no twin in the exe, so the parity test does not cover it.
 $Script:ComponentCopy = @{
   en = @{
-    PickTail      = "Use Vaenyx on my phone (Tailscale)   +37 MB"
-    PickTailNote  = "So your phone can reach this computer. Installing it is not enough: one sign-in follows, in Vaenyx."
-    PickCodex     = "Use my ChatGPT subscription   +247 MB"
-    PickCodexNote = "Only if you already pay for ChatGPT. Otherwise it downloads later."
-    PickClaude    = "Use my Claude subscription   +297 MB"
-    PickClaudeNote = "Only if you already pay for Claude. Otherwise it downloads later."
-    PickVoiceZh   = "Offline Chinese voice   +60 MB"
-    PickVoiceEn   = "Offline English voice   +60 MB"
-    PickVoiceNote = "Speak without the internet. Both languages share one engine."
-    PickTotal     = "Will download about %1 MB"
-    PickLater     = "Anything not chosen can be installed later from Vaenyx Settings."
+    PickTail    = "Use Vaenyx on my phone (installs Tailscale)"
+    PickCodex   = "Use my ChatGPT subscription (installs Codex)"
+    PickClaude  = "Use my Claude subscription (installs Claude Code)"
+    PickVoiceZh = "Offline Chinese voice (speaks without the internet)"
+    PickVoiceEn = "Offline English voice (speaks without the internet)"
+    PickLater   = "Anything not chosen can be installed later from Vaenyx Settings."
   }
   zh = @{
-    PickTail      = "在手机上用 Vaenyx(Tailscale)   +37 MB"
-    PickTailNote  = "为了让手机能连回这台电脑。装上还不够,装完在 Vaenyx 里还要登录一次。"
-    PickCodex     = "用我的 ChatGPT 订阅   +247 MB"
-    PickCodexNote = "只有已经在付 ChatGPT 才用得上。不勾以后也能补。"
-    PickClaude    = "用我的 Claude 订阅   +297 MB"
-    PickClaudeNote = "只有已经在付 Claude 才用得上。不勾以后也能补。"
-    PickVoiceZh   = "中文离线语音   +60 MB"
-    PickVoiceEn   = "英文离线语音   +60 MB"
-    PickVoiceNote = "不联网也能说话。两种语言共用一个引擎。"
-    PickTotal     = "将下载约 %1 MB"
-    PickLater     = "没选的以后都能在 Vaenyx 设置里补装。"
+    PickTail    = "在手机上用 Vaenyx(装 Tailscale)"
+    PickCodex   = "用我的 ChatGPT 订阅(装 Codex)"
+    PickClaude  = "用我的 Claude 订阅(装 Claude Code)"
+    PickVoiceZh = "中文离线语音(不联网也能说话)"
+    PickVoiceEn = "英文离线语音(不联网也能说话)"
+    PickLater   = "没选的以后都能在 Vaenyx 设置里补装。"
   }
-}
-
-# One arithmetic, same as the exe's DownloadMb(). Never a third model.
-function Get-ComponentTotalMb {
-  param([string[]]$Wanted)
-  $sizes = @{ codex = 247; claude = 297; tailscale = 37; "voice-zh" = 60; "voice-en" = 60 }
-  $total = 0
-  foreach ($name in @($Wanted)) {
-    if ($sizes.ContainsKey($name)) { $total = $total + $sizes[$name] }
-  }
-  if (@($Wanted) -contains "voice-zh" -or @($Wanted) -contains "voice-en") {
-    $total = $total + 21
-  }
-  return $total
 }
 
 # One y/n answer against a default. $null (Enter, or no console) = the default,
@@ -279,14 +257,6 @@ if ($SelfTest) {
     }
   }
   Write-Head "Vaenyx Setup - self test"
-  # Component arithmetic: the exe's DownloadMb() in PowerShell. The shared
-  # speech engine counts once, never twice.
-  Assert-Equal 37 (Get-ComponentTotalMb @("tailscale")) "total: the Enter-through default is Tailscale alone"
-  Assert-Equal 284 (Get-ComponentTotalMb @("codex", "tailscale")) "total: codex + tailscale"
-  Assert-Equal 81 (Get-ComponentTotalMb @("voice-zh")) "total: one voice carries the shared engine"
-  Assert-Equal 141 (Get-ComponentTotalMb @("voice-zh", "voice-en")) "total: two voices share one engine (60+60+21, not +42)"
-  Assert-Equal 0 (Get-ComponentTotalMb @()) "total: nothing chosen is 0"
-  Assert-Equal 0 (Get-ComponentTotalMb @("nonsense")) "total: an unknown name adds nothing"
   Assert-Equal $true (Get-YesNoChoice "y" $false) "yes/no: y is yes"
   Assert-Equal $false (Get-YesNoChoice "n" $true) "yes/no: n is no"
   Assert-Equal $true (Get-YesNoChoice "" $true) "yes/no: Enter takes the default"
@@ -297,7 +267,7 @@ if ($SelfTest) {
   $issPath = Join-Path $PSScriptRoot "installer\vaenyx.iss"
   if (Test-Path $issPath) {
     $iss = [System.IO.File]::ReadAllText($issPath, [System.Text.Encoding]::UTF8)
-    foreach ($key in @("PickTail", "PickTailNote", "PickCodex", "PickCodexNote", "PickClaude", "PickClaudeNote", "PickVoiceZh", "PickVoiceEn", "PickVoiceNote", "PickTotal")) {
+    foreach ($key in @("PickTail", "PickCodex", "PickClaude", "PickVoiceZh", "PickVoiceEn")) {
       foreach ($pair in @(@("english", "en"), @("chinesesimplified", "zh"))) {
         $match = [regex]::Match($iss, "(?m)^" + $pair[0] + "\." + $key + "=(.*)$")
         Assert-Equal $Script:ComponentCopy[$pair[1]][$key] $match.Groups[1].Value.Trim() "iss parity: $($pair[0]).$key"
@@ -426,21 +396,19 @@ if (-not $PSBoundParameters.ContainsKey("Components") `
   $picked = @()
   Write-Host ""
   foreach ($ask in @(
-    @{ Key = "PickTail"; Note = "PickTailNote"; Value = "tailscale"; Default = $true },
-    @{ Key = "PickCodex"; Note = "PickCodexNote"; Value = "codex"; Default = $false },
-    @{ Key = "PickClaude"; Note = "PickClaudeNote"; Value = "claude"; Default = $false },
-    @{ Key = "PickVoiceZh"; Note = "PickVoiceNote"; Value = "voice-zh"; Default = $false },
-    @{ Key = "PickVoiceEn"; Note = $null; Value = "voice-en"; Default = $false }
+    @{ Key = "PickTail"; Value = "tailscale"; Default = $true },
+    @{ Key = "PickCodex"; Value = "codex"; Default = $false },
+    @{ Key = "PickClaude"; Value = "claude"; Default = $false },
+    @{ Key = "PickVoiceZh"; Value = "voice-zh"; Default = $false },
+    @{ Key = "PickVoiceEn"; Value = "voice-en"; Default = $false }
   )) {
     Write-Host ("  " + $copy[$ask.Key]) -ForegroundColor White
-    if ($ask.Note) { Write-Host ("    " + $copy[$ask.Note]) -ForegroundColor DarkGray }
     $hint = if ($ask.Default) { "[Y/n]" } else { "[y/N]" }
     $answer = $null
     try { $answer = Read-Host "    $hint" } catch { $answer = $null }
     if (Get-YesNoChoice $answer $ask.Default) { $picked += $ask.Value }
   }
   Write-Host ""
-  Write-Host ("  " + $copy.PickTotal.Replace("%1", "$(Get-ComponentTotalMb $picked)")) -ForegroundColor White
   Write-Host ("  " + $copy.PickLater) -ForegroundColor DarkGray
   $Components = $picked -join ","
 }

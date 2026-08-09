@@ -20,19 +20,21 @@ Read this inside the app: **Settings → Manual**.
 
 ## 0. What the installer asks
 
-- **Choose what to download** — the install-location screen carries five ticks
-  and a running total, so you decide instead of waiting for a mystery
-  download: your ChatGPT subscription, your Claude subscription, phone access
-  (Tailscale), and an offline voice for Chinese and for English. Nothing is
+- **Choose what to download** — the install-location screen carries five plain
+  one-line ticks, so you decide instead of waiting for a mystery download:
+  your ChatGPT subscription, your Claude subscription, phone access (installs
+  Tailscale), and an offline voice for Chinese and for English. Nothing is
   compulsory, and Vaenyx installs and works with none of them ticked.
 - **Only Tailscale is on by default** — it is the smallest, and using Vaenyx
   from a phone is part of what it is for. The two subscriptions are off
   because each is about 250 MB and only useful if you already pay for that
   service; leave them off and Vaenyx fetches the right one the first time you
   connect it.
-- **The total is what is still to come**, on top of the installer you already
-  downloaded. The speech engine is shared, so a second language adds 60 MB and
-  not 81.
+- **Sizes live here, not on that screen.** For the record: Tailscale is about
+  37 MB, each subscription channel roughly 250–300 MB, and each voice 60 MB on
+  top of a shared 21 MB speech engine — a second language adds 60 MB, not 81.
+  All of it comes on top of the installer you already downloaded, and the
+  free-disk-space line at the bottom of the page checks the real numbers.
 - **Anything you skip is still one click away** later, in Settings — the same
   buttons, the same downloads, no reinstall.
 - **They are fetched after the install, not during it** — Vaenyx does it on its
@@ -654,5 +656,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.4.0** · last updated 2026-08-09.
+Manual for **v0.4.1** · last updated 2026-08-09.
 Keep this file up to date whenever a feature changes.
