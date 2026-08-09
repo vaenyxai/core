@@ -48,6 +48,16 @@ function freshDatabase(): DatabaseHandle {
       proposed_event_time TEXT,
       mode_id TEXT
     );
+
+    -- The inbox's reference record (0069): candidate creation writes into it,
+    -- so this hand-built schema has to carry it too.
+    CREATE TABLE inbox_items (
+      id TEXT PRIMARY KEY NOT NULL,
+      mode_id TEXT,
+      source_kind TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   // The shipped starting shape: one placeholder per category, unlearned.
   sqlite

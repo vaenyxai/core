@@ -36,6 +36,24 @@ function extractJson(raw: string): Record<string, unknown> | null {
   }
 }
 
+/**
+ * WHERE A "GO CHANGE X" CAN POINT. A closed list, and the closedness is the
+ * safety: the model picks FROM it or the verdict degrades to none, so a
+ * hallucinated destination cannot exist. Each id maps to a real screen the
+ * client knows how to open; nothing here performs the change itself.
+ */
+export const GO_TARGETS = [
+  { id: "settings", hint: "general settings: agent name, language, password, backups, models, phone access, sharing" },
+  { id: "projects", hint: "the projects screen: project instructions and memories" },
+  { id: "scheduled", hint: "scheduled tasks: timers, recurring runs" },
+  { id: "library", hint: "the Library: installed Routines" },
+  { id: "library-methods", hint: "the Library's Methods tab: recipes, tags, corrections" },
+  { id: "library-tokens", hint: "the Library's Tokens tab: keys for outside apps" },
+  { id: "library-community", hint: "the Library's Community tab: publish account" },
+  { id: "vaenyx-me", hint: "Vaenyx Me: what Vaenyx has learned about the Owner" },
+  { id: "guard", hint: "Guard: the audit log of allowed and refused actions" },
+] as const;
+
 export async function classifyRoutineIntent(
   database: DatabaseHandle,
   conversationId: string,
@@ -57,6 +75,7 @@ export async function classifyRoutineIntent(
     createDescription: null,
     clarifyQuestion: null,
     imagePrompt: null,
+    goTarget: null,
     taskTitle: null,
     note: "",
   };
@@ -162,6 +181,13 @@ export async function classifyRoutineIntent(
           "  photo that a written answer serves.",
         ]
       : []),
+    '- "go-to": the Owner asks to OPEN a screen or to CHANGE something that',
+    "  lives on one (rename the agent, 打开手机访问, change the password, look",
+    "  at the audit log). Pick goTarget from this fixed list — the ids are the",
+    "  only legal values:",
+    ...GO_TARGETS.map((target) => `    ${target.id}: ${target.hint}`),
+    "  This only OFFERS a jump button; it never changes the setting. Never for",
+    "  a question ABOUT a setting that a written answer serves.",
     '- "none": ordinary conversation, or a question to answer directly here.',
     "",
     "If the recent conversation shows Vaenyx asked a clarifying question about",
@@ -202,6 +228,7 @@ export async function classifyRoutineIntent(
     '  "clarifyQuestion": "<for clarify-create, the one question to ask, in the',
     '    Owner\'s language, else null>",',
     '  "imagePrompt": "<for draw, one short English image prompt, else null>",',
+    '  "goTarget": "<for go-to, one id from the list above, else null>",',
     '  "note": "<one short sentence, or empty>" }',
   ].join("\n");
 
@@ -229,6 +256,7 @@ export async function classifyRoutineIntent(
     "create-routine",
     "clarify-create",
     "edit-method",
+    "go-to",
     // draw/annotate only count while their engines can actually run; a stray
     // verdict from a model that ignored the missing option degrades to chat.
     ...(imageEngineConnected ? ["draw"] : []),
@@ -239,6 +267,16 @@ export async function classifyRoutineIntent(
   if (decision === "none") return none;
 
   const note = typeof parsed.note === "string" ? parsed.note.trim() : "";
+
+  if (decision === "go-to") {
+    const target =
+      typeof parsed.goTarget === "string" ? parsed.goTarget.trim() : "";
+    // The closed list IS the safety: an id the client has no screen for, or
+    // one the model invented, degrades to ordinary chat rather than to a
+    // button that goes nowhere.
+    if (!GO_TARGETS.some((entry) => entry.id === target)) return none;
+    return { ...none, decision: "go-to", goTarget: target, note };
+  }
   const routineId =
     typeof parsed.routineId === "string" ? parsed.routineId : null;
   const methodId = typeof parsed.methodId === "string" ? parsed.methodId : null;
@@ -334,6 +372,7 @@ export async function classifyRoutineIntent(
       createDescription: null,
       clarifyQuestion: null,
       imagePrompt: null,
+      goTarget: null,
       taskTitle,
       note,
     };
@@ -351,6 +390,7 @@ export async function classifyRoutineIntent(
       createDescription: null,
       clarifyQuestion: null,
       imagePrompt: null,
+      goTarget: null,
       taskTitle,
       note,
     };
@@ -369,6 +409,7 @@ export async function classifyRoutineIntent(
       createDescription: createDescription ?? content.trim().slice(0, 2000),
       clarifyQuestion: null,
       imagePrompt: null,
+      goTarget: null,
       taskTitle,
       note,
     };
@@ -395,6 +436,7 @@ export async function classifyRoutineIntent(
       createDescription: null,
       clarifyQuestion: null,
       imagePrompt: null,
+      goTarget: null,
       taskTitle,
       note,
     };
@@ -414,6 +456,7 @@ export async function classifyRoutineIntent(
       createDescription: null,
       clarifyQuestion,
       imagePrompt: null,
+      goTarget: null,
       taskTitle,
       note,
     };
@@ -430,6 +473,7 @@ export async function classifyRoutineIntent(
     createDescription: null,
     clarifyQuestion: null,
     imagePrompt: null,
+    goTarget: null,
     taskTitle,
     note,
   };

@@ -8409,3 +8409,12 @@ html, body { overscroll-behavior-y: none; }
   flex-shrink: 0;
   color: var(--accent, #6ea8ff);
 }
+
+/* The "take me there" offer: one row above the composer, one button, one x.
+   It is an offer, so it dresses like one — never like a step already taken. */
+.go-offer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}

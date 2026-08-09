@@ -168,6 +168,10 @@ Read this inside the app: **Settings → Manual**.
 - **Tap the number** to answer the items beside the conversation, without
   leaving it. The chat stays exactly where it was.
 - **It is a real chat.** Type in it like any other.
+- **Ask to open or change a setting** ("rename the agent", "open phone
+  access") and a **Take me there** button appears under the reply. Tapping it
+  jumps to the right screen; nothing is ever changed for you, and ignoring the
+  button costs nothing.
 - **Say "use <a Routine>" in any chat** and the request travels to that
   Routine's own conversation, runs there, and you jump with it. The chat you
   spoke in keeps a one-line receipt saying what went where.

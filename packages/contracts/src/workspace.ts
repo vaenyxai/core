@@ -418,6 +418,14 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       // by keywords (Oskar, 2026-07-28); offered only when a vision engine is
       // connected and the conversation has a photo.
       Type.Literal("annotate"),
+      // The Owner asked to GO somewhere — open a screen, change a setting that
+      // lives on one ("改一下 Agent 名字", "打开手机访问"). The chat offers a
+      // button that jumps; it NEVER changes the setting itself, and goTarget
+      // must be one of the fixed ids in GO_TARGETS or the verdict degrades to
+      // none. A button rather than an auto-jump on purpose (Oskar,
+      // 2026-08-09): a settings page has no confirm-diff layer under it, so a
+      // wrong guess that navigates is a yank — a wrong button is just ignored.
+      Type.Literal("go-to"),
     ]),
     routineId: Type.Union([Type.String(), Type.Null()]),
     // For edit-method: which installed Method, and what to change about it.
@@ -449,6 +457,8 @@ export const ClassifyRoutineResponseSchema = Type.Object(
     // For create-*: a clean one-paragraph description of what to build,
     // distilled from the conversation, used to pre-fill the creation flow.
     createDescription: Type.Union([Type.String(), Type.Null()]),
+    // For go-to: the fixed destination id (see GO_TARGETS), else null.
+    goTarget: Type.Union([Type.String(), Type.Null()]),
     // For clarify-create: the one question to ask, in the Owner's language.
     clarifyQuestion: Type.Union([Type.String(), Type.Null()]),
     // For draw: the English image prompt, ready for the picture engine.

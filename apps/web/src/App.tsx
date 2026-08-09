@@ -5851,10 +5851,28 @@ function ProjectsPanel({
   );
 }
 
+/** What the jump button says it opens, per fixed destination id. */
+function goTargetLabel(target: string, zh: boolean): string {
+  const labels: Record<string, [string, string]> = {
+    settings: ["Settings", "设置"],
+    projects: ["Projects", "Projects"],
+    scheduled: ["Scheduled", "定时任务"],
+    library: ["Library", "资源库"],
+    "library-methods": ["Library · Methods", "资源库 · Methods"],
+    "library-tokens": ["Library · Tokens", "资源库 · Tokens"],
+    "library-community": ["Library · Community", "资源库 · Community"],
+    "vaenyx-me": ["Vaenyx Me", "Vaenyx Me"],
+    guard: ["Guard", "Guard"],
+  };
+  const entry = labels[target];
+  return entry ? (zh ? entry[1] : entry[0]) : target;
+}
+
 function AskVaenyxPanel({
   composeKey,
   agentName,
   inbox,
+  onGoTo,
   onInboxChange,
   conversations,
   libraryRoutines,
@@ -5877,6 +5895,9 @@ function AskVaenyxPanel({
   inbox: InboxSummary | null;
   // Answering an item changes the count, and the count lives in the sidebar.
   onInboxChange: () => void;
+  // Navigate to a fixed destination (a settings screen, a Library tab). The
+  // shell owns the screens, so the panel asks rather than reaches.
+  onGoTo: (target: string) => void;
   conversations: AskVaenyxConversation[];
   libraryRoutines: LibraryRoutineSummary[];
   focusedTaskId: string | null;
@@ -5915,6 +5936,10 @@ function AskVaenyxPanel({
     kind: "method" | "routine";
   } | null>(null);
   // A proposed recipe edit waiting for the Owner to read the diff and approve.
+  // A pending "jump there" offer from the judge — one at a time, cleared by
+  // tapping it, dismissing it, or sending the next message (an offer that
+  // outlives the exchange it answered becomes a mystery button).
+  const [goOffer, setGoOffer] = useState<string | null>(null);
   // The tag's panel, and what it holds. Local to the chat surface so opening
   // it cannot touch the conversation's own state.
   const [inboxTrayOpen, setInboxTrayOpen] = useState(false);
@@ -7111,6 +7136,19 @@ function AskVaenyxPanel({
         setSending(false);
         return;
       }
+      // go-to: the Owner asked to open a screen or change a setting that
+      // lives on one. A BUTTON, not an auto-jump (Oskar, 2026-08-09): the
+      // Routine jump is safe because its destination confirms before anything
+      // changes, but a settings page has no such layer — a wrong guess that
+      // navigates is a yank, a wrong button is just ignored. The reply still
+      // streams normally; the button rides under it.
+      if (verdict?.decision === "go-to" && verdict.goTarget) {
+        setGoOffer(verdict.goTarget);
+      } else {
+        // The next exchange retires an unanswered offer: a button that
+        // outlives the message it answered becomes a mystery button.
+        setGoOffer(null);
+      }
       if (verdict?.decision === "use-routine" && verdict.routineId) {
         try {
           // JUMP TO WHERE THE ROUTINE LIVES (Oskar, 2026-08-09). Saying "use
@@ -8296,6 +8334,29 @@ function AskVaenyxPanel({
             </div>
           ) : null}
         </header>
+        {goOffer ? (
+          <div className="go-offer">
+            <button
+              className="secondary-button"
+              onClick={() => {
+                const target = goOffer;
+                setGoOffer(null);
+                onGoTo(target);
+              }}
+              type="button"
+            >
+              {(zh ? "跳过去:" : "Take me there: ") + goTargetLabel(goOffer, zh)}
+            </button>
+            <button
+              aria-label={zh ? "关闭" : "Dismiss"}
+              className="modal-close"
+              onClick={() => setGoOffer(null)}
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
         {/* Beside the conversation on a desktop, over the bottom of it on a
             phone — one component, and the difference is a media query. The
             chat is NOT unmounted while this is open: it stays in the tree, in
@@ -18783,6 +18844,11 @@ const CONNECT_MODEL_INTENT = "vaenyx-connect-model";
 // parks what to build here; the Library consumes it (picks the tab, opens the
 // create panel, pre-fills the description) and clears it.
 const CREATE_INTENT = "vaenyx-create-intent";
+// One-shot handshake for a go-to jump that lands on a specific Library tab:
+// written just before openLibrary(), consumed once when LibraryArea mounts.
+// Same pattern as CREATE_INTENT, for the same reason — the tab is LibraryArea's
+// own state and the shell has no other honest way to hand it a starting value.
+const GOTO_LIBRARY_TAB = "vaenyx-goto-library-tab";
 
 function peekCreateIntent(): {
   kind: "method" | "routine";
@@ -20423,7 +20489,25 @@ function LibraryArea({
   // keys for other apps second, the insides last.
   const [tab, setTab] = useState<
     "community" | "methods" | "routines" | "tokens"
-  >(() => (peekCreateIntent()?.kind === "method" ? "methods" : "routines"));
+  >(() => {
+    // A go-to jump that named a tab wins, once, then the note is burned.
+    try {
+      const requested = localStorage.getItem(GOTO_LIBRARY_TAB);
+      if (requested) {
+        localStorage.removeItem(GOTO_LIBRARY_TAB);
+        if (
+          requested === "methods" ||
+          requested === "tokens" ||
+          requested === "community"
+        ) {
+          return requested;
+        }
+      }
+    } catch {
+      // Private-mode storage: fall through to the defaults.
+    }
+    return peekCreateIntent()?.kind === "method" ? "methods" : "routines";
+  });
   // Creating is the TAB's business, not the panel's. Each panel used to own a
   // "New" button of its own, so the Routines tab showed two of them in two
   // places — one that asked what you were making and one that had already
@@ -22278,6 +22362,49 @@ function VaenyxWorkspace({
       .catch(() => setLibraryLoad("failed"));
   }
 
+  /**
+   * A go-to offer, accepted. The destinations are the closed list the judge
+   * validates against; anything else lands on Settings, which can reach
+   * everything. Library TABS travel through the same one-shot localStorage
+   * handshake the create flow already uses, because LibraryArea owns its own
+   * tab state and mounts fresh on every visit.
+   */
+  function goToTarget(target: string): void {
+    if (target.startsWith("library")) {
+      const tab = target === "library-methods"
+        ? "methods"
+        : target === "library-tokens"
+          ? "tokens"
+          : target === "library-community"
+            ? "community"
+            : null;
+      try {
+        if (tab) localStorage.setItem(GOTO_LIBRARY_TAB, tab);
+        else localStorage.removeItem(GOTO_LIBRARY_TAB);
+      } catch {
+        // Private-mode storage: the Library still opens, on its default tab.
+      }
+      openLibrary();
+      return;
+    }
+    if (
+      target === "projects" ||
+      target === "scheduled" ||
+      target === "vaenyx-me" ||
+      target === "guard" ||
+      target === "discord" ||
+      target === "settings"
+    ) {
+      if (target === "guard") {
+        openGuard();
+        return;
+      }
+      openScreen(target as Screen);
+      return;
+    }
+    openScreen("settings");
+  }
+
   function openLibrary() {
     setSelectedThreadId(null);
     setMobileSidebarOpen(false);
@@ -22803,6 +22930,7 @@ function VaenyxWorkspace({
               "Vaenyx"
             }
             inbox={inbox}
+            onGoTo={goToTarget}
             onInboxChange={refreshInbox}
             composeKey={composeKey}
             conversations={askVaenyxConversations}
