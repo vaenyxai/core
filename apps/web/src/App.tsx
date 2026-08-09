@@ -5862,6 +5862,8 @@ function ProjectsPanel({
 function AskVaenyxPanel({
   composeKey,
   agentName,
+  inbox,
+  onInboxChange,
   conversations,
   libraryRoutines,
   onConversationsChange,
@@ -5878,6 +5880,11 @@ function AskVaenyxPanel({
   workspace,
 }: {
   agentName: string;
+  // The permanent conversation for this Mode, so the chat surface can tell
+  // when it IS that conversation and put the tag on it.
+  inbox: InboxSummary | null;
+  // Answering an item changes the count, and the count lives in the sidebar.
+  onInboxChange: () => void;
   conversations: AskVaenyxConversation[];
   libraryRoutines: LibraryRoutineSummary[];
   focusedTaskId: string | null;
@@ -5916,6 +5923,62 @@ function AskVaenyxPanel({
     kind: "method" | "routine";
   } | null>(null);
   // A proposed recipe edit waiting for the Owner to read the diff and approve.
+  // The tag's panel, and what it holds. Local to the chat surface so opening
+  // it cannot touch the conversation's own state.
+  const [inboxTrayOpen, setInboxTrayOpen] = useState(false);
+  const [inboxCandidates, setInboxCandidates] = useState<VaenyxMeCandidate[]>(
+    [],
+  );
+
+  useEffect(() => {
+    if (!inboxTrayOpen) return;
+    void fetchVaenyxMeCandidates()
+      .then((all) =>
+        setInboxCandidates(
+          all.filter((candidate) => candidate.status === "pending_review"),
+        ),
+      )
+      .catch(() => undefined);
+  }, [inboxTrayOpen]);
+
+  /**
+   * One item answered, without leaving the conversation.
+   *
+   * A fact and a profile trait share one queue and take different paths — the
+   * fact into the facts table, the trait into Vaenyx Me — and which one it is
+   * is decided by whether it carries a slot, never by asking the model.
+   *
+   * The count is re-read from the server afterwards rather than decremented
+   * locally. A local counter that disagrees with the server is exactly the
+   * failure this whole design is built to make impossible.
+   */
+  async function answerInboxCandidate(
+    candidate: VaenyxMeCandidate,
+    keep: boolean,
+  ): Promise<void> {
+    try {
+      if (!keep) {
+        await rejectVaenyxMeCandidate(candidate.id, { reviewNote: "" });
+      } else if (candidate.proposedSlot) {
+        await approveFactCandidate(candidate.id);
+      } else {
+        await approveVaenyxMeCandidate(candidate.id, {
+          title: candidate.title,
+          summary: candidate.proposedSummary,
+          evidence: candidate.proposedEvidence,
+          confidence: candidate.confidence,
+        });
+      }
+    } catch {
+      // The failed request already raised a toast. The list is re-read either
+      // way, so the screen never drifts from the server.
+    }
+    setInboxCandidates((current) =>
+      current.filter((item) => item.id !== candidate.id),
+    );
+    onInboxChange();
+  }
+
   const [recipeEdit, setRecipeEdit] = useState<{
     conversationId: string;
     draft: RecipeEditDraft;
@@ -7991,6 +8054,12 @@ function AskVaenyxPanel({
   }
 
   function renderChatSurface(mode: "embedded" | "focused") {
+    const zh = lang === "zh";
+    // Is the conversation on screen THE permanent one? Compared by id against
+    // what the server said, never by title — the title is the agent's name and
+    // the Owner can change it to anything, including another chat's name.
+    const isInboxChat =
+      inbox !== null && activeConversationId === inbox.conversationId;
     const isRoutine = Boolean(activeThread?.routineId);
     const activeRoutine = activeThread?.routineId
       ? libraryRoutines.find(
@@ -8135,6 +8204,25 @@ function AskVaenyxPanel({
               {renderThreadHeaderMenu(activeThread)}
             </div>
           </div>
+          {/* THE TAG, ON THE ONE CONVERSATION THAT HAS ONE.
+              It is an entrance and a status light, not a second conversation:
+              opening it does not navigate anywhere and does not change the
+              count. Looking is not handling. */}
+          {isInboxChat && inbox && inbox.waiting > 0 ? (
+            <div className="capability-bar">
+              <button
+                className={
+                  inboxTrayOpen
+                    ? "capability-tab capability-tab--active"
+                    : "capability-tab"
+                }
+                onClick={() => setInboxTrayOpen((open) => !open)}
+                type="button"
+              >
+                {zh ? "待确认" : "Review"} {inbox.waiting}
+              </button>
+            </div>
+          ) : null}
           {isRoutine ? (
             <div className="capability-bar">
               {(["chat", "journal", "gallery"] as const).map((tab) => (
@@ -8158,6 +8246,31 @@ function AskVaenyxPanel({
             </div>
           ) : null}
         </header>
+        {/* Beside the conversation on a desktop, over the bottom of it on a
+            phone — one component, and the difference is a media query. The
+            chat is NOT unmounted while this is open: it stays in the tree, in
+            the same slot, so its scroll position and anything mid-stream
+            survive. That is the whole reason this is not a route. */}
+        {isInboxChat && inboxTrayOpen ? (
+          <aside className="inbox-tray">
+            <div className="inbox-tray-head">
+              <strong>{zh ? "等你看的" : "Waiting for you"}</strong>
+              <button
+                aria-label={zh ? "关闭" : "Close"}
+                className="modal-close"
+                onClick={() => setInboxTrayOpen(false)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <VaenyxMeLedger
+              candidates={inboxCandidates}
+              onApprove={(candidate) => void answerInboxCandidate(candidate, true)}
+              onReject={(candidate) => void answerInboxCandidate(candidate, false)}
+            />
+          </aside>
+        ) : null}
 
         {/* What this Routine needs, drawn. A dimmed chip is the same shape, not
             a different one: it says "you have this off / Vaenyx has not got it
@@ -22562,6 +22675,8 @@ function VaenyxWorkspace({
         {screen === "ask-vaenyx" ? (
           <AskVaenyxPanel
             agentName={settings?.agentName?.trim() || "Vaenyx"}
+            inbox={inbox}
+            onInboxChange={refreshInbox}
             composeKey={composeKey}
             conversations={askVaenyxConversations}
             libraryRoutines={libraryRoutines}

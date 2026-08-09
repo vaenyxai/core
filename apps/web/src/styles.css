@@ -8297,3 +8297,38 @@ html, body { overscroll-behavior-y: none; }
   font-weight: 700;
   text-align: center;
 }
+
+/* ONE COMPONENT, TWO SHAPES, AND THE DIFFERENCE IS A MEDIA QUERY.
+   On a desktop it sits beside the conversation; on a phone it comes up over
+   the bottom of it. No JavaScript breakpoint, no isMobile, no matchMedia —
+   and, more importantly, the chat is never unmounted to switch between them,
+   so its scroll position and anything mid-stream survive being interrupted. */
+.inbox-tray {
+  overflow-y: auto;
+  max-height: 40vh;
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  margin: 0 0 var(--space-3);
+  background: var(--bg-raised);
+}
+
+.inbox-tray-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+@media (max-width: 767px) {
+  /* Half the screen, over the conversation, dismissible — and the conversation
+     is still mounted underneath it the whole time. */
+  .inbox-tray {
+    position: sticky;
+    z-index: 5;
+    bottom: 0;
+    max-height: 50vh;
+    border-radius: 12px 12px 0 0;
+    margin: 0;
+  }
+}

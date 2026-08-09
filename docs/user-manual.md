@@ -158,6 +158,17 @@ Read this inside the app: **Settings → Manual**.
   in that project starts with them.
 - **Put a chat in a project** — the ⋮ menu in the chat → **Move to project**.
 
+## 4a. The conversation Vaenyx speaks from
+
+- **Top of the sidebar, under New**, with a moon on it. It is always there and
+  it cannot be deleted, archived or duplicated.
+- **One per Mode.** A Custom Mode has its own, and nothing crosses between them.
+- **A number appears on it** when something needs you, and only then. Opening
+  the conversation does not clear it — looking is not the same as handling.
+- **Tap the number** to answer the items beside the conversation, without
+  leaving it. The chat stays exactly where it was.
+- **It is a real chat.** Type in it like any other.
+
 ## 5. Vaenyx Me
 
 - **What it is** — facts about you that Vaenyx has noticed, which it then uses
