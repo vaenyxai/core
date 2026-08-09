@@ -1332,6 +1332,13 @@ function CameraButton({
 // Its distance from the composer is MEASURED, not guessed: the composer's
 // height changes with the disclaimer line and with a multi-line draft, and a
 // fixed offset can only be right for one of those.
+/** The one scrollable element on a chat screen. The page itself is a locked
+ *  frame now, so every scroll read or write goes through this box; the window
+ *  fallbacks below only matter if the frame CSS is ever removed. */
+function chatScrollBox(): HTMLElement | null {
+  return document.querySelector(".portal-content .ask-vaenyx-messages");
+}
+
 function JumpToLatest({
   resetKey,
   targetRef,
@@ -1371,30 +1378,37 @@ function JumpToLatest({
           ),
         );
       }
+      const box = chatScrollBox();
       const doc = document.documentElement;
-      const fromBottom =
-        doc.scrollHeight - (window.scrollY + window.innerHeight);
+      const fromBottom = box
+        ? box.scrollHeight - box.scrollTop - box.clientHeight
+        : doc.scrollHeight - (window.scrollY + window.innerHeight);
       if (fromBottom >= 120) {
         setMode("down");
       } else {
         // At the bottom: offer the way back up, but only when the start of
         // that message is actually out of sight.
         const last = lastMessageElement();
+        // "Out of sight" is measured against the box's own top edge now — the
+        // header sits above the box as its own row and never overlaps it.
+        const edge = box ? box.getBoundingClientRect().top : bannerOffset();
         setMode(
-          last && last.getBoundingClientRect().top < bannerOffset()
-            ? "up"
-            : "hidden",
+          last && last.getBoundingClientRect().top < edge ? "up" : "hidden",
         );
       }
       hideTimerRef.current = window.setTimeout(() => setMode("hidden"), 3000);
     };
     wake();
     window.addEventListener("scroll", wake, { passive: true });
+    // The real scroll events come from the messages box, not the window.
+    const wakeBox = chatScrollBox();
+    wakeBox?.addEventListener("scroll", wake, { passive: true });
     window.addEventListener("resize", wake);
     window.addEventListener("touchstart", wake, { passive: true });
     window.addEventListener("pointerdown", wake);
     return () => {
       window.removeEventListener("scroll", wake);
+      wakeBox?.removeEventListener("scroll", wake);
       window.removeEventListener("resize", wake);
       window.removeEventListener("touchstart", wake);
       window.removeEventListener("pointerdown", wake);
@@ -1421,6 +1435,18 @@ function JumpToLatest({
         }
         const last = lastMessageElement();
         if (!last) return;
+        const box = chatScrollBox();
+        if (box) {
+          box.scrollTo({
+            behavior: "smooth",
+            top:
+              box.scrollTop +
+              last.getBoundingClientRect().top -
+              box.getBoundingClientRect().top -
+              12,
+          });
+          return;
+        }
         window.scrollTo({
           behavior: "smooth",
           top:
@@ -6630,6 +6656,21 @@ function AskVaenyxPanel({
 
   function scrollToMessageStart(element: Element | null): void {
     if (!element) return;
+    const box = chatScrollBox();
+    if (box) {
+      // The header is a sibling row above the box, so nothing overlaps: 12px
+      // of breathing room is the whole offset.
+      box.scrollTo({
+        top: Math.max(
+          0,
+          box.scrollTop +
+            element.getBoundingClientRect().top -
+            box.getBoundingClientRect().top -
+            12,
+        ),
+      });
+      return;
+    }
     const header = document.querySelector(".ask-vaenyx-chat-header");
     const offset = (header?.getBoundingClientRect().height ?? 90) + 12;
     window.scrollTo({

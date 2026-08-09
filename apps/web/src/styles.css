@@ -8319,26 +8319,48 @@ html, body { overscroll-behavior-y: none; }
   padding-bottom: 0;
 }
 
+/* EXACT height, not min — this is the whole fix. With min-height the page
+   grew with the content and scrolled, and every piece of chrome that slipped
+   into the arithmetic became slack the Owner could feel. With the frame
+   locked to the screen, only the message list scrolls, and there is nothing
+   left for a stray toggle, a lying vh or a scrollbar's own height to add to.
+   Flex instead of the old 3-row grid because the surface can carry more than
+   three children (the inbox tray, a go-to offer, a status row) and a grid
+   template silently shoved the extras into implicit rows. */
 .portal-content .focused-workspace,
 .portal-content .ask-vaenyx-chat.focused-chat,
 .portal-content .focused-task-panel,
 .portal-content .ask-vaenyx-chat {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+}
+
+.portal-content .ask-vaenyx-chat {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The ONE thing that scrolls on a chat screen. contain stops a fast fling
+   from handing its momentum to the page behind. */
+.portal-content .ask-vaenyx-messages {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 @media (max-width: 900px) {
   /* Everything in flow above the chat, added up exactly: the 10px portal top
-     pad, plus the sidebar toggle — which is position: STICKY, and sticky
-     stays in flow — at 40px tall with a 12px bottom margin. 62px, not 10:
-     the missing 52 was the phone's scroll slack, because the page was that
-     much taller than the screen on every chat (Oskar, 2026-08-09). */
+     pad, plus the sidebar toggle — position: STICKY, and sticky stays in
+     flow — at 40px tall with a 12px bottom margin. */
   .portal-content .focused-workspace,
   .portal-content .ask-vaenyx-chat.focused-chat,
   .portal-content .focused-task-panel,
   .portal-content .ask-vaenyx-chat {
-    min-height: calc(100vh - 62px);
-    min-height: calc(100dvh - 62px);
+    height: calc(100vh - 62px);
+    height: calc(100dvh - 62px);
   }
 }
 
