@@ -306,11 +306,48 @@ jobs:
           "@
           $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
           Set-Content -Path $notesFile -Value ($whatChanged + $notes) -Encoding utf8
+
+          # VERSIONED ALIASES (H-003). The fixed names are load-bearing — the
+          # website's latest/download links point at them and never change —
+          # but "which build is this file on my desktop?" has no answer once
+          # two releases have been downloaded. So the SAME Release also carries
+          # vaenyx-setup-<version>.* — plain copies of the already-tested
+          # fixed-name outputs, never a second packager run, so a byte of
+          # difference between the two names is impossible by construction.
+          $version = $tag -replace '^v', ''
+          Copy-Item release/vaenyx-setup.exe "release/vaenyx-setup-$version.exe"
+          Copy-Item release/vaenyx-setup.zip "release/vaenyx-setup-$version.zip"
+
+          # The checksum FILES are re-derived rather than copied, because a
+          # sha256 file names the file it validates — a copied one would name
+          # the fixed asset and fail anyone who checks the versioned download
+          # by its own name. The hash VALUES must still match the fixed pair
+          # exactly, and the gate below refuses to publish if they do not.
+          foreach ($pair in @(
+            @{ Fixed = "vaenyx-setup.exe"; Versioned = "vaenyx-setup-$version.exe" },
+            @{ Fixed = "vaenyx-setup.zip"; Versioned = "vaenyx-setup-$version.zip" }
+          )) {
+            $fixedHash = (Get-FileHash "release/$($pair.Fixed)" -Algorithm SHA256).Hash.ToLowerInvariant()
+            $versionedHash = (Get-FileHash "release/$($pair.Versioned)" -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($fixedHash -ne $versionedHash) {
+              throw "$($pair.Versioned) is not byte-identical to $($pair.Fixed)"
+            }
+            $publishedHash = (Get-Content "release/$($pair.Fixed).sha256" -Raw).Split(" ")[0].Trim().ToLowerInvariant()
+            if ($publishedHash -ne $fixedHash) {
+              throw "$($pair.Fixed).sha256 does not validate $($pair.Fixed)"
+            }
+            "$fixedHash *$($pair.Versioned)" | Set-Content "release/$($pair.Versioned).sha256" -Encoding ascii
+          }
+
           gh release create "$env:GITHUB_REF_NAME" `
             release/vaenyx-setup.exe `
             release/vaenyx-setup.exe.sha256 `
             release/vaenyx-setup.zip `
             release/vaenyx-setup.zip.sha256 `
+            "release/vaenyx-setup-$version.exe" `
+            "release/vaenyx-setup-$version.exe.sha256" `
+            "release/vaenyx-setup-$version.zip" `
+            "release/vaenyx-setup-$version.zip.sha256" `
             --title "Vaenyx $env:GITHUB_REF_NAME" `
             --notes-file "$notesFile" `
             --generate-notes
@@ -322,6 +359,10 @@ jobs:
           path: |
             release/vaenyx-setup.exe
             release/vaenyx-setup.exe.sha256
+            release/vaenyx-setup-*.exe
+            release/vaenyx-setup-*.exe.sha256
             release/vaenyx-setup.zip
             release/vaenyx-setup.zip.sha256
+            release/vaenyx-setup-*.zip
+            release/vaenyx-setup-*.zip.sha256
           retention-days: 14

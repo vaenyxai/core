@@ -121,8 +121,8 @@ english.PickTail=Use Vaenyx on my phone (Tailscale)   +37 MB
 chinesesimplified.PickTail=在手机上用 Vaenyx(Tailscale)   +37 MB
 english.PickTailNote=So your phone can reach this computer. Installing it is not enough: one sign-in follows, in Vaenyx.
 chinesesimplified.PickTailNote=为了让手机能连回这台电脑。装上还不够,装完在 Vaenyx 里还要登录一次。
-english.PickCodex=Use my ChatGPT subscription   +248 MB
-chinesesimplified.PickCodex=用我的 ChatGPT 订阅   +248 MB
+english.PickCodex=Use my ChatGPT subscription   +247 MB
+chinesesimplified.PickCodex=用我的 ChatGPT 订阅   +247 MB
 english.PickCodexNote=Only if you already pay for ChatGPT. Otherwise it downloads later.
 chinesesimplified.PickCodexNote=只有已经在付 ChatGPT 才用得上。不勾以后也能补。
 english.PickClaude=Use my Claude subscription   +297 MB
@@ -475,8 +475,11 @@ begin
     // What the component page was ticked for. Setup writes the list into
     // userdata and downloads none of it - Vaenyx fetches each one on its
     // first boot, where every one of those installers already lives.
-    if ChosenComponents() <> '' then
-      Params := Params + ' -Components "' + ChosenComponents() + '"';
+    // ALWAYS passed, even empty (H-003): -Components present means "somebody
+    // already decided". Without it, unticking every box made the exe's call
+    // look undecided, and the PowerShell step would have asked its text
+    // questions inside an exe install that already asked with checkboxes.
+    Params := Params + ' -Components "' + ChosenComponents() + '"';
     if Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
         Params, ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated,
         ResultCode) and (ResultCode = 0) then begin
