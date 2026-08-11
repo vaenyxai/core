@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v5";
+const CACHE_NAME = "vaenyx-shell-v6";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -35,8 +35,82 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-// Web Push: a scheduled task finished — show it. The payload is JSON
+// Web Push: something finished — show it. The payload is JSON
 // { title, body, url } sent by the local Vaenyx server.
+//
+// ONE TRAY ENTRY, HOWEVER MANY RESULTS (Oskar, 2026-08-11). Two results used
+// to be two separate notifications; native apps fold theirs into one
+// expandable group, and the web platform has no API for that group — so this
+// builds the equivalent by hand. A push that arrives while nothing is showing
+// is a normal, full notification. A push that arrives while one IS showing
+// folds every waiting item into a single "Vaenyx (n)" whose body lists one
+// item per line — Android renders a multi-line body expandable, which reads
+// exactly like the native groups beside it. The digest carries its items in
+// notification.data, so the next push extends it instead of starting over,
+// and it opens the app's front page: its items point at different places, and
+// the front page shows what is new.
+const DIGEST_TAG = "vaenyx-digest";
+
+function digestLine(item) {
+  const title = (item.title || "Vaenyx").trim();
+  const body = (item.body || "").trim();
+  const line = body ? title + " — " + body : title;
+  return line.length > 70 ? line.slice(0, 69) + "…" : line;
+}
+
+async function foldIntoTray(data) {
+  const incoming = {
+    title: data.title || "Vaenyx",
+    body: data.body || "",
+    url: data.url || "/",
+  };
+  // Whatever is still on screen — a single result or an earlier digest —
+  // becomes lines of the new digest. Dismissed notifications are gone from
+  // getNotifications(), so an emptied tray naturally starts fresh.
+  const showing = await self.registration.getNotifications();
+  const items = [];
+  for (const notification of showing) {
+    const held = notification.data && notification.data.items;
+    if (Array.isArray(held) && held.length) {
+      items.push(...held);
+    } else {
+      items.push({
+        title: notification.title,
+        body: notification.body,
+        url: (notification.data && notification.data.url) || "/",
+      });
+    }
+    notification.close();
+  }
+  items.push(incoming);
+  if (items.length === 1) {
+    await self.registration.showNotification(incoming.title, {
+      body: incoming.body,
+      icon: "/vaenyx-icon-192.png",
+      badge: "/vaenyx-icon-192.png",
+      tag: DIGEST_TAG,
+      data: { url: incoming.url, items },
+    });
+    return;
+  }
+  await self.registration.showNotification("Vaenyx (" + items.length + ")", {
+    body: items.map(digestLine).join("\n"),
+    icon: "/vaenyx-icon-192.png",
+    badge: "/vaenyx-icon-192.png",
+    tag: DIGEST_TAG,
+    // The tag makes this REPLACE the previous notification; renotify keeps
+    // the replacement buzzing, so a folded second result still announces
+    // itself the way a separate one would have.
+    renotify: true,
+    data: { url: "/", items },
+  });
+}
+
+// Two schedules on the same minute is the normal case, not the rare one — and
+// two concurrent handlers would each read the tray before the other wrote it,
+// losing an item. One chain serialises them.
+let pushChain = Promise.resolve();
+
 self.addEventListener("push", (event) => {
   let data = {};
   try {
@@ -44,14 +118,8 @@ self.addEventListener("push", (event) => {
   } catch {
     // Non-JSON payload: fall back to a generic notification.
   }
-  event.waitUntil(
-    self.registration.showNotification(data.title || "Vaenyx", {
-      body: data.body || "",
-      icon: "/vaenyx-icon-192.png",
-      badge: "/vaenyx-icon-192.png",
-      data: { url: data.url || "/" },
-    }),
-  );
+  pushChain = pushChain.then(() => foldIntoTray(data)).catch(() => undefined);
+  event.waitUntil(pushChain);
 });
 
 // Browsers occasionally rotate or drop a push subscription on their own.

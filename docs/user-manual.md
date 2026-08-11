@@ -561,6 +561,10 @@ Read this inside the app: **Settings → Manual**.
   prove it.
 - **Notifications** — Settings → Notifications → allow, then **Test** to prove
   one arrives.
+- **Several results fold into one** — a notification arriving while another is
+  still showing becomes a single *Vaenyx (n)* entry with one item per line.
+  Expand it to read them; tapping it opens Vaenyx. Dismiss it and the next
+  result starts a fresh, full notification again.
 - **The console route** — `Vaenyx-Connect-Tailscale.cmd` in the Vaenyx folder
   drives the same Tailscale commands by hand. It uses the client installed
   under Program Files.
