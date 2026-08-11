@@ -35,6 +35,12 @@ export function Picker({
   value: string;
 }) {
   const [open, setOpen] = useState(false);
+  // Measured at the moment of opening: the composer's pickers sit on the
+  // bottom edge of the screen, and a menu that always drops DOWN there ran
+  // straight off it (Oskar, 2026-08-12). When the room below the button is
+  // shorter than the menu's max height and the room above is taller, the
+  // menu opens upward instead.
+  const [dropUp, setDropUp] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,7 +69,18 @@ export function Picker({
         aria-label={ariaLabel}
         className={className ? `picker-button ${className}` : "picker-button"}
         disabled={disabled}
-        onClick={() => setOpen((was) => !was)}
+        onClick={() =>
+          setOpen((was) => {
+            if (!was && box.current) {
+              const rect = box.current.getBoundingClientRect();
+              // 268 = the menu's 260px max height plus its 4px offset and a
+              // little breathing room.
+              const below = window.innerHeight - rect.bottom;
+              setDropUp(below < 268 && rect.top > below);
+            }
+            return !was;
+          })
+        }
         title={title}
         type="button"
       >
@@ -83,7 +100,10 @@ export function Picker({
         </svg>
       </button>
       {open ? (
-        <div className="picker-menu" role="listbox">
+        <div
+          className={dropUp ? "picker-menu picker-menu--up" : "picker-menu"}
+          role="listbox"
+        >
           {options.map((option) => (
             <button
               aria-selected={option.value === value}

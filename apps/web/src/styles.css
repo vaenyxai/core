@@ -1493,6 +1493,15 @@ textarea::placeholder {
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
 }
 
+/* Opens upward when the button sits near the bottom of the screen — the
+   composer's model and effort pickers live there, and a downward menu ran
+   off the screen (Oskar, 2026-08-12). The component measures and picks. */
+.picker-menu--up {
+  top: auto;
+  bottom: calc(100% + 4px);
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 45%);
+}
+
 .picker-option {
   display: block;
   width: 100%;
