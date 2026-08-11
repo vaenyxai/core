@@ -4,6 +4,36 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.3.0 — 2026-08-11
+
+**Phone access without the reboot.** Installing Tailscale used to end with
+"restart the computer" — almost always wrongly, because the check looked at a
+Windows flag that anything can raise. And the real snag was simpler: the
+silent install left Tailscale's service stopped, so signing in did nothing
+until the next boot started it. Vaenyx now starts the service itself, right
+after the install and again any time it finds it stopped; the restart advice
+appears only when Windows genuinely demands one.
+
+**Connecting a model is one place now.** The Models card leads with the two
+subscriptions most households already have — OpenAI (ChatGPT) first,
+Anthropic (Claude) second — each with its sign-in right on the card, whether
+connected or not. The separate "OpenAI / Codex connection" card is gone; its
+connection tests live on, folded into a quiet Diagnostics card at the bottom
+of the tab. Everything else still connects through Add a Model.
+
+**The review drawer.** Review sits at the right end of the title row on every
+screen, and the panel it opens slides in from the right — full height, over
+the conversation, a thumb's width of the page left showing on the left. Tap
+that strip and it goes away. The menu button now sits neatly inside the
+header band instead of hanging out of it.
+
+**Judgments you can read at a glance.** Each waiting item now leads with its
+grounds as a few short points — written in the language of the conversation
+they came from, duplicates removed — and the claim you actually answer is a
+short sentence in its own highlighted block above the two buttons. Older
+long-winded items tidy themselves up over the daily passes, and nothing
+hides behind a per-item Open any more.
+
 ## v0.4.2.0 — 2026-08-11
 
 **Scrolling feels native again.** The page itself is the scroller now — the
