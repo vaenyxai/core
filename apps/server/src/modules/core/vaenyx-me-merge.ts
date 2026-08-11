@@ -471,17 +471,84 @@ export function parseCoveredIds(
   }
 }
 
-export function retireCovered(database: DatabaseHandle, ids: string[]): number {
+export function retireCovered(
+  database: DatabaseHandle,
+  ids: string[],
+  note = "Already in the approved profile.",
+): number {
   let retired = 0;
   const mark = database.sqlite.prepare(
     `UPDATE vaenyx_me_candidates
-        SET status = 'deleted', review_note = 'Already in the approved profile.'
+        SET status = 'deleted', review_note = ?
       WHERE id = ? AND status = 'pending_review'`,
   );
   for (const id of ids) {
-    retired += Number(mark.run(id).changes ?? 0);
+    retired += Number(mark.run(note, id).changes ?? 0);
   }
   return retired;
+}
+
+// ---- A trait that restates a pending fact ----------------------------------
+//
+// The last twin shape (Oskar, 2026-08-11, live queue): a prose TRAIT
+// ("wants interest-rate alerts") sitting beside the structured FACT that says
+// the same thing. Trait-grouping never sees facts and the fact-twin pass
+// never sees traits, so the pair survived both. When they restate each other
+// the FACT survives — it is the stronger, structured form — and the trait
+// retires. Same narrow ask, same refusal posture.
+
+export function listPendingTraitBriefs(
+  database: DatabaseHandle,
+  modeId: string | null,
+  limit = 15,
+): PendingBrief[] {
+  return database.sqlite
+    .prepare(
+      `SELECT id, title || ': ' || proposed_summary AS text
+         FROM vaenyx_me_candidates
+        WHERE status = 'pending_review'
+          AND proposed_slot IS NULL
+          AND mode_id IS ?
+        ORDER BY created_at DESC
+        LIMIT ?`,
+    )
+    .all(modeId, limit) as unknown as PendingBrief[];
+}
+
+export function listPendingFactBriefs(
+  database: DatabaseHandle,
+  modeId: string | null,
+  limit = 15,
+): PendingBrief[] {
+  return database.sqlite
+    .prepare(
+      `SELECT id,
+              proposed_slot || ' = ' || COALESCE(proposed_value, '') AS text
+         FROM vaenyx_me_candidates
+        WHERE status = 'pending_review'
+          AND proposed_slot IS NOT NULL
+          AND mode_id IS ?
+        ORDER BY created_at DESC
+        LIMIT ?`,
+    )
+    .all(modeId, limit) as unknown as PendingBrief[];
+}
+
+export function traitOverFactPrompt(
+  traits: PendingBrief[],
+  facts: PendingBrief[],
+): string {
+  return [
+    "FACTS are structured entries, TRAITS are prose observations — all pending about the same person.",
+    "Which traits state the same thing as one of the facts? Only clear restatements count — being related is not being the same.",
+    'Reply with ONLY JSON: {"covered":["<trait id>"]} — none? {"covered":[]}',
+    "",
+    "FACTS:",
+    ...facts.map((entry) => `- ${entry.text.slice(0, 240)}`),
+    "",
+    "TRAITS:",
+    ...traits.map((entry) => `id ${entry.id}: ${entry.text.slice(0, 240)}`),
+  ].join("\n");
 }
 
 // ---- Evidence hygiene ------------------------------------------------------

@@ -20,6 +20,8 @@ import {
   listMergeableTraits,
   listOverlongEvidence,
   listPendingBriefs,
+  listPendingFactBriefs,
+  listPendingTraitBriefs,
   listSameSlotFactPairs,
   mergeDuplicateFacts,
   parseCondensed,
@@ -29,6 +31,7 @@ import {
   retireCovered,
   retireOlderFactTwins,
   traitMergePrompt,
+  traitOverFactPrompt,
 } from "./vaenyx-me-merge.js";
 
 import { getDefaultProvider } from "../models/registry.js";
@@ -541,6 +544,33 @@ export async function mergePendingCandidates(
     } catch {
       // No model, no merge — the queue is merely longer, never wrong. The next
       // scan pass tries again.
+    }
+  }
+
+  // A prose trait sitting beside the pending FACT that says the same thing:
+  // the fact survives (the stronger, structured form), the trait retires.
+  // Neither the trait grouping nor the fact-twin pass sees this pair.
+  const pendingTraits = listPendingTraitBriefs(database, modeId);
+  const pendingFacts = listPendingFactBriefs(database, modeId);
+  if (pendingTraits.length > 0 && pendingFacts.length > 0) {
+    try {
+      const response = await getDefaultProvider().sendChat(
+        [
+          {
+            role: "owner",
+            content: traitOverFactPrompt(pendingTraits, pendingFacts),
+          },
+        ],
+        undefined,
+        { signal },
+      );
+      merged += retireCovered(
+        database,
+        parseCoveredIds(response.answer, pendingTraits),
+        "Same as a pending fact.",
+      );
+    } catch {
+      // Best-effort; the pair stays visible.
     }
   }
 

@@ -7100,14 +7100,16 @@ select {
      headers own their top-left corner and have no floor to hide it against. */
   .portal-content .mobile-sidebar-toggle {
     position: fixed;
-    /* Sized and placed to live INSIDE the header band (Oskar, 2026-08-11):
-       the band is 8px pad + 48px row + 10px pad ≈ 66px tall, so a 36px
-       button at top 15 sits centred in it instead of hanging out of its
-       bottom edge. */
-    top: 15px;
-    left: 14px;
-    width: 36px;
-    height: 36px;
+    /* Sized and placed to live INSIDE the header band. Measured, not
+       derived (Oskar, 2026-08-11, second screenshot): border-box makes the
+       band's min-height 48px THE height on a phone — the paddings live
+       inside it, not on top of it — so the first attempt's 36px at top 15
+       (sized against an imagined 66px band) hung out of the bottom edge.
+       34px at top 7 is centred in the real 48. */
+    top: 7px;
+    left: 12px;
+    width: 34px;
+    height: 34px;
     margin-bottom: 0;
   }
 

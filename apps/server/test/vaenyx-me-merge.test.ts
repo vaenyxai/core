@@ -18,6 +18,7 @@ import {
   listMergeableTraits,
   listOverlongEvidence,
   listPendingBriefs,
+  listPendingTraitBriefs,
   listSameSlotFactPairs,
   mergeDuplicateFacts,
   parseCondensed,
@@ -353,6 +354,39 @@ describe("restatements of approved knowledge ask nothing new", () => {
       .map((entry) => entry.text)
       .sort();
     expect(texts).toEqual(["home.address = 12 X St", "t: summary"]);
+  });
+
+  it("🔴 a trait covered by a pending fact retires; the fact never does", () => {
+    // The fact is the stronger, structured form — the model may only ever
+    // name TRAITS as covered, and the ids are validated against the trait
+    // list, so a fact id in the answer changes nothing.
+    const database = testDatabase();
+    seed(database, "fact1", {
+      slot: "alerts.rates",
+      value: "notify on change",
+    });
+    seed(database, "trait1");
+    const traits = listPendingTraitBriefs(database, null);
+    const covered = parseCoveredIds('{"covered":["trait1","fact1"]}', traits);
+    expect(covered).toEqual(["trait1"]);
+    expect(retireCovered(database, covered, "Same as a pending fact.")).toBe(1);
+    const rows = database.sqlite
+      .prepare(
+        `SELECT id, status, review_note FROM vaenyx_me_candidates ORDER BY id`,
+      )
+      .all() as { id: string; status: string; review_note: string | null }[];
+    expect(rows).toEqual([
+      {
+        id: "fact1",
+        status: "pending_review",
+        review_note: null,
+      },
+      {
+        id: "trait1",
+        status: "deleted",
+        review_note: "Same as a pending fact.",
+      },
+    ]);
   });
 });
 
