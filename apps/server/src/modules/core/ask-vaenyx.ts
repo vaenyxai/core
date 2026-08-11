@@ -146,6 +146,11 @@ const SUMMARY_REFRESH_EVERY = 10;
 // The Owner's approved profile, capped so a long profile cannot crowd out the
 // conversation itself.
 const MAX_OWNER_PROFILE_ITEMS = 12;
+// BOUNDED, so the token bill cannot grow without limit as facts accumulate
+// (Oskar, 2026-08-11: 会不会越用越多). Every turn carries at most this many
+// current facts, one line each, most recently recorded first — never "all of
+// them, forever". The full list stays on the Vaenyx Me screen.
+const MAX_FACTS_PER_TURN = 40;
 
 // The long-conversation memory (Oskar, 2026-07-29). A chat used to forget its
 // own beginning: only the last 30 messages reached the model and the rest were
@@ -388,12 +393,14 @@ function formatProjectMemoryContext(
   const memoryLines =
     memories.length === 0
       ? ["No approved project memories are saved for this project yet."]
-      : memories.slice(0, MAX_PROJECT_MEMORIES_FOR_CHAT).map((memory, index) =>
-          [
-            `Memory ${index + 1}: ${memory.title}`,
-            trimMemoryContent(memory.content),
-          ].join("\n"),
-        );
+      : memories
+          .slice(0, MAX_PROJECT_MEMORIES_FOR_CHAT)
+          .map((memory, index) =>
+            [
+              `Memory ${index + 1}: ${memory.title}`,
+              trimMemoryContent(memory.content),
+            ].join("\n"),
+          );
 
   return [
     `This conversation belongs to the ${projectName} project.`,
@@ -767,9 +774,7 @@ export function appendAssistantNote(
     )
     .run(id, conversationId, content.trim(), now);
   database.sqlite
-    .prepare(
-      `UPDATE ask_vaenyx_conversations SET updated_at = ? WHERE id = ?`,
-    )
+    .prepare(`UPDATE ask_vaenyx_conversations SET updated_at = ? WHERE id = ?`)
     .run(now, conversationId);
   touchChatThread(database, conversationId, now);
   return {
@@ -947,12 +952,10 @@ export async function createAskVaenyxMessage(
       (message) =>
         !(message.role === "assistant" && message.status === "failed"),
     );
-  const history = usableHistory
-    .slice(-MAX_HISTORY_MESSAGES)
-    .map((message) => ({
-      content: message.content,
-      role: message.role,
-    }));
+  const history = usableHistory.slice(-MAX_HISTORY_MESSAGES).map((message) => ({
+    content: message.content,
+    role: message.role,
+  }));
   let assistantContent: string;
   let assistantStatus: "completed" | "failed";
   let webSearchUsed = false;
@@ -1170,8 +1173,15 @@ export async function createAskVaenyxMessage(
     // pick the newer one; that question is settled before it is asked, by a
     // timestamp comparison, because a model has no clock and gets worse at
     // this as the context grows.
+    const allCurrentFacts = listCurrentFacts(database, modeRow?.id ?? null);
     const currentFacts = formatFactsContext(
-      listCurrentFacts(database, modeRow?.id ?? null),
+      allCurrentFacts.length > MAX_FACTS_PER_TURN
+        ? [...allCurrentFacts]
+            .sort((left, right) =>
+              right.recordedAt.localeCompare(left.recordedAt),
+            )
+            .slice(0, MAX_FACTS_PER_TURN)
+        : allCurrentFacts,
     );
     // The stand-in is named to the model in the same words the Test button and
     // the manual use, and the model is told to pass it on: the Owner attached a
@@ -1388,7 +1398,11 @@ export async function createAskVaenyxMessage(
     // existing photo pointed out ON the picture ("标出来", any wording). Runs
     // BEFORE the model speaks, same truth-note pattern as generation: the
     // reply narrates what actually happened, never a guess.
-    if (options?.annotate && options.dataDirectory && options.secretsDirectory) {
+    if (
+      options?.annotate &&
+      options.dataDirectory &&
+      options.secretsDirectory
+    ) {
       options.onStatus?.("annotating");
       const latestPhoto = database.sqlite
         .prepare(
@@ -1537,9 +1551,7 @@ export async function createAskVaenyxMessage(
       ...(imageAttachment ? { imageDataUrl: imageAttachment } : {}),
       ...(imageAttachmentPath ? { imagePath: imageAttachmentPath } : {}),
       ...(documentBase64 ? { documentBase64 } : {}),
-      ...(options?.documentName
-        ? { documentName: options.documentName }
-        : {}),
+      ...(options?.documentName ? { documentName: options.documentName } : {}),
       ...(hasToolLoop && fetchAccess ? { fetchAccess } : {}),
     });
     assistantContent = result.answer;

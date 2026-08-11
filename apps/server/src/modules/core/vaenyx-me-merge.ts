@@ -16,13 +16,17 @@
 // merged away — and the rows remain the only record of what the merge did.
 //
 // Two kinds share the queue and merge by different rules:
-//   • FACTS (proposed_slot set) merge only when slot AND value are identical —
-//     pure SQL, no model. Same slot with a DIFFERENT value is a conflict the
-//     Owner should see as two items, not something to blend.
+//   • FACTS (proposed_slot set): identical slot AND value merge in pure SQL.
+//     A same-slot pair whose values differ gets ONE narrow model question —
+//     same thing in different words, or genuinely different? — and only a
+//     same-meaning pair folds (newest kept). A real conflict stays two items
+//     the Owner can see.
 //   • TRAITS are judged by the model, because "prefers blunt answers" and
 //     "likes it short and direct" match no string comparison. The model only
 //     ever GROUPS and REPHRASES; what happens to the groups is decided here,
 //     and nothing it says can approve, reject or delete anything.
+//   • Either kind retires when it merely RESTATES already-approved knowledge:
+//     it asks nothing new, so dropping it skips no approval.
 import type { DatabaseHandle } from "../../db/database.js";
 
 export interface MergeableTrait {
@@ -135,7 +139,12 @@ export function parseTraitMergeGroups(
 export function traitMergePrompt(candidates: MergeableTrait[]): string {
   return [
     "These are separate pending observations about the same person. Some describe the same underlying thing in different words.",
-    "Group ONLY the ones that clearly describe the same thing. Most groups should be no group at all.",
+    // Loosened from "most groups should be no group at all" (Oskar,
+    // 2026-08-11): under that instruction the model let word-for-word
+    // near-twins sit side by side for weeks. Same CONCLUSION is the test —
+    // same topic alone still is not.
+    "Group the ones that describe the same underlying thing, even worded differently: if two observations would lead to the same conclusion about the person, they are one group.",
+    "Do NOT group genuinely different things — being about the same topic is not being the same thing.",
     "For each group, write one merged title and one merged summary that covers all of them.",
     'Also boil each group\'s evidence down to 1-4 SHORT bullet points ("evidence"): only observations that differ from each other, never the same thing twice in different words.',
     "Write each group's title, summary and evidence in the language of the conversations the evidence quotes — Chinese quotes mean Chinese, English means English. Never mix languages in one group.",
@@ -246,6 +255,233 @@ export function mergeDuplicateFacts(
     )
     .run(modeId, modeId);
   return Number(result.changes ?? 0);
+}
+
+// ---- Same-slot fact twins --------------------------------------------------
+//
+// FACTS merge by exact slot+value match, and for discrete values (an address)
+// that is right: same slot, different value = a conflict the Owner must see.
+// Free-text values broke that rule (Oskar, 2026-08-11): "wants AI news every
+// morning" and "wants a daily AI news summary" share a slot, differ as
+// strings, and sat side by side for weeks. So the model now gets ONE narrow
+// question per pair — do these two values state the same thing? — and the
+// newest of a same-meaning pair is kept. It is never asked which value is
+// RIGHT; a genuinely different pair stays a visible conflict.
+
+export interface FactTwinPair {
+  slot: string;
+  newerId: string;
+  olderId: string;
+  newerValue: string;
+  olderValue: string;
+}
+
+export function listSameSlotFactPairs(
+  database: DatabaseHandle,
+  modeId: string | null,
+  limit = 6,
+): FactTwinPair[] {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT id, proposed_slot AS slot, proposed_value AS value
+         FROM vaenyx_me_candidates
+        WHERE status = 'pending_review'
+          AND proposed_slot IS NOT NULL
+          AND mode_id IS ?
+        ORDER BY proposed_slot ASC, created_at DESC`,
+    )
+    .all(modeId) as unknown as {
+    id: string;
+    slot: string;
+    value: string | null;
+  }[];
+  const pairs: FactTwinPair[] = [];
+  for (let index = 0; index < rows.length - 1; index += 1) {
+    if (pairs.length === limit) break;
+    const newer = rows[index]!;
+    const older = rows[index + 1]!;
+    if (newer.slot !== older.slot) continue;
+    pairs.push({
+      slot: newer.slot,
+      newerId: newer.id,
+      olderId: older.id,
+      newerValue: newer.value ?? "",
+      olderValue: older.value ?? "",
+    });
+  }
+  return pairs;
+}
+
+export function factTwinPrompt(pairs: FactTwinPair[]): string {
+  return [
+    "Each numbered pair below is two stored values for the same field about the same person.",
+    "One question per pair: do the two values state the same thing, merely worded differently?",
+    "Different amounts, places, times or preferences are NOT the same thing.",
+    'Reply with ONLY JSON: {"same":[<pair numbers>]} — only the pairs that state the same thing. None? {"same":[]}',
+    "",
+    ...pairs.map(
+      (pair, index) =>
+        `${index + 1}. [${pair.slot}] A: ${pair.newerValue.slice(0, 200)} | B: ${pair.olderValue.slice(0, 200)}`,
+    ),
+  ].join("\n");
+}
+
+export function parseSameFactPairs(
+  text: string,
+  pairs: FactTwinPair[],
+): FactTwinPair[] {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return [];
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1)) as { same?: unknown };
+    if (!Array.isArray(parsed.same)) return [];
+    const chosen = new Set(
+      parsed.same.filter((entry): entry is number => typeof entry === "number"),
+    );
+    return pairs.filter((pair, index) => chosen.has(index + 1));
+  } catch {
+    return [];
+  }
+}
+
+/** The newest of a same-meaning pair survives; the older retires. */
+export function retireOlderFactTwins(
+  database: DatabaseHandle,
+  same: FactTwinPair[],
+): number {
+  let retired = 0;
+  const mark = database.sqlite.prepare(
+    `UPDATE vaenyx_me_candidates
+        SET status = 'deleted', review_note = 'Same as a newer pending value.'
+      WHERE id = ? AND status = 'pending_review'`,
+  );
+  for (const pair of same) {
+    retired += Number(mark.run(pair.olderId).changes ?? 0);
+  }
+  return retired;
+}
+
+// ---- Already-approved restatements -----------------------------------------
+//
+// Approving an item does not stop the scan proposing its twin out of the next
+// chat — and the Owner then answers the same question twice (Oskar,
+// 2026-08-11). A pending proposal that merely RESTATES approved knowledge is
+// retired: it asks nothing new, and retiring it adds nothing to the profile,
+// so no approval is being skipped.
+
+export interface PendingBrief {
+  id: string;
+  text: string;
+}
+
+export function listPendingBriefs(
+  database: DatabaseHandle,
+  modeId: string | null,
+  limit = 20,
+): PendingBrief[] {
+  return database.sqlite
+    .prepare(
+      `SELECT id,
+              CASE WHEN proposed_slot IS NOT NULL
+                   THEN proposed_slot || ' = ' || COALESCE(proposed_value, '')
+                   ELSE title || ': ' || proposed_summary
+              END AS text
+         FROM vaenyx_me_candidates
+        WHERE status = 'pending_review'
+          AND mode_id IS ?
+        ORDER BY created_at DESC
+        LIMIT ?`,
+    )
+    .all(modeId, limit) as unknown as PendingBrief[];
+}
+
+/** One line per piece of approved knowledge: profile items (they are global,
+ *  so User Mode only) plus this mode's current facts. */
+export function listApprovedBriefs(
+  database: DatabaseHandle,
+  modeId: string | null,
+  limit = 30,
+): string[] {
+  const briefs: string[] = [];
+  if (modeId === null) {
+    const items = database.sqlite
+      .prepare(
+        `SELECT title, summary FROM vaenyx_me_items
+          WHERE status = 'approved' ORDER BY title LIMIT ?`,
+      )
+      .all(limit) as { title: string; summary: string }[];
+    for (const item of items) {
+      briefs.push(`${item.title}: ${item.summary.slice(0, 200)}`);
+    }
+  }
+  const facts = database.sqlite
+    .prepare(
+      `SELECT slot, value FROM facts
+        WHERE valid_until IS NULL
+          AND ((? IS NULL AND mode_id IS NULL) OR mode_id = ?)
+        ORDER BY slot LIMIT ?`,
+    )
+    .all(modeId, modeId, limit) as { slot: string; value: string }[];
+  for (const fact of facts) {
+    briefs.push(`${fact.slot} = ${fact.value.slice(0, 200)}`);
+  }
+  return briefs.slice(0, limit);
+}
+
+export function approvedDupPrompt(
+  pending: PendingBrief[],
+  approved: string[],
+): string {
+  return [
+    "APPROVED is what is already known about the person. PENDING is new proposals awaiting their review.",
+    "Which pending entries state something the approved list ALREADY covers? Only clear restatements count — being related is not being covered.",
+    'Reply with ONLY JSON: {"covered":["<pending id>"]} — none? {"covered":[]}',
+    "",
+    "APPROVED:",
+    ...approved.map((line) => `- ${line}`),
+    "",
+    "PENDING:",
+    ...pending.map((entry) => `id ${entry.id}: ${entry.text.slice(0, 240)}`),
+  ].join("\n");
+}
+
+export function parseCoveredIds(
+  text: string,
+  pending: PendingBrief[],
+): string[] {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return [];
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1)) as {
+      covered?: unknown;
+    };
+    if (!Array.isArray(parsed.covered)) return [];
+    const known = new Set(pending.map((entry) => entry.id));
+    return [
+      ...new Set(
+        parsed.covered.filter(
+          (id): id is string => typeof id === "string" && known.has(id),
+        ),
+      ),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+export function retireCovered(database: DatabaseHandle, ids: string[]): number {
+  let retired = 0;
+  const mark = database.sqlite.prepare(
+    `UPDATE vaenyx_me_candidates
+        SET status = 'deleted', review_note = 'Already in the approved profile.'
+      WHERE id = ? AND status = 'pending_review'`,
+  );
+  for (const id of ids) {
+    retired += Number(mark.run(id).changes ?? 0);
+  }
+  return retired;
 }
 
 // ---- Evidence hygiene ------------------------------------------------------

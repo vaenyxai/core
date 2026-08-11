@@ -12,13 +12,22 @@ import type { DatabaseHandle } from "../../db/database.js";
 import {
   applyCondensed,
   applyTraitMergeGroups,
+  approvedDupPrompt,
   condensePrompt,
   dominantLanguage,
+  factTwinPrompt,
+  listApprovedBriefs,
   listMergeableTraits,
   listOverlongEvidence,
+  listPendingBriefs,
+  listSameSlotFactPairs,
   mergeDuplicateFacts,
   parseCondensed,
+  parseCoveredIds,
+  parseSameFactPairs,
   parseTraitMergeGroups,
+  retireCovered,
+  retireOlderFactTwins,
   traitMergePrompt,
 } from "./vaenyx-me-merge.js";
 
@@ -493,6 +502,26 @@ export async function mergePendingCandidates(
 ): Promise<{ merged: number }> {
   let merged = mergeDuplicateFacts(database, modeId);
 
+  // Same slot, different wording: one narrow same-or-not question per pair.
+  // The exact-match rule above only catches identical strings, and free-text
+  // values almost never repeat verbatim (Oskar, 2026-08-11).
+  const factPairs = listSameSlotFactPairs(database, modeId);
+  if (factPairs.length > 0) {
+    try {
+      const response = await getDefaultProvider().sendChat(
+        [{ role: "owner", content: factTwinPrompt(factPairs) }],
+        undefined,
+        { signal },
+      );
+      merged += retireOlderFactTwins(
+        database,
+        parseSameFactPairs(response.answer, factPairs),
+      );
+    } catch {
+      // No model, no verdicts — the pair stays visible, never wrong.
+    }
+  }
+
   const traits = listMergeableTraits(database, modeId);
   if (traits.length >= 2) {
     try {
@@ -512,6 +541,32 @@ export async function mergePendingCandidates(
     } catch {
       // No model, no merge — the queue is merely longer, never wrong. The next
       // scan pass tries again.
+    }
+  }
+
+  // A pending proposal that merely restates APPROVED knowledge asks nothing
+  // new — the Owner answered it the day they approved the original, and
+  // being asked twice teaches them to stop reading the queue.
+  const pendingBriefs = listPendingBriefs(database, modeId);
+  const approvedBriefs = listApprovedBriefs(database, modeId);
+  if (pendingBriefs.length > 0 && approvedBriefs.length > 0) {
+    try {
+      const response = await getDefaultProvider().sendChat(
+        [
+          {
+            role: "owner",
+            content: approvedDupPrompt(pendingBriefs, approvedBriefs),
+          },
+        ],
+        undefined,
+        { signal },
+      );
+      merged += retireCovered(
+        database,
+        parseCoveredIds(response.answer, pendingBriefs),
+      );
+    } catch {
+      // Best-effort; the queue is merely longer, never wrong.
     }
   }
 

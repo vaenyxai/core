@@ -17,9 +17,15 @@ import {
   dominantLanguage,
   listMergeableTraits,
   listOverlongEvidence,
+  listPendingBriefs,
+  listSameSlotFactPairs,
   mergeDuplicateFacts,
   parseCondensed,
+  parseCoveredIds,
+  parseSameFactPairs,
   parseTraitMergeGroups,
+  retireCovered,
+  retireOlderFactTwins,
   type MergeableTrait,
 } from "../src/modules/core/vaenyx-me-merge.js";
 
@@ -247,6 +253,106 @@ describe("fact duplicates, which need no model", () => {
     seed(database, "a", { slot: "home.address", value: "12 X St" });
     seed(database, "b", { slot: "home.address", value: "9 Y Rd" });
     expect(mergeDuplicateFacts(database, null)).toBe(0);
+  });
+});
+
+describe("same-slot fact twins, judged one narrow question at a time", () => {
+  it("pairs newest-with-next within one slot, and never across slots", () => {
+    const database = testDatabase();
+    seed(database, "n1", {
+      slot: "preference:news",
+      value: "daily AI news",
+      createdAt: "2026-08-08 00:00:00",
+    });
+    seed(database, "n2", {
+      slot: "preference:news",
+      value: "AI news every morning",
+      createdAt: "2026-08-01 00:00:00",
+    });
+    seed(database, "addr", {
+      slot: "home.address",
+      value: "12 X St",
+      createdAt: "2026-08-05 00:00:00",
+    });
+    const pairs = listSameSlotFactPairs(database, null);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]?.newerId).toBe("n1");
+    expect(pairs[0]?.olderId).toBe("n2");
+  });
+
+  it("reads verdicts by pair number, refusing junk", () => {
+    const pairs = [
+      {
+        slot: "s",
+        newerId: "a",
+        olderId: "b",
+        newerValue: "x",
+        olderValue: "y",
+      },
+    ];
+    expect(parseSameFactPairs('{"same":[1]}', pairs)).toHaveLength(1);
+    expect(parseSameFactPairs('{"same":[2]}', pairs)).toHaveLength(0);
+    expect(parseSameFactPairs('{"same":"yes"}', pairs)).toHaveLength(0);
+    expect(parseSameFactPairs("no json", pairs)).toHaveLength(0);
+  });
+
+  it("🔴 retires the OLDER of a same-meaning pair, never the newer", () => {
+    const database = testDatabase();
+    seed(database, "n1", { slot: "preference:news", value: "daily AI news" });
+    seed(database, "n2", {
+      slot: "preference:news",
+      value: "AI news every morning",
+      createdAt: "2026-07-01 00:00:00",
+    });
+    const pairs = listSameSlotFactPairs(database, null);
+    expect(retireOlderFactTwins(database, pairs)).toBe(1);
+    const statuses = database.sqlite
+      .prepare(`SELECT id, status FROM vaenyx_me_candidates ORDER BY id`)
+      .all() as { id: string; status: string }[];
+    expect(statuses).toEqual([
+      { id: "n1", status: "pending_review" },
+      { id: "n2", status: "deleted" },
+    ]);
+  });
+});
+
+describe("restatements of approved knowledge ask nothing new", () => {
+  it("validates covered ids against the pending list, deduped", () => {
+    const pending = [
+      { id: "p1", text: "one" },
+      { id: "p2", text: "two" },
+    ];
+    expect(parseCoveredIds('{"covered":["p2","p2","ghost"]}', pending)).toEqual(
+      ["p2"],
+    );
+    expect(parseCoveredIds('{"covered":"p1"}', pending)).toEqual([]);
+    expect(parseCoveredIds("junk", pending)).toEqual([]);
+  });
+
+  it("retires only rows that are still waiting", () => {
+    const database = testDatabase();
+    seed(database, "p1");
+    seed(database, "p2");
+    database.sqlite
+      .prepare(
+        `UPDATE vaenyx_me_candidates SET status='approved' WHERE id='p2'`,
+      )
+      .run();
+    expect(retireCovered(database, ["p1", "p2"])).toBe(1);
+    const note = database.sqlite
+      .prepare(`SELECT review_note FROM vaenyx_me_candidates WHERE id='p1'`)
+      .get() as { review_note: string };
+    expect(note.review_note).toBe("Already in the approved profile.");
+  });
+
+  it("briefs a fact as slot = value and a trait as title: summary", () => {
+    const database = testDatabase();
+    seed(database, "f", { slot: "home.address", value: "12 X St" });
+    seed(database, "t");
+    const texts = listPendingBriefs(database, null)
+      .map((entry) => entry.text)
+      .sort();
+    expect(texts).toEqual(["home.address = 12 X St", "t: summary"]);
   });
 });
 
