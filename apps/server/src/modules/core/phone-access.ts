@@ -71,28 +71,6 @@ export function findTailscaleCommand(): string | null {
   return "tailscale";
 }
 
-/** Has Windows queued file replacements for the next boot? An MSI that
- *  upgrades a driver in use does exactly this, and nothing it installed works
- *  properly until the machine restarts. */
-export function windowsHasPendingFileRename(): boolean {
-  if (process.platform !== "win32") return false;
-  try {
-    const result = spawnSync(
-      "reg.exe",
-      [
-        "query",
-        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager",
-        "/v",
-        "PendingFileRenameOperations",
-      ],
-      { encoding: "utf8", timeout: 5000, windowsHide: true },
-    );
-    return result.status === 0;
-  } catch {
-    return false;
-  }
-}
-
 /** Does Windows know about a Tailscale service? A second, independent answer
  *  to "is it installed", so one lookup failing cannot green-light an install
  *  that destroys a working configuration. */
@@ -110,6 +88,29 @@ export function tailscaleServiceExists(): boolean {
   } catch {
     return false;
   }
+}
+
+// THE "RESTART THE COMPUTER" FOLKLORE, RETIRED (Oskar, 2026-08-11: a fresh
+// test install still would not reach the phone until a reboot). The silent
+// MSI, run from the SYSTEM session, reliably COPIES Tailscale but does not
+// reliably LEAVE ITS SERVICE RUNNING — and every CLI call needs that service,
+// so sign-in "didn't work" until the next boot auto-started it. Starting it
+// here is the same cure without the reboot. sc.exe rather than PowerShell:
+// present on every Windows install, answers in milliseconds.
+async function tailscaleServiceRunning(): Promise<boolean> {
+  const result = await run("sc.exe", ["query", "Tailscale"], 5_000);
+  return result.ok && /\bRUNNING\b/.test(result.stdout);
+}
+
+export async function ensureTailscaleServiceRunning(): Promise<boolean> {
+  if (process.platform !== "win32") return true;
+  if (await tailscaleServiceRunning()) return true;
+  await run("sc.exe", ["start", "Tailscale"], 10_000);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (await tailscaleServiceRunning()) return true;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 1_500));
+  }
+  return false;
 }
 
 interface RunResult {
@@ -181,10 +182,7 @@ export interface ParsedServeStatus {
 export function parseServeStatus(jsonText: string): ParsedServeStatus {
   try {
     const parsed = JSON.parse(jsonText) as {
-      Web?: Record<
-        string,
-        { Handlers?: Record<string, { Proxy?: unknown }> }
-      >;
+      Web?: Record<string, { Handlers?: Record<string, { Proxy?: unknown }> }>;
       AllowFunnel?: Record<string, unknown>;
     };
     for (const [hostPort, entry] of Object.entries(parsed.Web ?? {})) {
@@ -197,7 +195,8 @@ export function parseServeStatus(jsonText: string): ParsedServeStatus {
       const port = lastColon > 0 ? hostPort.slice(lastColon + 1) : "443";
       return {
         tunnelUp: true,
-        phoneUrl: port === "443" ? `https://${host}` : `https://${host}:${port}`,
+        phoneUrl:
+          port === "443" ? `https://${host}` : `https://${host}:${port}`,
       };
     }
     return { tunnelUp: false, phoneUrl: null };
@@ -271,11 +270,10 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
     // it; an instance started by hand from a normal account does not, and
     // msiexec answers 1603 or 1625. Both cases end at the same place: the
     // manual download link the UI already shows beside this.
-    const child = spawn(
-      "msiexec",
-      ["/i", target, "/quiet", "/norestart"],
-      { stdio: ["ignore", "ignore", "ignore"], windowsHide: true },
-    );
+    const child = spawn("msiexec", ["/i", target, "/quiet", "/norestart"], {
+      stdio: ["ignore", "ignore", "ignore"],
+      windowsHide: true,
+    });
     child.once("error", (error) => {
       installState.phase = "failed";
       installState.detail =
@@ -297,9 +295,13 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
       // worked, the phone address stayed dead, and restarting the service
       // could not have helped.
       //
-      // 3010 is msiexec's own "success, reboot required"; the queued-rename
-      // flag catches the case where it exits 0 and defers anyway.
-      if (code === 3010 || windowsHasPendingFileRename()) {
+      // 3010 is msiexec's own "success, reboot required" — the ONE reboot
+      // verdict this code still believes. It used to also consult the global
+      // PendingFileRenameOperations registry flag, and that flag is machine-
+      // wide noise: Windows Update, the Node MSI the Vaenyx installer itself
+      // just ran, anything — so on a fresh machine every Tailscale install
+      // was mislabelled "restart the computer" (Oskar, 2026-08-11).
+      if (code === 3010) {
         installState.phase = "failed";
         installState.detail =
           lang === "zh"
@@ -308,10 +310,13 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
         return;
       }
       // The command appearing is the only proof that counts — msiexec can
-      // report success and still have put nothing where we look.
+      // report success and still have put nothing where we look. Then start
+      // the service the silent install left registered-but-stopped, so the
+      // sign-in that follows works NOW rather than after a reboot.
       if (findTailscaleCommand()) {
         installState.phase = "idle";
         installState.detail = null;
+        void ensureTailscaleServiceRunning();
         return;
       }
       installState.phase = "failed";
@@ -351,8 +356,17 @@ export async function getPhoneAccessStatus(): Promise<PhoneAccessStatus> {
   base.installed = true;
   base.version = versionResult.stdout.split(/\r?\n/)[0]?.trim() || null;
 
-  const statusResult = await run(command, ["status", "--json"]);
-  const backend = parseBackendStatus(statusResult.stdout);
+  let statusResult = await run(command, ["status", "--json"]);
+  let backend = parseBackendStatus(statusResult.stdout);
+  if (!backend.backendState) {
+    // The exe is on disk but the CLI cannot reach tailscaled — the service is
+    // stopped (a fresh silent install, or a machine that never rebooted after
+    // the old advice). Start it and ask once more before reporting.
+    if (await ensureTailscaleServiceRunning()) {
+      statusResult = await run(command, ["status", "--json"]);
+      backend = parseBackendStatus(statusResult.stdout);
+    }
+  }
   base.backendState = backend.backendState;
   base.signedIn = backend.backendState === "Running";
   base.loginUrl = backend.authUrl ?? capturedLoginUrl;
@@ -394,8 +408,16 @@ export async function startTailscaleLogin(
           : "Tailscale is not installed yet.",
     };
   }
-  const statusResult = await run(command, ["status", "--json"]);
-  const backend = parseBackendStatus(statusResult.stdout);
+  let statusResult = await run(command, ["status", "--json"]);
+  let backend = parseBackendStatus(statusResult.stdout);
+  if (!backend.backendState) {
+    // Same self-heal as the status read: a stopped service is why "sign in"
+    // used to do nothing until the machine was rebooted.
+    if (await ensureTailscaleServiceRunning()) {
+      statusResult = await run(command, ["status", "--json"]);
+      backend = parseBackendStatus(statusResult.stdout);
+    }
+  }
   if (backend.backendState === "Running") {
     capturedLoginUrl = null;
     return { url: null, alreadySignedIn: true, detail: null };
