@@ -11,10 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import {
-  AnnotatedPhoto,
-  AnnotatedPhotoEditor,
-} from "./photo-marks";
+import { AnnotatedPhoto, AnnotatedPhotoEditor } from "./photo-marks";
 import { encodeQr, qrSvgPath } from "./qr";
 import { StatusOrb } from "./status-orb";
 
@@ -275,11 +272,7 @@ import {
   updateVaenyxThreadTitle,
 } from "./api.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
-import {
-  setToastListener,
-  showErrorToast,
-  type ToastTone,
-} from "./toast.js";
+import { setToastListener, showErrorToast, type ToastTone } from "./toast.js";
 import { useI18n, type Lang } from "./i18n.js";
 import {
   CAPABILITY_META,
@@ -388,9 +381,7 @@ function shortWhen(value: string): string {
   }).format(when);
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
-  const days = Math.floor(
-    (when.getTime() - midnight.getTime()) / 86_400_000,
-  );
+  const days = Math.floor((when.getTime() - midnight.getTime()) / 86_400_000);
   if (days === 0) return time;
   if (days === 1) return `tomorrow ${time}`;
   if (days === -1) return `yesterday ${time}`;
@@ -454,8 +445,8 @@ function describeSchedule(task: {
       return `Every day at ${time}`;
     case "weekly": {
       const day =
-        WEEKDAY_OPTIONS.find((d) => d.value === task.scheduleDayOfWeek)?.label ??
-        "Mon";
+        WEEKDAY_OPTIONS.find((d) => d.value === task.scheduleDayOfWeek)
+          ?.label ?? "Mon";
       return `Every ${day} at ${time}`;
     }
     case "monthly":
@@ -582,7 +573,9 @@ function sortProjectsForSidebar(projects: Project[]): Project[] {
     if (isGeneralProject(left)) return 1;
     if (isGeneralProject(right)) return -1;
 
-    return getSidebarProjectName(left).localeCompare(getSidebarProjectName(right));
+    return getSidebarProjectName(left).localeCompare(
+      getSidebarProjectName(right),
+    );
   });
 }
 
@@ -772,7 +765,11 @@ function AuthScreen({
     <main className="auth-shell">
       <section className="auth-card">
         <div className="brand auth-brand">
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <span>Vaenyx</span>
         </div>
 
@@ -982,7 +979,11 @@ function TokenField({ token }: { token: string }) {
         >
           {revealed ? "Hide" : "Show"}
         </button>
-        <button className="secondary-button" onClick={() => void copy()} type="button">
+        <button
+          className="secondary-button"
+          onClick={() => void copy()}
+          type="button"
+        >
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
@@ -993,7 +994,13 @@ function TokenField({ token }: { token: string }) {
 // An existing Token's masked row: Show / Copy fetch the real value on demand
 // from the at-rest cipher (Owner-only endpoint). Tokens created before the
 // cipher existed cannot be recovered — the row says so and points at Reset.
-function StoredTokenField({ prefix, profileId }: { prefix: string; profileId: string }) {
+function StoredTokenField({
+  prefix,
+  profileId,
+}: {
+  prefix: string;
+  profileId: string;
+}) {
   const [revealed, setRevealed] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -1036,9 +1043,7 @@ function StoredTokenField({ prefix, profileId }: { prefix: string; profileId: st
 
   return (
     <div className="token-field">
-      <code className="token-value">
-        {revealed && token ? token : masked}
-      </code>
+      <code className="token-value">{revealed && token ? token : masked}</code>
       <div className="token-field-actions">
         <button
           className="secondary-button"
@@ -1174,11 +1179,7 @@ async function downscalePhoto(file: File): Promise<Blob> {
     if (!context) return file;
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     return await new Promise<Blob>((resolvePhoto) =>
-      canvas.toBlob(
-        (blob) => resolvePhoto(blob ?? file),
-        "image/jpeg",
-        0.85,
-      ),
+      canvas.toBlob((blob) => resolvePhoto(blob ?? file), "image/jpeg", 0.85),
     );
   } catch {
     return file;
@@ -1264,7 +1265,6 @@ function CameraButton({
     }
   }
 
-
   return (
     <>
       {/* Two inputs, because one cannot do both jobs. `capture` tells a phone
@@ -1321,7 +1321,6 @@ function CameraButton({
   );
 }
 
-
 // One round button in one place, just above the composer, carrying whichever
 // arrow is useful from where the Owner is standing (Oskar, 2026-08-07):
 //   away from the bottom → ↓, jumps to the newest message
@@ -1367,7 +1366,9 @@ function JumpToLatest({
         setBottom(
           Math.max(
             12,
-            Math.round(window.innerHeight - composer.getBoundingClientRect().top) + 8,
+            Math.round(
+              window.innerHeight - composer.getBoundingClientRect().top,
+            ) + 8,
           ),
         );
       }
@@ -1407,7 +1408,9 @@ function JumpToLatest({
   const goUp = mode === "up";
   return (
     <button
-      aria-label={goUp ? "Jump to the start of the last message" : "Jump to latest"}
+      aria-label={
+        goUp ? "Jump to the start of the last message" : "Jump to latest"
+      }
       className="jump-latest jump-latest--icon"
       onClick={() => {
         window.clearTimeout(hideTimerRef.current);
@@ -1544,9 +1547,9 @@ function SpeakButton({
   text: string;
 }) {
   const { lang } = useI18n();
-  const [state, setState] = useState<
-    "idle" | "loading" | "playing" | "paused"
-  >("idle");
+  const [state, setState] = useState<"idle" | "loading" | "playing" | "paused">(
+    "idle",
+  );
   // Playing back a recording the Owner made is not Vaenyx speaking, so only
   // the synthesised paths sit under the Speaking switch — the clip is the
   // Owner's own voice and belongs to Hearing's side of the app.
@@ -1554,9 +1557,7 @@ function SpeakButton({
   // Seeded from what this page already knows, so only the very first button of
   // a session can appear for the instant before the answer arrives; every
   // reply after that is drawn right the first time.
-  const [muted, setMuted] = useState(
-    () => synthesises && speakingOn === false,
-  );
+  const [muted, setMuted] = useState(() => synthesises && speakingOn === false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // The clips to play in order (a recording is one clip; TTS is 1-2 sentence
   // chunks), synthesis already in flight. Built once, then replayable.
@@ -1702,9 +1703,7 @@ function SpeakButton({
         // show that as paused so Resume works naturally.
         created.onpause = () => {
           if (!created.ended) {
-            setState((current) =>
-              current === "playing" ? "paused" : current,
-            );
+            setState((current) => (current === "playing" ? "paused" : current));
           }
         };
         audioRef.current = created;
@@ -2099,9 +2098,7 @@ function ComposerTools({
           />
         ) : null}
         <DocumentButton disabled={disabled} onPicked={onDocument} />
-        {showMic ? (
-          <MicButton disabled={disabled} onText={onSpoken} />
-        ) : null}
+        {showMic ? <MicButton disabled={disabled} onText={onSpoken} /> : null}
       </span>
     </span>
   );
@@ -2616,7 +2613,9 @@ function ToolsPanel() {
       </section>
 
       <p className="settings-card-copy text-faint">
-        {zh ? "缺一个你需要的 Tool?来 " : "Missing a tool you need? Suggest it on "}
+        {zh
+          ? "缺一个你需要的 Tool?来 "
+          : "Missing a tool you need? Suggest it on "}
         <a href="https://vaenyx.ai/discord" rel="noopener" target="_blank">
           Discord
         </a>{" "}
@@ -2865,10 +2864,10 @@ function NotificationsPanel() {
       <p className="eyebrow">Notifications</p>
       <h2>Notifications</h2>
       <p className="settings-card-copy">
-        Vaenyx pushes a notification when something stays unseen for ~30
-        seconds — while any device is viewing the app, it stays quiet. Once a
-        device's system permission is granted, it keeps itself subscribed.
-        iPhone: add Vaenyx to the Home Screen first and open it from there.
+        Vaenyx pushes a notification when something stays unseen for ~30 seconds
+        — while any device is viewing the app, it stays quiet. Once a device's
+        system permission is granted, it keeps itself subscribed. iPhone: add
+        Vaenyx to the Home Screen first and open it from there.
       </p>
 
       <h3 className="settings-subhead">What Gets Pushed</h3>
@@ -2894,7 +2893,9 @@ function NotificationsPanel() {
                 [key]: event.target.checked,
               };
               setPrefs(next);
-              void updatePushPrefs(next).then(setPrefs).catch(() => undefined);
+              void updatePushPrefs(next)
+                .then(setPrefs)
+                .catch(() => undefined);
             }}
             type="checkbox"
           />
@@ -3074,7 +3075,11 @@ function MethodPickerModal({
       <p className="settings-card-copy">
         Tick the Methods this app may use. You can change this any time.
       </p>
-      <MethodToggleList methods={methods} onToggle={toggle} selected={selected} />
+      <MethodToggleList
+        methods={methods}
+        onToggle={toggle}
+        selected={selected}
+      />
       <div className="modal-actions">
         <button className="text-button" onClick={onClose} type="button">
           Cancel
@@ -3208,9 +3213,7 @@ function EditAppProfileModal({
         </button>
         <button
           className="primary-button"
-          disabled={
-            saving || (isRoutine ? !routineId : selected.length === 0)
-          }
+          disabled={saving || (isRoutine ? !routineId : selected.length === 0)}
           onClick={() => void save()}
           type="button"
         >
@@ -3434,7 +3437,13 @@ function AppsPanel({
       const result = await createAppProfile(
         kind === "routine"
           ? { name, kind: "routine", allowedRoutineId: routineId }
-          : { name, kind: "method", allowedMethodIds, fetchRecipe, sendFeedback },
+          : {
+              name,
+              kind: "method",
+              allowedMethodIds,
+              fetchRecipe,
+              sendFeedback,
+            },
       );
       onCreate(result);
       setCreatedToken({ profileId: result.profile.id, token: result.token });
@@ -3460,8 +3469,8 @@ function AppsPanel({
         <p className="eyebrow">New connection</p>
         <h2>Create a Token</h2>
         <p className="panel-description">
-          A Token lets one external app use Vaenyx. Pick the type, then what it may
-          use. Every request stays Level 0.
+          A Token lets one external app use Vaenyx. Pick the type, then what it
+          may use. Every request stays Level 0.
         </p>
         <p className="library-note">{t("apps.token.externalNote")}</p>
 
@@ -3548,8 +3557,9 @@ function AppsPanel({
                 />
               )}
               <small className="token-kind-hint">
-                The app calls <code>POST /v1/library/routines/:id/run</code> with
-                its input and gets the finished result. Nothing is stored on Vaenyx.
+                The app calls <code>POST /v1/library/routines/:id/run</code>{" "}
+                with its input and gets the finished result. Nothing is stored
+                on Vaenyx.
               </small>
             </label>
           ) : (
@@ -3598,9 +3608,9 @@ function AppsPanel({
                 <span>
                   <strong>{t("apps.token.sendFeedback.label")}</strong>
                   <small>{t("apps.token.sendFeedback.desc")}</small>
-              <small className="context-disclaimer">
-                {t("legal.notice.methodToken.feedback")}
-              </small>
+                  <small className="context-disclaimer">
+                    {t("legal.notice.methodToken.feedback")}
+                  </small>
                 </span>
               </label>
             </>
@@ -3651,8 +3661,8 @@ function AppsPanel({
           <span>Vaenyx App Bridge</span>
         </div>
         <p>
-          Store the Token as a secret in the external app's backend. Never put it
-          in browser JavaScript or a public GitHub file.
+          Store the Token as a secret in the external app's backend. Never put
+          it in browser JavaScript or a public GitHub file.
         </p>
         <dl className="settings-list">
           <div>
@@ -3676,8 +3686,8 @@ function AppsPanel({
         </dl>
         <p className="token-kind-hint">
           Send the token as <code>Authorization: Bearer vaenyx_app_…</code>. The
-          routine route returns the finished result; the method routes give you one
-          building block at a time.
+          routine route returns the finished result; the method routes give you
+          one building block at a time.
         </p>
       </section>
 
@@ -3701,7 +3711,9 @@ function AppsPanel({
               <article className="profile-card" key={profile.id}>
                 <div>
                   <span className="task-status">
-                    {profile.kind === "routine" ? "Routine Token" : "Method Token"}
+                    {profile.kind === "routine"
+                      ? "Routine Token"
+                      : "Method Token"}
                     {profile.enabled ? "" : " · Disabled"}
                   </span>
                   <strong>{profile.name}</strong>
@@ -3800,7 +3812,11 @@ function AppsPanel({
                       <p className="form-error">{capsError}</p>
                     ) : null}
                     {!ceiling ? (
-                      <p className={ceilingFailed ? "form-error" : "library-note"}>
+                      <p
+                        className={
+                          ceilingFailed ? "form-error" : "library-note"
+                        }
+                      >
                         {ceilingFailed
                           ? lang === "zh"
                             ? "这台机器自己的开关读不出来,所以现在什么都不能勾。"
@@ -3815,7 +3831,9 @@ function AppsPanel({
                           const never = ceiling.neverViaToken.includes(meta.id);
                           const built = ceiling.implemented[meta.id] !== false;
                           const machineOn = ceiling.global[meta.id] === true;
-                          const granted = profile.capabilities.includes(meta.id);
+                          const granted = profile.capabilities.includes(
+                            meta.id,
+                          );
                           const ownApproval =
                             ceiling.needsOwnTokenApproval.includes(meta.id);
                           return (
@@ -3827,7 +3845,10 @@ function AppsPanel({
                                 {lang === "zh" ? meta.name.zh : meta.name.en}
                                 <em>
                                   (
-                                  {lang === "zh" ? meta.gloss.zh : meta.gloss.en})
+                                  {lang === "zh"
+                                    ? meta.gloss.zh
+                                    : meta.gloss.en}
+                                  )
                                 </em>
                               </span>
                               {never ? (
@@ -4099,9 +4120,9 @@ function GuardPanel({ events }: { events: AuditEvent[] }) {
           <p className="eyebrow">Autonomy policy</p>
           <h2>Level 0 only</h2>
           <p>
-            Vaenyx can answer, but cannot take external action, and never changes
-            its own memory, Skills, Apps, or behaviour silently — higher levels
-            and any self-change need the Owner's approval.
+            Vaenyx can answer, but cannot take external action, and never
+            changes its own memory, Skills, Apps, or behaviour silently — higher
+            levels and any self-change need the Owner's approval.
           </p>
         </div>
       </section>
@@ -4141,7 +4162,9 @@ function GuardPanel({ events }: { events: AuditEvent[] }) {
                 onClick={() => setShowAllAudit((value) => !value)}
                 type="button"
               >
-                {showAllAudit ? "Show less" : `Show more (${events.length - 5})`}
+                {showAllAudit
+                  ? "Show less"
+                  : `Show more (${events.length - 5})`}
               </button>
             ) : null}
           </div>
@@ -4182,7 +4205,8 @@ function ToastHost() {
       nextId += 1;
       setToasts((current) => [...current.slice(-2), { id, text, tone }]);
       window.setTimeout(
-        () => setToasts((current) => current.filter((toast) => toast.id !== id)),
+        () =>
+          setToasts((current) => current.filter((toast) => toast.id !== id)),
         // A confirmation has done its job in a moment; an error is read.
         tone === "success" ? 2200 : 6000,
       );
@@ -4311,9 +4335,7 @@ function ModePinGate({
       markModePinVerified(mode.id);
       onVerified();
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "Wrong PIN.",
-      );
+      setError(nextError instanceof Error ? nextError.message : "Wrong PIN.");
     } finally {
       setBusy(false);
     }
@@ -4346,8 +4368,8 @@ function ModePinGate({
         <p className="eyebrow">Restricted Mode</p>
         <h2>{mode.name}</h2>
         <p className="settings-card-copy">
-          This device is in the mode "{mode.name}". Enter its PIN to
-          continue — the account password always works too.
+          This device is in the mode "{mode.name}". Enter its PIN to continue —
+          the account password always works too.
         </p>
         <input
           {...PIN_INPUT_PROPS}
@@ -4712,9 +4734,7 @@ function ModesPanel() {
   const [editAgentName, setEditAgentName] = useState("");
   const [editDigest, setEditDigest] = useState<
     "off" | "daily" | "weekly" | "monthly"
-  >(
-    "off",
-  );
+  >("off");
   const [editEnterPin, setEditEnterPin] = useState("");
   const [editExitPin, setEditExitPin] = useState("");
   const [editClearEnterPin, setEditClearEnterPin] = useState(false);
@@ -4794,9 +4814,9 @@ function ModesPanel() {
   return (
     <div className="modes-layout">
       <p className="modes-preview-note">
-        Enter a mode to work inside its own sandbox — separate chats,
-        projects and memory. The badge in the corner shows where you are and
-        is the way back; your account password always overrides a PIN.
+        Enter a mode to work inside its own sandbox — separate chats, projects
+        and memory. The badge in the corner shows where you are and is the way
+        back; your account password always overrides a PIN.
       </p>
 
       <section className="settings-card">
@@ -4805,8 +4825,8 @@ function ModesPanel() {
         <p className="settings-card-copy">
           The default, unrestricted mode (you, the account owner). Every mode
           setting lives here. A Custom Mode is a restricted sandbox you switch
-          into — with its own projects, chats, and memory, visible only from User
-          Mode.
+          into — with its own projects, chats, and memory, visible only from
+          User Mode.
         </p>
       </section>
 
@@ -4926,11 +4946,13 @@ function ModesPanel() {
         <p className="eyebrow">Paired devices</p>
         <h2>Which Mode Each Device Opens In</h2>
         <p className="settings-card-copy">
-          A device set to open in a mode lands there every time the app
-          starts. Combined with that mode's Exit PIN, the device stays in it.
+          A device set to open in a mode lands there every time the app starts.
+          Combined with that mode's Exit PIN, the device stays in it.
         </p>
         {devices.length === 0 ? (
-          <p className="library-note">No other devices have opened Vaenyx yet.</p>
+          <p className="library-note">
+            No other devices have opened Vaenyx yet.
+          </p>
         ) : (
           <div className="modes-list">
             {devices.map((device) => (
@@ -5301,7 +5323,9 @@ function ModesPanel() {
                                 {lang === "zh" ? meta.name.zh : meta.name.en}
                                 <em>
                                   (
-                                  {lang === "zh" ? meta.gloss.zh : meta.gloss.en}
+                                  {lang === "zh"
+                                    ? meta.gloss.zh
+                                    : meta.gloss.en}
                                   )
                                 </em>
                               </span>
@@ -5361,9 +5385,7 @@ function ModesPanel() {
                 {viewingModeId === mode.id ? (
                   <div className="mode-view-window">
                     {viewThreads.length === 0 ? (
-                      <p className="library-note">
-                        Nothing in this mode yet.
-                      </p>
+                      <p className="library-note">Nothing in this mode yet.</p>
                     ) : (
                       viewThreads.map((thread) => (
                         <button
@@ -6121,9 +6143,7 @@ function AskVaenyxPanel({
   const [newChatProviderId, setNewChatProviderId] = useState<string | null>(
     null,
   );
-  const [newChatModelName, setNewChatModelName] = useState<string | null>(
-    null,
-  );
+  const [newChatModelName, setNewChatModelName] = useState<string | null>(null);
   const [newChatEffort, setNewChatEffort] = useState<ReasoningEffort | null>(
     null,
   );
@@ -6185,7 +6205,9 @@ function AskVaenyxPanel({
   const [routineJournal, setRoutineJournal] = useState<RoutineJournalEntry[]>(
     [],
   );
-  const [routineGallery, setRoutineGallery] = useState<RoutineGalleryItem[]>([]);
+  const [routineGallery, setRoutineGallery] = useState<RoutineGalleryItem[]>(
+    [],
+  );
   const [capabilityTab, setCapabilityTab] = useState<
     "chat" | "journal" | "gallery"
   >("chat");
@@ -6551,7 +6573,8 @@ function AskVaenyxPanel({
   // "Working" used to stick until a manual refresh. Poll while the open task is
   // waiting/running; the interval dissolves as soon as the status settles.
   const focusedTaskStatus = focusedTaskId
-    ? workspace.tasks.find((task) => task.id === focusedTaskId)?.status ?? null
+    ? (workspace.tasks.find((task) => task.id === focusedTaskId)?.status ??
+      null)
     : null;
   useEffect(() => {
     if (!focusedTaskId) return undefined;
@@ -6818,7 +6841,8 @@ function AskVaenyxPanel({
           }
         }
         const marks =
-          imageId && Array.isArray(result.annotations) &&
+          imageId &&
+          Array.isArray(result.annotations) &&
           result.annotations.length > 0
             ? result.annotations
             : null;
@@ -7132,7 +7156,10 @@ function AskVaenyxPanel({
     // classifier needs a conversation to read history from, so create it first
     // and reuse it for the reply below — no extra chat is left behind.
     let preCreatedConversationId: string | null = null;
-    if (!activeConversationId && messageMaybeIntent(content, messages, libraryRoutines)) {
+    if (
+      !activeConversationId &&
+      messageMaybeIntent(content, messages, libraryRoutines)
+    ) {
       try {
         const conversation = await createAskVaenyxConversation({
           projectId: composeProjectId || generalProjectId,
@@ -7278,9 +7305,8 @@ function AskVaenyxPanel({
           // there when he comes back — a day later he can still tell what was
           // sent where.
           const targetName =
-            libraryRoutines.find(
-              (routine) => routine.id === verdict.routineId,
-            )?.name ?? verdict.routineId;
+            libraryRoutines.find((routine) => routine.id === verdict.routineId)
+              ?.name ?? verdict.routineId;
           await appendConversationNote(
             classifyConversationId,
             lang === "zh"
@@ -7590,7 +7616,10 @@ function AskVaenyxPanel({
       });
       void onWorkspaceRefresh();
     } catch (nextError) {
-      if (nextError instanceof DOMException && nextError.name === "AbortError") {
+      if (
+        nextError instanceof DOMException &&
+        nextError.name === "AbortError"
+      ) {
         // Owner pressed Stop: keep the partial reply, mark it failed so the
         // Retry button appears. The server persisted the same partial text.
         setMessages((current) =>
@@ -7618,7 +7647,9 @@ function AskVaenyxPanel({
         // until the network is back, then swap the real reply in and clear
         // the error. Backs off; gives up quietly after ~15s.
         const reconcileId =
-          createdConversationId ?? activeConversationId ?? preCreatedConversationId;
+          createdConversationId ??
+          activeConversationId ??
+          preCreatedConversationId;
         if (reconcileId) {
           void (async () => {
             for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -7751,26 +7782,26 @@ function AskVaenyxPanel({
         taskId,
         trimmed,
         {
-        signal: controller.signal,
-        onOwner: (ownerMessage) =>
-          setTaskMessages((current) =>
-            current.map((message) =>
-              message.id === tempOwnerId ? ownerMessage : message,
+          signal: controller.signal,
+          onOwner: (ownerMessage) =>
+            setTaskMessages((current) =>
+              current.map((message) =>
+                message.id === tempOwnerId ? ownerMessage : message,
+              ),
             ),
-          ),
-        // Same watch-it-work channel the plain chat has — the task thread was
-        // missed on the first pass (Oskar, 2026-07-27).
-        onStatus: (code) => setStreamStatus(code),
-        onThinking: (text) =>
-          setStreamThinking((current) => (current + text).slice(-4000)),
-        onDelta: (text) =>
-          setTaskMessages((current) =>
-            current.map((message) =>
-              message.id === tempAssistantId
-                ? { ...message, content: message.content + text }
-                : message,
+          // Same watch-it-work channel the plain chat has — the task thread was
+          // missed on the first pass (Oskar, 2026-07-27).
+          onStatus: (code) => setStreamStatus(code),
+          onThinking: (text) =>
+            setStreamThinking((current) => (current + text).slice(-4000)),
+          onDelta: (text) =>
+            setTaskMessages((current) =>
+              current.map((message) =>
+                message.id === tempAssistantId
+                  ? { ...message, content: message.content + text }
+                  : message,
+              ),
             ),
-          ),
         },
         {
           ...(voiceAudioId ? { voiceAudioId } : {}),
@@ -7800,7 +7831,10 @@ function AskVaenyxPanel({
       });
       void onWorkspaceRefresh();
     } catch (nextError) {
-      if (nextError instanceof DOMException && nextError.name === "AbortError") {
+      if (
+        nextError instanceof DOMException &&
+        nextError.name === "AbortError"
+      ) {
         setTaskMessages((current) =>
           current.map((message) =>
             message.id === tempAssistantId
@@ -7890,13 +7924,15 @@ function AskVaenyxPanel({
     conversations.find(
       (conversation) => conversation.id === activeConversationId,
     ) ?? null;
-  const chatThreads = workspace.threads.filter((thread) => thread.kind === "chat");
+  const chatThreads = workspace.threads.filter(
+    (thread) => thread.kind === "chat",
+  );
   const activeThread =
     activeConversation === null
       ? null
-      : chatThreads.find(
+      : (chatThreads.find(
           (thread) => thread.conversationId === activeConversation.id,
-        ) ?? null;
+        ) ?? null);
 
   function getThreadForTask(task: Task): VaenyxThread | null {
     return (
@@ -8045,7 +8081,7 @@ function AskVaenyxPanel({
     );
     const newChatModelChoices =
       newChatEffective && newChatEffective.kind !== "cli-login"
-        ? MODEL_CHOICES[newChatEffective.id] ?? []
+        ? (MODEL_CHOICES[newChatEffective.id] ?? [])
         : [];
     return (
       <div className="simple-compose-shell">
@@ -8093,7 +8129,6 @@ function AskVaenyxPanel({
             submitLabel={sending ? "Sending" : "Send"}
             value={startWorkPrompt}
           />
-
 
           {!hasUsableModel ? (
             <div className="composer-status">
@@ -8191,7 +8226,7 @@ function AskVaenyxPanel({
   const focusedTask =
     focusedTaskId === null
       ? null
-      : workspace.tasks.find((task) => task.id === focusedTaskId) ?? null;
+      : (workspace.tasks.find((task) => task.id === focusedTaskId) ?? null);
   const focusedTaskThread =
     focusedTask === null ? null : getThreadForTask(focusedTask);
 
@@ -8224,9 +8259,9 @@ function AskVaenyxPanel({
       inbox !== null && activeConversationId === inbox.conversationId;
     const isRoutine = Boolean(activeThread?.routineId);
     const activeRoutine = activeThread?.routineId
-      ? libraryRoutines.find(
+      ? (libraryRoutines.find(
           (routine) => routine.id === activeThread.routineId,
-        ) ?? null
+        ) ?? null)
       : null;
     // Header chips (spec §2a): same real-state chips as the sidebar, but the
     // Routine chip shows the Routine's actual name, and an in-flight build adds
@@ -8350,7 +8385,11 @@ function AskVaenyxPanel({
         {loadingMessages && messages.length === 0 && !splashExpired ? (
           <div className="loading-screen chat-splash">
             <div>
-              <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+              <img
+                alt="Vaenyx"
+                className="brand-mark brand-mark-img"
+                src="/vaenyx-mark.svg"
+              />
               <p>{lang === "zh" ? "正在打开对话…" : "Opening the chat…"}</p>
             </div>
           </div>
@@ -8423,7 +8462,8 @@ function AskVaenyxPanel({
               }}
               type="button"
             >
-              {(zh ? "跳过去:" : "Take me there: ") + goTargetLabel(goOffer, zh)}
+              {(zh ? "跳过去:" : "Take me there: ") +
+                goTargetLabel(goOffer, zh)}
             </button>
             <button
               aria-label={zh ? "关闭" : "Dismiss"}
@@ -8435,36 +8475,48 @@ function AskVaenyxPanel({
             </button>
           </div>
         ) : null}
-        {/* Beside the conversation on a desktop, over the bottom of it on a
-            phone — one component, and the difference is a media query. The
-            chat is NOT unmounted while this is open: it stays in the tree, in
-            the same slot, so its scroll position and anything mid-stream
-            survive. That is the whole reason this is not a route. */}
+        {/* A right-hand drawer over the conversation, phone and desktop the
+            same; the dimmed strip left of it closes it on a tap. The chat is
+            NOT unmounted while this is open: it stays in the tree, in the
+            same slot, so its scroll position and anything mid-stream survive.
+            That is the whole reason this is not a route. */}
         {isInboxChat && inboxTrayOpen ? (
-          <aside className="inbox-tray">
-            <div className="inbox-tray-head">
-              <strong>{zh ? "等你看的" : "Waiting for you"}</strong>
-              <button
-                aria-label={zh ? "关闭" : "Close"}
-                className="modal-close"
-                onClick={() => setInboxTrayOpen(false)}
-                type="button"
-              >
-                ×
-              </button>
-            </div>
-            <VaenyxMeLedger
-              candidates={inboxCandidates}
-              compact
-              onViewSource={(conversationId) => {
-                // The tray stays open: the Owner is checking a claim, and the
-                // claim is still waiting for them when they come back.
-                void openConversation(conversationId);
-              }}
-              onApprove={(candidate) => void answerInboxCandidate(candidate, true)}
-              onReject={(candidate) => void answerInboxCandidate(candidate, false)}
+          <>
+            <button
+              aria-label={zh ? "关闭" : "Close"}
+              className="inbox-tray-backdrop"
+              onClick={() => setInboxTrayOpen(false)}
+              type="button"
             />
-          </aside>
+            <aside className="inbox-tray">
+              <div className="inbox-tray-head">
+                <strong>{zh ? "等你看的" : "Waiting for you"}</strong>
+                <button
+                  aria-label={zh ? "关闭" : "Close"}
+                  className="modal-close"
+                  onClick={() => setInboxTrayOpen(false)}
+                  type="button"
+                >
+                  ×
+                </button>
+              </div>
+              <VaenyxMeLedger
+                candidates={inboxCandidates}
+                compact
+                onViewSource={(conversationId) => {
+                  // The tray stays open: the Owner is checking a claim, and the
+                  // claim is still waiting for them when they come back.
+                  void openConversation(conversationId);
+                }}
+                onApprove={(candidate) =>
+                  void answerInboxCandidate(candidate, true)
+                }
+                onReject={(candidate) =>
+                  void answerInboxCandidate(candidate, false)
+                }
+              />
+            </aside>
+          </>
         ) : null}
 
         {/* What this Routine needs, drawn. A dimmed chip is the same shape, not
@@ -8679,75 +8731,79 @@ function AskVaenyxPanel({
                     ),
                 )
                 .map((field) => (
-                <label
-                  className={
-                    routineInputConfirm.marks ? "confirm-compact" : undefined
-                  }
-                  key={field.key}
-                  style={{ display: "flex", flexDirection: "column", gap: "4px" }}
-                >
-                  <span className="eyebrow" style={{ margin: 0 }}>
-                    {field.key}
-                    {field.required ? " *" : ""}
-                  </span>
-                  {field.description ? (
-                    <span
-                      className="settings-card-copy"
-                      style={{ margin: 0, opacity: 0.75 }}
-                    >
-                      {field.description}
+                  <label
+                    className={
+                      routineInputConfirm.marks ? "confirm-compact" : undefined
+                    }
+                    key={field.key}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
+                    <span className="eyebrow" style={{ margin: 0 }}>
+                      {field.key}
+                      {field.required ? " *" : ""}
                     </span>
-                  ) : null}
-                  {field.type === "boolean" ? (
-                    <input
-                      checked={routineInputConfirm.checks[field.key] === true}
-                      onChange={(event) =>
-                        setRoutineInputConfirm((current) =>
-                          current
-                            ? {
-                                ...current,
-                                checks: {
-                                  ...current.checks,
-                                  [field.key]: event.target.checked,
-                                },
-                              }
-                            : current,
-                        )
-                      }
-                      type="checkbox"
-                    />
-                  ) : (
-                    <textarea
-                      onChange={(event) =>
-                        setRoutineInputConfirm((current) =>
-                          current
-                            ? {
-                                ...current,
-                                values: {
-                                  ...current.values,
-                                  [field.key]: event.target.value,
-                                },
-                              }
-                            : current,
-                        )
-                      }
-                      placeholder={
-                        field.type === "array"
-                          ? t("routine.confirm.onePerLine")
-                          : ""
-                      }
-                      rows={
-                        routineInputConfirm.marks
-                          ? 1
-                          : field.type === "array"
-                            ? 3
-                            : 2
-                      }
-                      value={routineInputConfirm.values[field.key] ?? ""}
-                    />
-                  )}
-                </label>
-              ))}
+                    {field.description ? (
+                      <span
+                        className="settings-card-copy"
+                        style={{ margin: 0, opacity: 0.75 }}
+                      >
+                        {field.description}
+                      </span>
+                    ) : null}
+                    {field.type === "boolean" ? (
+                      <input
+                        checked={routineInputConfirm.checks[field.key] === true}
+                        onChange={(event) =>
+                          setRoutineInputConfirm((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  checks: {
+                                    ...current.checks,
+                                    [field.key]: event.target.checked,
+                                  },
+                                }
+                              : current,
+                          )
+                        }
+                        type="checkbox"
+                      />
+                    ) : (
+                      <textarea
+                        onChange={(event) =>
+                          setRoutineInputConfirm((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  values: {
+                                    ...current.values,
+                                    [field.key]: event.target.value,
+                                  },
+                                }
+                              : current,
+                          )
+                        }
+                        placeholder={
+                          field.type === "array"
+                            ? t("routine.confirm.onePerLine")
+                            : ""
+                        }
+                        rows={
+                          routineInputConfirm.marks
+                            ? 1
+                            : field.type === "array"
+                              ? 3
+                              : 2
+                        }
+                        value={routineInputConfirm.values[field.key] ?? ""}
+                      />
+                    )}
+                  </label>
+                ))}
             </div>
             {confirmMissing.length > 0 ? (
               <p className="settings-card-copy">
@@ -8830,7 +8886,9 @@ function AskVaenyxPanel({
         >
           {pullReady ? (
             <p className="pull-refresh-hint">
-              {lang === "zh" ? "松手刷新这个对话" : "Release to refresh this chat"}
+              {lang === "zh"
+                ? "松手刷新这个对话"
+                : "Release to refresh this chat"}
             </p>
           ) : null}
           {isRoutine ? (
@@ -8877,7 +8935,8 @@ function AskVaenyxPanel({
               <div className="empty-state">
                 <strong>Feed this routine</strong>
                 <p>
-                  Type a note below — the result appears here and in the Gallery.
+                  Type a note below — the result appears here and in the
+                  Gallery.
                 </p>
               </div>
             ) : (
@@ -8940,7 +8999,10 @@ function AskVaenyxPanel({
                     <div className="ask-vaenyx-message-head">
                       <strong>Vaenyx</strong>
                     </div>
-                    <ThinkingIndicator status={streamStatus} thinking={Boolean(streamThinking)} />
+                    <ThinkingIndicator
+                      status={streamStatus}
+                      thinking={Boolean(streamThinking)}
+                    />
                   </article>
                 ) : null}
               </>
@@ -8966,7 +9028,9 @@ function AskVaenyxPanel({
                     where the ✓ is (Oskar, 2026-07-29 — two timestamps on one
                     message is one too many). */}
                 <div className="ask-vaenyx-message-head">
-                  <strong>{message.role === "owner" ? "You" : agentName}</strong>
+                  <strong>
+                    {message.role === "owner" ? "You" : agentName}
+                  </strong>
                 </div>
                 {message.documentId ? (
                   <div className="message-document">
@@ -9013,7 +9077,10 @@ function AskVaenyxPanel({
                 ) : message.content ? (
                   <MarkdownMessage content={message.content} />
                 ) : (
-                  <ThinkingIndicator status={streamStatus} thinking={Boolean(streamThinking)} />
+                  <ThinkingIndicator
+                    status={streamStatus}
+                    thinking={Boolean(streamThinking)}
+                  />
                 )}
                 {message.webSearchUsed ? (
                   <span className="web-search-chip">Web search used</span>
@@ -9087,194 +9154,203 @@ function AskVaenyxPanel({
         ) : null}
 
         <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
-        <Composer
-          busy={sending}
-          documentTray={pendingDocument}
-          lang={lang}
-          onDocument={(picked) => {
-            if (picked.needsCostGate) {
-              // The gate stands BEFORE the file is attached: nothing can be
-              // sent, and nothing spent, until it is answered.
-              setDocumentGate(picked);
-              return;
+          <Composer
+            busy={sending}
+            documentTray={pendingDocument}
+            lang={lang}
+            onDocument={(picked) => {
+              if (picked.needsCostGate) {
+                // The gate stands BEFORE the file is attached: nothing can be
+                // sent, and nothing spent, until it is answered.
+                setDocumentGate(picked);
+                return;
+              }
+              setPendingDocument({ ...picked, acknowledged: false });
+            }}
+            onPhoto={(id) => setPendingImageId(id)}
+            onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+            onRemoveDocument={() => setPendingDocument(null)}
+            onRemovePhoto={clearPendingPhoto}
+            onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
+            onStop={stopStreaming}
+            onSubmit={sendMessage}
+            onTranscribed={(text) =>
+              setPrompt((current) => (current ? `${current}\n${text}` : text))
             }
-            setPendingDocument({ ...picked, acknowledged: false });
-          }}
-          onPhoto={(id) => setPendingImageId(id)}
-          onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
-          onRemoveDocument={() => setPendingDocument(null)}
-          onRemovePhoto={clearPendingPhoto}
-          onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
-          onStop={stopStreaming}
-          onSubmit={sendMessage}
-          onTranscribed={(text) =>
-            setPrompt((current) => (current ? `${current}\n${text}` : text))
-          }
-          onUploadStart={(upload) => {
-            pendingUploadRef.current = upload;
-          }}
-          onValueChange={setPrompt}
-          photoTray={
-            pendingPhotoPreview ??
-            (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
-          }
-          placeholder={isRoutine ? "Type or paste a note…" : "Ask anything"}
-          showCamera={visionReady}
-          showMic={voiceReady}
-          submitLabel={isRoutine ? "Run" : "Send"}
-          value={prompt}
-        >
-          <div className="composer-status">
-            {chatProviders.length > 1 ? (
+            onUploadStart={(upload) => {
+              pendingUploadRef.current = upload;
+            }}
+            onValueChange={setPrompt}
+            photoTray={
+              pendingPhotoPreview ??
+              (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
+            }
+            placeholder={isRoutine ? "Type or paste a note…" : "Ask anything"}
+            showCamera={visionReady}
+            showMic={voiceReady}
+            submitLabel={isRoutine ? "Run" : "Send"}
+            value={prompt}
+          >
+            <div className="composer-status">
+              {chatProviders.length > 1 ? (
+                <Picker
+                  ariaLabel="Model"
+                  className="composer-level-select"
+                  disabled={!activeConversationId}
+                  onChange={(chosen) => {
+                    const next = chosen || null;
+                    if (!activeConversationId) return;
+                    onConversationsChange(
+                      conversations.map((conversation) =>
+                        conversation.id === activeConversationId
+                          ? // A provider switch also clears the pinned model —
+                            // model ids don't transfer between providers.
+                            {
+                              ...conversation,
+                              modelProviderId: next,
+                              modelName: null,
+                            }
+                          : conversation,
+                      ),
+                    );
+                    void setChatProvider(activeConversationId, next);
+                    void setChatModel(activeConversationId, null);
+                  }}
+                  // The default backend IS the empty choice — one entry,
+                  // marked inline, never listed twice (Oskar, dev.159).
+                  options={[
+                    {
+                      label: `${
+                        chatProviders.find((provider) => provider.isDefault)
+                          ?.name ?? "Codex"
+                      } (Default)`,
+                      value: "",
+                    },
+                    ...chatProviders
+                      .filter((provider) => !provider.isDefault)
+                      .map((provider) => ({
+                        label: provider.name,
+                        value: provider.id,
+                      })),
+                  ]}
+                  title={t("legal.notice.modelPicker")}
+                  value={activeConversation?.modelProviderId ?? ""}
+                />
+              ) : hasUsableModel ? (
+                <span className="composer-model">
+                  {chatProviders[0]?.name ?? "ChatGPT"}
+                </span>
+              ) : (
+                // Skipped the first-run step (or the model stopped working):
+                // say so honestly and go straight to where it is fixed.
+                <button
+                  className="composer-connect-hint"
+                  onClick={onOpenSettings}
+                  type="button"
+                >
+                  {lang === "zh" ? "先连一个模型 →" : "Connect a model →"}
+                </button>
+              )}
+              {(() => {
+                // "Model within the provider": a second picker with a curated
+                // shortlist for the conversation's effective (pinned or default)
+                // provider. Codex has no picker — it is a single-login backend.
+                const effective =
+                  chatProviders.find(
+                    (provider) =>
+                      provider.id === activeConversation?.modelProviderId,
+                  ) ??
+                  chatProviders.find((provider) => provider.isDefault) ??
+                  null;
+                const choices = effective
+                  ? (MODEL_CHOICES[effective.id] ?? [])
+                  : [];
+                if (
+                  !effective ||
+                  effective.kind === "cli-login" ||
+                  choices.length === 0
+                ) {
+                  return null;
+                }
+                return (
+                  <>
+                    <span aria-hidden="true" className="composer-sep">
+                      ·
+                    </span>
+                    <Picker
+                      ariaLabel="Model version"
+                      className="composer-level-select"
+                      disabled={!activeConversationId}
+                      onChange={(chosen) => {
+                        const next = chosen || null;
+                        if (!activeConversationId) return;
+                        onConversationsChange(
+                          conversations.map((conversation) =>
+                            conversation.id === activeConversationId
+                              ? { ...conversation, modelName: next }
+                              : conversation,
+                          ),
+                        );
+                        void setChatModel(activeConversationId, next);
+                      }}
+                      options={[
+                        {
+                          label: `${effective.model ?? "provider default"} (Default)`,
+                          value: "",
+                        },
+                        ...choices
+                          .filter((choice) => choice !== effective.model)
+                          .map((choice) => ({ label: choice, value: choice })),
+                      ]}
+                      value={activeConversation?.modelName ?? ""}
+                    />
+                  </>
+                );
+              })()}
+              <span aria-hidden="true" className="composer-sep">
+                ·
+              </span>
               <Picker
-                ariaLabel="Model"
+                ariaLabel="Reasoning level"
                 className="composer-level-select"
                 disabled={!activeConversationId}
                 onChange={(chosen) => {
-                  const next = chosen || null;
+                  const next = chosen as ReasoningEffort;
                   if (!activeConversationId) return;
                   onConversationsChange(
                     conversations.map((conversation) =>
                       conversation.id === activeConversationId
-                        ? // A provider switch also clears the pinned model —
-                          // model ids don't transfer between providers.
-                          { ...conversation, modelProviderId: next, modelName: null }
+                        ? { ...conversation, reasoningEffort: next }
                         : conversation,
                     ),
                   );
-                  void setChatProvider(activeConversationId, next);
-                  void setChatModel(activeConversationId, null);
+                  void setReasoningEffort(activeConversationId, next);
                 }}
-                // The default backend IS the empty choice — one entry,
-                // marked inline, never listed twice (Oskar, dev.159).
-                options={[
-                  {
-                    label: `${
-                      chatProviders.find((provider) => provider.isDefault)
-                        ?.name ?? "Codex"
-                    } (Default)`,
-                    value: "",
-                  },
-                  ...chatProviders
-                    .filter((provider) => !provider.isDefault)
-                    .map((provider) => ({
-                      label: provider.name,
-                      value: provider.id,
-                    })),
-                ]}
-                title={t("legal.notice.modelPicker")}
-                value={activeConversation?.modelProviderId ?? ""}
+                options={EFFORT_OPTIONS}
+                value={activeConversation?.reasoningEffort ?? "medium"}
               />
-            ) : hasUsableModel ? (
-              <span className="composer-model">
-                {chatProviders[0]?.name ?? "ChatGPT"}
+              <span aria-hidden="true" className="composer-sep">
+                ·
               </span>
-            ) : (
-              // Skipped the first-run step (or the model stopped working):
-              // say so honestly and go straight to where it is fixed.
-              <button
-                className="composer-connect-hint"
-                onClick={onOpenSettings}
-                type="button"
-              >
-                {lang === "zh" ? "先连一个模型 →" : "Connect a model →"}
-              </button>
-            )}
-            {(() => {
-              // "Model within the provider": a second picker with a curated
-              // shortlist for the conversation's effective (pinned or default)
-              // provider. Codex has no picker — it is a single-login backend.
-              const effective =
-                chatProviders.find(
-                  (provider) =>
-                    provider.id === activeConversation?.modelProviderId,
-                ) ??
-                chatProviders.find((provider) => provider.isDefault) ??
-                null;
-              const choices = effective
-                ? MODEL_CHOICES[effective.id] ?? []
-                : [];
-              if (!effective || effective.kind === "cli-login" || choices.length === 0) {
-                return null;
-              }
-              return (
-                <>
-                  <span aria-hidden="true" className="composer-sep">
-                    ·
-                  </span>
-                  <Picker
-                    ariaLabel="Model version"
-                    className="composer-level-select"
-                    disabled={!activeConversationId}
-                    onChange={(chosen) => {
-                      const next = chosen || null;
-                      if (!activeConversationId) return;
-                      onConversationsChange(
-                        conversations.map((conversation) =>
-                          conversation.id === activeConversationId
-                            ? { ...conversation, modelName: next }
-                            : conversation,
-                        ),
-                      );
-                      void setChatModel(activeConversationId, next);
-                    }}
-                    options={[
-                      {
-                        label: `${effective.model ?? "provider default"} (Default)`,
-                        value: "",
-                      },
-                      ...choices
-                        .filter((choice) => choice !== effective.model)
-                        .map((choice) => ({ label: choice, value: choice })),
-                    ]}
-                    value={activeConversation?.modelName ?? ""}
-                  />
-                </>
-              );
-            })()}
-            <span aria-hidden="true" className="composer-sep">
-              ·
-            </span>
-            <Picker
-              ariaLabel="Reasoning level"
-              className="composer-level-select"
-              disabled={!activeConversationId}
-              onChange={(chosen) => {
-                const next = chosen as ReasoningEffort;
-                if (!activeConversationId) return;
-                onConversationsChange(
-                  conversations.map((conversation) =>
-                    conversation.id === activeConversationId
-                      ? { ...conversation, reasoningEffort: next }
-                      : conversation,
-                  ),
-                );
-                void setReasoningEffort(activeConversationId, next);
-              }}
-              options={EFFORT_OPTIONS}
-              value={activeConversation?.reasoningEffort ?? "medium"}
-            />
-            <span aria-hidden="true" className="composer-sep">
-              ·
-            </span>
-            {/* (The always-read-aloud toggle used to live here. It was a
+              {/* (The always-read-aloud toggle used to live here. It was a
                 crossed-out speaker nobody could read, and it contradicts the
                 rule that replaced it: spoken in → spoken out, plus a speak
                 button on every message. Removed 2026-07-29.) */}
-          </div>
-          <p className="composer-disclaimer">
-            {t("legal.disclaimer.aiGeneral.composer")}
-          </p>
-          {error ? <p className="form-error">{error}</p> : null}
-        </Composer>
+            </div>
+            <p className="composer-disclaimer">
+              {t("legal.disclaimer.aiGeneral.composer")}
+            </p>
+            {error ? <p className="form-error">{error}</p> : null}
+          </Composer>
         </form>
-
       </section>
     );
   }
 
   if (view === "chat") {
-    return <div className="focused-workspace">{renderChatSurface("focused")}</div>;
+    return (
+      <div className="focused-workspace">{renderChatSurface("focused")}</div>
+    );
   }
 
   if (view === "task") {
@@ -9391,7 +9467,7 @@ function AskVaenyxPanel({
                     }))}
                     value={
                       focusedTask.scheduleEnabled
-                        ? focusedTask.scheduleCadence ?? ""
+                        ? (focusedTask.scheduleCadence ?? "")
                         : ""
                     }
                   />
@@ -9507,7 +9583,9 @@ function AskVaenyxPanel({
                                     }`}
                                   />
                                   <span className="task-run-when">
-                                    {formatTime(run.finishedAt ?? run.startedAt)}
+                                    {formatTime(
+                                      run.finishedAt ?? run.startedAt,
+                                    )}
                                   </span>
                                   <span className="task-run-trigger">
                                     {run.trigger === "schedule"
@@ -9592,7 +9670,10 @@ function AskVaenyxPanel({
                   ) : message.content ? (
                     <MarkdownMessage content={message.content} />
                   ) : (
-                    <ThinkingIndicator status={streamStatus} thinking={Boolean(streamThinking)} />
+                    <ThinkingIndicator
+                      status={streamStatus}
+                      thinking={Boolean(streamThinking)}
+                    />
                   )}
                   {message.webSearchUsed ? (
                     <span className="web-search-chip">Web search used</span>
@@ -9601,7 +9682,9 @@ function AskVaenyxPanel({
                     <button
                       className="retry-button"
                       disabled={sendingTaskMessage}
-                      onClick={() => retryTaskMessage(visibleTaskMessages, index)}
+                      onClick={() =>
+                        retryTaskMessage(visibleTaskMessages, index)
+                      }
                       type="button"
                     >
                       Retry
@@ -9634,7 +9717,10 @@ function AskVaenyxPanel({
                 <div className="ask-vaenyx-message-head">
                   <strong>{agentName}</strong>
                 </div>
-                <ThinkingIndicator status={streamStatus} thinking={Boolean(streamThinking)} />
+                <ThinkingIndicator
+                  status={streamStatus}
+                  thinking={Boolean(streamThinking)}
+                />
                 {/* The run's live thinking, polled while it works — a run is
                     detached from any one screen, so it cannot stream. */}
                 {runThinking ? (
@@ -9647,9 +9733,7 @@ function AskVaenyxPanel({
             {sendingTaskMessage && (streamStatus || streamThinking) ? (
               <div className="thinking-block">
                 {streamStatus ? (
-                  <p className="thinking-status">
-                    {statusLabel(streamStatus)}
-                  </p>
+                  <p className="thinking-status">{statusLabel(streamStatus)}</p>
                 ) : null}
                 {streamThinking ? (
                   <p className="thinking-text">{streamThinking}</p>
@@ -9658,50 +9742,49 @@ function AskVaenyxPanel({
             ) : null}
             <div className="chat-end-anchor" ref={taskEndRef} />
           </div>
-          <JumpToLatest
-            resetKey={focusedTaskId ?? ""}
-            targetRef={taskEndRef}
-          />
+          <JumpToLatest resetKey={focusedTaskId ?? ""} targetRef={taskEndRef} />
 
           <form
             className="ask-vaenyx-composer"
             onSubmit={sendFocusedTaskMessage}
           >
-          <Composer
-            busy={sendingTaskMessage}
-            documentTray={pendingDocument}
-            lang={lang}
-            onDocument={(picked) => {
-              if (picked.needsCostGate) {
-                setDocumentGate(picked);
-                return;
+            <Composer
+              busy={sendingTaskMessage}
+              documentTray={pendingDocument}
+              lang={lang}
+              onDocument={(picked) => {
+                if (picked.needsCostGate) {
+                  setDocumentGate(picked);
+                  return;
+                }
+                setPendingDocument({ ...picked, acknowledged: false });
+              }}
+              onPhoto={(id) => setPendingImageId(id)}
+              onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+              onRemoveDocument={() => setPendingDocument(null)}
+              onRemovePhoto={clearPendingPhoto}
+              onSpoken={(text, audioId) => void sendTaskContent(text, audioId)}
+              onStop={stopStreaming}
+              onSubmit={sendFocusedTaskMessage}
+              onTranscribed={(text) =>
+                setTaskPrompt((current) =>
+                  current ? `${current}\n${text}` : text,
+                )
               }
-              setPendingDocument({ ...picked, acknowledged: false });
-            }}
-            onPhoto={(id) => setPendingImageId(id)}
-            onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
-            onRemoveDocument={() => setPendingDocument(null)}
-            onRemovePhoto={clearPendingPhoto}
-            onSpoken={(text, audioId) => void sendTaskContent(text, audioId)}
-            onStop={stopStreaming}
-            onSubmit={sendFocusedTaskMessage}
-            onTranscribed={(text) =>
-              setTaskPrompt((current) => (current ? `${current}\n${text}` : text))
-            }
-            onUploadStart={(upload) => {
-              pendingUploadRef.current = upload;
-            }}
-            onValueChange={setTaskPrompt}
-            photoTray={
-              pendingPhotoPreview ??
-              (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
-            }
-            placeholder="Ask about this task"
-            showCamera={visionReady}
-            showMic={voiceReady}
-            submitLabel="Send"
-            value={taskPrompt}
-          />
+              onUploadStart={(upload) => {
+                pendingUploadRef.current = upload;
+              }}
+              onValueChange={setTaskPrompt}
+              photoTray={
+                pendingPhotoPreview ??
+                (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
+              }
+              placeholder="Ask about this task"
+              showCamera={visionReady}
+              showMic={voiceReady}
+              submitLabel="Send"
+              value={taskPrompt}
+            />
           </form>
         </section>
       </div>
@@ -9958,7 +10041,12 @@ function Modal({
   // inside a panel would be trapped behind its neighbours. Every Modal in the
   // app goes through here, so this holds everywhere.
   return createPortal(
-    <div className="modal-overlay" role="dialog" aria-label={title} aria-modal="true">
+    <div
+      className="modal-overlay"
+      role="dialog"
+      aria-label={title}
+      aria-modal="true"
+    >
       <div className={variant === "doc" ? "modal-card doc" : "modal-card"}>
         <div className="modal-head">
           <h2>{title}</h2>
@@ -10056,7 +10144,11 @@ function ThemeSelect({
 // and where do I press") are two different documents with one reader. Both ship
 // in docs/ and are read in the app, because that is where the Owner actually
 // looks — not in a file somebody has to go and find.
-function HelpContent({ document = "glossary" }: { document?: "glossary" | "manual" }) {
+function HelpContent({
+  document = "glossary",
+}: {
+  document?: "glossary" | "manual";
+}) {
   const { lang, t } = useI18n();
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -10243,9 +10335,7 @@ function SharingPanel() {
       await withdrawFlywheelItem(id);
       refresh();
     } catch {
-      setError(
-        zh ? "这一条没能移除。" : "That item could not be withdrawn.",
-      );
+      setError(zh ? "这一条没能移除。" : "That item could not be withdrawn.");
     } finally {
       setBusy(false);
     }
@@ -10414,11 +10504,17 @@ function SharingPanel() {
                         else. */}
                     <details className="flywheel-preview">
                       <summary>
-                        {zh ? "看看会发出去什么" : "See exactly what would be sent"}
+                        {zh
+                          ? "看看会发出去什么"
+                          : "See exactly what would be sent"}
                       </summary>
                       <pre className="correction-body">
                         {JSON.stringify(
-                          { input: item.input, output: item.output, note: item.note },
+                          {
+                            input: item.input,
+                            output: item.output,
+                            note: item.note,
+                          },
                           null,
                           2,
                         )}
@@ -10575,7 +10671,8 @@ function FreePick({
 // machine); anything else — including unparseable/empty — falls back.
 function localBackendNoticeKey(
   baseUrl: string,
-): "legal.notice.modelConnect.local"
+):
+  | "legal.notice.modelConnect.local"
   | "legal.notice.modelConnect.local.lan"
   | "legal.notice.modelConnect.local.unverified" {
   try {
@@ -11580,7 +11677,9 @@ function CapabilitiesPanel({
       // apology instead of a control.
       if (id === "speaking" || id === "hearing") {
         const result =
-          id === "speaking" ? await testSpeakingHere() : await testHearingHere();
+          id === "speaking"
+            ? await testSpeakingHere()
+            : await testHearingHere();
         setTestResults((current) => ({ ...current, [id]: result }));
         return;
       }
@@ -12317,23 +12416,23 @@ function CapabilitiesPanel({
       ),
       settings: (
         <>
-        <DoorList
-          addLabel={lang === "zh" ? "加上" : "Add"}
-          draft={folderDraft}
-          items={folders}
-          onChange={(next) => void saveFolders(next)}
-          placeholder={
-            lang === "zh"
-              ? "C:\\Users\\你\\Documents"
-              : "C:\\Users\\you\\Documents"
-          }
-          setDraft={setFolderDraft}
-        />
-        {folderErrors.map((line) => (
-          <p className="form-error" key={line}>
-            {line}
-          </p>
-        ))}
+          <DoorList
+            addLabel={lang === "zh" ? "加上" : "Add"}
+            draft={folderDraft}
+            items={folders}
+            onChange={(next) => void saveFolders(next)}
+            placeholder={
+              lang === "zh"
+                ? "C:\\Users\\你\\Documents"
+                : "C:\\Users\\you\\Documents"
+            }
+            setDraft={setFolderDraft}
+          />
+          {folderErrors.map((line) => (
+            <p className="form-error" key={line}>
+              {line}
+            </p>
+          ))}
         </>
       ),
       who: (
@@ -12491,7 +12590,9 @@ function CapabilitiesPanel({
   }) {
     return (
       <>
-        <p className="drawer-head">{lang === "zh" ? "这是什么" : "What it is"}</p>
+        <p className="drawer-head">
+          {lang === "zh" ? "这是什么" : "What it is"}
+        </p>
         {parts.what}
         {parts.settings ? (
           <>
@@ -12523,11 +12624,11 @@ function CapabilitiesPanel({
                 ? readingSetup()
                 : id === "ocr"
                   ? ocrSetup()
-                : id === "fetching"
-                  ? fetchingSetup()
-                  : id === "web"
-                    ? webSetup()
-                    : null;
+                  : id === "fetching"
+                    ? fetchingSetup()
+                    : id === "web"
+                      ? webSetup()
+                      : null;
     return body;
   }
 
@@ -12626,7 +12727,9 @@ function CapabilitiesPanel({
       {capabilityNotice ? (
         <Modal
           onClose={() => {
-            setNoticePutOff((current) => new Set(current).add(capabilityNotice));
+            setNoticePutOff((current) =>
+              new Set(current).add(capabilityNotice),
+            );
             setCapabilityNotice(null);
           }}
           title={t(`legal.notice.capability.${capabilityNotice}.title`)}
@@ -13147,8 +13250,8 @@ function ModelsPanel({
                 Open Claude Sign-In ↗
               </a>
               <p className="settings-card-copy text-faint">
-                The sign-in page opened in a new tab (button above reopens
-                it). Sign in, copy the code the page shows, paste it here:
+                The sign-in page opened in a new tab (button above reopens it).
+                Sign in, copy the code the page shows, paste it here:
               </p>
               <input
                 autoCapitalize="off"
@@ -13267,7 +13370,9 @@ function ModelsPanel({
             {lang === "zh" ? "去 Cloudflare 建令牌 ↗" : "Make a token ↗"}
           </a>
           <div className="chat-font-field">
-            <span>{lang === "zh" ? "Workers AI 令牌" : "Workers AI Token"}</span>
+            <span>
+              {lang === "zh" ? "Workers AI 令牌" : "Workers AI Token"}
+            </span>
             <input
               autoCapitalize="off"
               autoComplete="off"
@@ -13583,113 +13688,119 @@ function ModelsPanel({
               <>
                 {PROVIDER_COST_FACTS[provider.id]?.eligibility ? (
                   <small className="model-card-model">
-                    {PROVIDER_COST_FACTS[provider.id]?.eligibility?.[
-                      lang === "zh" ? "zh" : "en"
-                    ]}
+                    {
+                      PROVIDER_COST_FACTS[provider.id]?.eligibility?.[
+                        lang === "zh" ? "zh" : "en"
+                      ]
+                    }
                   </small>
                 ) : null}
                 {provider.model ? (
                   <small className="model-card-model">{provider.model}</small>
                 ) : null}
-            {/* The provider's own data conditions, copied from its terms and
+                {/* The provider's own data conditions, copied from its terms and
                 dated — the label beside the choice, never our judgment. */}
-            {(() => {
-              const facts = PROVIDER_DATA_FACTS[provider.id];
-              if (!facts) return null;
-              return (
-                <small className="model-data-facts">
-                  {facts.en}{" "}
-                  <a href={facts.sourceUrl} rel="noreferrer" target="_blank">
-                    source, {facts.checkedAt}
-                  </a>
-                </small>
-              );
-            })()}
-            {!provider.healthy ? (
-              <small className="model-card-model">{provider.detail}</small>
-            ) : null}
-            {provider.kind === "cli-login" ? (
-              <>
+                {(() => {
+                  const facts = PROVIDER_DATA_FACTS[provider.id];
+                  if (!facts) return null;
+                  return (
+                    <small className="model-data-facts">
+                      {facts.en}{" "}
+                      <a
+                        href={facts.sourceUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        source, {facts.checkedAt}
+                      </a>
+                    </small>
+                  );
+                })()}
                 {!provider.healthy ? (
-                  <div className="model-card-actions">
-                    <button
-                      className="primary-button"
-                      disabled={codexWaiting}
-                      onClick={() => void signInCodex()}
-                      type="button"
-                    >
-                      {codexWaiting
-                        ? codexLoginUrl
-                          ? "Waiting For Sign-In..."
-                          : "Preparing The ChatGPT Sign-In (About A Minute)..."
-                        : "Sign In With ChatGPT"}
-                    </button>
-                  </div>
+                  <small className="model-card-model">{provider.detail}</small>
                 ) : null}
-                {codexWaiting && codexLoginUrl ? (
-                  <a
-                    className="model-key-link"
-                    href={codexLoginUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    No window? Open the sign-in page ↗
-                  </a>
-                ) : null}
-                {codexWaiting ? (
-                  <p className="library-note">
-                    Finish the ChatGPT login in the browser window that just
-                    opened — this card updates by itself.
-                  </p>
-                ) : null}
-              </>
-            ) : null}
-            <div className="model-card-actions">
-              {!provider.isDefault ? (
-                <button
-                  className="secondary-button"
-                  disabled={busy === provider.id}
-                  onClick={() => void makeDefault(provider)}
-                  type="button"
-                >
-                  Set As Default
-                </button>
-              ) : null}
-              {provider.kind !== "cli-login" ? (
-                <>
-                  {confirmDisconnect === provider.id ? (
-                    <>
-                      <button
-                        className="text-button danger"
-                        disabled={busy === provider.id}
-                        onClick={() => {
-                          setConfirmDisconnect(null);
-                          void disconnect(provider);
-                        }}
-                        type="button"
+                {provider.kind === "cli-login" ? (
+                  <>
+                    {!provider.healthy ? (
+                      <div className="model-card-actions">
+                        <button
+                          className="primary-button"
+                          disabled={codexWaiting}
+                          onClick={() => void signInCodex()}
+                          type="button"
+                        >
+                          {codexWaiting
+                            ? codexLoginUrl
+                              ? "Waiting For Sign-In..."
+                              : "Preparing The ChatGPT Sign-In (About A Minute)..."
+                            : "Sign In With ChatGPT"}
+                        </button>
+                      </div>
+                    ) : null}
+                    {codexWaiting && codexLoginUrl ? (
+                      <a
+                        className="model-key-link"
+                        href={codexLoginUrl}
+                        rel="noreferrer"
+                        target="_blank"
                       >
-                        Really Disconnect
-                      </button>
-                      <button
-                        className="text-button"
-                        onClick={() => setConfirmDisconnect(null)}
-                        type="button"
-                      >
-                        Keep
-                      </button>
-                    </>
-                  ) : (
+                        No window? Open the sign-in page ↗
+                      </a>
+                    ) : null}
+                    {codexWaiting ? (
+                      <p className="library-note">
+                        Finish the ChatGPT login in the browser window that just
+                        opened — this card updates by itself.
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+                <div className="model-card-actions">
+                  {!provider.isDefault ? (
                     <button
-                      className="text-button"
+                      className="secondary-button"
                       disabled={busy === provider.id}
-                      onClick={() => setConfirmDisconnect(provider.id)}
+                      onClick={() => void makeDefault(provider)}
                       type="button"
                     >
-                      Disconnect
+                      Set As Default
                     </button>
-                  )}
-                </>
-              ) : null}
+                  ) : null}
+                  {provider.kind !== "cli-login" ? (
+                    <>
+                      {confirmDisconnect === provider.id ? (
+                        <>
+                          <button
+                            className="text-button danger"
+                            disabled={busy === provider.id}
+                            onClick={() => {
+                              setConfirmDisconnect(null);
+                              void disconnect(provider);
+                            }}
+                            type="button"
+                          >
+                            Really Disconnect
+                          </button>
+                          <button
+                            className="text-button"
+                            onClick={() => setConfirmDisconnect(null)}
+                            type="button"
+                          >
+                            Keep
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="text-button"
+                          disabled={busy === provider.id}
+                          onClick={() => setConfirmDisconnect(provider.id)}
+                          type="button"
+                        >
+                          Disconnect
+                        </button>
+                      )}
+                    </>
+                  ) : null}
                 </div>
                 {renderConnectForm(provider)}
               </>
@@ -13721,9 +13832,7 @@ function ModelsPanel({
                 // cards can never disagree about what a provider costs.
                 const badge = costBadge(provider.id, lang);
                 return {
-                  label: badge
-                    ? `${provider.name} — ${badge}`
-                    : provider.name,
+                  label: badge ? `${provider.name} — ${badge}` : provider.name,
                   value: provider.id,
                 };
               }),
@@ -14185,7 +14294,13 @@ function BackupPanel() {
                 gap: "12px",
               }}
             >
-              <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  minWidth: 0,
+                }}
+              >
                 <span className="settings-card-copy" style={{ margin: 0 }}>
                   {formatDate(entry.createdAt)}
                 </span>
@@ -14317,9 +14432,9 @@ function UpdatePanel() {
     return (
       <p className="settings-card-copy">
         This Vaenyx is version <strong>{status.currentVersion}</strong>, and
-        this copy is managed with git — it updates with <strong>git pull</strong>,
-        not by unpacking a release over itself. The one-press updater is for
-        installs made with Vaenyx-Setup.cmd.
+        this copy is managed with git — it updates with{" "}
+        <strong>git pull</strong>, not by unpacking a release over itself. The
+        one-press updater is for installs made with Vaenyx-Setup.cmd.
       </p>
     );
   }
@@ -14345,8 +14460,8 @@ function UpdatePanel() {
       </p>
       {step === "restarting" ? (
         <p className="settings-card-copy">
-          Installing. Vaenyx will restart and this page will reload on its own
-          — leave it open.
+          Installing. Vaenyx will restart and this page will reload on its own —
+          leave it open.
         </p>
       ) : null}
       {note ? <p className="saved-note">{note}</p> : null}
@@ -14506,9 +14621,7 @@ function PhoneAccessPanel() {
   const zh = lang === "zh";
   const [status, setStatus] = useState<PhoneAccessStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"install" | "login" | "tunnel" | null>(
-    null,
-  );
+  const [busy, setBusy] = useState<"install" | "login" | "tunnel" | null>(null);
   const [loginUrl, setLoginUrl] = useState<string | null>(null);
   // Poll while something settles OUTSIDE this page — the winget download or
   // the browser sign-in. Stops by itself once every light is green (or the
@@ -14622,7 +14735,9 @@ function PhoneAccessPanel() {
   }
 
   if (!status) {
-    return <p className="settings-card-copy">{zh ? "正在检查…" : "Checking..."}</p>;
+    return (
+      <p className="settings-card-copy">{zh ? "正在检查…" : "Checking..."}</p>
+    );
   }
 
   const installing = status.installPhase === "installing";
@@ -15181,469 +15296,474 @@ function SettingsPanel({
       </nav>
       {locked ? (
         <p className="modes-preview-note">
-          You are in the mode "{sessionMode?.name}" — it locks everything
-          except these personal preferences. Exit to User Mode (the badge at
-          the top) to change the rest.
+          You are in the mode "{sessionMode?.name}" — it locks everything except
+          these personal preferences. Exit to User Mode (the badge at the top)
+          to change the rest.
         </p>
       ) : null}
       {activeTab === "manual" ? (
-      <section className="settings-card">
-        <p className="eyebrow">{t("settings.manual.eyebrow")}</p>
-        <h2>{t("settings.manual.title")}</h2>
-        <HelpContent document="manual" />
-      </section>
+        <section className="settings-card">
+          <p className="eyebrow">{t("settings.manual.eyebrow")}</p>
+          <h2>{t("settings.manual.title")}</h2>
+          <HelpContent document="manual" />
+        </section>
       ) : null}
       {activeTab === "user" ? (
-      <section className="settings-card">
-        <p className="eyebrow">Personal</p>
-        <h2>Appearance &amp; Name</h2>
-        <h3 className="settings-subhead">Theme</h3>
-        <p className="settings-card-copy">
-          Pick a color theme for Vaenyx. Your choice is saved on this device.
-        </p>
-        <ThemeSelect
-          onChange={(id) => {
-            applyTheme(id);
-            setTheme(id);
-          }}
-          value={theme}
-        />
-        <div className="settings-card-divider" />
-        <h3 className="settings-subhead">Chat Text</h3>
-        <p className="settings-card-copy">
-          Font and size for the conversation area. Saved on this device.
-        </p>
-        <div className="chat-font-controls">
-          <div className="chat-font-field">
-            <span>Size</span>
-            <Picker
-              ariaLabel="Chat text size"
-              className="task-select"
-              onChange={(next) => {
-                setChatFontSize(next);
-                applyChatFont(next, chatFontFamily);
-              }}
-              options={CHAT_FONT_SIZES.map((option) => ({
-                label: option.label,
-                value: option.id,
-              }))}
-              value={chatFontSize}
-            />
-          </div>
-          <div className="chat-font-field">
-            <span>Font</span>
-            <Picker
-              ariaLabel="Chat font"
-              className="task-select"
-              onChange={(next) => {
-                setChatFontFamily(next);
-                applyChatFont(chatFontSize, next);
-              }}
-              options={CHAT_FONT_FAMILIES.map((option) => ({
-                label: option.label,
-                value: option.id,
-              }))}
-              value={chatFontFamily}
-            />
-          </div>
-        </div>
-        <div className="settings-card-divider" />
-        <h3 className="settings-subhead">{t("settings.language.title")}</h3>
-        <p className="settings-card-copy">{t("settings.language.copy")}</p>
-        <div className="lang-toggle">
-          <button
-            className={`lang-toggle-option ${lang === "en" ? "active" : ""}`}
-            onClick={() => setLang("en")}
-            type="button"
-          >
-            {t("settings.language.english")}
-          </button>
-          <button
-            className={`lang-toggle-option ${lang === "zh" ? "active" : ""}`}
-            onClick={() => setLang("zh")}
-            type="button"
-          >
-            {t("settings.language.chinese")}
-          </button>
-        </div>
-        <div className="settings-card-divider" />
-        <h3 className="settings-subhead">Agent Name</h3>
-        <p className="settings-card-copy">
-          What your assistant is called in conversations. A Custom Mode can
-          carry its own name — set that on the mode itself.
-        </p>
-        <label className="chat-font-field">
-          Agent Name
-          <input
-            maxLength={100}
-            onChange={(event) => {
-              setAgentName(event.target.value);
-              setSaved(false);
+        <section className="settings-card">
+          <p className="eyebrow">Personal</p>
+          <h2>Appearance &amp; Name</h2>
+          <h3 className="settings-subhead">Theme</h3>
+          <p className="settings-card-copy">
+            Pick a color theme for Vaenyx. Your choice is saved on this device.
+          </p>
+          <ThemeSelect
+            onChange={(id) => {
+              applyTheme(id);
+              setTheme(id);
             }}
-            value={agentName}
+            value={theme}
           />
-        </label>
-        <div className="model-card-actions">
-          <button
-            className="secondary-button"
-            onClick={() =>
-              void updateSettings({
-                instanceName: settings.instanceName,
-                agentName,
-              }).then((updated) => {
-                onUpdate(updated);
-                setSaved(true);
-              })
-            }
-            type="button"
-          >
-            Save
-          </button>
-        </div>
-        {saved ? <p className="saved-note">Saved.</p> : null}
-      </section>
-      ) : null}
-      {activeTab === "user" && !locked ? (
-      <section className="settings-card">
-        <p className="eyebrow">Account</p>
-        <h2>Account &amp; power</h2>
-        <h3 className="settings-subhead">Owner password</h3>
-        <p className="settings-card-copy">
-          Change your password (signs out other devices) or sign out everywhere.
-        </p>
-        <button
-          className="secondary-button"
-          onClick={() => setShowPasswordModal(true)}
-          type="button"
-        >
-          Change password
-        </button>
-        <div className="settings-card-divider" />
-        <h3 className="settings-subhead">Sign out everywhere</h3>
-        <p className="settings-card-copy">
-          Sign out on all devices, including this one. Use this if a device was
-          lost or you want to force every session to log in again.
-        </p>
-        <button
-          className="text-button"
-          disabled={loggingOutAll}
-          onClick={() => void handleLogoutAll()}
-          type="button"
-        >
-          {loggingOutAll ? "Signing out..." : "Sign out all devices"}
-        </button>
-        <div className="settings-card-divider" />
-        <h3 className="settings-subhead">Updates</h3>
-        <UpdatePanel />
-        <div className="settings-card-divider" />
-        <h3 className="settings-subhead">Restart Vaenyx</h3>
-        <p className="settings-card-copy">
-          Restarts the local server and reloads this page when it is back —
-          also how an updated build goes live.
-        </p>
-        <button
-          className="secondary-button"
-          disabled={restartingVaenyx || stoppingVaenyx}
-          onClick={() => void restartVaenyxNow()}
-          type="button"
-        >
-          {restartingVaenyx ? "Restarting..." : "Restart Vaenyx"}
-        </button>
-        <div className="settings-card-divider" />
-        <h3 className="settings-subhead">Stop Vaenyx</h3>
-        <p className="settings-card-copy">
-          Use this when you want Vaenyx fully off. Closing the browser alone does
-          not safely stop the local server.
-        </p>
-        <button
-          className="danger-button"
-          disabled={stoppingVaenyx || restartingVaenyx}
-          onClick={() => void stopVaenyx()}
-          type="button"
-        >
-          {stoppingVaenyx ? "Stopping Vaenyx..." : "Stop Vaenyx"}
-        </button>
-        {shutdownMessage ? (
-          <p className="connection-test-result passed">{shutdownMessage}</p>
-        ) : null}
-        {shutdownError ? <p className="form-error">{shutdownError}</p> : null}
-        {showPasswordModal ? (
-          <Modal
-            onClose={() => setShowPasswordModal(false)}
-            title="Change password"
-          >
-            <form
-              className="memory-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleChangePassword();
-              }}
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Chat Text</h3>
+          <p className="settings-card-copy">
+            Font and size for the conversation area. Saved on this device.
+          </p>
+          <div className="chat-font-controls">
+            <div className="chat-font-field">
+              <span>Size</span>
+              <Picker
+                ariaLabel="Chat text size"
+                className="task-select"
+                onChange={(next) => {
+                  setChatFontSize(next);
+                  applyChatFont(next, chatFontFamily);
+                }}
+                options={CHAT_FONT_SIZES.map((option) => ({
+                  label: option.label,
+                  value: option.id,
+                }))}
+                value={chatFontSize}
+              />
+            </div>
+            <div className="chat-font-field">
+              <span>Font</span>
+              <Picker
+                ariaLabel="Chat font"
+                className="task-select"
+                onChange={(next) => {
+                  setChatFontFamily(next);
+                  applyChatFont(chatFontSize, next);
+                }}
+                options={CHAT_FONT_FAMILIES.map((option) => ({
+                  label: option.label,
+                  value: option.id,
+                }))}
+                value={chatFontFamily}
+              />
+            </div>
+          </div>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">{t("settings.language.title")}</h3>
+          <p className="settings-card-copy">{t("settings.language.copy")}</p>
+          <div className="lang-toggle">
+            <button
+              className={`lang-toggle-option ${lang === "en" ? "active" : ""}`}
+              onClick={() => setLang("en")}
+              type="button"
             >
-              <label>
-                Current password
-                <input
-                  autoComplete="current-password"
-                  onChange={(event) => {
-                    setCurrentPassword(event.target.value);
-                    setPasswordSaved(false);
-                    setPasswordError(null);
-                  }}
-                  required
-                  type="password"
-                  value={currentPassword}
-                />
-              </label>
-              <label>
-                New password
-                <input
-                  autoComplete="new-password"
-                  minLength={8}
-                  onChange={(event) => {
-                    setNewPassword(event.target.value);
-                    setPasswordSaved(false);
-                    setPasswordError(null);
-                  }}
-                  required
-                  type="password"
-                  value={newPassword}
-                />
-              </label>
-              <label>
-                Confirm new password
-                <input
-                  autoComplete="new-password"
-                  minLength={8}
-                  onChange={(event) => {
-                    setConfirmPassword(event.target.value);
-                    setPasswordSaved(false);
-                    setPasswordError(null);
-                  }}
-                  required
-                  type="password"
-                  value={confirmPassword}
-                />
-              </label>
-              <button
-                className="primary-button"
-                disabled={changingPassword}
-                type="submit"
-              >
-                {changingPassword ? "Changing..." : "Change password"}
-              </button>
-              {passwordSaved ? (
-                <p className="saved-note">
-                  Password changed. Other devices are signed out.
-                </p>
-              ) : null}
-              {passwordError ? (
-                <p className="form-error">{passwordError}</p>
-              ) : null}
-            </form>
-          </Modal>
-        ) : null}
-      </section>
-      ) : null}
-      {activeTab === "user" && !locked ? (
-      <section className="settings-card" id="phone-access">
-        <p className="eyebrow">{lang === "zh" ? "设备" : "Devices"}</p>
-        <h2>{lang === "zh" ? "手机访问" : "Phone Access"}</h2>
-        <PhoneAccessPanel />
-      </section>
-      ) : null}
-      {activeTab === "ai" ? (
-      <section className="settings-card">
-        <p className="eyebrow">Visible identity</p>
-        <h2>Identity</h2>
-        <form
-          className="memory-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void updateSettings({ instanceName, agentName }).then((updated) => {
-              onUpdate(updated);
-              setSaved(true);
-            });
-          }}
-        >
-          <label>
-            Instance Name
+              {t("settings.language.english")}
+            </button>
+            <button
+              className={`lang-toggle-option ${lang === "zh" ? "active" : ""}`}
+              onClick={() => setLang("zh")}
+              type="button"
+            >
+              {t("settings.language.chinese")}
+            </button>
+          </div>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Agent Name</h3>
+          <p className="settings-card-copy">
+            What your assistant is called in conversations. A Custom Mode can
+            carry its own name — set that on the mode itself.
+          </p>
+          <label className="chat-font-field">
+            Agent Name
             <input
               maxLength={100}
               onChange={(event) => {
-                setInstanceName(event.target.value);
+                setAgentName(event.target.value);
                 setSaved(false);
               }}
-              required
-              value={instanceName}
+              value={agentName}
             />
           </label>
+          <div className="model-card-actions">
+            <button
+              className="secondary-button"
+              onClick={() =>
+                void updateSettings({
+                  instanceName: settings.instanceName,
+                  agentName,
+                }).then((updated) => {
+                  onUpdate(updated);
+                  setSaved(true);
+                })
+              }
+              type="button"
+            >
+              Save
+            </button>
+          </div>
+          {saved ? <p className="saved-note">Saved.</p> : null}
+        </section>
+      ) : null}
+      {activeTab === "user" && !locked ? (
+        <section className="settings-card">
+          <p className="eyebrow">Account</p>
+          <h2>Account &amp; power</h2>
+          <h3 className="settings-subhead">Owner password</h3>
           <p className="settings-card-copy">
-            The name of this Vaenyx install. Your assistant's name lives in
-            User Settings.
+            Change your password (signs out other devices) or sign out
+            everywhere.
           </p>
-          <button className="primary-button" type="submit">
-            Save
+          <button
+            className="secondary-button"
+            onClick={() => setShowPasswordModal(true)}
+            type="button"
+          >
+            Change password
           </button>
-          {saved ? <p className="saved-note">Saved locally.</p> : null}
-        </form>
-      </section>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Sign out everywhere</h3>
+          <p className="settings-card-copy">
+            Sign out on all devices, including this one. Use this if a device
+            was lost or you want to force every session to log in again.
+          </p>
+          <button
+            className="text-button"
+            disabled={loggingOutAll}
+            onClick={() => void handleLogoutAll()}
+            type="button"
+          >
+            {loggingOutAll ? "Signing out..." : "Sign out all devices"}
+          </button>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Updates</h3>
+          <UpdatePanel />
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Restart Vaenyx</h3>
+          <p className="settings-card-copy">
+            Restarts the local server and reloads this page when it is back —
+            also how an updated build goes live.
+          </p>
+          <button
+            className="secondary-button"
+            disabled={restartingVaenyx || stoppingVaenyx}
+            onClick={() => void restartVaenyxNow()}
+            type="button"
+          >
+            {restartingVaenyx ? "Restarting..." : "Restart Vaenyx"}
+          </button>
+          <div className="settings-card-divider" />
+          <h3 className="settings-subhead">Stop Vaenyx</h3>
+          <p className="settings-card-copy">
+            Use this when you want Vaenyx fully off. Closing the browser alone
+            does not safely stop the local server.
+          </p>
+          <button
+            className="danger-button"
+            disabled={stoppingVaenyx || restartingVaenyx}
+            onClick={() => void stopVaenyx()}
+            type="button"
+          >
+            {stoppingVaenyx ? "Stopping Vaenyx..." : "Stop Vaenyx"}
+          </button>
+          {shutdownMessage ? (
+            <p className="connection-test-result passed">{shutdownMessage}</p>
+          ) : null}
+          {shutdownError ? <p className="form-error">{shutdownError}</p> : null}
+          {showPasswordModal ? (
+            <Modal
+              onClose={() => setShowPasswordModal(false)}
+              title="Change password"
+            >
+              <form
+                className="memory-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleChangePassword();
+                }}
+              >
+                <label>
+                  Current password
+                  <input
+                    autoComplete="current-password"
+                    onChange={(event) => {
+                      setCurrentPassword(event.target.value);
+                      setPasswordSaved(false);
+                      setPasswordError(null);
+                    }}
+                    required
+                    type="password"
+                    value={currentPassword}
+                  />
+                </label>
+                <label>
+                  New password
+                  <input
+                    autoComplete="new-password"
+                    minLength={8}
+                    onChange={(event) => {
+                      setNewPassword(event.target.value);
+                      setPasswordSaved(false);
+                      setPasswordError(null);
+                    }}
+                    required
+                    type="password"
+                    value={newPassword}
+                  />
+                </label>
+                <label>
+                  Confirm new password
+                  <input
+                    autoComplete="new-password"
+                    minLength={8}
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value);
+                      setPasswordSaved(false);
+                      setPasswordError(null);
+                    }}
+                    required
+                    type="password"
+                    value={confirmPassword}
+                  />
+                </label>
+                <button
+                  className="primary-button"
+                  disabled={changingPassword}
+                  type="submit"
+                >
+                  {changingPassword ? "Changing..." : "Change password"}
+                </button>
+                {passwordSaved ? (
+                  <p className="saved-note">
+                    Password changed. Other devices are signed out.
+                  </p>
+                ) : null}
+                {passwordError ? (
+                  <p className="form-error">{passwordError}</p>
+                ) : null}
+              </form>
+            </Modal>
+          ) : null}
+        </section>
+      ) : null}
+      {activeTab === "user" && !locked ? (
+        <section className="settings-card" id="phone-access">
+          <p className="eyebrow">{lang === "zh" ? "设备" : "Devices"}</p>
+          <h2>{lang === "zh" ? "手机访问" : "Phone Access"}</h2>
+          <PhoneAccessPanel />
+        </section>
       ) : null}
       {activeTab === "ai" ? (
-      <section className="settings-card">
-        <p className="eyebrow">Provider Auth</p>
-        <h2>OpenAI / Codex connection</h2>
-        <div
-          className={`provider-status-card ${
-            providerConnected ? "connected" : "needs-attention"
-          }`}
-        >
-          <span>{providerConnected ? "Connected" : "Needs setup"}</span>
-          <strong>
-            {getProviderConnectionCopy(settings.providerConnection)}
-          </strong>
-          <p>{getProviderConnectionDetail(settings.providerConnection)}</p>
-        </div>
-        {/* F1 (copy pack): the Codex CLI channel is a cloud-provider
+        <section className="settings-card">
+          <p className="eyebrow">Visible identity</p>
+          <h2>Identity</h2>
+          <form
+            className="memory-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void updateSettings({ instanceName, agentName }).then(
+                (updated) => {
+                  onUpdate(updated);
+                  setSaved(true);
+                },
+              );
+            }}
+          >
+            <label>
+              Instance Name
+              <input
+                maxLength={100}
+                onChange={(event) => {
+                  setInstanceName(event.target.value);
+                  setSaved(false);
+                }}
+                required
+                value={instanceName}
+              />
+            </label>
+            <p className="settings-card-copy">
+              The name of this Vaenyx install. Your assistant's name lives in
+              User Settings.
+            </p>
+            <button className="primary-button" type="submit">
+              Save
+            </button>
+            {saved ? <p className="saved-note">Saved locally.</p> : null}
+          </form>
+        </section>
+      ) : null}
+      {activeTab === "ai" ? (
+        <section className="settings-card">
+          <p className="eyebrow">Provider Auth</p>
+          <h2>OpenAI / Codex connection</h2>
+          <div
+            className={`provider-status-card ${
+              providerConnected ? "connected" : "needs-attention"
+            }`}
+          >
+            <span>{providerConnected ? "Connected" : "Needs setup"}</span>
+            <strong>
+              {getProviderConnectionCopy(settings.providerConnection)}
+            </strong>
+            <p>{getProviderConnectionDetail(settings.providerConnection)}</p>
+          </div>
+          {/* F1 (copy pack): the Codex CLI channel is a cloud-provider
             connection — the third-party notice renders on its connect surface
             (TPN n.3 acknowledgement surface). */}
-        <p className="context-disclaimer">
-          {t("legal.notice.modelConnect.cloud")}
-        </p>
-        <p className="context-disclaimer">{t("disclaimer.remote")}</p>
-        <details className="advanced-details">
-          <summary>Advanced</summary>
-          <h3 className="settings-subhead">Diagnostics</h3>
-          <div className="diagnostics-stack">
-            <div className="connection-test-panel">
-              <div>
-                <strong>Forge connection test</strong>
-                <p>
-                  Runs one approved read-only repository check through the Codex
-                  harness. No files are changed.
-                </p>
-              </div>
-              <button
-                className="secondary-button"
-                disabled={testingForge}
-                onClick={() => void runForgeTest()}
-                type="button"
-              >
-                {testingForge ? "Testing Forge..." : "Run connection test"}
-              </button>
-              {forgeTestResult ? (
-                <p
-                  className={`connection-test-result ${forgeTestResult.status}`}
-                >
-                  <strong>
-                    {forgeTestResult.status === "passed" ? "Passed" : "Failed"}
-                  </strong>
-                  {forgeTestResult.message}
-                </p>
-              ) : null}
-              {forgeTestError ? (
-                <p className="form-error">{forgeTestError}</p>
-              ) : null}
-            </div>
-            <div className="connection-test-panel">
-              <div>
-                <strong>ChatGPT quick chat</strong>
-                <p>
-                  Sends one short message through your ChatGPT / Codex account.
-                  It does not read files, change files, or expose tokens in the
-                  browser. The first call may take longer while Vaenyx warms the
-                  local Codex bridge.
-                </p>
-              </div>
-              <label>
-                Test message
-                <textarea
-                  maxLength={1000}
-                  onChange={(event) => setChatPrompt(event.target.value)}
-                  rows={3}
-                  value={chatPrompt}
-                />
-              </label>
-              <button
-                className="secondary-button"
-                disabled={testingChat || !chatPrompt.trim()}
-                onClick={() => void runChatTest()}
-                type="button"
-              >
-                {testingChat
-                  ? `Sending... ${chatElapsedSeconds}s`
-                  : "Send chat test"}
-              </button>
-              {chatTestResult ? (
-                <div
-                  className={`connection-test-result ${chatTestResult.status}`}
-                >
-                  <strong>
-                    {chatTestResult.status === "passed"
-                      ? "Passed"
-                      : chatTestResult.status === "blocked"
-                        ? "Blocked"
-                        : "Failed"}
-                  </strong>
-                  <p>{chatTestResult.message}</p>
+          <p className="context-disclaimer">
+            {t("legal.notice.modelConnect.cloud")}
+          </p>
+          <p className="context-disclaimer">{t("disclaimer.remote")}</p>
+          <details className="advanced-details">
+            <summary>Advanced</summary>
+            <h3 className="settings-subhead">Diagnostics</h3>
+            <div className="diagnostics-stack">
+              <div className="connection-test-panel">
+                <div>
+                  <strong>Forge connection test</strong>
                   <p>
-                    Response time: {formatDuration(chatTestResult.durationMs)}
+                    Runs one approved read-only repository check through the
+                    Codex harness. No files are changed.
                   </p>
-                  {chatTestResult.output ? (
-                    <pre className="connection-test-output">
-                      {chatTestResult.output}
-                    </pre>
-                  ) : null}
                 </div>
-              ) : null}
-              {chatTestError ? (
-                <p className="form-error">{chatTestError}</p>
-              ) : null}
+                <button
+                  className="secondary-button"
+                  disabled={testingForge}
+                  onClick={() => void runForgeTest()}
+                  type="button"
+                >
+                  {testingForge ? "Testing Forge..." : "Run connection test"}
+                </button>
+                {forgeTestResult ? (
+                  <p
+                    className={`connection-test-result ${forgeTestResult.status}`}
+                  >
+                    <strong>
+                      {forgeTestResult.status === "passed"
+                        ? "Passed"
+                        : "Failed"}
+                    </strong>
+                    {forgeTestResult.message}
+                  </p>
+                ) : null}
+                {forgeTestError ? (
+                  <p className="form-error">{forgeTestError}</p>
+                ) : null}
+              </div>
+              <div className="connection-test-panel">
+                <div>
+                  <strong>ChatGPT quick chat</strong>
+                  <p>
+                    Sends one short message through your ChatGPT / Codex
+                    account. It does not read files, change files, or expose
+                    tokens in the browser. The first call may take longer while
+                    Vaenyx warms the local Codex bridge.
+                  </p>
+                </div>
+                <label>
+                  Test message
+                  <textarea
+                    maxLength={1000}
+                    onChange={(event) => setChatPrompt(event.target.value)}
+                    rows={3}
+                    value={chatPrompt}
+                  />
+                </label>
+                <button
+                  className="secondary-button"
+                  disabled={testingChat || !chatPrompt.trim()}
+                  onClick={() => void runChatTest()}
+                  type="button"
+                >
+                  {testingChat
+                    ? `Sending... ${chatElapsedSeconds}s`
+                    : "Send chat test"}
+                </button>
+                {chatTestResult ? (
+                  <div
+                    className={`connection-test-result ${chatTestResult.status}`}
+                  >
+                    <strong>
+                      {chatTestResult.status === "passed"
+                        ? "Passed"
+                        : chatTestResult.status === "blocked"
+                          ? "Blocked"
+                          : "Failed"}
+                    </strong>
+                    <p>{chatTestResult.message}</p>
+                    <p>
+                      Response time: {formatDuration(chatTestResult.durationMs)}
+                    </p>
+                    {chatTestResult.output ? (
+                      <pre className="connection-test-output">
+                        {chatTestResult.output}
+                      </pre>
+                    ) : null}
+                  </div>
+                ) : null}
+                {chatTestError ? (
+                  <p className="form-error">{chatTestError}</p>
+                ) : null}
+              </div>
             </div>
-          </div>
-          <h3 className="settings-subhead">Connection details</h3>
-          <dl className="settings-list">
-            <div>
-              <dt>Codex auth</dt>
-              <dd>{getCodexAuthCopy(settings.codex.authMethod)}</dd>
-            </div>
-            <div>
-              <dt>Harness</dt>
-              <dd>{settings.harness}</dd>
-            </div>
-            <div>
-              <dt>Autonomy</dt>
-              <dd>Level 0 only</dd>
-            </div>
-            <div>
-              <dt>Forge access</dt>
-              <dd>Vaenyx repository · Read-only</dd>
-            </div>
-            <div>
-              <dt>Browser secrets</dt>
-              <dd>Never exposed</dd>
-            </div>
-            <div>
-              <dt>Storage</dt>
-              <dd>{settings.dataStorage}</dd>
-            </div>
-            <div>
-              <dt>Version</dt>
-              <dd>{settings.version}</dd>
-            </div>
-            <div>
-              <dt>Mode</dt>
-              <dd>{settings.mode}</dd>
-            </div>
-            <div>
-              <dt>Local bind</dt>
-              <dd>{settings.bindAddress}</dd>
-            </div>
-            <div>
-              <dt>Codex CLI</dt>
-              <dd>{settings.codex.version ?? "Not installed"}</dd>
-            </div>
-          </dl>
-        </details>
-      </section>
+            <h3 className="settings-subhead">Connection details</h3>
+            <dl className="settings-list">
+              <div>
+                <dt>Codex auth</dt>
+                <dd>{getCodexAuthCopy(settings.codex.authMethod)}</dd>
+              </div>
+              <div>
+                <dt>Harness</dt>
+                <dd>{settings.harness}</dd>
+              </div>
+              <div>
+                <dt>Autonomy</dt>
+                <dd>Level 0 only</dd>
+              </div>
+              <div>
+                <dt>Forge access</dt>
+                <dd>Vaenyx repository · Read-only</dd>
+              </div>
+              <div>
+                <dt>Browser secrets</dt>
+                <dd>Never exposed</dd>
+              </div>
+              <div>
+                <dt>Storage</dt>
+                <dd>{settings.dataStorage}</dd>
+              </div>
+              <div>
+                <dt>Version</dt>
+                <dd>{settings.version}</dd>
+              </div>
+              <div>
+                <dt>Mode</dt>
+                <dd>{settings.mode}</dd>
+              </div>
+              <div>
+                <dt>Local bind</dt>
+                <dd>{settings.bindAddress}</dd>
+              </div>
+              <div>
+                <dt>Codex CLI</dt>
+                <dd>{settings.codex.version ?? "Not installed"}</dd>
+              </div>
+            </dl>
+          </details>
+        </section>
       ) : null}
       {activeTab === "ai" ? (
         <CapabilitiesPanel
@@ -15671,29 +15791,29 @@ function SettingsPanel({
       ) : null}
       {activeTab === "modes" ? <ModesPanel /> : null}
       {activeTab === "legal" ? (
-      <section className="settings-card">
-        <p className="eyebrow">{t("settings.legal.eyebrow")}</p>
-        <h2>{t("settings.legal.title")}</h2>
-        <p className="settings-card-copy">{t("settings.legal.copy")}</p>
-        <p className="context-disclaimer">
-          {t("legal.notice.settings.legalLinks")}
-        </p>
-        <div className="legal-list">
-          <p className="settings-card-copy">{t("disclaimer.ai")}</p>
-          <p className="settings-card-copy">{t("disclaimer.health")}</p>
-          <p className="settings-card-copy">{t("disclaimer.finance")}</p>
-          <p className="settings-card-copy">{t("disclaimer.legal")}</p>
-          <p className="settings-card-copy">{t("disclaimer.community")}</p>
-          {/* No Merit line (copy pack J3): Merit is not built and the Terms say
+        <section className="settings-card">
+          <p className="eyebrow">{t("settings.legal.eyebrow")}</p>
+          <h2>{t("settings.legal.title")}</h2>
+          <p className="settings-card-copy">{t("settings.legal.copy")}</p>
+          <p className="context-disclaimer">
+            {t("legal.notice.settings.legalLinks")}
+          </p>
+          <div className="legal-list">
+            <p className="settings-card-copy">{t("disclaimer.ai")}</p>
+            <p className="settings-card-copy">{t("disclaimer.health")}</p>
+            <p className="settings-card-copy">{t("disclaimer.finance")}</p>
+            <p className="settings-card-copy">{t("disclaimer.legal")}</p>
+            <p className="settings-card-copy">{t("disclaimer.community")}</p>
+            {/* No Merit line (copy pack J3): Merit is not built and the Terms say
               it is not provided, so a summary of how it works would imply it
               exists. The held string lives in the copy pack until the Schedule
               marks Merit active. */}
-          <p className="settings-card-copy">{t("disclaimer.remote")}</p>
-          <p className="settings-card-copy">{t("disclaimer.model")}</p>
-        </div>
-        <div className="settings-card-divider" />
-        <LegalDocLinks />
-      </section>
+            <p className="settings-card-copy">{t("disclaimer.remote")}</p>
+            <p className="settings-card-copy">{t("disclaimer.model")}</p>
+          </div>
+          <div className="settings-card-divider" />
+          <LegalDocLinks />
+        </section>
       ) : null}
     </div>
   );
@@ -15767,8 +15887,10 @@ function factSlotLabel(slot: string, zh: boolean): string {
   const colon = slot.indexOf(":");
   if (colon < 1) return slot;
   const tail = slot.slice(colon + 1).replace(/_/g, " ");
-  if (slot.startsWith("preference:")) return zh ? `偏好:${tail}` : `Preference: ${tail}`;
-  if (slot.startsWith("relationship:")) return zh ? `家人:${tail}` : `Relationship: ${tail}`;
+  if (slot.startsWith("preference:"))
+    return zh ? `偏好:${tail}` : `Preference: ${tail}`;
+  if (slot.startsWith("relationship:"))
+    return zh ? `家人:${tail}` : `Relationship: ${tail}`;
   return slot;
 }
 
@@ -16054,9 +16176,7 @@ function VaenyxMeLedger({
   if (candidates.length === 0) {
     return (
       <p className="library-note">
-        {zh
-          ? "最近没有注意到什么新的。"
-          : "Nothing new noticed lately."}
+        {zh ? "最近没有注意到什么新的。" : "Nothing new noticed lately."}
       </p>
     );
   }
@@ -16088,69 +16208,69 @@ function VaenyxMeLedger({
                 </span>
               </button>
             ) : (
-            <article className="me-ledger-item" key={candidate.id}>
-              {/* THE QUOTE LEADS. It is the Owner's own sentence, and it is the
+              <article className="me-ledger-item" key={candidate.id}>
+                {/* THE QUOTE LEADS. It is the Owner's own sentence, and it is the
                   one thing on the old card that was doing any work — better
                   provenance than Facebook or Google offer for the same kind of
                   guess. The claim reads as a consequence of it, not as a
                   verdict handed down. */}
-              <blockquote className="me-ledger-quote">
-                {candidate.proposedEvidence}
-              </blockquote>
-              <p className="me-ledger-claim">
-                {candidate.proposedSlot ? (
-                  <>
-                    <span className="me-ledger-kind">
-                      {zh ? "想记住" : "Wants to remember"}
-                    </span>{" "}
-                    <code>{candidate.proposedSlot}</code> ={" "}
-                    {candidate.proposedValue}
-                    {candidate.proposedEventTime
-                      ? ` · ${zh ? "从" : "since"} ${candidate.proposedEventTime}`
-                      : ""}
-                  </>
-                ) : (
-                  <>
-                    <span className="me-ledger-kind">
-                      {zh ? "读出来的" : "Read as"}
-                    </span>{" "}
-                    {candidate.proposedSummary}
-                  </>
-                )}
-              </p>
-              {/* Two actions, not four, and no percentage. Real buttons, not
+                <blockquote className="me-ledger-quote">
+                  {candidate.proposedEvidence}
+                </blockquote>
+                <p className="me-ledger-claim">
+                  {candidate.proposedSlot ? (
+                    <>
+                      <span className="me-ledger-kind">
+                        {zh ? "想记住" : "Wants to remember"}
+                      </span>{" "}
+                      <code>{candidate.proposedSlot}</code> ={" "}
+                      {candidate.proposedValue}
+                      {candidate.proposedEventTime
+                        ? ` · ${zh ? "从" : "since"} ${candidate.proposedEventTime}`
+                        : ""}
+                    </>
+                  ) : (
+                    <>
+                      <span className="me-ledger-kind">
+                        {zh ? "读出来的" : "Read as"}
+                      </span>{" "}
+                      {candidate.proposedSummary}
+                    </>
+                  )}
+                </p>
+                {/* Two actions, not four, and no percentage. Real buttons, not
                   text links (Oskar, 2026-08-09): this is the one thing on the
                   screen he is here to do, and it was the smallest thing on it.
                   Both are the same size — "wrong" is not the lesser answer, and
                   making it look like one is how you get agreement by default. */}
-              <div className="me-ledger-actions">
-                <button
-                  className="secondary-button me-ledger-answer"
-                  onClick={() => onApprove(candidate)}
-                  type="button"
-                >
-                  {zh ? "对,记住" : "Yes, keep it"}
-                </button>
-                <button
-                  className="secondary-button me-ledger-answer"
-                  onClick={() => onReject(candidate)}
-                  type="button"
-                >
-                  {zh ? "这条不对" : "That's wrong"}
-                </button>
-                {onViewSource &&
-                candidate.sourceType === "chat_history" &&
-                candidate.sourceId ? (
+                <div className="me-ledger-actions">
                   <button
-                    className="text-button"
-                    onClick={() => onViewSource(candidate.sourceId as string)}
+                    className="secondary-button me-ledger-answer"
+                    onClick={() => onApprove(candidate)}
                     type="button"
                   >
-                    {zh ? "看来源" : "View source"}
+                    {zh ? "对,记住" : "Yes, keep it"}
                   </button>
-                ) : null}
-              </div>
-            </article>
+                  <button
+                    className="secondary-button me-ledger-answer"
+                    onClick={() => onReject(candidate)}
+                    type="button"
+                  >
+                    {zh ? "这条不对" : "That's wrong"}
+                  </button>
+                  {onViewSource &&
+                  candidate.sourceType === "chat_history" &&
+                  candidate.sourceId ? (
+                    <button
+                      className="text-button"
+                      onClick={() => onViewSource(candidate.sourceId as string)}
+                      type="button"
+                    >
+                      {zh ? "看来源" : "View source"}
+                    </button>
+                  ) : null}
+                </div>
+              </article>
             ),
           )}
         </section>
@@ -16200,10 +16320,6 @@ function VaenyxMePanel({
   // The evidence quote does the job the number was pretending to do, and it
   // does it honestly: it is the Owner's own sentence, so he can judge the
   // inference instead of trusting a percentage about it.
-
-
-
-
 
   const pendingCandidates = candidates.filter(
     (candidate) => candidate.status === "pending_review",
@@ -16507,27 +16623,27 @@ function VaenyxMePanel({
             outcomes; what it drops is the homework. */}
 
         {reviewedCandidates.length > 0 ? (
-            <section className="recent-section">
-              <div className="section-title">
-                <div>
-                  <p className="eyebrow">Reviewed</p>
-                  <h2>Recent decisions</h2>
-                </div>
-                <span className="count-chip">{reviewedCandidates.length}</span>
+          <section className="recent-section">
+            <div className="section-title">
+              <div>
+                <p className="eyebrow">Reviewed</p>
+                <h2>Recent decisions</h2>
               </div>
-              <div className="memory-list">
-                {reviewedCandidates.slice(0, 4).map((candidate) => (
-                  <article className="memory-card" key={candidate.id}>
-                    <span className="task-status">
-                      {getVaenyxMeCandidateStatusCopy(candidate.status)}
-                    </span>
-                    <h3>{candidate.title}</h3>
-                    <p>{candidate.proposedSummary}</p>
-                    <small>{candidate.reviewNote ?? "No review note."}</small>
-                  </article>
-                ))}
-              </div>
-            </section>
+              <span className="count-chip">{reviewedCandidates.length}</span>
+            </div>
+            <div className="memory-list">
+              {reviewedCandidates.slice(0, 4).map((candidate) => (
+                <article className="memory-card" key={candidate.id}>
+                  <span className="task-status">
+                    {getVaenyxMeCandidateStatusCopy(candidate.status)}
+                  </span>
+                  <h3>{candidate.title}</h3>
+                  <p>{candidate.proposedSummary}</p>
+                  <small>{candidate.reviewNote ?? "No review note."}</small>
+                </article>
+              ))}
+            </div>
+          </section>
         ) : null}
       </div>
     </div>
@@ -16555,9 +16671,10 @@ function readMethodSchemaFields(schema: unknown): MethodSchemaField[] {
 
   return Object.entries(properties as Record<string, unknown>).map(
     ([name, raw]) => {
-      const prop = (
-        raw && typeof raw === "object" ? raw : {}
-      ) as Record<string, unknown>;
+      const prop = (raw && typeof raw === "object" ? raw : {}) as Record<
+        string,
+        unknown
+      >;
       const rawType = prop.type;
       let type =
         typeof rawType === "string"
@@ -16847,7 +16964,10 @@ function PublishNicknameEditor({
         marginBottom: "0.5rem",
       }}
     >
-      <label className="settings-card-copy" style={{ fontSize: "var(--fs-sm)" }}>
+      <label
+        className="settings-card-copy"
+        style={{ fontSize: "var(--fs-sm)" }}
+      >
         Your public name — shown as the author in the community library.
       </label>
       <input
@@ -17602,7 +17722,11 @@ function SkillImportPanel({ onImported }: { onImported: () => void }) {
       </div>
 
       {preview ? (
-        <Modal onClose={() => setPreview(null)} title={preview.name} variant="doc">
+        <Modal
+          onClose={() => setPreview(null)}
+          title={preview.name}
+          variant="doc"
+        >
           <p className="settings-card-copy">{t("legal.notice.skill.import")}</p>
           {/* L1 requires the dropped items listed one by one, and L5 requires
               each label to sit AGAINST the thing found — the file name, the
@@ -17613,12 +17737,15 @@ function SkillImportPanel({ onImported }: { onImported: () => void }) {
             <ul className="skill-dropped">
               {preview.dropped.map((item, index) => (
                 <li key={`${item.kind}-${index}`}>
-                  <strong>{t(`skill.drop.${item.reason}`)}</strong> — {item.detail}
+                  <strong>{t(`skill.drop.${item.reason}`)}</strong> —{" "}
+                  {item.detail}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="settings-card-copy">{t("skill.import.nothingLost")}</p>
+            <p className="settings-card-copy">
+              {t("skill.import.nothingLost")}
+            </p>
           )}
           <div className="modal-actions">
             <button
@@ -17775,18 +17902,14 @@ function MethodCorrections({
               onClick={() => void keep(correction)}
               type="button"
             >
-              {busyId === correction.id
-                ? "…"
-                : t("method.corrections.keep")}
+              {busyId === correction.id ? "…" : t("method.corrections.keep")}
             </button>
           )}
         </div>
       ))}
       {/* D4f: this sentence used to be written inline here. A statement about
           where data goes belongs in the copy pack, where the audit can see it. */}
-      <p className="context-disclaimer">
-        {t("method.corrections.locality")}
-      </p>
+      <p className="context-disclaimer">{t("method.corrections.locality")}</p>
     </section>
   );
 }
@@ -17846,7 +17969,10 @@ function useFailedChecks(): Map<string, number> {
   return failed;
 }
 
-function useCommunityVersions(): Map<string, { version: string; description: string }> {
+function useCommunityVersions(): Map<
+  string,
+  { version: string; description: string }
+> {
   const [versions, setVersions] = useState<
     Map<string, { version: string; description: string }>
   >(new Map());
@@ -17855,7 +17981,10 @@ function useCommunityVersions(): Map<string, { version: string; description: str
     void fetchCatalogue()
       .then((index) => {
         if (!active) return;
-        const next = new Map<string, { version: string; description: string }>();
+        const next = new Map<
+          string,
+          { version: string; description: string }
+        >();
         for (const item of [...index.methods, ...index.routines]) {
           next.set(item.id, {
             version: item.version,
@@ -17974,7 +18103,9 @@ function UpdateDialog({
   return (
     <Modal onClose={onClose} title={zh ? "有新版" : "A newer version"}>
       {loading ? (
-        <p className="library-note">{zh ? "正在看要动到什么…" : "Working out what would change…"}</p>
+        <p className="library-note">
+          {zh ? "正在看要动到什么…" : "Working out what would change…"}
+        </p>
       ) : updated ? (
         /* C7 — the update is in. The one question left is the one only this
            machine can answer: does the new recipe still get THIS household's
@@ -18014,7 +18145,11 @@ function UpdateDialog({
                       ? "拿我的例子跑一遍"
                       : "Re-run my examples"}
                 </button>
-                <button className="secondary-button" onClick={onClose} type="button">
+                <button
+                  className="secondary-button"
+                  onClick={onClose}
+                  type="button"
+                >
                   {zh ? "以后再说" : "Not now"}
                 </button>
               </div>
@@ -18067,7 +18202,11 @@ function UpdateDialog({
                 >
                   {zh ? "换回上一个版本" : "Put the previous version back"}
                 </button>
-                <button className="secondary-button" onClick={onClose} type="button">
+                <button
+                  className="secondary-button"
+                  onClick={onClose}
+                  type="button"
+                >
                   {zh ? "先留着新版" : "Keep the new one"}
                 </button>
               </div>
@@ -18125,7 +18264,9 @@ function UpdateDialog({
           <div className="model-card-actions">
             <button
               className={
-                offer.recommended === "update" ? "primary-button" : "secondary-button"
+                offer.recommended === "update"
+                  ? "primary-button"
+                  : "secondary-button"
               }
               disabled={busy}
               onClick={() =>
@@ -18148,7 +18289,12 @@ function UpdateDialog({
               disabled={busy}
               onClick={() =>
                 void run(() =>
-                  setUpdatePolicy({ id, kind, policy: "skipped", version: offer.newVersion }),
+                  setUpdatePolicy({
+                    id,
+                    kind,
+                    policy: "skipped",
+                    version: offer.newVersion,
+                  }),
                 )
               }
               type="button"
@@ -18158,7 +18304,9 @@ function UpdateDialog({
             <button
               className="secondary-button"
               disabled={busy}
-              onClick={() => void run(() => setUpdatePolicy({ id, kind, policy: "locked" }))}
+              onClick={() =>
+                void run(() => setUpdatePolicy({ id, kind, policy: "locked" }))
+              }
               type="button"
             >
               {zh ? "锁在这个版本" : "Lock to this version"}
@@ -18584,8 +18732,8 @@ function MethodDetail({
         <p className="eyebrow">Try it</p>
         <h2>Test run</h2>
         <p className="settings-card-copy">
-          Runs this method through Vaenyx's model with the input below. Owner-only;
-          nothing is saved.
+          Runs this method through Vaenyx's model with the input below.
+          Owner-only; nothing is saved.
         </p>
         <label className="library-tryit-label">
           Input (JSON)
@@ -18743,7 +18891,11 @@ function CreateRoutinePanel({
 
   return (
     <div className="library-layout">
-      <button className="text-button library-back" onClick={onDone} type="button">
+      <button
+        className="text-button library-back"
+        onClick={onDone}
+        type="button"
+      >
         ← All routines
       </button>
       {phase === "describe" || !plan ? (
@@ -18751,9 +18903,9 @@ function CreateRoutinePanel({
           <p className="eyebrow">New routine</p>
           <h2>Describe what you want</h2>
           <p className="settings-card-copy">
-            Say in plain language what you want to do, step by step. Vaenyx plans it
-            — reusing methods you have and drafting any that are missing — and shows
-            you the plan before anything is saved.
+            Say in plain language what you want to do, step by step. Vaenyx
+            plans it — reusing methods you have and drafting any that are
+            missing — and shows you the plan before anything is saved.
           </p>
           <textarea
             className="library-tryit-input"
@@ -18989,7 +19141,11 @@ const CONNECTABLE_MODELS: Array<{
     label: "Claude",
     keyUrl: "https://console.anthropic.com/settings/keys",
   },
-  { id: "gemini", label: "Gemini", keyUrl: "https://aistudio.google.com/apikey" },
+  {
+    id: "gemini",
+    label: "Gemini",
+    keyUrl: "https://aistudio.google.com/apikey",
+  },
   { id: "grok", label: "Grok", keyUrl: "https://console.x.ai" },
   { id: "groq", label: "Groq", keyUrl: "https://console.groq.com/keys" },
   {
@@ -19027,7 +19183,8 @@ const MODEL_FREE_TIER_NOTES: Record<string, string> = {
   // (claude-sub has no entry here: its connect card is the one-click guided
   // sign-in, and its usage is the Owner's own plan, never a free tier.
   // Wording rule 2026-07-29: no quota numbers for the Claude plan, anywhere.)
-  gemini: "Free tier: ~1,500 requests/day via Google AI Studio, no card needed.",
+  gemini:
+    "Free tier: ~1,500 requests/day via Google AI Studio, no card needed.",
   groq: "Free tier: ~1,000 requests/day, very fast responses. No card needed.",
   cerebras: "Free tier: ~1M tokens/day, fastest responses. No card needed.",
   openrouter:
@@ -19080,9 +19237,7 @@ const MODEL_CHOICES: Record<string, string[]> = {
   ],
 };
 
-function routineDomain(
-  tags: string[],
-): "health" | "finance" | "legal" | null {
+function routineDomain(tags: string[]): "health" | "finance" | "legal" | null {
   const lower = tags.map((tag) => tag.toLowerCase());
   const has = (...needles: string[]) =>
     lower.some((tag) => needles.some((needle) => tag.includes(needle)));
@@ -19115,8 +19270,7 @@ function routineDomain(
     )
   )
     return "health";
-  if (has("financ", "tax", "invoice", "budget", "accounting"))
-    return "finance";
+  if (has("financ", "tax", "invoice", "budget", "accounting")) return "finance";
   if (has("legal", "lawyer", "contract", "lease")) return "legal";
   return null;
 }
@@ -19208,7 +19362,10 @@ function messageMaybeIntent(
     .find((message) => message.role === "assistant");
   // An offer just made ("want me to…") must always classify — a bare "yes/ok"
   // accept carries no keyword of its own.
-  if (lastAssistant && /(want me to|要不要|要我)/i.test(lastAssistant.content)) {
+  if (
+    lastAssistant &&
+    /(want me to|要不要|要我)/i.test(lastAssistant.content)
+  ) {
     return true;
   }
   // A creation ask classifies WITHOUT needing overlap with installed Routines —
@@ -19261,7 +19418,8 @@ function messageMaybeIntent(
 // older format — yields null and the automatic view ("A") takes over, so a bad
 // view can never break rendering.
 function parseRoutineView(raw: unknown): RoutineView | null {
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw))
+    return null;
   const fieldsRaw = (raw as Record<string, unknown>).fields;
   if (!Array.isArray(fieldsRaw)) return null;
   const fields: RoutineViewField[] = [];
@@ -19515,7 +19673,11 @@ function spokenResultText(output: unknown, view?: unknown): string {
 
 function journalText(content: unknown): string {
   if (typeof content === "string") return content;
-  if (content !== null && typeof content === "object" && !Array.isArray(content)) {
+  if (
+    content !== null &&
+    typeof content === "object" &&
+    !Array.isArray(content)
+  ) {
     const entries = Object.entries(content as Record<string, unknown>);
     const strings = entries.filter(([, value]) => typeof value === "string");
     if (strings.length === 1 && entries.length === 1) {
@@ -19525,7 +19687,8 @@ function journalText(content: unknown): string {
       entries.length > 0 &&
       entries.every(
         ([, value]) =>
-          value === null || ["string", "number", "boolean"].includes(typeof value),
+          value === null ||
+          ["string", "number", "boolean"].includes(typeof value),
       )
     ) {
       return entries
@@ -19792,7 +19955,11 @@ function CommunityReportLink({
 
   return (
     <>
-      <button className="text-button" onClick={() => setOpen(true)} type="button">
+      <button
+        className="text-button"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
         {label}
       </button>
       {open ? (
@@ -20005,7 +20172,11 @@ function CataloguePanel({
                         ? "Installing…"
                         : "Install"}
                   </button>
-                  <CommunityReportLink id={routine.id} kind="routine" name={routine.name} />
+                  <CommunityReportLink
+                    id={routine.id}
+                    kind="routine"
+                    name={routine.name}
+                  />
                 </div>
               </div>
             );
@@ -20020,8 +20191,8 @@ function CataloguePanel({
                 </div>
                 <p>{method.description}</p>
                 <p className="library-note">
-                  A building block — install it to reuse as a step when you build
-                  your own Routine.
+                  A building block — install it to reuse as a step when you
+                  build your own Routine.
                 </p>
                 {method.tags.length > 0 ? (
                   <span className="tag-row">
@@ -20055,7 +20226,11 @@ function CataloguePanel({
                         ? "Installing…"
                         : "Install"}
                   </button>
-                  <CommunityReportLink id={method.id} kind="method" name={method.name} />
+                  <CommunityReportLink
+                    id={method.id}
+                    kind="method"
+                    name={method.name}
+                  />
                 </div>
               </div>
             );
@@ -20282,7 +20457,11 @@ function AttentionChip({
   children: ReactNode;
   tone: "edited" | "new-version" | "regressed" | "review";
 }) {
-  return <span className={`library-chip chip-attention chip-${tone}`}>{children}</span>;
+  return (
+    <span className={`library-chip chip-attention chip-${tone}`}>
+      {children}
+    </span>
+  );
 }
 
 /** What to show while the shelf has not been read, and when reading it
@@ -20831,9 +21010,9 @@ function CreateMethodPanel({
 
   const [testInput, setTestInput] = useState("{}");
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<
-    Awaited<ReturnType<typeof testDraftMethod>> | null
-  >(null);
+  const [testResult, setTestResult] = useState<Awaited<
+    ReturnType<typeof testDraftMethod>
+  > | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -20849,7 +21028,9 @@ function CreateMethodPanel({
       setTagsText(draft.tags.join(", "));
       setInputSchemaText(JSON.stringify(draft.inputSchema, null, 2));
       setOutputSchemaText(JSON.stringify(draft.outputSchema, null, 2));
-      setTestInput(JSON.stringify(buildInputSkeleton(draft.inputSchema), null, 2));
+      setTestInput(
+        JSON.stringify(buildInputSkeleton(draft.inputSchema), null, 2),
+      );
       setPhase("review");
     } catch (nextError) {
       setError(
@@ -20944,7 +21125,11 @@ function CreateMethodPanel({
 
   return (
     <div className="library-layout">
-      <button className="text-button library-back" onClick={onDone} type="button">
+      <button
+        className="text-button library-back"
+        onClick={onDone}
+        type="button"
+      >
         ← All methods
       </button>
       {phase === "describe" ? (
@@ -20952,8 +21137,8 @@ function CreateMethodPanel({
           <p className="eyebrow">New method</p>
           <h2>Describe what it should do</h2>
           <p className="settings-card-copy">
-            Say, in plain language, the one job this method does. Vaenyx drafts it;
-            you review and test it before anything is saved.
+            Say, in plain language, the one job this method does. Vaenyx drafts
+            it; you review and test it before anything is saved.
           </p>
           <textarea
             className="library-tryit-input"
@@ -21116,9 +21301,9 @@ function LibraryPanel({
   const failedChecks = useFailedChecks();
 
   // Every distinct tag across the shelf, for the filter bar + rename picker.
-  const allTags = [
-    ...new Set(methods.flatMap((method) => method.tags)),
-  ].sort((left, right) => left.localeCompare(right));
+  const allTags = [...new Set(methods.flatMap((method) => method.tags))].sort(
+    (left, right) => left.localeCompare(right),
+  );
 
   // Filter is OR: with tags selected, show methods carrying any of them.
   const visible = [...methods]
@@ -21355,7 +21540,10 @@ function ThreadActionsMenu({
   thread: VaenyxThread;
   onMoveThreadProject: (thread: VaenyxThread, projectId: string | null) => void;
   onRenameThread: (thread: VaenyxThread, title: string) => void;
-  onSetThreadStatus: (thread: VaenyxThread, status: VaenyxThread["status"]) => void;
+  onSetThreadStatus: (
+    thread: VaenyxThread,
+    status: VaenyxThread["status"],
+  ) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState(thread.title);
@@ -21459,7 +21647,9 @@ function ThreadActionsMenu({
             </label>
             <div className="thread-rename-actions">
               <button
-                disabled={!draftTitle.trim() || draftTitle.trim() === thread.title}
+                disabled={
+                  !draftTitle.trim() || draftTitle.trim() === thread.title
+                }
                 type="submit"
               >
                 Save
@@ -21567,9 +21757,10 @@ const THREAD_SEEN_SINCE_KEY = "vaenyx-thread-seen-since";
 
 function readThreadSeen(): Record<string, string> {
   try {
-    return JSON.parse(
-      localStorage.getItem(THREAD_SEEN_KEY) ?? "",
-    ) as Record<string, string>;
+    return JSON.parse(localStorage.getItem(THREAD_SEEN_KEY) ?? "") as Record<
+      string,
+      string
+    >;
   } catch {
     return {};
   }
@@ -21616,7 +21807,10 @@ function ThreadList({
   onOpenTask: (taskId: string, threadId: string) => void;
   onMoveThreadProject: (thread: VaenyxThread, projectId: string | null) => void;
   onRenameThread: (thread: VaenyxThread, title: string) => void;
-  onSetThreadStatus: (thread: VaenyxThread, status: VaenyxThread["status"]) => void;
+  onSetThreadStatus: (
+    thread: VaenyxThread,
+    status: VaenyxThread["status"],
+  ) => void;
   // Bulk actions on a selection. Ctrl/Cmd-click adds one, Shift-click takes a
   // run — the same gesture as a file manager, because that is what people
   // already know (Oskar, 2026-07-27).
@@ -21872,7 +22066,10 @@ function SidebarThreadTree({
   onOpenTask: (taskId: string, threadId: string) => void;
   onMoveThreadProject: (thread: VaenyxThread, projectId: string | null) => void;
   onRenameThread: (thread: VaenyxThread, title: string) => void;
-  onSetThreadStatus: (thread: VaenyxThread, status: VaenyxThread["status"]) => void;
+  onSetThreadStatus: (
+    thread: VaenyxThread,
+    status: VaenyxThread["status"],
+  ) => void;
   onBulkArchive: (threads: VaenyxThread[]) => void;
   onBulkDelete: (threads: VaenyxThread[]) => void;
 }) {
@@ -21882,9 +22079,8 @@ function SidebarThreadTree({
   // Deleting archived chats is the one destructive act here — two clicks.
   const [confirmArchiveDelete, setConfirmArchiveDelete] = useState(false);
   // Unread dots: last-seen per thread, plus the tracking watermark. Device only.
-  const [threadSeen, setThreadSeen] = useState<Record<string, string>>(
-    readThreadSeen,
-  );
+  const [threadSeen, setThreadSeen] =
+    useState<Record<string, string>>(readThreadSeen);
   const [seenSince, setSeenSince] = useState<string>(readThreadSeenSince);
 
   // First run on this device: everything that already happened counts as read.
@@ -21997,20 +22193,20 @@ function SidebarThreadTree({
       {namedProjects.length > 0 ? (
         <div className="project-thread-folders">
           {namedProjects.map((project) => {
-              const projectThreads = threadsForProject(project.id);
+            const projectThreads = threadsForProject(project.id);
 
-              return (
-                <SidebarDetails
-                  className="project-thread-folder"
-                  count={projectThreads.length}
-                  initiallyOpen={projectThreads.length > 0}
-                  key={project.id}
-                  label={getSidebarProjectName(project)}
-                >
-                  {renderThreadItems(projectThreads, "No chats yet")}
-                </SidebarDetails>
-              );
-            })}
+            return (
+              <SidebarDetails
+                className="project-thread-folder"
+                count={projectThreads.length}
+                initiallyOpen={projectThreads.length > 0}
+                key={project.id}
+                label={getSidebarProjectName(project)}
+              >
+                {renderThreadItems(projectThreads, "No chats yet")}
+              </SidebarDetails>
+            );
+          })}
         </div>
       ) : null}
       <div className="project-thread-folders unsorted-section">
@@ -22073,9 +22269,7 @@ function SidebarThreadTree({
                 const picked = pickedArchived.has(thread.id);
                 return (
                   <button
-                    className={
-                      picked ? "archive-row picked" : "archive-row"
-                    }
+                    className={picked ? "archive-row picked" : "archive-row"}
                     key={thread.id}
                     onClick={() => {
                       const next = new Set(pickedArchived);
@@ -22187,7 +22381,8 @@ function VaenyxWorkspace({
   // through a wrong title.
   const [inbox, setInbox] = useState<InboxSummary | null>(null);
   const [settings, setSettings] = useState<InstanceSettings | null>(null);
-  const generalProjectId = workspace.projects.find(isGeneralProject)?.id ?? null;
+  const generalProjectId =
+    workspace.projects.find(isGeneralProject)?.id ?? null;
   const defaultProjectId = generalProjectId ?? workspace.projects[0]?.id ?? "";
   const defaultSkillId = workspace.skills[0]?.id ?? "";
   const [, setError] = useState<string | null>(null);
@@ -22216,9 +22411,7 @@ function VaenyxWorkspace({
     const savedWidth = window.localStorage.getItem("vaenyx.sidebarWidth");
     const parsedWidth = savedWidth ? Number.parseInt(savedWidth, 10) : 320;
 
-    return Number.isFinite(parsedWidth)
-      ? clampSidebarWidth(parsedWidth)
-      : 320;
+    return Number.isFinite(parsedWidth) ? clampSidebarWidth(parsedWidth) : 320;
   });
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -22449,13 +22642,14 @@ function VaenyxWorkspace({
    */
   function goToTarget(target: string): void {
     if (target.startsWith("library")) {
-      const tab = target === "library-methods"
-        ? "methods"
-        : target === "library-tokens"
-          ? "tokens"
-          : target === "library-community"
-            ? "community"
-            : null;
+      const tab =
+        target === "library-methods"
+          ? "methods"
+          : target === "library-tokens"
+            ? "tokens"
+            : target === "library-community"
+              ? "community"
+              : null;
       try {
         if (tab) localStorage.setItem(GOTO_LIBRARY_TAB, tab);
         else localStorage.removeItem(GOTO_LIBRARY_TAB);
@@ -22655,7 +22849,12 @@ function VaenyxWorkspace({
   // here because Screen has its own initialiser logic.
   useEffect(() => {
     const view = bootParams.get("view");
-    if (!bootTaskId && !bootChatId && view && RESTORABLE_SCREENS.includes(view as Screen)) {
+    if (
+      !bootTaskId &&
+      !bootChatId &&
+      view &&
+      RESTORABLE_SCREENS.includes(view as Screen)
+    ) {
       setScreen(view as Screen);
     }
     // Runs once per load; afterwards the sync effect owns the URL.
@@ -22812,7 +23011,11 @@ function VaenyxWorkspace({
       ) : null}
       <aside className={`sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`}>
         <div className="brand sidebar-brand">
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <span>{workspace.mode?.agentName?.trim() || "Vaenyx"}</span>
           {/* The mode marker sits with the identity it belongs to (Oskar,
               dev.171) instead of floating over the sign-out row. */}
@@ -22820,7 +23023,10 @@ function VaenyxWorkspace({
         </div>
 
         <nav aria-label="Vaenyx navigation">
-          <div aria-label="Create new Vaenyx work" className="sidebar-compose-switch">
+          <div
+            aria-label="Create new Vaenyx work"
+            className="sidebar-compose-switch"
+          >
             <button
               aria-label="Start a new Vaenyx conversation"
               className={
@@ -22899,9 +23105,7 @@ function VaenyxWorkspace({
       </aside>
       <button
         aria-label="Close navigation"
-        className={`mobile-sidebar-backdrop ${
-          mobileSidebarOpen ? "open" : ""
-        }`}
+        className={`mobile-sidebar-backdrop ${mobileSidebarOpen ? "open" : ""}`}
         onClick={() => setMobileSidebarOpen(false)}
         type="button"
       />
@@ -23128,7 +23332,7 @@ function VaenyxWorkspace({
             onRoutinesRefresh={() => {
               void fetchLibraryRoutines().then(setLibraryRoutines);
             }}
-            />
+          />
         ) : screen === "discord" ? (
           // Discord got its own screen (Oskar, 2026-07-27): what it is, the
           // link, and the third-party notice that travels with it (D5) —
@@ -23142,7 +23346,11 @@ function VaenyxWorkspace({
                 : "Where Vaenyx users talk — questions, showing what you built, and announcements."}
             </p>
             <p className="settings-card-copy">
-              <a href="https://vaenyx.ai/discord" rel="noopener" target="_blank">
+              <a
+                href="https://vaenyx.ai/discord"
+                rel="noopener"
+                target="_blank"
+              >
                 {t("community.discord.link")}
               </a>
             </p>
@@ -23345,7 +23553,11 @@ function InstallAcceptanceGate({ children }: { children: ReactNode }) {
     return (
       <main className="loading-screen">
         <div>
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <p>Loading…</p>
         </div>
       </main>
@@ -23566,7 +23778,11 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
     return (
       <main className="acceptance-screen">
         <div className="acceptance-card">
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <h2>{zh ? "在手机上用 Vaenyx" : "Use Vaenyx from your phone"}</h2>
           <p className="settings-card-copy">
             {zh
@@ -23617,7 +23833,11 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
     return (
       <main className="acceptance-screen">
         <div className="acceptance-card">
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <h2>{zh ? "把 Vaenyx 装到手机上" : "Put Vaenyx on your phone"}</h2>
           <PhoneAccessPanel />
           <button
@@ -23644,7 +23864,11 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
     return (
       <main className="acceptance-screen">
         <div className="acceptance-card">
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <h2>{zh ? "都设好了" : "You're set up"}</h2>
           <p className="settings-card-copy">
             {zh
@@ -23666,8 +23890,6 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
             </p>
           </section>
 
-          
-
           <button
             className="primary-button acceptance-continue"
             onClick={onDone}
@@ -23683,7 +23905,11 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   return (
     <main className="acceptance-screen">
       <div className="acceptance-card">
-        <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+        <img
+          alt="Vaenyx"
+          className="brand-mark brand-mark-img"
+          src="/vaenyx-mark.svg"
+        />
         <h2>{zh ? "连接第一个模型" : "Connect your first model"}</h2>
         <p className="settings-card-copy">
           {zh
@@ -23731,7 +23957,9 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
               rel="noreferrer"
               target="_blank"
             >
-              {zh ? "没弹出窗口?点这里打开登录页 ↗" : "No window? Open the sign-in page ↗"}
+              {zh
+                ? "没弹出窗口?点这里打开登录页 ↗"
+                : "No window? Open the sign-in page ↗"}
             </a>
           ) : null}
 
@@ -23761,7 +23989,9 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
                 autoComplete="off"
                 className="method-rename-input key-input"
                 onChange={(event) => setClaudeCode(event.target.value)}
-                placeholder={zh ? "登录页给的代码" : "Code from the sign-in page"}
+                placeholder={
+                  zh ? "登录页给的代码" : "Code from the sign-in page"
+                }
                 spellCheck={false}
                 type="text"
                 value={claudeCode}
@@ -23925,7 +24155,11 @@ function ModelConnectGate({ children }: { children: ReactNode }) {
   if (ready === null) {
     return (
       <main className="loading-screen">
-        <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+        <img
+          alt="Vaenyx"
+          className="brand-mark brand-mark-img"
+          src="/vaenyx-mark.svg"
+        />
         <p>Loading…</p>
       </main>
     );
@@ -23946,9 +24180,9 @@ function ModelConnectGate({ children }: { children: ReactNode }) {
 // actually becomes available.
 function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
   const { lang, t } = useI18n();
-  const [choice, setChoice] = useState<
-    "interested" | "not-interested" | null
-  >(null);
+  const [choice, setChoice] = useState<"interested" | "not-interested" | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
 
   function proceed() {
@@ -23969,7 +24203,11 @@ function InstallAcceptanceWizard({ onDone }: { onDone: () => void }) {
   return (
     <main className="acceptance-screen">
       <div className="acceptance-card">
-        <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+        <img
+          alt="Vaenyx"
+          className="brand-mark brand-mark-img"
+          src="/vaenyx-mark.svg"
+        />
         <p className="acceptance-ai">
           {t("legal.disclaimer.aiGeneral.firstRun")}
         </p>
@@ -24052,7 +24290,11 @@ export function App() {
     return (
       <main className="loading-screen">
         <div>
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <h1>Vaenyx needs attention.</h1>
           <p>{fatalError}</p>
         </div>
@@ -24064,7 +24306,11 @@ export function App() {
     return (
       <main className="loading-screen">
         <div>
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <p>Starting your private Vaenyx Instance...</p>
         </div>
       </main>
@@ -24087,7 +24333,11 @@ export function App() {
     return (
       <main className="loading-screen">
         <div>
-          <img alt="Vaenyx" className="brand-mark brand-mark-img" src="/vaenyx-mark.svg" />
+          <img
+            alt="Vaenyx"
+            className="brand-mark brand-mark-img"
+            src="/vaenyx-mark.svg"
+          />
           <p>Loading your workspace...</p>
         </div>
       </main>

@@ -16,14 +16,14 @@
   --on-accent: #1a1917;
 
   /* Type scale (R1 foundation) — rem off a 16px base so OS text-size is honored */
-  --fs-eyebrow: 0.625rem;   /* 10px — UPPERCASE section labels */
-  --fs-label: 0.6875rem;    /* 11px — floor for real text: labels, meta, timestamps */
-  --fs-sm: 0.75rem;         /* 12px — secondary / dim body, chips */
-  --fs-base: 0.8125rem;     /* 13px — default body + chat answer */
-  --fs-md: 0.875rem;        /* 14px — sidebar item, menu item, button, card h3 */
-  --fs-lg: 1rem;            /* 16px — subheading / open-chat title */
-  --fs-xl: 1.25rem;         /* 20px — section heading */
-  --fs-2xl: 1.625rem;       /* 26px — page title */
+  --fs-eyebrow: 0.625rem; /* 10px — UPPERCASE section labels */
+  --fs-label: 0.6875rem; /* 11px — floor for real text: labels, meta, timestamps */
+  --fs-sm: 0.75rem; /* 12px — secondary / dim body, chips */
+  --fs-base: 0.8125rem; /* 13px — default body + chat answer */
+  --fs-md: 0.875rem; /* 14px — sidebar item, menu item, button, card h3 */
+  --fs-lg: 1rem; /* 16px — subheading / open-chat title */
+  --fs-xl: 1.25rem; /* 20px — section heading */
+  --fs-2xl: 1.625rem; /* 26px — page title */
   /* Spacing (4px base) + radius — R1 foundation, rolled out over later rounds */
   --space-1: 4px;
   --space-2: 8px;
@@ -62,64 +62,148 @@
 }
 
 [data-theme="obice"] {
-  --bg: #1c1b19; --bg-sidebar: #161513; --bg-raised: #232220; --border: #34322d;
-  --text: #ece9e1; --text-muted: #9b978c;
-  --accent: #9fc3ce; --accent-hover: #bbd7df; --accent-soft: rgba(159, 195, 206, 0.14); --on-accent: #14181c;
+  --bg: #1c1b19;
+  --bg-sidebar: #161513;
+  --bg-raised: #232220;
+  --border: #34322d;
+  --text: #ece9e1;
+  --text-muted: #9b978c;
+  --accent: #9fc3ce;
+  --accent-hover: #bbd7df;
+  --accent-soft: rgba(159, 195, 206, 0.14);
+  --on-accent: #14181c;
 }
 [data-theme="steel"] {
-  --bg: #1c1b19; --bg-sidebar: #161513; --bg-raised: #232220; --border: #34322d;
-  --text: #ece9e1; --text-muted: #9b978c;
-  --accent: #8198ab; --accent-hover: #9db1c1; --accent-soft: rgba(129, 152, 171, 0.14); --on-accent: #14181c;
+  --bg: #1c1b19;
+  --bg-sidebar: #161513;
+  --bg-raised: #232220;
+  --border: #34322d;
+  --text: #ece9e1;
+  --text-muted: #9b978c;
+  --accent: #8198ab;
+  --accent-hover: #9db1c1;
+  --accent-soft: rgba(129, 152, 171, 0.14);
+  --on-accent: #14181c;
 }
 [data-theme="champagne"] {
-  --bg: #1b1a17; --bg-sidebar: #151412; --bg-raised: #221f1b; --border: #322f29;
-  --text: #ece8df; --text-muted: #99948a;
-  --accent: #c9b18a; --accent-hover: #d8c4a3; --accent-soft: rgba(201, 177, 138, 0.13); --on-accent: #1b1a17;
+  --bg: #1b1a17;
+  --bg-sidebar: #151412;
+  --bg-raised: #221f1b;
+  --border: #322f29;
+  --text: #ece8df;
+  --text-muted: #99948a;
+  --accent: #c9b18a;
+  --accent-hover: #d8c4a3;
+  --accent-soft: rgba(201, 177, 138, 0.13);
+  --on-accent: #1b1a17;
 }
 [data-theme="ice"] {
-  --bg: #0f1417; --bg-sidebar: #0a0e11; --bg-raised: #161d21; --border: #243036;
-  --text: #e6ecec; --text-muted: #8a9aa0;
-  --accent: #9fc3ce; --accent-hover: #bbd7df; --accent-soft: rgba(159, 195, 206, 0.14); --on-accent: #0f1417;
+  --bg: #0f1417;
+  --bg-sidebar: #0a0e11;
+  --bg-raised: #161d21;
+  --border: #243036;
+  --text: #e6ecec;
+  --text-muted: #8a9aa0;
+  --accent: #9fc3ce;
+  --accent-hover: #bbd7df;
+  --accent-soft: rgba(159, 195, 206, 0.14);
+  --on-accent: #0f1417;
 }
 [data-theme="platinum"] {
-  --bg: #14161c; --bg-sidebar: #0f1116; --bg-raised: #1b1e26; --border: #2a2e3a;
-  --text: #e8eaf0; --text-muted: #8f93a3;
-  --accent: #b9c0cf; --accent-hover: #d2d8e3; --accent-soft: rgba(185, 192, 207, 0.13); --on-accent: #14161c;
+  --bg: #14161c;
+  --bg-sidebar: #0f1116;
+  --bg-raised: #1b1e26;
+  --border: #2a2e3a;
+  --text: #e8eaf0;
+  --text-muted: #8f93a3;
+  --accent: #b9c0cf;
+  --accent-hover: #d2d8e3;
+  --accent-soft: rgba(185, 192, 207, 0.13);
+  --on-accent: #14161c;
 }
 [data-theme="sage"] {
-  --bg: #161812; --bg-sidebar: #11130d; --bg-raised: #1d2017; --border: #2c3024;
-  --text: #e7eadd; --text-muted: #909684;
-  --accent: #9bb08a; --accent-hover: #b3c5a3; --accent-soft: rgba(155, 176, 138, 0.13); --on-accent: #14160f;
+  --bg: #161812;
+  --bg-sidebar: #11130d;
+  --bg-raised: #1d2017;
+  --border: #2c3024;
+  --text: #e7eadd;
+  --text-muted: #909684;
+  --accent: #9bb08a;
+  --accent-hover: #b3c5a3;
+  --accent-soft: rgba(155, 176, 138, 0.13);
+  --on-accent: #14160f;
 }
 [data-theme="oxblood"] {
-  --bg: #161514; --bg-sidebar: #100f0e; --bg-raised: #1f1d1c; --border: #302d2b;
-  --text: #ece8e4; --text-muted: #989390;
-  --accent: #b06a5f; --accent-hover: #c47e72; --accent-soft: rgba(176, 106, 95, 0.13); --on-accent: #160f0e;
+  --bg: #161514;
+  --bg-sidebar: #100f0e;
+  --bg-raised: #1f1d1c;
+  --border: #302d2b;
+  --text: #ece8e4;
+  --text-muted: #989390;
+  --accent: #b06a5f;
+  --accent-hover: #c47e72;
+  --accent-soft: rgba(176, 106, 95, 0.13);
+  --on-accent: #160f0e;
 }
 [data-theme="bronze"] {
-  --bg: #1a1613; --bg-sidebar: #14110e; --bg-raised: #221d18; --border: #342c25;
-  --text: #ece4d8; --text-muted: #9c9182;
-  --accent: #b8814f; --accent-hover: #cc9463; --accent-soft: rgba(184, 129, 79, 0.13); --on-accent: #1a1613;
+  --bg: #1a1613;
+  --bg-sidebar: #14110e;
+  --bg-raised: #221d18;
+  --border: #342c25;
+  --text: #ece4d8;
+  --text-muted: #9c9182;
+  --accent: #b8814f;
+  --accent-hover: #cc9463;
+  --accent-soft: rgba(184, 129, 79, 0.13);
+  --on-accent: #1a1613;
 }
 [data-theme="amber"] {
-  --bg: #1a1512; --bg-sidebar: #130f0c; --bg-raised: #221b16; --border: #342a23;
-  --text: #ece2d4; --text-muted: #9d9080;
-  --accent: #cba35e; --accent-hover: #dcb673; --accent-soft: rgba(203, 163, 94, 0.14); --on-accent: #1a1512;
+  --bg: #1a1512;
+  --bg-sidebar: #130f0c;
+  --bg-raised: #221b16;
+  --border: #342a23;
+  --text: #ece2d4;
+  --text-muted: #9d9080;
+  --accent: #cba35e;
+  --accent-hover: #dcb673;
+  --accent-soft: rgba(203, 163, 94, 0.14);
+  --on-accent: #1a1512;
 }
 [data-theme="mauve"] {
-  --bg: #18151a; --bg-sidebar: #120f14; --bg-raised: #201c22; --border: #312b34;
-  --text: #ebe6ec; --text-muted: #989099;
-  --accent: #b58aa6; --accent-hover: #c9a2bc; --accent-soft: rgba(181, 138, 166, 0.14); --on-accent: #18151a;
+  --bg: #18151a;
+  --bg-sidebar: #120f14;
+  --bg-raised: #201c22;
+  --border: #312b34;
+  --text: #ebe6ec;
+  --text-muted: #989099;
+  --accent: #b58aa6;
+  --accent-hover: #c9a2bc;
+  --accent-soft: rgba(181, 138, 166, 0.14);
+  --on-accent: #18151a;
 }
 [data-theme="mono"] {
-  --bg: #1a1917; --bg-sidebar: #141311; --bg-raised: #211f1c; --border: #322f2a;
-  --text: #ede9e2; --text-muted: #9a958b;
-  --accent: #c9c3b8; --accent-hover: #ddd7cc; --accent-soft: rgba(201, 195, 184, 0.12); --on-accent: #1a1917;
+  --bg: #1a1917;
+  --bg-sidebar: #141311;
+  --bg-raised: #211f1c;
+  --border: #322f2a;
+  --text: #ede9e2;
+  --text-muted: #9a958b;
+  --accent: #c9c3b8;
+  --accent-hover: #ddd7cc;
+  --accent-soft: rgba(201, 195, 184, 0.12);
+  --on-accent: #1a1917;
 }
 [data-theme="coral"] {
-  --bg: #262624; --bg-sidebar: #1f1e1d; --bg-raised: #30302b; --border: #3a3833;
-  --text: #f1efe7; --text-muted: #908d85;
-  --accent: #d97757; --accent-hover: #e08862; --accent-soft: rgba(217, 119, 87, 0.14); --on-accent: #ffffff;
+  --bg: #262624;
+  --bg-sidebar: #1f1e1d;
+  --bg-raised: #30302b;
+  --border: #3a3833;
+  --text: #f1efe7;
+  --text-muted: #908d85;
+  --accent: #d97757;
+  --accent-hover: #e08862;
+  --accent-soft: rgba(217, 119, 87, 0.14);
+  --on-accent: #ffffff;
 }
 
 * {
@@ -1615,7 +1699,9 @@ textarea::placeholder {
   margin: 2px;
   border-radius: 50%;
   background: #8d8a83;
-  transition: transform 120ms ease, background 120ms linear;
+  transition:
+    transform 120ms ease,
+    background 120ms linear;
 }
 
 .door-toggle:checked {
@@ -2277,7 +2363,6 @@ textarea::placeholder {
   height: 18px;
 }
 
-
 .annotated-photo .message-photo {
   cursor: zoom-in;
 }
@@ -2311,7 +2396,6 @@ textarea::placeholder {
   max-height: 96vh;
   user-select: none;
 }
-
 
 /* The confirm card's editable marked photo: labels are buttons; the row under
    the photo edits the selected mark's name or adds a new one. Secondary text
@@ -2735,7 +2819,6 @@ textarea::placeholder {
   background: rgba(93, 160, 235, 0.16);
   color: #8fc0f0;
 }
-
 
 .thread-chip--working,
 .thread-chip--building {
@@ -3412,6 +3495,16 @@ select {
   gap: 8px;
 }
 
+/* Inside a chat header the title line takes the whole row. The header is a
+   shrink-to-fit flex row on a desktop, so without this the line was only as
+   wide as its words and the actions' margin-left: auto had no space to push
+   against — Review sat glued to the name instead of on the right edge
+   (Oskar, 2026-08-11). The phone header is a stretched grid column, which is
+   why it never showed the fault. */
+.ask-vaenyx-chat-header .focused-title-line {
+  flex: 1 1 auto;
+}
+
 .focused-title-line .thread-action-menu {
   flex: 0 0 auto;
 }
@@ -3920,8 +4013,8 @@ select {
 .markdown-body pre code {
   padding: 0;
   background: transparent;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-size: 13.5px;
   line-height: 1.6;
 }
@@ -7007,8 +7100,14 @@ select {
      headers own their top-left corner and have no floor to hide it against. */
   .portal-content .mobile-sidebar-toggle {
     position: fixed;
-    top: 10px;
+    /* Sized and placed to live INSIDE the header band (Oskar, 2026-08-11):
+       the band is 8px pad + 48px row + 10px pad ≈ 66px tall, so a 36px
+       button at top 15 sits centred in it instead of hanging out of its
+       bottom edge. */
+    top: 15px;
     left: 14px;
+    width: 36px;
+    height: 36px;
     margin-bottom: 0;
   }
 
@@ -7055,7 +7154,6 @@ select {
     width: min(100% - 28px, 1040px);
     padding-top: 14px;
   }
-
 
   .workspace-header {
     align-items: end;
@@ -7639,78 +7737,275 @@ select {
   gap: 12px;
   margin-top: 8px;
 }
-.flywheel-queue { margin-top: var(--space-4); border-top: 1px solid var(--border); padding-top: var(--space-3); }
-.flywheel-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
-.flywheel-item { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); border: 1px solid var(--border); border-radius: var(--r-sm); padding: var(--space-2) var(--space-3); }
-.flywheel-item p { margin: 0.15rem 0 0; font-size: var(--fs-sm); }
-.free-pick { margin: var(--space-2) 0 0; padding: var(--space-2) var(--space-3); border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: var(--fs-sm); line-height: 1.5; }
-.free-pick a { word-break: break-all; }
-.free-pick code { font-size: 0.95em; }
-.legal-multiline { white-space: pre-line; }
+.flywheel-queue {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+}
+.flywheel-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.flywheel-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: var(--space-2) var(--space-3);
+}
+.flywheel-item p {
+  margin: 0.15rem 0 0;
+  font-size: var(--fs-sm);
+}
+.free-pick {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.free-pick a {
+  word-break: break-all;
+}
+.free-pick code {
+  font-size: 0.95em;
+}
+.legal-multiline {
+  white-space: pre-line;
+}
 /* Free-option links: an affordance, not a beacon - the default link blue
    fights every theme this app has. */
-.free-pick a { color: var(--accent); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 2px; }
+.free-pick a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
 /* Engine rows: short select, status chip beside it instead of a line below. */
-.engine-row { display: flex; align-items: flex-end; gap: var(--space-3); flex-wrap: wrap; }
-.engine-row .chat-font-field { flex: 0 1 300px; min-width: 220px; margin: 0; }
-.engine-row .library-chip { margin-bottom: 8px; }
-.field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-@media (max-width: 560px) { .field-pair { grid-template-columns: 1fr; } }
-.slot-key-open { margin-top: var(--space-1); }
-.slot-key-add { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; margin-top: var(--space-2); }
-.slot-key-add .picker { flex: 0 1 170px; }
-.slot-key-add input { flex: 1 1 200px; }
+.engine-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.engine-row .chat-font-field {
+  flex: 0 1 300px;
+  min-width: 220px;
+  margin: 0;
+}
+.engine-row .library-chip {
+  margin-bottom: 8px;
+}
+.field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+@media (max-width: 560px) {
+  .field-pair {
+    grid-template-columns: 1fr;
+  }
+}
+.slot-key-open {
+  margin-top: var(--space-1);
+}
+.slot-key-add {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: var(--space-2);
+}
+.slot-key-add .picker {
+  flex: 0 1 170px;
+}
+.slot-key-add input {
+  flex: 1 1 200px;
+}
 /* The archive window: compact pickable rows. */
-.archive-modal { display: flex; flex-direction: column; gap: var(--space-2); min-width: min(420px, 80vw); }
-.archive-modal-toolbar { display: flex; justify-content: space-between; align-items: center; }
-.archive-modal-list { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; }
-.archive-row { display: flex; gap: var(--space-2); align-items: center; padding: 6px 8px; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; border-radius: var(--r-sm); font-size: var(--fs-md); }
-.archive-row:hover { background: var(--accent-soft); }
-.archive-row.picked { background: var(--accent-soft); }
-.archive-row-mark { width: 1em; color: var(--accent); flex: none; }
-.archive-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.archive-modal-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+.archive-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: min(420px, 80vw);
+}
+.archive-modal-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.archive-modal-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.archive-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 6px 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-md);
+}
+.archive-row:hover {
+  background: var(--accent-soft);
+}
+.archive-row.picked {
+  background: var(--accent-soft);
+}
+.archive-row-mark {
+  width: 1em;
+  color: var(--accent);
+  flex: none;
+}
+.archive-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archive-modal-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
 /* Key/token fields: masked by CSS, NOT type="password" - a model key is not a
    login, and password inputs make the browser offer to store them. (Chromium
    and WebKit mask via text-security; Firefox shows the text plainly.) */
-.key-input { -webkit-text-security: disc; }
+.key-input {
+  -webkit-text-security: disc;
+}
 /* Login-page model chips: readable, not a wall of identical pills. */
-.auth-model-button { color: var(--text); background: var(--accent-soft); }
-.auth-model-button:hover { border-color: var(--accent); }
-.auth-model-button.selected { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
-.free-refresh-row { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-2) 0; flex-wrap: wrap; }
+.auth-model-button {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+.auth-model-button:hover {
+  border-color: var(--accent);
+}
+.auth-model-button.selected {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+.free-refresh-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-2) 0;
+  flex-wrap: wrap;
+}
 /* The browser gesture that reloads the whole app is off; pulling down inside a
    conversation refreshes that conversation instead (App.tsx pull handlers). */
-html, body { overscroll-behavior-y: none; }
-.pull-refresh-hint { margin: 0 0 var(--space-2); text-align: center; font-size: var(--fs-sm); color: var(--text-muted); }
-.hard-refresh-button { display: none; }
-.sent-prompt { margin: 4px 0 0; font-size: var(--fs-sm); color: var(--text-muted); max-width: 480px; }
+html,
+body {
+  overscroll-behavior-y: none;
+}
+.pull-refresh-hint {
+  margin: 0 0 var(--space-2);
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.hard-refresh-button {
+  display: none;
+}
+.sent-prompt {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  max-width: 480px;
+}
 /* Live workings while a reply is being made - status line + the model's own
    thinking. Deliberately faint; both disappear when the reply lands. */
-.thinking-block { margin: 0 0 var(--space-3); opacity: 0.75; }
-.thinking-status { margin: 0 0 4px; font-size: var(--fs-sm); color: var(--text-muted); }
-.thinking-status::before { content: "\2699 "; }
-.thinking-text { margin: 0; font-size: var(--fs-sm); color: var(--text-faint); font-style: italic; white-space: pre-line; max-height: 9em; overflow: hidden; display: flex; flex-direction: column-reverse; }
+.thinking-block {
+  margin: 0 0 var(--space-3);
+  opacity: 0.75;
+}
+.thinking-status {
+  margin: 0 0 4px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.thinking-status::before {
+  content: "\2699 ";
+}
+.thinking-text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-faint);
+  font-style: italic;
+  white-space: pre-line;
+  max-height: 9em;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+}
 /* Splash held over a conversation whose first load is in flight: deep links go
    splash -> conversation, with no half-built frame between. */
-.chat-splash { position: absolute; inset: 0; z-index: 40; min-height: 0; background: var(--bg); }
+.chat-splash {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  min-height: 0;
+  background: var(--bg);
+}
 /* Sections with a visible rule between them (Oskar, 2026-07-27 - "看得很复杂"
    redesign); the Tools card is what still uses them. */
-.engine-section { border-top: 2px solid var(--border); margin-top: var(--space-5); padding-top: var(--space-4); }
-.engine-section > .settings-subhead { margin-top: 0; }
+.engine-section {
+  border-top: 2px solid var(--border);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+}
+.engine-section > .settings-subhead {
+  margin-top: 0;
+}
 /* The Sharing card's state line + control rows (one anatomy across states). */
-.sharing-status { margin: 0 0 var(--space-3); font-size: var(--fs-md); font-weight: 600; color: var(--accent); }
-.sharing-actions { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; margin: var(--space-2) 0 var(--space-3); }
-.sharing-mode-field { flex: 0 1 320px; }
+.sharing-status {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--accent);
+}
+.sharing-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin: var(--space-2) 0 var(--space-3);
+}
+.sharing-mode-field {
+  flex: 0 1 320px;
+}
 /* The real mark everywhere the styled letter V used to sit (Oskar,
    2026-07-27: swapping the asset alone changed nothing visible - the UI drew
    its own V). The circle chrome stays; the letter becomes the moon-embrace. */
-.brand-mark-img { padding: 5px; object-fit: contain; font-size: 0; }
+.brand-mark-img {
+  padding: 5px;
+  object-fit: contain;
+  font-size: 0;
+}
 /* While a run is in flight and the thread is short, the working indicator sits
    just above the composer instead of stranding mid-screen with a void below
    (Oskar, 2026-07-27). margin-top:auto takes the grid slack ABOVE it. */
-.ask-vaenyx-messages > .ask-vaenyx-message:last-child:has(.streaming-pending) { margin-top: auto; }
-.thinking-block { margin-top: auto; }
+.ask-vaenyx-messages > .ask-vaenyx-message:last-child:has(.streaming-pending) {
+  margin-top: auto;
+}
+.thinking-block {
+  margin-top: auto;
+}
 /* The unread breathing dot (Oskar, 2026-07-28): new activity in a thread this
    device has not opened since. Dies the moment the thread is opened. */
 /* Unread = the row's own status light breathing (Oskar, 2026-07-29). One dot,
@@ -8247,28 +8542,56 @@ html, body { overscroll-behavior-y: none; }
    and, more importantly, the chat is never unmounted to switch between them,
    so its scroll position and anything mid-stream survive being interrupted. */
 .inbox-tray {
-  /* ALWAYS IN FRONT (Oskar, 2026-08-09). It used to sit in the page flow near
-     the composer, so with the conversation scrolled anywhere else the Review
-     button seemed to do nothing — the panel had opened off-screen. Fixed now:
-     it hangs under the sticky header on a desktop, right where the button
-     that opened it lives, at any scroll depth. */
+  /* A RIGHT-HAND DRAWER, phone and desktop the same (Oskar, 2026-08-11): it
+     slides in over the conversation from the right, full height, and leaves
+     a thumb's width of the page showing on the left — that strip is the
+     dimmed backdrop below, and one tap on it puts the drawer away. Fixed, so
+     it is in front wherever the conversation is scrolled; the chat stays
+     mounted under it the whole time. */
   position: fixed;
   z-index: 30;
-  top: 64px;
-  right: 24px;
+  top: 0;
+  right: 0;
+  bottom: 0;
   overflow-y: auto;
   /* Contain is CORRECT here and wrong on the message list: this panel floats
      OVER the page, so its wheel events must never leak through to scroll the
      conversation behind it. */
   overscroll-behavior: contain;
-  width: min(430px, calc(100vw - 48px));
-  max-height: calc(100dvh - 88px);
+  width: min(440px, calc(100vw - 64px));
   padding: var(--space-3) var(--space-4);
-  border: 0.5px solid var(--border);
-  border-radius: 12px;
+  border: 0;
+  border-left: 0.5px solid var(--border);
+  border-radius: 14px 0 0 14px;
   margin: 0;
   background: var(--bg-raised);
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+  box-shadow: -18px 0 60px rgba(0, 0, 0, 0.42);
+  animation: inbox-tray-in 0.16s ease-out;
+}
+
+@keyframes inbox-tray-in {
+  from {
+    transform: translateX(28px);
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-tray {
+    animation: none;
+  }
+}
+
+/* The rest of the screen while the drawer is out: visibly dimmed, quietly a
+   button. Tapping anywhere on it closes the drawer. */
+.inbox-tray-backdrop {
+  position: fixed;
+  z-index: 29;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
 }
 
 .inbox-tray-head {
@@ -8276,21 +8599,6 @@ html, body { overscroll-behavior-y: none; }
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--space-2);
-}
-
-@media (max-width: 767px) {
-  /* Half the screen, over the bottom, dismissible — fixed for the same
-     reason as the desktop panel, and the conversation is still mounted
-     underneath it the whole time. */
-  .inbox-tray {
-    top: auto;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    width: auto;
-    max-height: 50vh;
-    border-radius: 12px 12px 0 0;
-  }
 }
 
 /* THE COMPOSER'S BOTTOM EDGE IS THE SCREEN'S BOTTOM EDGE (Oskar, 2026-08-09).
