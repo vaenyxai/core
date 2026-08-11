@@ -101,6 +101,9 @@ Read this inside the app: **Settings → Manual**.
 ## 3. Chatting
 
 - **Ask anything** — type in the box at the bottom and press **Send**.
+- **Enter makes a new line; Shift+Enter sends** — the reverse of most chat
+  apps, on purpose: long messages stopped firing off half-typed. On a phone,
+  the Send button is the send.
 - **Speak instead of typing** — the microphone button. Needs the **Hearing** row
   switched on with an engine (Settings → AI Settings → Capabilities).
 - **Hear the answer** — the ▶ button at the bottom-right of any reply. It reads
@@ -567,6 +570,9 @@ Read this inside the app: **Settings → Manual**.
   still showing becomes a single *Vaenyx (n)* entry with one item per line.
   Expand it to read them; tapping it opens Vaenyx. Dismiss it and the next
   result starts a fresh, full notification again.
+- **No banner while you are looking at it** — a device with Vaenyx open on
+  screen shows no notification at all; the result is already in front of you.
+  Devices where it is closed or backgrounded still get one.
 - **The console route** — `Vaenyx-Connect-Tailscale.cmd` in the Vaenyx folder
   drives the same Tailscale commands by hand. It uses the client installed
   under Program Files.

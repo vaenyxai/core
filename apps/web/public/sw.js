@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v6";
+const CACHE_NAME = "vaenyx-shell-v7";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -16,7 +16,9 @@ self.addEventListener("activate", (event) => {
       // Drop any cache from a previous build so an old shell can't linger.
       const keys = await caches.keys();
       await Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)),
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key)),
       );
       await self.clients.claim();
     })(),
@@ -59,6 +61,18 @@ function digestLine(item) {
 }
 
 async function foldIntoTray(data) {
+  // The app is on this screen RIGHT NOW (Oskar, 2026-08-12): the result is
+  // already in front of the Owner, and a banner over the very app it is
+  // about is noise. The server's presence check covers the common case
+  // across devices; this covers THIS device, for every push category.
+  // Skipping while a visible window exists is exactly what the browsers'
+  // notification quota permits.
+  const windows = await self.clients.matchAll({
+    type: "window",
+    includeUncontrolled: true,
+  });
+  if (windows.some((client) => client.visibilityState === "visible")) return;
+
   const incoming = {
     title: data.title || "Vaenyx",
     body: data.body || "",
@@ -169,7 +183,8 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil(
     (async () => {
-      const url = (event.notification.data && event.notification.data.url) || "/";
+      const url =
+        (event.notification.data && event.notification.data.url) || "/";
       const windows = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,

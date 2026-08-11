@@ -517,9 +517,13 @@ const THINKING_PHASES = [
 // as they were: the words remain the accessible status, the orb is decoration
 // over them and says so with aria-hidden.
 function ThinkingIndicator({
+  label = null,
   status = null,
   thinking = false,
 }: {
+  /** The real status ("Generating the picture…") when one exists; the
+   *  rotating phases only fill in while nothing specific is known. */
+  label?: string | null;
   status?: string | null;
   thinking?: boolean;
 }): ReactNode {
@@ -539,7 +543,9 @@ function ThinkingIndicator({
   return (
     <p aria-live="polite" className="streaming-pending">
       <StatusOrb code={status} thinking={thinking} />
-      <span className="thinking-label">{THINKING_PHASES[phase]}…</span>
+      <span className="thinking-label">
+        {label ?? `${THINKING_PHASES[phase]}…`}
+      </span>
     </p>
   );
 }
@@ -2198,14 +2204,15 @@ function Composer({
         <textarea
           maxLength={10_000}
           onChange={(event) => onValueChange(event.target.value)}
-          // Enter sends, Shift+Enter makes a new line — the convention every
-          // chat app uses. IME composition (Chinese/Japanese input) must be
-          // ignored: mid-composition Enter picks a candidate word and would
-          // otherwise fire off a half-typed message.
+          // Enter makes a new line; Shift+Enter sends (Oskar, 2026-08-12 —
+          // deliberately the reverse of the common convention: he writes
+          // multi-line messages and Enter kept firing them off half-typed).
+          // IME composition (Chinese/Japanese input) is still ignored:
+          // mid-composition Enter only picks a candidate word.
           onKeyDown={(event) => {
             if (
               event.key === "Enter" &&
-              !event.shiftKey &&
+              event.shiftKey &&
               !event.nativeEvent.isComposing
             ) {
               event.preventDefault();
@@ -8996,6 +9003,7 @@ function AskVaenyxPanel({
                       <strong>Vaenyx</strong>
                     </div>
                     <ThinkingIndicator
+                      label={streamStatus ? statusLabel(streamStatus) : null}
                       status={streamStatus}
                       thinking={Boolean(streamThinking)}
                     />
@@ -9074,6 +9082,7 @@ function AskVaenyxPanel({
                   <MarkdownMessage content={message.content} />
                 ) : (
                   <ThinkingIndicator
+                    label={streamStatus ? statusLabel(streamStatus) : null}
                     status={streamStatus}
                     thinking={Boolean(streamThinking)}
                   />
@@ -9120,16 +9129,32 @@ function AskVaenyxPanel({
               </article>
             ))
           )}
-          {/* The live workings: status + thinking while the reply is made,
-              gone the moment it lands. */}
-          {sending && (streamStatus || streamThinking) ? (
+          {/* The live workings, ONE indicator (Oskar, 2026-08-12: a text
+              marker used to appear first and the orb second). The orb carries
+              the whole wait: before the reply's message row exists — the
+              working-out-what-you-asked moment — this stand-in article holds
+              it, and the real status text rides beside it as the orb's label.
+              The moment the empty assistant message lands, ITS orb takes over
+              and this stand-in leaves. The model's own thinking stream still
+              prints underneath. */}
+          {sending &&
+          !messages.some(
+            (message) => message.role !== "owner" && !message.content,
+          ) ? (
+            <article className="ask-vaenyx-message assistant completed">
+              <div className="ask-vaenyx-message-head">
+                <strong>Vaenyx</strong>
+              </div>
+              <ThinkingIndicator
+                label={streamStatus ? statusLabel(streamStatus) : null}
+                status={streamStatus}
+                thinking={Boolean(streamThinking)}
+              />
+            </article>
+          ) : null}
+          {sending && streamThinking ? (
             <div className="thinking-block">
-              {streamStatus ? (
-                <p className="thinking-status">{statusLabel(streamStatus)}</p>
-              ) : null}
-              {streamThinking ? (
-                <p className="thinking-text">{streamThinking}</p>
-              ) : null}
+              <p className="thinking-text">{streamThinking}</p>
             </div>
           ) : null}
           <div className="chat-end-anchor" ref={chatEndRef} />
@@ -9667,6 +9692,7 @@ function AskVaenyxPanel({
                     <MarkdownMessage content={message.content} />
                   ) : (
                     <ThinkingIndicator
+                      label={streamStatus ? statusLabel(streamStatus) : null}
                       status={streamStatus}
                       thinking={Boolean(streamThinking)}
                     />
@@ -9724,16 +9750,27 @@ function AskVaenyxPanel({
                 ) : null}
               </article>
             ) : null}
-            {/* Chatting in the task thread gets the same watch-it-work block
-                as the plain chat. */}
-            {sendingTaskMessage && (streamStatus || streamThinking) ? (
+            {/* Chatting in the task thread gets the same one-indicator
+                treatment as the plain chat: the orb from the first moment,
+                real status as its label, thinking underneath. */}
+            {sendingTaskMessage &&
+            !visibleTaskMessages.some(
+              (message) => message.role !== "owner" && !message.content,
+            ) ? (
+              <article className="ask-vaenyx-message assistant completed">
+                <div className="ask-vaenyx-message-head">
+                  <strong>{agentName}</strong>
+                </div>
+                <ThinkingIndicator
+                  label={streamStatus ? statusLabel(streamStatus) : null}
+                  status={streamStatus}
+                  thinking={Boolean(streamThinking)}
+                />
+              </article>
+            ) : null}
+            {sendingTaskMessage && streamThinking ? (
               <div className="thinking-block">
-                {streamStatus ? (
-                  <p className="thinking-status">{statusLabel(streamStatus)}</p>
-                ) : null}
-                {streamThinking ? (
-                  <p className="thinking-text">{streamThinking}</p>
-                ) : null}
+                <p className="thinking-text">{streamThinking}</p>
               </div>
             ) : null}
             <div className="chat-end-anchor" ref={taskEndRef} />

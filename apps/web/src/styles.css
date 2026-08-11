@@ -7939,19 +7939,13 @@ body {
   color: var(--text-muted);
   max-width: 480px;
 }
-/* Live workings while a reply is being made - status line + the model's own
-   thinking. Deliberately faint; both disappear when the reply lands. */
+/* The model's own live thinking while a reply is being made. Deliberately
+   faint; gone when the reply lands. The status line that used to sit above
+   it (with a ⚙ before the text) is gone — the orb is the one indicator and
+   the status text rides beside it as the orb's label (Oskar, 2026-08-12). */
 .thinking-block {
   margin: 0 0 var(--space-3);
   opacity: 0.75;
-}
-.thinking-status {
-  margin: 0 0 4px;
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-}
-.thinking-status::before {
-  content: "\2699 ";
 }
 .thinking-text {
   margin: 0;
