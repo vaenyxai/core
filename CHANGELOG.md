@@ -4,6 +4,30 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.2.0 — 2026-08-11
+
+**Scrolling feels native again.** The page itself is the scroller now — the
+way phones expect — instead of a frame with a scrolling box inside it. Flick,
+momentum and the disappearing address bar all behave, the top and bottom land
+exactly on the screen edges with nothing extra to pull into view, and the
+menu button floats in its corner instead of reserving a row above every chat.
+
+**Review, within reach.** The Review tag sits on the title row beside the
+conversation's name, and the panel it opens now appears in front — wherever
+the conversation happens to be scrolled — under the header on a computer,
+up from the bottom on a phone.
+
+**Several results, one notification.** A result arriving while another is
+still showing folds into a single *Vaenyx (n)* entry, one item per line —
+expand it to read them, tap it to open Vaenyx. Dismiss it and the next result
+is a full single notification again.
+
+**A calmer first install screen.** The choose-what-to-download list is five
+plain sentences in a larger type, each saying in brackets what it installs —
+no sizes, no small print, no download total. The free-disk-space line at the
+bottom stays, and the space checks still use the real numbers behind the
+scenes.
+
 ## v0.4.1.0 — 2026-08-09
 
 **Pick what to download at install time.** The installer asks which optional
