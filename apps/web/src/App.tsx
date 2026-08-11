@@ -288,11 +288,7 @@ import {
   costBadge,
 } from "./provider-facts.js";
 import { CAPABILITIES } from "./capabilities.js";
-import {
-  getCodexAuthCopy,
-  getProviderConnectionCopy,
-  getProviderConnectionDetail,
-} from "./status-copy.js";
+import { getCodexAuthCopy } from "./status-copy.js";
 
 type Screen =
   | "ask-vaenyx"
@@ -13604,9 +13600,27 @@ function ModelsPanel({
     );
   }
 
-  const connectedProviders = providers.filter((provider) => provider.connected);
+  // The two subscription channels are the front door (Oskar, 2026-08-11):
+  // always on the page, connected or signed out alike, OpenAI first and
+  // Anthropic second — a fresh install opens on exactly the two things a
+  // household most likely already pays for, each one click from working.
+  // Everything else earns its card by being connected, or waits in Add a
+  // Model.
+  const FEATURED = ["codex", "claude-sub"];
+  const rankOf = (provider: ModelProviderInfo) => {
+    const index = FEATURED.indexOf(provider.id);
+    return index === -1 ? FEATURED.length : index;
+  };
+  const cardProviders = providers
+    .filter((provider) => provider.connected || FEATURED.includes(provider.id))
+    .sort((left, right) => rankOf(left) - rankOf(right));
+  // A featured channel that is not signed in keeps its sign-in in sight
+  // instead of behind the expander tap.
+  const bodyOpen = (provider: ModelProviderInfo) =>
+    editingId === provider.id ||
+    (FEATURED.includes(provider.id) && !provider.healthy);
   const availableProviders = providers.filter(
-    (provider) => !provider.connected,
+    (provider) => !provider.connected && !FEATURED.includes(provider.id),
   );
   const addTarget =
     availableProviders.find((provider) => provider.id === addTargetId) ?? null;
@@ -13631,7 +13645,7 @@ function ModelsPanel({
       </details>
       {error ? <p className="form-error">{error}</p> : null}
       <div className="model-cards">
-        {connectedProviders.map((provider) => (
+        {cardProviders.map((provider) => (
           <div
             className={
               connectTarget === provider.id
@@ -13650,7 +13664,11 @@ function ModelsPanel({
                     : "library-chip"
                 }
               >
-                {provider.healthy ? "Connected" : "Needs Attention"}
+                {provider.healthy
+                  ? "Connected"
+                  : provider.connected
+                    ? "Needs Attention"
+                    : "Not Connected"}
               </span>
               {provider.isDefault ? (
                 <span className="library-chip chip-installed">Default</span>
@@ -13666,145 +13684,168 @@ function ModelsPanel({
                 is one line — name, state, what it costs, what it can do —
                 because the list is read to answer "what have I got", and the
                 detail is only ever wanted about ONE of them (Oskar,
-                2026-08-07: 字还是太多太大,一眼扫完). */}
-            <button
-              aria-expanded={editingId === provider.id}
-              className="model-card-summary"
-              onClick={() =>
-                setEditingId((current) =>
-                  current === provider.id ? null : provider.id,
-                )
-              }
-              type="button"
-            >
-              <span className="model-card-does">
-                {capabilitySummary(provider, lang)}
-              </span>
-              <LineIcon>
-                <path d="m7 10 5 5 5-5" />
-              </LineIcon>
-            </button>
-            {editingId === provider.id ? (
+                2026-08-07: 字还是太多太大,一眼扫完). Two exceptions stand open
+                on their own: an unconnected featured card IS its connect
+                form, and a featured channel that is signed out keeps its
+                sign-in in sight — the fresh install reads OpenAI, Anthropic,
+                each one click from working (Oskar, 2026-08-11). */}
+            {!provider.connected ? (
+              renderConnectForm(provider)
+            ) : (
               <>
-                {PROVIDER_COST_FACTS[provider.id]?.eligibility ? (
-                  <small className="model-card-model">
-                    {
-                      PROVIDER_COST_FACTS[provider.id]?.eligibility?.[
-                        lang === "zh" ? "zh" : "en"
-                      ]
-                    }
-                  </small>
-                ) : null}
-                {provider.model ? (
-                  <small className="model-card-model">{provider.model}</small>
-                ) : null}
-                {/* The provider's own data conditions, copied from its terms and
-                dated — the label beside the choice, never our judgment. */}
-                {(() => {
-                  const facts = PROVIDER_DATA_FACTS[provider.id];
-                  if (!facts) return null;
-                  return (
-                    <small className="model-data-facts">
-                      {facts.en}{" "}
-                      <a
-                        href={facts.sourceUrl}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        source, {facts.checkedAt}
-                      </a>
-                    </small>
-                  );
-                })()}
-                {!provider.healthy ? (
-                  <small className="model-card-model">{provider.detail}</small>
-                ) : null}
-                {provider.kind === "cli-login" ? (
+                <button
+                  aria-expanded={bodyOpen(provider)}
+                  className="model-card-summary"
+                  onClick={() =>
+                    setEditingId((current) =>
+                      current === provider.id ? null : provider.id,
+                    )
+                  }
+                  type="button"
+                >
+                  <span className="model-card-does">
+                    {capabilitySummary(provider, lang)}
+                  </span>
+                  <LineIcon>
+                    <path d="m7 10 5 5 5-5" />
+                  </LineIcon>
+                </button>
+                {bodyOpen(provider) ? (
                   <>
+                    {PROVIDER_COST_FACTS[provider.id]?.eligibility ? (
+                      <small className="model-card-model">
+                        {
+                          PROVIDER_COST_FACTS[provider.id]?.eligibility?.[
+                            lang === "zh" ? "zh" : "en"
+                          ]
+                        }
+                      </small>
+                    ) : null}
+                    {provider.model ? (
+                      <small className="model-card-model">
+                        {provider.model}
+                      </small>
+                    ) : null}
+                    {/* The provider's own data conditions, copied from its terms and
+                dated — the label beside the choice, never our judgment. */}
+                    {(() => {
+                      const facts = PROVIDER_DATA_FACTS[provider.id];
+                      if (!facts) return null;
+                      return (
+                        <small className="model-data-facts">
+                          {facts.en}{" "}
+                          <a
+                            href={facts.sourceUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            source, {facts.checkedAt}
+                          </a>
+                        </small>
+                      );
+                    })()}
                     {!provider.healthy ? (
-                      <div className="model-card-actions">
+                      <small className="model-card-model">
+                        {provider.detail}
+                      </small>
+                    ) : null}
+                    {provider.kind === "cli-login" ? (
+                      <>
+                        {!provider.healthy ? (
+                          <>
+                            <div className="model-card-actions">
+                              <button
+                                className="primary-button"
+                                disabled={codexWaiting}
+                                onClick={() => void signInCodex()}
+                                type="button"
+                              >
+                                {codexWaiting
+                                  ? codexLoginUrl
+                                    ? "Waiting For Sign-In..."
+                                    : "Preparing The ChatGPT Sign-In (About A Minute)..."
+                                  : "Sign In With ChatGPT"}
+                              </button>
+                            </div>
+                            {/* F1 (copy pack): a cloud-provider connect surface
+                            carries the third-party notice. This sign-in IS
+                            the Codex channel's connect surface now that the
+                            old Provider Auth card is gone. */}
+                            <p className="context-disclaimer">
+                              {t("legal.notice.modelConnect.cloud")}
+                            </p>
+                          </>
+                        ) : null}
+                        {codexWaiting && codexLoginUrl ? (
+                          <a
+                            className="model-key-link"
+                            href={codexLoginUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            No window? Open the sign-in page ↗
+                          </a>
+                        ) : null}
+                        {codexWaiting ? (
+                          <p className="library-note">
+                            Finish the ChatGPT login in the browser window that
+                            just opened — this card updates by itself.
+                          </p>
+                        ) : null}
+                      </>
+                    ) : null}
+                    <div className="model-card-actions">
+                      {!provider.isDefault ? (
                         <button
-                          className="primary-button"
-                          disabled={codexWaiting}
-                          onClick={() => void signInCodex()}
+                          className="secondary-button"
+                          disabled={busy === provider.id}
+                          onClick={() => void makeDefault(provider)}
                           type="button"
                         >
-                          {codexWaiting
-                            ? codexLoginUrl
-                              ? "Waiting For Sign-In..."
-                              : "Preparing The ChatGPT Sign-In (About A Minute)..."
-                            : "Sign In With ChatGPT"}
+                          Set As Default
                         </button>
-                      </div>
-                    ) : null}
-                    {codexWaiting && codexLoginUrl ? (
-                      <a
-                        className="model-key-link"
-                        href={codexLoginUrl}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        No window? Open the sign-in page ↗
-                      </a>
-                    ) : null}
-                    {codexWaiting ? (
-                      <p className="library-note">
-                        Finish the ChatGPT login in the browser window that just
-                        opened — this card updates by itself.
-                      </p>
-                    ) : null}
+                      ) : null}
+                      {provider.kind !== "cli-login" ? (
+                        <>
+                          {confirmDisconnect === provider.id ? (
+                            <>
+                              <button
+                                className="text-button danger"
+                                disabled={busy === provider.id}
+                                onClick={() => {
+                                  setConfirmDisconnect(null);
+                                  void disconnect(provider);
+                                }}
+                                type="button"
+                              >
+                                Really Disconnect
+                              </button>
+                              <button
+                                className="text-button"
+                                onClick={() => setConfirmDisconnect(null)}
+                                type="button"
+                              >
+                                Keep
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              className="text-button"
+                              disabled={busy === provider.id}
+                              onClick={() => setConfirmDisconnect(provider.id)}
+                              type="button"
+                            >
+                              Disconnect
+                            </button>
+                          )}
+                        </>
+                      ) : null}
+                    </div>
+                    {renderConnectForm(provider)}
                   </>
                 ) : null}
-                <div className="model-card-actions">
-                  {!provider.isDefault ? (
-                    <button
-                      className="secondary-button"
-                      disabled={busy === provider.id}
-                      onClick={() => void makeDefault(provider)}
-                      type="button"
-                    >
-                      Set As Default
-                    </button>
-                  ) : null}
-                  {provider.kind !== "cli-login" ? (
-                    <>
-                      {confirmDisconnect === provider.id ? (
-                        <>
-                          <button
-                            className="text-button danger"
-                            disabled={busy === provider.id}
-                            onClick={() => {
-                              setConfirmDisconnect(null);
-                              void disconnect(provider);
-                            }}
-                            type="button"
-                          >
-                            Really Disconnect
-                          </button>
-                          <button
-                            className="text-button"
-                            onClick={() => setConfirmDisconnect(null)}
-                            type="button"
-                          >
-                            Keep
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="text-button"
-                          disabled={busy === provider.id}
-                          onClick={() => setConfirmDisconnect(provider.id)}
-                          type="button"
-                        >
-                          Disconnect
-                        </button>
-                      )}
-                    </>
-                  ) : null}
-                </div>
-                {renderConnectForm(provider)}
               </>
-            ) : null}
+            )}
           </div>
         ))}
       </div>
@@ -15070,8 +15111,6 @@ function SettingsPanel({
     }
   }
 
-  const providerConnected = settings.providerConnection === "chatgpt-connected";
-
   // Read once when Settings opens, so a download already running elsewhere is
   // picked up rather than discovered by accident.
   useEffect(() => {
@@ -15606,30 +15645,30 @@ function SettingsPanel({
         </section>
       ) : null}
       {activeTab === "ai" ? (
-        <section className="settings-card">
-          <p className="eyebrow">Provider Auth</p>
-          <h2>OpenAI / Codex connection</h2>
-          <div
-            className={`provider-status-card ${
-              providerConnected ? "connected" : "needs-attention"
-            }`}
-          >
-            <span>{providerConnected ? "Connected" : "Needs setup"}</span>
-            <strong>
-              {getProviderConnectionCopy(settings.providerConnection)}
-            </strong>
-            <p>{getProviderConnectionDetail(settings.providerConnection)}</p>
-          </div>
-          {/* F1 (copy pack): the Codex CLI channel is a cloud-provider
-            connection — the third-party notice renders on its connect surface
-            (TPN n.3 acknowledgement surface). */}
-          <p className="context-disclaimer">
-            {t("legal.notice.modelConnect.cloud")}
-          </p>
-          <p className="context-disclaimer">{t("disclaimer.remote")}</p>
+        <CapabilitiesPanel
+          localTts={localTts}
+          onLocalTtsChanged={setLocalTts}
+          refreshKey={modelsChanged}
+        />
+      ) : null}
+      {activeTab === "ai" ? (
+        <ModelsPanel
+          localTts={localTts}
+          onConnectionsChanged={() => setModelsChanged((count) => count + 1)}
+          onLocalTtsChanged={setLocalTts}
+        />
+      ) : null}
+      {activeTab === "ai" ? <SubscriptionDoorPanel /> : null}
+      {/* The "OpenAI / Codex connection" card is gone (Oskar, 2026-08-11):
+          connecting lives in Models above, where OpenAI and Anthropic lead.
+          What the card still earned its keep with — the connection tests and
+          the facts list — is this Diagnostics card, last on the tab. */}
+      {activeTab === "ai" ? (
+        <section className="settings-card" id="ai-diagnostics">
+          <p className="eyebrow">Advanced</p>
+          <h2>Diagnostics</h2>
           <details className="advanced-details">
-            <summary>Advanced</summary>
-            <h3 className="settings-subhead">Diagnostics</h3>
+            <summary>Connection tests and details</summary>
             <div className="diagnostics-stack">
               <div className="connection-test-panel">
                 <div>
@@ -15765,21 +15804,6 @@ function SettingsPanel({
           </details>
         </section>
       ) : null}
-      {activeTab === "ai" ? (
-        <CapabilitiesPanel
-          localTts={localTts}
-          onLocalTtsChanged={setLocalTts}
-          refreshKey={modelsChanged}
-        />
-      ) : null}
-      {activeTab === "ai" ? (
-        <ModelsPanel
-          localTts={localTts}
-          onConnectionsChanged={() => setModelsChanged((count) => count + 1)}
-          onLocalTtsChanged={setLocalTts}
-        />
-      ) : null}
-      {activeTab === "ai" ? <SubscriptionDoorPanel /> : null}
       {activeTab === "tools" ? <ToolsPanel /> : null}
       {activeTab === "notifications" ? <NotificationsPanel /> : null}
       {activeTab === "backup" ? <BackupPanel /> : null}

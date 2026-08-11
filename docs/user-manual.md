@@ -349,9 +349,10 @@ Read this inside the app: **Settings → Manual**.
   when, because free tiers change constantly and models state them wrongly with
   confidence. Check the provider's own site before relying on it.
 - **Two groups, never mixed**
-  - *Use a subscription you already have* — ChatGPT (Codex CLI) and Claude. Sign
-    in once, inside the app. These are **not** free credit; they are your own
-    paid subscriptions. Both need a component that is **not** included in the
+  - *Use a subscription you already have* — ChatGPT (Codex CLI) and Claude.
+    They lead the Models card, OpenAI first and Anthropic second, connected or
+    not — each with its sign-in right on the card. Sign in once, inside the
+    app. These are **not** free credit; they are your own paid subscriptions. Both need a component that is **not** included in the
     download, so the first time you press either sign-in button it fetches one
     first — a minute or so for ChatGPT, about 250 MB for Claude. The installer
     also offers both as a tick, which fetches them during setup instead of
