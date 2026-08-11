@@ -12,9 +12,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import {
+  applyCondensedEvidence,
   applyTraitMergeGroups,
+  dominantLanguage,
   listMergeableTraits,
+  listOverlongEvidence,
   mergeDuplicateFacts,
+  parseCondensedPoints,
   parseTraitMergeGroups,
   type MergeableTrait,
 } from "../src/modules/core/vaenyx-me-merge.js";
@@ -92,8 +96,21 @@ describe("reading the model's grouping without trusting it", () => {
       pool,
     );
     expect(groups).toEqual([
-      { ids: ["a", "b"], title: "Merged", summary: "One sentence." },
+      {
+        ids: ["a", "b"],
+        title: "Merged",
+        summary: "One sentence.",
+        evidence: [],
+      },
     ]);
+  });
+
+  it("sanitises evidence points: bullets stripped, duplicates dropped, four at most", () => {
+    const groups = parseTraitMergeGroups(
+      '{"groups":[{"ids":["a","b"],"title":"M","summary":"S","evidence":["- one","one","• two",3,"three","four","five"]}]}',
+      pool,
+    );
+    expect(groups[0]?.evidence).toEqual(["one", "two", "three", "four"]);
   });
 
   it("🔴 refuses a group that mixes categories", () => {
@@ -128,31 +145,55 @@ describe("reading the model's grouping without trusting it", () => {
 });
 
 describe("folding a group into one proposal", () => {
-  it("keeps every member's evidence verbatim and retires the members", () => {
-    // The quotes are the Owner's own words — the one part of a proposal that
-    // must never be paraphrased, because they are the reason to believe it.
+  it("stores the model's deduped points, one '- ' line each", () => {
     const database = testDatabase();
     seed(database, "a");
     seed(database, "b");
-    const traits = listMergeableTraits(database, null);
     const merged = applyTraitMergeGroups(
       database,
-      [{ ids: ["a", "b"], title: "Merged", summary: "One." }],
-      traits,
+      [
+        {
+          ids: ["a", "b"],
+          title: "Merged",
+          summary: "One.",
+          evidence: ["short point", "other point"],
+        },
+      ],
+      listMergeableTraits(database, null),
       null,
       "owner-1",
     );
     expect(merged).toBe(1);
-
     const pending = database.sqlite
       .prepare(
-        `SELECT id, proposed_evidence FROM vaenyx_me_candidates
+        `SELECT proposed_evidence FROM vaenyx_me_candidates
           WHERE status = 'pending_review'`,
       )
-      .all() as { id: string; proposed_evidence: string }[];
-    expect(pending).toHaveLength(1);
-    expect(pending[0]?.proposed_evidence).toContain("evidence a");
-    expect(pending[0]?.proposed_evidence).toContain("evidence b");
+      .get() as { proposed_evidence: string };
+    expect(pending.proposed_evidence).toBe("- short point\n- other point");
+  });
+
+  it("falls back to the members' own lines, deduped, when the model gave none", () => {
+    // A merge must never fail for want of polish — and never repeat itself:
+    // repetition is the very thing the merge exists to remove.
+    const database = testDatabase();
+    seed(database, "a");
+    seed(database, "b");
+    const traits = listMergeableTraits(database, null);
+    applyTraitMergeGroups(
+      database,
+      [{ ids: ["a", "b"], title: "Merged", summary: "One.", evidence: [] }],
+      traits,
+      null,
+      "owner-1",
+    );
+    const pending = database.sqlite
+      .prepare(
+        `SELECT proposed_evidence FROM vaenyx_me_candidates
+          WHERE status = 'pending_review'`,
+      )
+      .get() as { proposed_evidence: string };
+    expect(pending.proposed_evidence).toBe("- evidence a\n- evidence b");
   });
 
   it("🔴 retires members by status, never by DELETE", () => {
@@ -164,15 +205,13 @@ describe("folding a group into one proposal", () => {
     seed(database, "b");
     applyTraitMergeGroups(
       database,
-      [{ ids: ["a", "b"], title: "M", summary: "S" }],
+      [{ ids: ["a", "b"], title: "M", summary: "S", evidence: [] }],
       listMergeableTraits(database, null),
       null,
       "owner-1",
     );
     const rows = database.sqlite
-      .prepare(
-        `SELECT status FROM vaenyx_me_candidates WHERE id IN ('a','b')`,
-      )
+      .prepare(`SELECT status FROM vaenyx_me_candidates WHERE id IN ('a','b')`)
       .all() as { status: string }[];
     expect(rows.map((row) => row.status)).toEqual(["deleted", "deleted"]);
   });
@@ -208,5 +247,54 @@ describe("fact duplicates, which need no model", () => {
     seed(database, "a", { slot: "home.address", value: "12 X St" });
     seed(database, "b", { slot: "home.address", value: "9 Y Rd" });
     expect(mergeDuplicateFacts(database, null)).toBe(0);
+  });
+});
+
+describe("evidence hygiene: walls become points", () => {
+  it("picks only walls: long blobs and many-lined evidence, never short rows", () => {
+    const database = testDatabase();
+    seed(database, "wall");
+    database.sqlite
+      .prepare(
+        `UPDATE vaenyx_me_candidates SET proposed_evidence = ? WHERE id = ?`,
+      )
+      .run(`They said the same thing five ways. `.repeat(12), "wall");
+    seed(database, "fine");
+    const walls = listOverlongEvidence(database, null);
+    expect(walls.map((row) => row.id)).toEqual(["wall"]);
+  });
+
+  it("writes points back one '- ' line each, and refuses an empty answer", () => {
+    const database = testDatabase();
+    seed(database, "a");
+    expect(applyCondensedEvidence(database, "a", [])).toBe(false);
+    expect(applyCondensedEvidence(database, "a", ["one", "two"])).toBe(true);
+    const row = database.sqlite
+      .prepare(
+        `SELECT proposed_evidence FROM vaenyx_me_candidates WHERE id = 'a'`,
+      )
+      .get() as { proposed_evidence: string };
+    expect(row.proposed_evidence).toBe("- one\n- two");
+  });
+
+  it("reads the model's points with the same refusal posture as groups", () => {
+    expect(parseCondensedPoints('{"points":["- a","a","b"]}')).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(parseCondensedPoints("no json")).toEqual([]);
+    expect(parseCondensedPoints('{"points":"wall"}')).toEqual([]);
+  });
+
+  it("🔴 hears Chinese through an English wrapper", () => {
+    // Legacy evidence describes Chinese chats in English with the Owner's own
+    // words quoted inside — those quoted characters decide the language, so
+    // the condensed points come back in the language of the conversation.
+    expect(
+      dominantLanguage(
+        "The Owner asked in Chinese: 该请求本身使用中文,并明确要求用中文简单介绍。",
+      ),
+    ).toBe("zh");
+    expect(dominantLanguage("Short answers, always in English.")).toBe("en");
   });
 });

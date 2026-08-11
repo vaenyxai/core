@@ -38,6 +38,37 @@ export interface TraitMergeGroup {
   ids: string[];
   title: string;
   summary: string;
+  // Deduplicated short points; empty when the model offered none (the apply
+  // step then falls back to the members' own lines, exact-deduped).
+  evidence: string[];
+}
+
+// "The language of the conversation it came from" (Oskar, 2026-08-11): a
+// Chinese chat's proposal reads in Chinese, an English chat's in English,
+// never a mixture. Detection is a character count, not a model call — trait
+// text written ABOUT a Chinese chat often arrives in English with the Owner's
+// own words quoted inside, and those quoted characters are the giveaway.
+export function dominantLanguage(text: string): "zh" | "en" {
+  const cjk = text.match(/[㐀-䶿一-鿿]/g)?.length ?? 0;
+  return cjk >= 6 || cjk / Math.max(text.length, 1) > 0.08 ? "zh" : "en";
+}
+
+// One sanitiser for every list of points the model hands back, wherever it
+// came from: strings only, bullets stripped (the dash is added at render
+// time), exact duplicates dropped, at most four, none over 200 characters.
+function sanitisePoints(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const points: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const point = entry
+      .replace(/^[-•*]\s*/, "")
+      .trim()
+      .slice(0, 200);
+    if (point && !points.includes(point)) points.push(point);
+    if (points.length === 4) break;
+  }
+  return points;
 }
 
 /**
@@ -90,7 +121,12 @@ export function parseTraitMergeGroups(
         : (byId.get(unique[0] as string)?.summary ?? "");
     if (!title || !summary) continue;
     for (const id of unique) claimed.add(id);
-    groups.push({ ids: unique, title, summary });
+    groups.push({
+      ids: unique,
+      title,
+      summary,
+      evidence: sanitisePoints(record.evidence),
+    });
   }
   return groups;
 }
@@ -101,7 +137,9 @@ export function traitMergePrompt(candidates: MergeableTrait[]): string {
     "These are separate pending observations about the same person. Some describe the same underlying thing in different words.",
     "Group ONLY the ones that clearly describe the same thing. Most groups should be no group at all.",
     "For each group, write one merged title and one merged summary that covers all of them.",
-    'Reply with ONLY JSON: {"groups":[{"ids":["<id>","<id>"],"title":"<merged>","summary":"<merged>"}]}',
+    'Also boil each group\'s evidence down to 1-4 SHORT bullet points ("evidence"): only observations that differ from each other, never the same thing twice in different words.',
+    "Write each group's title, summary and evidence in the language of the conversations the evidence quotes — Chinese quotes mean Chinese, English means English. Never mix languages in one group.",
+    'Reply with ONLY JSON: {"groups":[{"ids":["<id>","<id>"],"title":"<merged>","summary":"<merged>","evidence":["<point>"]}]}',
     'No duplicates found? Reply with exactly: {"groups":[]}',
     "",
     ...candidates.map(
@@ -114,9 +152,12 @@ export function traitMergePrompt(candidates: MergeableTrait[]): string {
 /**
  * Fold each group into one new pending proposal and retire its members.
  *
- * The merged row's evidence is the members' evidence joined verbatim — the
- * quotes are the part of a proposal that cannot be paraphrased, because they
- * are the Owner's own words and the reason to believe the claim at all.
+ * The merged row's evidence is SHORT POINTS, not the members' text joined
+ * verbatim (Oskar, 2026-08-11: the verbatim join made a wall of near-repeats
+ * nobody could read). Trait evidence is model wording to begin with — the
+ * Owner's actual verbatim sentences live on FACT rows, which never pass
+ * through here — so condensing loses nothing that was ever sacred. Stored one
+ * point per line with a leading "- "; the ledger renders the lines as a list.
  */
 export function applyTraitMergeGroups(
   database: DatabaseHandle,
@@ -132,9 +173,18 @@ export function applyTraitMergeGroups(
       .map((id) => byId.get(id))
       .filter((entry): entry is MergeableTrait => entry !== undefined);
     if (members.length < 2) continue;
-    const evidence = members
-      .map((entry) => entry.evidence.trim())
-      .filter(Boolean)
+    // The model's deduped points when it gave any; otherwise the members'
+    // own lines, exact-deduped and capped, so a merge never fails for want
+    // of polish.
+    const points = group.evidence.length
+      ? group.evidence
+      : [
+          ...new Set(
+            members.map((entry) => entry.evidence.trim()).filter(Boolean),
+          ),
+        ].slice(0, 3);
+    const evidence = points
+      .map((point) => `- ${point}`)
       .join("\n")
       .slice(0, 2_000);
     const confidence = Math.max(...members.map((entry) => entry.confidence));
@@ -196,6 +246,83 @@ export function mergeDuplicateFacts(
     )
     .run(modeId, modeId);
   return Number(result.changes ?? 0);
+}
+
+// ---- Evidence hygiene ------------------------------------------------------
+//
+// The pre-points merges left walls: many near-identical sentences joined
+// verbatim, no line breaks, some in English about Chinese conversations
+// (Oskar, 2026-08-11, with the screenshot). Rather than a one-off migration —
+// this needs a model, which migrations do not get — the merge pass boils a
+// few of them down each time it runs, until none are left.
+
+export interface OverlongEvidenceRow {
+  id: string;
+  evidence: string;
+}
+
+/** Pending rows whose evidence is a wall: over 320 chars or over 4 lines. */
+export function listOverlongEvidence(
+  database: DatabaseHandle,
+  modeId: string | null,
+  limit = 6,
+): OverlongEvidenceRow[] {
+  return database.sqlite
+    .prepare(
+      `SELECT id, proposed_evidence AS evidence
+         FROM vaenyx_me_candidates
+        WHERE status = 'pending_review'
+          AND mode_id IS ?
+          AND (LENGTH(proposed_evidence) > 320
+               OR LENGTH(proposed_evidence)
+                  - LENGTH(REPLACE(proposed_evidence, char(10), '')) > 4)
+        ORDER BY created_at ASC
+        LIMIT ?`,
+    )
+    .all(modeId, limit) as unknown as OverlongEvidenceRow[];
+}
+
+/** The condense ask, in the language the underlying conversation was in. */
+export function condensePrompt(evidence: string): string {
+  return [
+    dominantLanguage(evidence) === "zh"
+      ? "把下面的依据压缩成 2-4 个很短的要点:去掉重复,只留互不相同的观察,全部用中文。"
+      : "Boil the evidence below down to 2-4 very short bullet points: remove repetition, keep only observations that differ from each other, all in English.",
+    'Reply with ONLY JSON: {"points":["<point>","<point>"]}',
+    "",
+    evidence.slice(0, 2_000),
+  ].join("\n");
+}
+
+/** Same refusal posture as the group parser: anything off-shape becomes []. */
+export function parseCondensedPoints(text: string): string[] {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return [];
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1)) as {
+      points?: unknown;
+    };
+    return sanitisePoints(parsed.points);
+  } catch {
+    return [];
+  }
+}
+
+/** Write the points back — only onto a row that is still waiting. */
+export function applyCondensedEvidence(
+  database: DatabaseHandle,
+  id: string,
+  points: string[],
+): boolean {
+  if (points.length === 0) return false;
+  const result = database.sqlite
+    .prepare(
+      `UPDATE vaenyx_me_candidates SET proposed_evidence = ?
+        WHERE id = ? AND status = 'pending_review'`,
+    )
+    .run(points.map((point) => `- ${point}`).join("\n"), id);
+  return Number(result.changes ?? 0) > 0;
 }
 
 /** The pending traits of one Mode, oldest first so merged ids stay stable. */

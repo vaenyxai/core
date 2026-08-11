@@ -10,9 +10,14 @@ import type {
 
 import type { DatabaseHandle } from "../../db/database.js";
 import {
+  applyCondensedEvidence,
   applyTraitMergeGroups,
+  condensePrompt,
+  dominantLanguage,
   listMergeableTraits,
+  listOverlongEvidence,
   mergeDuplicateFacts,
+  parseCondensedPoints,
   parseTraitMergeGroups,
   traitMergePrompt,
 } from "./vaenyx-me-merge.js";
@@ -116,10 +121,10 @@ function getCandidateRow(
   candidateId: string,
 ): VaenyxMeCandidateRow | null {
   return (
-    database.sqlite
+    (database.sqlite
       .prepare(`${candidateSelect} WHERE id = ?`)
-      .get(candidateId) as VaenyxMeCandidateRow | undefined
-  ) ?? null;
+      .get(candidateId) as VaenyxMeCandidateRow | undefined) ?? null
+  );
 }
 
 export function getVaenyxMeProfile(database: DatabaseHandle): VaenyxMeProfile {
@@ -265,6 +270,13 @@ async function extractTrait(
     "You infer ONE stable trait about the Owner from a sample of their own activity.",
     "Pick exactly one category id from: identity, communication, preferences, decisions, projects, trust, autonomy.",
     "Be conservative: most activity reveals nothing durable. Only propose a trait when it clearly does.",
+    // The Owner reads proposals in the language of the conversation they came
+    // from (Oskar, 2026-08-11) — decided here by counting characters, not
+    // left to the model, which used to describe Chinese chats in English.
+    dominantLanguage(activity) === "zh"
+      ? "The activity is in Chinese: write title, summary and evidence entirely in Chinese."
+      : "The activity is in English: write title, summary and evidence entirely in English.",
+    "Summary and evidence are ONE short sentence each — under 15 words, no piling up.",
     'Reply with ONLY JSON: {"category":"<id>","title":"<short label>","summary":"<one sentence about the Owner>","evidence":"<one short sentence: why>"}',
     'If nothing stable is revealed, reply with exactly: {"category":null}',
     "",
@@ -490,10 +502,37 @@ export async function mergePendingCandidates(
         { signal },
       );
       const groups = parseTraitMergeGroups(response.answer, traits);
-      merged += applyTraitMergeGroups(database, groups, traits, modeId, ownerId);
+      merged += applyTraitMergeGroups(
+        database,
+        groups,
+        traits,
+        modeId,
+        ownerId,
+      );
     } catch {
       // No model, no merge — the queue is merely longer, never wrong. The next
       // scan pass tries again.
+    }
+  }
+
+  // Evidence hygiene, same cadence: the walls left by pre-points merges (and
+  // any over-chatty extraction) are boiled down to short points, a few rows a
+  // pass, until none are left. Best-effort like the merge itself.
+  for (const row of listOverlongEvidence(database, modeId)) {
+    if (signal?.aborted) break;
+    try {
+      const response = await getDefaultProvider().sendChat(
+        [{ role: "owner", content: condensePrompt(row.evidence) }],
+        undefined,
+        { signal },
+      );
+      applyCondensedEvidence(
+        database,
+        row.id,
+        parseCondensedPoints(response.answer),
+      );
+    } catch {
+      // Next pass.
     }
   }
   return { merged };
@@ -501,7 +540,9 @@ export async function mergePendingCandidates(
 
 // Auto-run entry for the scheduler: resolve the single Owner and scan. No-ops
 // quietly if there is no Owner yet or the model channel isn't ready.
-export async function autoScanVaenyxMe(database: DatabaseHandle): Promise<void> {
+export async function autoScanVaenyxMe(
+  database: DatabaseHandle,
+): Promise<void> {
   const owner = database.sqlite
     .prepare("SELECT id FROM owners ORDER BY created_at ASC LIMIT 1")
     .get() as { id: string } | undefined;

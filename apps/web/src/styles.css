@@ -8554,6 +8554,8 @@ body {
   right: 0;
   bottom: 0;
   overflow-y: auto;
+  /* Never sideways: whatever overflows must wrap, not widen the drawer. */
+  overflow-x: hidden;
   /* Contain is CORRECT here and wrong on the message list: this panel floats
      OVER the page, so its wheel events must never leak through to scroll the
      conversation behind it. */
@@ -8694,32 +8696,21 @@ body {
   font-size: var(--fs-sm);
 }
 
-/* A folded row: present, counted, one tap from open. */
-.me-ledger-item--folded {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: var(--space-2);
-  background: none;
-  border-left: 0;
-  border-right: 0;
-  border-bottom: 0;
-  color: var(--text-faint);
-  cursor: pointer;
-  font-size: var(--fs-sm);
-  text-align: left;
+/* Grounds with several distinct observations read as points, not a wall. */
+.me-ledger-points {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
 }
 
-.me-ledger-folded-text {
-  overflow: hidden;
-  flex: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.me-ledger-folded-open {
-  flex-shrink: 0;
-  color: var(--accent, #6ea8ff);
+/* Nothing in a ledger item may force sideways travel: long tokens (slot
+   names, URLs, unbroken model prose) wrap instead of widening the panel
+   (Oskar, 2026-08-11: the tray scrolled horizontally). */
+.me-ledger-quote,
+.me-ledger-claim,
+.me-ledger-item {
+  overflow-wrap: anywhere;
 }
 
 /* The "take me there" offer: one row above the composer, one button, one x.
