@@ -259,9 +259,12 @@ export function mergeDuplicateFacts(
 export interface OverlongEvidenceRow {
   id: string;
   evidence: string;
+  summary: string;
 }
 
-/** Pending rows whose evidence is a wall: over 320 chars or over 4 lines. */
+/** Pending rows with a wall anywhere: evidence over 320 chars or over 4
+ *  lines, or a claim over 200 chars — the claim is the sentence the Owner
+ *  actually answers, so it must read at a glance (Oskar, 2026-08-11). */
 export function listOverlongEvidence(
   database: DatabaseHandle,
   modeId: string | null,
@@ -269,13 +272,14 @@ export function listOverlongEvidence(
 ): OverlongEvidenceRow[] {
   return database.sqlite
     .prepare(
-      `SELECT id, proposed_evidence AS evidence
+      `SELECT id, proposed_evidence AS evidence, proposed_summary AS summary
          FROM vaenyx_me_candidates
         WHERE status = 'pending_review'
           AND mode_id IS ?
           AND (LENGTH(proposed_evidence) > 320
                OR LENGTH(proposed_evidence)
-                  - LENGTH(REPLACE(proposed_evidence, char(10), '')) > 4)
+                  - LENGTH(REPLACE(proposed_evidence, char(10), '')) > 4
+               OR LENGTH(proposed_summary) > 200)
         ORDER BY created_at ASC
         LIMIT ?`,
     )
@@ -283,45 +287,69 @@ export function listOverlongEvidence(
 }
 
 /** The condense ask, in the language the underlying conversation was in. */
-export function condensePrompt(evidence: string): string {
+export function condensePrompt(evidence: string, summary: string): string {
   return [
-    dominantLanguage(evidence) === "zh"
-      ? "把下面的依据压缩成 2-4 个很短的要点:去掉重复,只留互不相同的观察,全部用中文。"
-      : "Boil the evidence below down to 2-4 very short bullet points: remove repetition, keep only observations that differ from each other, all in English.",
-    'Reply with ONLY JSON: {"points":["<point>","<point>"]}',
+    dominantLanguage(`${summary}\n${evidence}`) === "zh"
+      ? "下面是一条待确认的观察。把「依据」压缩成 2-4 个很短的要点(去掉重复,只留互不相同的观察),再把「结论」改写成一句很短的话。全部用中文。"
+      : "Below is one pending observation. Boil the EVIDENCE down to 2-4 very short bullet points (remove repetition, keep only observations that differ), and rewrite the CLAIM as one short sentence. All in English.",
+    'Reply with ONLY JSON: {"summary":"<one short sentence>","points":["<point>","<point>"]}',
     "",
+    `CLAIM: ${summary.slice(0, 600)}`,
+    "EVIDENCE:",
     evidence.slice(0, 2_000),
   ].join("\n");
 }
 
-/** Same refusal posture as the group parser: anything off-shape becomes []. */
-export function parseCondensedPoints(text: string): string[] {
+export interface CondensedProposal {
+  summary: string | null;
+  points: string[];
+}
+
+/** Same refusal posture as the group parser: anything off-shape is nothing. */
+export function parseCondensed(text: string): CondensedProposal {
+  const none: CondensedProposal = { summary: null, points: [] };
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
-  if (start < 0 || end <= start) return [];
+  if (start < 0 || end <= start) return none;
   try {
     const parsed = JSON.parse(text.slice(start, end + 1)) as {
+      summary?: unknown;
       points?: unknown;
     };
-    return sanitisePoints(parsed.points);
+    const summary =
+      typeof parsed.summary === "string" && parsed.summary.trim()
+        ? parsed.summary.trim().slice(0, 300)
+        : null;
+    return { summary, points: sanitisePoints(parsed.points) };
   } catch {
-    return [];
+    return none;
   }
 }
 
-/** Write the points back — only onto a row that is still waiting. */
-export function applyCondensedEvidence(
+/** Write back whichever halves came out clean — only onto a row that is
+ *  still waiting. A summary alone or points alone is still an improvement. */
+export function applyCondensed(
   database: DatabaseHandle,
   id: string,
-  points: string[],
+  condensed: CondensedProposal,
 ): boolean {
-  if (points.length === 0) return false;
+  const sets: string[] = [];
+  const values: string[] = [];
+  if (condensed.points.length > 0) {
+    sets.push("proposed_evidence = ?");
+    values.push(condensed.points.map((point) => `- ${point}`).join("\n"));
+  }
+  if (condensed.summary) {
+    sets.push("proposed_summary = ?");
+    values.push(condensed.summary);
+  }
+  if (sets.length === 0) return false;
   const result = database.sqlite
     .prepare(
-      `UPDATE vaenyx_me_candidates SET proposed_evidence = ?
+      `UPDATE vaenyx_me_candidates SET ${sets.join(", ")}
         WHERE id = ? AND status = 'pending_review'`,
     )
-    .run(points.map((point) => `- ${point}`).join("\n"), id);
+    .run(...values, id);
   return Number(result.changes ?? 0) > 0;
 }
 

@@ -8448,22 +8448,40 @@ body {
   border-top: 0.5px solid var(--border);
 }
 
+/* Quiet: the grounds are context for the decision, not the decision. */
 .me-ledger-quote {
   margin: 0;
   padding-left: var(--space-3);
   border-left: 2px solid var(--border);
-  font-size: var(--fs-md, 15px);
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
   line-height: 1.55;
 }
 
+/* THE CLAIM IS THE DECISION (Oskar, 2026-08-11): what the two buttons answer
+   is THIS sentence, so it is the loud one — its own raised block, clearly
+   apart from the grounds above and the answers below. The emphasis used to
+   run the other way (big quote, faint claim), which read as approving the
+   evidence. */
 .me-ledger-claim {
-  margin: var(--space-2) 0 0;
-  color: var(--text-faint);
-  font-size: var(--fs-sm);
+  margin: var(--space-3) 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent, #6ea8ff);
+  border-radius: 0 10px 10px 0;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ece9e0;
+  font-size: var(--fs-md, 15px);
+  line-height: 1.5;
 }
 
+/* "Read as" / "Wants to remember" — a small label line over the claim. */
 .me-ledger-kind {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
   font-weight: 650;
+  letter-spacing: 0.04em;
 }
 
 /* The one thing the Owner is on this screen to do, so it is the biggest thing

@@ -12,13 +12,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import {
-  applyCondensedEvidence,
+  applyCondensed,
   applyTraitMergeGroups,
   dominantLanguage,
   listMergeableTraits,
   listOverlongEvidence,
   mergeDuplicateFacts,
-  parseCondensedPoints,
+  parseCondensed,
   parseTraitMergeGroups,
   type MergeableTrait,
 } from "../src/modules/core/vaenyx-me-merge.js";
@@ -251,7 +251,7 @@ describe("fact duplicates, which need no model", () => {
 });
 
 describe("evidence hygiene: walls become points", () => {
-  it("picks only walls: long blobs and many-lined evidence, never short rows", () => {
+  it("picks walls only: long evidence, many lines, or a long claim", () => {
     const database = testDatabase();
     seed(database, "wall");
     database.sqlite
@@ -259,31 +259,48 @@ describe("evidence hygiene: walls become points", () => {
         `UPDATE vaenyx_me_candidates SET proposed_evidence = ? WHERE id = ?`,
       )
       .run(`They said the same thing five ways. `.repeat(12), "wall");
+    seed(database, "longclaim");
+    database.sqlite
+      .prepare(
+        `UPDATE vaenyx_me_candidates SET proposed_summary = ? WHERE id = ?`,
+      )
+      .run(`A claim that never lands on a full stop `.repeat(8), "longclaim");
     seed(database, "fine");
     const walls = listOverlongEvidence(database, null);
-    expect(walls.map((row) => row.id)).toEqual(["wall"]);
+    expect(walls.map((row) => row.id).sort()).toEqual(["longclaim", "wall"]);
   });
 
-  it("writes points back one '- ' line each, and refuses an empty answer", () => {
+  it("writes back whichever halves came out clean, refusing an empty answer", () => {
     const database = testDatabase();
     seed(database, "a");
-    expect(applyCondensedEvidence(database, "a", [])).toBe(false);
-    expect(applyCondensedEvidence(database, "a", ["one", "two"])).toBe(true);
+    expect(applyCondensed(database, "a", { summary: null, points: [] })).toBe(
+      false,
+    );
+    expect(
+      applyCondensed(database, "a", {
+        summary: "Short claim.",
+        points: ["one", "two"],
+      }),
+    ).toBe(true);
     const row = database.sqlite
       .prepare(
-        `SELECT proposed_evidence FROM vaenyx_me_candidates WHERE id = 'a'`,
+        `SELECT proposed_evidence, proposed_summary
+           FROM vaenyx_me_candidates WHERE id = 'a'`,
       )
-      .get() as { proposed_evidence: string };
+      .get() as { proposed_evidence: string; proposed_summary: string };
     expect(row.proposed_evidence).toBe("- one\n- two");
+    expect(row.proposed_summary).toBe("Short claim.");
   });
 
-  it("reads the model's points with the same refusal posture as groups", () => {
-    expect(parseCondensedPoints('{"points":["- a","a","b"]}')).toEqual([
-      "a",
-      "b",
-    ]);
-    expect(parseCondensedPoints("no json")).toEqual([]);
-    expect(parseCondensedPoints('{"points":"wall"}')).toEqual([]);
+  it("reads the model's answer with the same refusal posture as groups", () => {
+    expect(
+      parseCondensed('{"summary":" S. ","points":["- a","a","b"]}'),
+    ).toEqual({ summary: "S.", points: ["a", "b"] });
+    expect(parseCondensed("no json")).toEqual({ summary: null, points: [] });
+    expect(parseCondensed('{"points":"wall"}')).toEqual({
+      summary: null,
+      points: [],
+    });
   });
 
   it("🔴 hears Chinese through an English wrapper", () => {

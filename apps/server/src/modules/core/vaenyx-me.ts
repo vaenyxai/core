@@ -10,14 +10,14 @@ import type {
 
 import type { DatabaseHandle } from "../../db/database.js";
 import {
-  applyCondensedEvidence,
+  applyCondensed,
   applyTraitMergeGroups,
   condensePrompt,
   dominantLanguage,
   listMergeableTraits,
   listOverlongEvidence,
   mergeDuplicateFacts,
-  parseCondensedPoints,
+  parseCondensed,
   parseTraitMergeGroups,
   traitMergePrompt,
 } from "./vaenyx-me-merge.js";
@@ -515,22 +515,19 @@ export async function mergePendingCandidates(
     }
   }
 
-  // Evidence hygiene, same cadence: the walls left by pre-points merges (and
-  // any over-chatty extraction) are boiled down to short points, a few rows a
-  // pass, until none are left. Best-effort like the merge itself.
+  // Hygiene, same cadence: walls left by pre-points merges (and any
+  // over-chatty extraction) — evidence AND the claim sentence itself — are
+  // boiled down, a few rows a pass, until none are left. Best-effort like
+  // the merge itself.
   for (const row of listOverlongEvidence(database, modeId)) {
     if (signal?.aborted) break;
     try {
       const response = await getDefaultProvider().sendChat(
-        [{ role: "owner", content: condensePrompt(row.evidence) }],
+        [{ role: "owner", content: condensePrompt(row.evidence, row.summary) }],
         undefined,
         { signal },
       );
-      applyCondensedEvidence(
-        database,
-        row.id,
-        parseCondensedPoints(response.answer),
-      );
+      applyCondensed(database, row.id, parseCondensed(response.answer));
     } catch {
       // Next pass.
     }
