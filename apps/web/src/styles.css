@@ -8448,9 +8448,18 @@ body {
   text-transform: uppercase;
 }
 
+/* Each judgment is its own card (Oskar, 2026-08-12: a hairline divider was
+   not enough — two items read as one). The card edge does the dividing. */
+.me-ledger-day {
+  display: grid;
+  gap: var(--space-2);
+}
+
 .me-ledger-item {
-  padding: var(--space-3) 0;
-  border-top: 0.5px solid var(--border);
+  padding: var(--space-3);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 /* Quiet: the grounds are context for the decision, not the decision. */
@@ -8710,7 +8719,7 @@ body {
 }
 
 .me-ledger--compact .me-ledger-item {
-  padding: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
 }
 
 .me-ledger--compact .me-ledger-answer {

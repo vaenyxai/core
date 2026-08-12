@@ -24,9 +24,15 @@ import { seedLibraryIfEmpty } from "./modules/core/library-seed.js";
 import { initModelRegistry } from "./modules/models/registry.js";
 import { normalizeEngineConnections } from "./modules/models/provider-settings.js";
 import { initPushService } from "./modules/core/push.js";
-import { reconcileInterruptedTasks, runDueTasks } from "./modules/core/tasks.js";
+import {
+  reconcileInterruptedTasks,
+  runDueTasks,
+} from "./modules/core/tasks.js";
 import { runScheduledBackupIfDue } from "./modules/core/backup-schedule.js";
-import { autoScanVaenyxMe } from "./modules/core/vaenyx-me.js";
+import {
+  autoScanVaenyxMe,
+  mergePendingCandidates,
+} from "./modules/core/vaenyx-me.js";
 import { runDueModeDigests } from "./modules/core/modes.js";
 import { bindUsageDatabase } from "./modules/core/relay-usage.js";
 import { sweepFlywheel } from "./modules/core/flywheel-send.js";
@@ -67,13 +73,13 @@ export async function buildApp(
     dataDirectory: config.dataDirectory,
     install: (id) => installWantedComponent(id, config.dataDirectory),
     onDone: (results) =>
-      app.log.info(
-        { results: results.done },
-        "installer components finished",
-      ),
+      app.log.info({ results: results.done }, "installer components finished"),
   });
   if (asked.length) {
-    app.log.info({ components: asked }, "installing what the installer asked for");
+    app.log.info(
+      { components: asked },
+      "installing what the installer asked for",
+    );
   }
 
   // An instance that was already using its Claude subscription keeps it: the
@@ -81,7 +87,7 @@ export async function buildApp(
   restoreClaudeSdkForConnectedInstance({
     connected: Boolean(
       resolveClaudeSubscriptionAuth(config.secretsDirectory).token ||
-        claudeMachineLogin(),
+      claudeMachineLogin(),
     ),
     dataDirectory: config.dataDirectory,
     onDone: (outcome) =>
@@ -159,12 +165,9 @@ export async function buildApp(
     24 * 60 * 60_000,
   );
   vaenyxMeScanTick.unref();
-  const vaenyxMeWarmup = setTimeout(
-    () => {
-      void autoScanVaenyxMe(database).catch((error) => app.log.error(error));
-    },
-    3 * 60_000,
-  );
+  const vaenyxMeWarmup = setTimeout(() => {
+    void autoScanVaenyxMe(database).catch((error) => app.log.error(error));
+  }, 3 * 60_000);
   vaenyxMeWarmup.unref();
 
   // FACTS, distilled out of quiet conversations. Hourly, because the machine
@@ -175,23 +178,31 @@ export async function buildApp(
   // It never touches a conversation that is still happening (30 minutes of
   // quiet first), reads only what the OWNER said, and proposes rather than
   // decides: everything lands in the review queue.
-  const factsTick = setInterval(
-    () => {
-      const owner = getOwner(database);
-      if (!owner) return;
-      void runFactExtractionPass(database, owner.id)
-        .then((result) => {
-          if (result.queued > 0) {
-            app.log.info(
-              { conversations: result.conversations, queued: result.queued },
-              "facts proposed for review",
-            );
-          }
-        })
-        .catch((error) => app.log.error(error));
-    },
-    60 * 60_000,
-  );
+  const factsTick = setInterval(() => {
+    const owner = getOwner(database);
+    if (!owner) return;
+    void runFactExtractionPass(database, owner.id)
+      .then((result) => {
+        if (result.queued > 0) {
+          app.log.info(
+            { conversations: result.conversations, queued: result.queued },
+            "facts proposed for review",
+          );
+        }
+        // The merge rides the same hourly train (Oskar, 2026-08-12: a fact
+        // distilled at 23:02 sat beside its trait twin until the next DAILY
+        // pass). Cheap when there is nothing to do — every stage inside
+        // skips below two pending rows — and User Mode only, same as the
+        // background scan.
+        return mergePendingCandidates(database, owner.id, null);
+      })
+      .then((merge) => {
+        if (merge.merged > 0) {
+          app.log.info({ merged: merge.merged }, "vaenyx me proposals merged");
+        }
+      })
+      .catch((error) => app.log.error(error));
+  }, 60 * 60_000);
   factsTick.unref();
 
   // Event-loop stall detector. On 2026-08-06 the Owner's instance degraded
