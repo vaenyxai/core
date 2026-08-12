@@ -16144,24 +16144,46 @@ function FactsSection() {
  * diary instead of as homework — so the shape can be judged before anybody
  * decides whether the gate itself should move.
  */
-// Evidence arrives one point per line (leading "- " optional). Several
-// distinct observations read as a list, not a wall; a single line keeps the
-// quote treatment. No folding and no per-item Open button any more (Oskar,
-// 2026-08-11: opening rows one by one to read a queue is the queue hiding).
-function EvidencePoints({ text }: { text: string }) {
-  const lines = text
-    .split(/\n+/)
-    .map((line) => line.replace(/^[-•*]\s*/, "").trim())
-    .filter(Boolean);
-  if (lines.length <= 1) {
+// Grounds with citations (Oskar, 2026-08-12): one line per origin, each line
+// carrying its own way into the conversation it came from — a merged card
+// cites several chats, so a single bottom "View source" could not serve them
+// all. A lone line keeps the quote treatment; several read as points. No
+// folding and no per-item Open (2026-08-11: rows opened one by one is the
+// queue hiding).
+function SourceLines({
+  onViewSource,
+  sources,
+  zh,
+}: {
+  onViewSource?: (conversationId: string) => void;
+  sources: { quote: string; conversationId: string | null }[];
+  zh: boolean;
+}) {
+  const lines = sources.filter((source) => source.quote.trim());
+  if (lines.length === 0) return null;
+  const link = (source: { conversationId: string | null }) =>
+    onViewSource && source.conversationId ? (
+      <button
+        className="text-button me-ledger-source"
+        onClick={() => onViewSource(source.conversationId as string)}
+        type="button"
+      >
+        {zh ? "看来源" : "View source"}
+      </button>
+    ) : null;
+  if (lines.length === 1) {
     return (
-      <blockquote className="me-ledger-quote">{lines[0] ?? ""}</blockquote>
+      <blockquote className="me-ledger-quote">
+        {lines[0]!.quote} {link(lines[0]!)}
+      </blockquote>
     );
   }
   return (
     <ul className="me-ledger-quote me-ledger-points">
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
+      {lines.map((source, index) => (
+        <li key={`${source.quote}-${index}`}>
+          {source.quote} {link(source)}
+        </li>
       ))}
     </ul>
   );
@@ -16245,62 +16267,93 @@ function VaenyxMeLedger({
             <article className="me-ledger-item" key={candidate.id}>
               {/* THE GROUNDS LEAD: short points in the language of the
                   conversation they came from — for a fact, the Owner's own
-                  sentence. Better provenance than Facebook or Google offer
-                  for the same kind of guess, and the claim reads as a
-                  consequence of it, not as a verdict handed down. */}
-              <EvidencePoints text={candidate.proposedEvidence} />
-              <p className="me-ledger-claim">
-                {candidate.proposedSlot ? (
-                  <>
-                    <span className="me-ledger-kind">
-                      {zh ? "想记住" : "Wants to remember"}
-                    </span>{" "}
-                    <code>{candidate.proposedSlot}</code> ={" "}
+                  sentence — each line with its own way to the source. The
+                  claim reads as a consequence of them, never a verdict. */}
+              <SourceLines
+                onViewSource={onViewSource}
+                sources={candidate.sources ?? []}
+                zh={zh}
+              />
+              {candidate.proposedSlot && candidate.currentValue ? (
+                /* A CHANGE, not a fresh claim (Oskar, 2026-08-12): the slot
+                   already holds an approved value and this proposes another.
+                   Old and new side by side; choosing the new one retires the
+                   old into the fact's own history with a date — never an
+                   erasure. */
+                <p className="me-ledger-claim me-ledger-claim--change">
+                  <span className="me-ledger-kind">
+                    {zh ? "变化" : "Change"}
+                  </span>
+                  <code>{candidate.proposedSlot}</code>
+                  <span className="me-ledger-change-line me-ledger-change-old">
+                    {zh ? "原来:" : "Was: "}
+                    {candidate.currentValue}
+                  </span>
+                  <span className="me-ledger-change-line">
+                    {zh ? "现在提议:" : "Now proposed: "}
                     {candidate.proposedValue}
                     {candidate.proposedEventTime
                       ? ` · ${zh ? "从" : "since"} ${candidate.proposedEventTime}`
                       : ""}
-                  </>
-                ) : (
-                  <>
-                    <span className="me-ledger-kind">
-                      {zh ? "读出来的" : "Read as"}
-                    </span>{" "}
-                    {candidate.proposedSummary}
-                  </>
-                )}
-              </p>
+                  </span>
+                </p>
+              ) : (
+                <p className="me-ledger-claim">
+                  {candidate.proposedSlot ? (
+                    <>
+                      <span className="me-ledger-kind">
+                        {zh ? "想记住" : "Wants to remember"}
+                      </span>{" "}
+                      <code>{candidate.proposedSlot}</code> ={" "}
+                      {candidate.proposedValue}
+                      {candidate.proposedEventTime
+                        ? ` · ${zh ? "从" : "since"} ${candidate.proposedEventTime}`
+                        : ""}
+                    </>
+                  ) : (
+                    <>
+                      <span className="me-ledger-kind">
+                        {zh ? "读出来的" : "Read as"}
+                      </span>{" "}
+                      {candidate.proposedSummary}
+                    </>
+                  )}
+                </p>
+              )}
               {/* Two actions, not four, and no percentage. Real buttons, not
                   text links (Oskar, 2026-08-09): this is the one thing on the
                   screen he is here to do, and it was the smallest thing on it.
                   Both are the same size — "wrong" is not the lesser answer, and
-                  making it look like one is how you get agreement by default. */}
+                  making it look like one is how you get agreement by default.
+                  On a CHANGE card the same two buttons speak change-language:
+                  approving IS "make it the new value". */}
               <div className="me-ledger-actions">
                 <button
                   className="secondary-button me-ledger-answer"
                   onClick={() => onApprove(candidate)}
                   type="button"
                 >
-                  {zh ? "对,记住" : "Yes, keep it"}
+                  {candidate.currentValue
+                    ? zh
+                      ? "改成新的"
+                      : "Change it"
+                    : zh
+                      ? "对,记住"
+                      : "Yes, keep it"}
                 </button>
                 <button
                   className="secondary-button me-ledger-answer"
                   onClick={() => onReject(candidate)}
                   type="button"
                 >
-                  {zh ? "这条不对" : "That's wrong"}
+                  {candidate.currentValue
+                    ? zh
+                      ? "保持原来的"
+                      : "Keep the old one"
+                    : zh
+                      ? "这条不对"
+                      : "That's wrong"}
                 </button>
-                {onViewSource &&
-                candidate.sourceType === "chat_history" &&
-                candidate.sourceId ? (
-                  <button
-                    className="text-button"
-                    onClick={() => onViewSource(candidate.sourceId as string)}
-                    type="button"
-                  >
-                    {zh ? "看来源" : "View source"}
-                  </button>
-                ) : null}
               </div>
             </article>
           ))}

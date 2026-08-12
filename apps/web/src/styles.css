@@ -8498,6 +8498,27 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* The per-line way into a citation's conversation. */
+.me-ledger-source {
+  margin-left: 6px;
+  font-size: var(--fs-label);
+}
+
+/* A change card wears amber, not blue: something will be REPLACED, not
+   added. The old value is quiet but not struck through — it stays the truth
+   until the Owner decides. */
+.me-ledger-claim--change {
+  border-left-color: #d9a441;
+}
+
+.me-ledger-change-line {
+  display: block;
+}
+
+.me-ledger-change-old {
+  color: var(--text-faint);
+}
+
 /* The one thing the Owner is on this screen to do, so it is the biggest thing
    on the row rather than the smallest. Both answers are the same size on
    purpose: making "wrong" the lesser-looking one is how you collect agreement

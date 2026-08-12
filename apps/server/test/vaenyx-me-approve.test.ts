@@ -46,7 +46,8 @@ function freshDatabase(): DatabaseHandle {
       proposed_slot TEXT,
       proposed_value TEXT,
       proposed_event_time TEXT,
-      mode_id TEXT
+      mode_id TEXT,
+      sources_json TEXT
     );
 
     -- The inbox's reference record (0069): candidate creation writes into it,
@@ -103,10 +104,15 @@ beforeEach(() => {
 
 describe("approving what Vaenyx worked out about you", () => {
   it("fills the empty placeholder for its category", () => {
-    const itemId = approve(propose("Prefers short answers"), "Prefers short answers");
+    const itemId = approve(
+      propose("Prefers short answers"),
+      "Prefers short answers",
+    );
     expect(itemId).toBe("seed-communication");
     const rows = database.sqlite
-      .prepare(`SELECT status, summary FROM vaenyx_me_items WHERE category = 'communication'`)
+      .prepare(
+        `SELECT status, summary FROM vaenyx_me_items WHERE category = 'communication'`,
+      )
       .all() as unknown as { status: string; summary: string }[];
     expect(rows).toHaveLength(1);
     expect(rows[0]?.status).toBe("approved");
@@ -117,7 +123,10 @@ describe("approving what Vaenyx worked out about you", () => {
     // state, so a second approval landed on top of an insight the Owner had
     // already accepted — gone, with no record it had ever existed.
     approve(propose("Prefers short answers"), "Prefers short answers");
-    approve(propose("Dislikes being asked twice"), "Dislikes being asked twice");
+    approve(
+      propose("Dislikes being asked twice"),
+      "Dislikes being asked twice",
+    );
 
     const rows = database.sqlite
       .prepare(

@@ -18,15 +18,19 @@ import {
   listMergeableTraits,
   listOverlongEvidence,
   listPendingBriefs,
+  listPendingFactBriefs,
   listPendingTraitBriefs,
   listSameSlotFactPairs,
   mergeDuplicateFacts,
   parseCondensed,
   parseCoveredIds,
   parseSameFactPairs,
+  parseTraitFactPairs,
   parseTraitMergeGroups,
+  readCandidateSources,
   retireCovered,
   retireOlderFactTwins,
+  retireTraitsOverFacts,
   type MergeableTrait,
 } from "../src/modules/core/vaenyx-me-merge.js";
 
@@ -357,9 +361,9 @@ describe("restatements of approved knowledge ask nothing new", () => {
   });
 
   it("🔴 a trait covered by a pending fact retires; the fact never does", () => {
-    // The fact is the stronger, structured form — the model may only ever
-    // name TRAITS as covered, and the ids are validated against the trait
-    // list, so a fact id in the answer changes nothing.
+    // The fact is the stronger, structured form — the pairs are validated
+    // both ways (trait must be a trait, fact must be a fact), so the model
+    // can never retire a fact, and the fact inherits the trait's citation.
     const database = testDatabase();
     seed(database, "fact1", {
       slot: "alerts.rates",
@@ -367,9 +371,20 @@ describe("restatements of approved knowledge ask nothing new", () => {
     });
     seed(database, "trait1");
     const traits = listPendingTraitBriefs(database, null);
-    const covered = parseCoveredIds('{"covered":["trait1","fact1"]}', traits);
-    expect(covered).toEqual(["trait1"]);
-    expect(retireCovered(database, covered, "Same as a pending fact.")).toBe(1);
+    const facts = listPendingFactBriefs(database, null);
+    expect(
+      parseTraitFactPairs(
+        '{"covered":[{"trait":"fact1","fact":"trait1"}]}',
+        traits,
+        facts,
+      ),
+    ).toEqual([]);
+    const pairs = parseTraitFactPairs(
+      '{"covered":[{"trait":"trait1","fact":"fact1"}]}',
+      traits,
+      facts,
+    );
+    expect(retireTraitsOverFacts(database, pairs)).toBe(1);
     const rows = database.sqlite
       .prepare(
         `SELECT id, status, review_note FROM vaenyx_me_candidates ORDER BY id`,
@@ -386,6 +401,53 @@ describe("restatements of approved knowledge ask nothing new", () => {
         status: "deleted",
         review_note: "Same as a pending fact.",
       },
+    ]);
+    // The surviving fact now cites the trait's grounds too.
+    const quotes = readCandidateSources(database, "fact1").map(
+      (source) => source.quote,
+    );
+    expect(quotes).toContain("evidence trait1");
+  });
+});
+
+describe("citations travel with merges", () => {
+  it("a merged trait card carries every member's sources, deduped", () => {
+    const database = testDatabase();
+    seed(database, "a");
+    seed(database, "b");
+    applyTraitMergeGroups(
+      database,
+      [{ ids: ["a", "b"], title: "M", summary: "S", evidence: ["point"] }],
+      listMergeableTraits(database, null),
+      null,
+      "owner-1",
+    );
+    const quotes = readCandidateSources(database, "merged-a").map(
+      (source) => source.quote,
+    );
+    expect(quotes.sort()).toEqual(["evidence a", "evidence b"]);
+  });
+
+  it("the newest fact twin inherits the older twin's citation", () => {
+    const database = testDatabase();
+    seed(database, "n1", { slot: "preference:news", value: "daily AI news" });
+    seed(database, "n2", {
+      slot: "preference:news",
+      value: "AI news every morning",
+      createdAt: "2026-07-01 00:00:00",
+    });
+    retireOlderFactTwins(database, listSameSlotFactPairs(database, null));
+    const quotes = readCandidateSources(database, "n1").map(
+      (source) => source.quote,
+    );
+    expect(quotes.sort()).toEqual(["evidence n1", "evidence n2"]);
+  });
+
+  it("rows from before the column synthesize sources from their evidence", () => {
+    const database = testDatabase();
+    seed(database, "old");
+    expect(readCandidateSources(database, "old")).toEqual([
+      { quote: "evidence old", conversationId: null },
     ]);
   });
 });

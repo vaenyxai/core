@@ -190,6 +190,13 @@ Read this inside the app: **Settings → Manual**.
   a few short points, written in the language of the conversation they came
   from; for a fact, the sentence you actually said — then what Vaenyx made of
   it. Two answers: keep it, or say it is wrong.
+- **Every ground line can open its source.** A merged proposal cites each
+  conversation it was seen in — one line per origin, each with its own View
+  source.
+- **A change shows as a change.** When a proposal touches something already
+  approved with a different value, the card reads *was → now proposed* and
+  the buttons become **Change it / Keep the old one**. Choosing the new value
+  dates the old one into history — never an erasure.
 - **Listed by day**, newest first, so it reads like a diary rather than a pile
   of work.
 - **Each Mode only ever learns from itself.** Nothing said inside a Custom Mode

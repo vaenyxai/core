@@ -249,7 +249,10 @@ export const SetChatProviderRequestSchema = Type.Object(
 
 export const SetChatModelRequestSchema = Type.Object(
   {
-    model: Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+    model: Type.Union([
+      Type.String({ minLength: 1, maxLength: 200 }),
+      Type.Null(),
+    ]),
   },
   { additionalProperties: false },
 );
@@ -672,7 +675,9 @@ export const RecordFactRequestSchema = Type.Object(
   {
     slot: Type.String({ minLength: 1, maxLength: 60 }),
     value: Type.String({ minLength: 1, maxLength: 2000 }),
-    eventTime: Type.Optional(Type.Union([Type.String({ maxLength: 40 }), Type.Null()])),
+    eventTime: Type.Optional(
+      Type.Union([Type.String({ maxLength: 40 }), Type.Null()]),
+    ),
     // The Owner adding something they read somewhere marks it as such, and it
     // carries the URL from then on.
     sourceKind: Type.Optional(
@@ -709,6 +714,25 @@ export const VaenyxMeCandidateSchema = Type.Object(
     proposedSlot: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     proposedValue: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     proposedEventTime: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // Every place this proposal was seen (Oskar, 2026-08-12): one line of
+    // grounds per source, each with the conversation it came from, so a
+    // merged card cites all of its origins and each line can open its own
+    // source. Rows from before the column synthesize one entry at read time.
+    sources: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            quote: Type.String(),
+            conversationId: Type.Union([Type.String(), Type.Null()]),
+          },
+          { additionalProperties: false },
+        ),
+      ),
+    ),
+    // Present on a pending FACT whose slot already holds a DIFFERENT approved
+    // value: the proposal is a CHANGE, and the card reads old → new with
+    // "change it / keep the old one" instead of "keep / wrong".
+    currentValue: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -1917,7 +1941,9 @@ export const AdoptCorrectionResponseSchema = Type.Object(
 
 export type StoredCorrection = Static<typeof StoredCorrectionSchema>;
 export type CorrectionsResponse = Static<typeof CorrectionsResponseSchema>;
-export type AdoptCorrectionRequest = Static<typeof AdoptCorrectionRequestSchema>;
+export type AdoptCorrectionRequest = Static<
+  typeof AdoptCorrectionRequestSchema
+>;
 export type AdoptCorrectionResponse = Static<
   typeof AdoptCorrectionResponseSchema
 >;
@@ -2067,7 +2093,9 @@ export const RegressionListResponseSchema = Type.Object(
 export type RegressionCase = Static<typeof RegressionCaseSchema>;
 export type RegressionResult = Static<typeof RegressionResultSchema>;
 export type RegressionCheck = Static<typeof RegressionCheckSchema>;
-export type RegressionListResponse = Static<typeof RegressionListResponseSchema>;
+export type RegressionListResponse = Static<
+  typeof RegressionListResponseSchema
+>;
 
 export const UpdateRecipeRequestSchema = Type.Object(
   {
@@ -2093,7 +2121,9 @@ export const UpdateRecipeResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type DraftRecipeEditRequest = Static<typeof DraftRecipeEditRequestSchema>;
+export type DraftRecipeEditRequest = Static<
+  typeof DraftRecipeEditRequestSchema
+>;
 export type RecipeEditDraft = Static<typeof RecipeEditDraftSchema>;
 export type UpdateRecipeRequest = Static<typeof UpdateRecipeRequestSchema>;
 export type UpdateRecipeResponse = Static<typeof UpdateRecipeResponseSchema>;
@@ -2579,7 +2609,9 @@ export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type ImageAnnotationItem = Static<typeof ImageAnnotationItemSchema>;
 export type AnnotateImageRequest = Static<typeof AnnotateImageRequestSchema>;
 export type AnnotateImageResponse = Static<typeof AnnotateImageResponseSchema>;
-export type SaveAnnotationsRequest = Static<typeof SaveAnnotationsRequestSchema>;
+export type SaveAnnotationsRequest = Static<
+  typeof SaveAnnotationsRequestSchema
+>;
 export type DocumentUploadResponse = Static<
   typeof DocumentUploadResponseSchema
 >;
@@ -2598,7 +2630,9 @@ export type RunMethodResponse = Static<typeof RunMethodResponseSchema>;
 export type FetchMethodRecipeResponse = Static<
   typeof FetchMethodRecipeResponseSchema
 >;
-export type MethodFeedbackReaction = Static<typeof MethodFeedbackReactionSchema>;
+export type MethodFeedbackReaction = Static<
+  typeof MethodFeedbackReactionSchema
+>;
 export type SendMethodFeedbackRequest = Static<
   typeof SendMethodFeedbackRequestSchema
 >;
@@ -2689,7 +2723,9 @@ export type ChatConnectionTestResult = Static<
   typeof ChatConnectionTestResultSchema
 >;
 export type CreateTaskRequest = Static<typeof CreateTaskRequestSchema>;
-export type SetTaskScheduleRequest = Static<typeof SetTaskScheduleRequestSchema>;
+export type SetTaskScheduleRequest = Static<
+  typeof SetTaskScheduleRequestSchema
+>;
 export type CreateVaenyxMeCandidateRequest = Static<
   typeof CreateVaenyxMeCandidateRequestSchema
 >;
@@ -2842,9 +2878,8 @@ export const RelaySettingsSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const UpdateRelaySettingsRequestSchema = Type.Partial(
-  RelaySettingsSchema,
-);
+export const UpdateRelaySettingsRequestSchema =
+  Type.Partial(RelaySettingsSchema);
 
 export const RelayCallSchema = Type.Object(
   {
@@ -3035,5 +3070,7 @@ export type RelayProfileLoginCompleteResponse = Static<
 export type RelayProfileDisconnectRequest = Static<
   typeof RelayProfileDisconnectRequestSchema
 >;
-export type RelayRotateKeyResponse = Static<typeof RelayRotateKeyResponseSchema>;
+export type RelayRotateKeyResponse = Static<
+  typeof RelayRotateKeyResponseSchema
+>;
 export type RelayUsageResponse = Static<typeof RelayUsageResponseSchema>;

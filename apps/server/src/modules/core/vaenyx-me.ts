@@ -27,9 +27,11 @@ import {
   parseCondensed,
   parseCoveredIds,
   parseSameFactPairs,
+  parseTraitFactPairs,
   parseTraitMergeGroups,
   retireCovered,
   retireOlderFactTwins,
+  retireTraitsOverFacts,
   traitMergePrompt,
   traitOverFactPrompt,
 } from "./vaenyx-me-merge.js";
@@ -85,7 +87,10 @@ const candidateSelect = `
          -- was approved as one, landing in vaenyx_me_items instead of facts.
          -- 0059 says in as many words that the shared table is split by
          -- proposed_slot; this is the line that has to read it.
-         proposed_slot, proposed_value, proposed_event_time
+         proposed_slot, proposed_value, proposed_event_time,
+         -- Citations (0070) and the mode, which the change-detection lookup
+         -- needs to find the slot's currently approved value.
+         sources_json, mode_id
   FROM vaenyx_me_candidates
 `;
 
@@ -93,12 +98,51 @@ interface FactCandidateColumns {
   proposed_event_time?: string | null;
   proposed_slot?: string | null;
   proposed_value?: string | null;
+  sources_json?: string | null;
+  mode_id?: string | null;
+}
+
+/** The card's citations. Stored rows carry them as JSON; rows from before
+ *  0070 synthesize one entry per evidence line, all pointing at the row's
+ *  single source conversation — nothing legacy renders blank. */
+function candidateSources(
+  row: FactCandidateColumns & VaenyxMeCandidateRow,
+): { quote: string; conversationId: string | null }[] {
+  if (row.sources_json) {
+    try {
+      const parsed = JSON.parse(row.sources_json) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter(
+            (entry): entry is { quote: string; conversationId?: unknown } =>
+              typeof (entry as { quote?: unknown }).quote === "string",
+          )
+          .map((entry) => ({
+            quote: entry.quote,
+            conversationId:
+              typeof entry.conversationId === "string"
+                ? entry.conversationId
+                : null,
+          }));
+      }
+    } catch {
+      // Fall through to the synthesized shape.
+    }
+  }
+  const conversationId =
+    row.source_type === "chat_history" ? row.source_id : null;
+  return row.proposed_evidence
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-•*]\s*/, "").trim())
+    .filter(Boolean)
+    .map((quote) => ({ quote, conversationId }));
 }
 
 function mapCandidate(
   row: FactCandidateColumns & VaenyxMeCandidateRow,
 ): VaenyxMeCandidate {
   return {
+    sources: candidateSources(row),
     id: row.id,
     category: row.category,
     title: row.title,
@@ -180,9 +224,32 @@ export function listVaenyxMeCandidates(
          END,
          created_at DESC`,
     )
-    .all() as unknown as VaenyxMeCandidateRow[];
+    .all() as unknown as (FactCandidateColumns & VaenyxMeCandidateRow)[];
 
-  return rows.map(mapCandidate);
+  const currentValueOf = database.sqlite.prepare(
+    `SELECT value FROM facts
+      WHERE slot = ? AND valid_until IS NULL
+        AND ((? IS NULL AND mode_id IS NULL) OR mode_id = ?)
+      ORDER BY recorded_at DESC LIMIT 1`,
+  );
+  return rows.map((row) => {
+    const candidate = mapCandidate(row);
+    // A pending FACT whose slot already holds a DIFFERENT approved value is a
+    // CHANGE, and the card must say so (Oskar, 2026-08-12): old → new, with
+    // "change it / keep the old one". Same value never reaches here — the
+    // restatement pass retires it before the Owner sees it.
+    if (candidate.status === "pending_review" && candidate.proposedSlot) {
+      const current = currentValueOf.get(
+        candidate.proposedSlot,
+        row.mode_id ?? null,
+        row.mode_id ?? null,
+      ) as { value: string } | undefined;
+      if (current && current.value !== (candidate.proposedValue ?? "")) {
+        candidate.currentValue = current.value;
+      }
+    }
+    return candidate;
+  });
 }
 
 export function createVaenyxMeCandidate(
@@ -196,8 +263,8 @@ export function createVaenyxMeCandidate(
     .prepare(
       `INSERT INTO vaenyx_me_candidates (
         id, category, title, proposed_summary, proposed_evidence, source_type,
-        source_id, confidence, status, created_by, mode_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?)`,
+        source_id, confidence, status, created_by, mode_id, sources_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?, ?, ?)`,
     )
     .run(
       id,
@@ -212,6 +279,17 @@ export function createVaenyxMeCandidate(
       // Which Mode this belongs to. NULL is User Mode and is a real value
       // here, not "unknown" — it is what every existing row already means.
       input.modeId ?? null,
+      // The first citation: this row's own grounds, pointing at the chat it
+      // came from. Merges append to this list rather than replacing it.
+      JSON.stringify([
+        {
+          quote: input.proposedEvidence.trim(),
+          conversationId:
+            (input.sourceType ?? "owner_manual") === "chat_history"
+              ? (input.sourceId ?? null)
+              : null,
+        },
+      ]),
     );
 
   // The inbox's own record of the reference (H-001): one row per Mode and
@@ -564,10 +642,9 @@ export async function mergePendingCandidates(
         undefined,
         { signal },
       );
-      merged += retireCovered(
+      merged += retireTraitsOverFacts(
         database,
-        parseCoveredIds(response.answer, pendingTraits),
-        "Same as a pending fact.",
+        parseTraitFactPairs(response.answer, pendingTraits, pendingFacts),
       );
     } catch {
       // Best-effort; the pair stays visible.

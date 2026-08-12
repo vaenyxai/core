@@ -57,6 +57,100 @@ export function dominantLanguage(text: string): "zh" | "en" {
   return cjk >= 6 || cjk / Math.max(text.length, 1) > 0.08 ? "zh" : "en";
 }
 
+// ---- Citations travel with merges (Oskar, 2026-08-12) ----------------------
+//
+// Every candidate carries sources: one line of grounds per origin, each with
+// its conversation. When twins fold, the survivor takes the loser's sources —
+// a merged card cites everything it came from, and each line can open its own
+// conversation. Six at most: past that the card is a list, not a decision.
+
+export interface CandidateSource {
+  quote: string;
+  conversationId: string | null;
+}
+
+export function readCandidateSources(
+  database: DatabaseHandle,
+  id: string,
+): CandidateSource[] {
+  const row = database.sqlite
+    .prepare(
+      `SELECT sources_json, proposed_evidence, source_type, source_id
+         FROM vaenyx_me_candidates WHERE id = ?`,
+    )
+    .get(id) as
+    | {
+        sources_json: string | null;
+        proposed_evidence: string;
+        source_type: string;
+        source_id: string | null;
+      }
+    | undefined;
+  if (!row) return [];
+  if (row.sources_json) {
+    try {
+      const parsed = JSON.parse(row.sources_json) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter(
+            (entry): entry is { quote: string; conversationId?: unknown } =>
+              typeof (entry as { quote?: unknown }).quote === "string",
+          )
+          .map((entry) => ({
+            quote: entry.quote,
+            conversationId:
+              typeof entry.conversationId === "string"
+                ? entry.conversationId
+                : null,
+          }));
+      }
+    } catch {
+      // Synthesize below.
+    }
+  }
+  const conversationId =
+    row.source_type === "chat_history" ? row.source_id : null;
+  return row.proposed_evidence
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-•*]\s*/, "").trim())
+    .filter(Boolean)
+    .map((quote) => ({ quote, conversationId }));
+}
+
+export function unionSources(
+  lists: CandidateSource[][],
+  cap = 6,
+): CandidateSource[] {
+  const merged: CandidateSource[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    for (const source of list) {
+      const quote = source.quote.trim();
+      if (!quote || seen.has(quote)) continue;
+      seen.add(quote);
+      merged.push({ quote, conversationId: source.conversationId });
+      if (merged.length === cap) return merged;
+    }
+  }
+  return merged;
+}
+
+/** The survivor of a fold takes the retired twin's citations. */
+export function attachSources(
+  database: DatabaseHandle,
+  survivorId: string,
+  extra: CandidateSource[],
+): void {
+  if (extra.length === 0) return;
+  const merged = unionSources([
+    readCandidateSources(database, survivorId),
+    extra,
+  ]);
+  database.sqlite
+    .prepare(`UPDATE vaenyx_me_candidates SET sources_json = ? WHERE id = ?`)
+    .run(JSON.stringify(merged), survivorId);
+}
+
 // One sanitiser for every list of points the model hands back, wherever it
 // came from: strings only, bullets stripped (the dash is added at render
 // time), exact duplicates dropped, at most four, none over 200 characters.
@@ -198,12 +292,18 @@ export function applyTraitMergeGroups(
       .slice(0, 2_000);
     const confidence = Math.max(...members.map((entry) => entry.confidence));
     const id = `merged-${members[0]!.id}`;
+    // The merged card cites everything its members did, deduped and capped —
+    // one line of grounds per origin, each still openable.
+    const sources = unionSources(
+      members.map((entry) => readCandidateSources(database, entry.id)),
+    );
     database.sqlite
       .prepare(
         `INSERT INTO vaenyx_me_candidates (
            id, category, title, proposed_summary, proposed_evidence,
-           source_type, source_id, confidence, status, created_by, mode_id
-         ) VALUES (?, ?, ?, ?, ?, 'chat_history', NULL, ?, 'pending_review', ?, ?)`,
+           source_type, source_id, confidence, status, created_by, mode_id,
+           sources_json
+         ) VALUES (?, ?, ?, ?, ?, 'chat_history', NULL, ?, 'pending_review', ?, ?, ?)`,
       )
       .run(
         id,
@@ -214,6 +314,7 @@ export function applyTraitMergeGroups(
         confidence,
         ownerId,
         modeId,
+        JSON.stringify(sources),
       );
     // Retired, not erased — see the note at the top for both reasons.
     const marks = database.sqlite.prepare(
@@ -345,7 +446,9 @@ export function parseSameFactPairs(
   }
 }
 
-/** The newest of a same-meaning pair survives; the older retires. */
+/** The newest of a same-meaning pair survives — and takes the older one's
+ *  citations with it, so the card still shows every conversation it came
+ *  from (Oskar, 2026-08-12). */
 export function retireOlderFactTwins(
   database: DatabaseHandle,
   same: FactTwinPair[],
@@ -357,7 +460,10 @@ export function retireOlderFactTwins(
       WHERE id = ? AND status = 'pending_review'`,
   );
   for (const pair of same) {
-    retired += Number(mark.run(pair.olderId).changes ?? 0);
+    const olderSources = readCandidateSources(database, pair.olderId);
+    const changed = Number(mark.run(pair.olderId).changes ?? 0);
+    if (changed > 0) attachSources(database, pair.newerId, olderSources);
+    retired += changed;
   }
   return retired;
 }
@@ -436,6 +542,7 @@ export function approvedDupPrompt(
   return [
     "APPROVED is what is already known about the person. PENDING is new proposals awaiting their review.",
     "Which pending entries state something the approved list ALREADY covers? Only clear restatements count — being related is not being covered.",
+    "A pending entry whose VALUE DIFFERS from the approved one is a CHANGE the person must see — never list it as covered.",
     'Reply with ONLY JSON: {"covered":["<pending id>"]} — none? {"covered":[]}',
     "",
     "APPROVED:",
@@ -541,14 +648,74 @@ export function traitOverFactPrompt(
   return [
     "FACTS are structured entries, TRAITS are prose observations — all pending about the same person.",
     "Which traits state the same thing as one of the facts? Only clear restatements count — being related is not being the same.",
-    'Reply with ONLY JSON: {"covered":["<trait id>"]} — none? {"covered":[]}',
+    'Reply with ONLY JSON: {"covered":[{"trait":"<trait id>","fact":"<fact id>"}]} — none? {"covered":[]}',
     "",
     "FACTS:",
-    ...facts.map((entry) => `- ${entry.text.slice(0, 240)}`),
+    ...facts.map((entry) => `id ${entry.id}: ${entry.text.slice(0, 240)}`),
     "",
     "TRAITS:",
     ...traits.map((entry) => `id ${entry.id}: ${entry.text.slice(0, 240)}`),
   ].join("\n");
+}
+
+export interface TraitFactPair {
+  traitId: string;
+  factId: string;
+}
+
+/** Pairs, both sides validated: the trait must be a listed trait, the fact a
+ *  listed fact, each trait claimed once. Anything else is dropped whole. */
+export function parseTraitFactPairs(
+  text: string,
+  traits: PendingBrief[],
+  facts: PendingBrief[],
+): TraitFactPair[] {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return [];
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1)) as {
+      covered?: unknown;
+    };
+    if (!Array.isArray(parsed.covered)) return [];
+    const traitIds = new Set(traits.map((entry) => entry.id));
+    const factIds = new Set(facts.map((entry) => entry.id));
+    const claimed = new Set<string>();
+    const pairs: TraitFactPair[] = [];
+    for (const entry of parsed.covered) {
+      const record = entry as { trait?: unknown; fact?: unknown };
+      if (typeof record.trait !== "string" || typeof record.fact !== "string")
+        continue;
+      if (!traitIds.has(record.trait) || !factIds.has(record.fact)) continue;
+      if (claimed.has(record.trait)) continue;
+      claimed.add(record.trait);
+      pairs.push({ traitId: record.trait, factId: record.fact });
+    }
+    return pairs;
+  } catch {
+    return [];
+  }
+}
+
+/** The fact survives (the stronger, structured form) and takes the trait's
+ *  citations; the trait retires with a note. */
+export function retireTraitsOverFacts(
+  database: DatabaseHandle,
+  pairs: TraitFactPair[],
+): number {
+  let retired = 0;
+  const mark = database.sqlite.prepare(
+    `UPDATE vaenyx_me_candidates
+        SET status = 'deleted', review_note = 'Same as a pending fact.'
+      WHERE id = ? AND status = 'pending_review'`,
+  );
+  for (const pair of pairs) {
+    const traitSources = readCandidateSources(database, pair.traitId);
+    const changed = Number(mark.run(pair.traitId).changes ?? 0);
+    if (changed > 0) attachSources(database, pair.factId, traitSources);
+    retired += changed;
+  }
+  return retired;
 }
 
 // ---- Evidence hygiene ------------------------------------------------------

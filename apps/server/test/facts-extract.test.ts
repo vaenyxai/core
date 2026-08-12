@@ -4,7 +4,10 @@ import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { DatabaseHandle } from "../src/db/database.js";
-import { listCurrentFacts, listFactHistory } from "../src/modules/core/facts.js";
+import {
+  listCurrentFacts,
+  listFactHistory,
+} from "../src/modules/core/facts.js";
 import {
   approveFactCandidate,
   idleConversations,
@@ -46,7 +49,8 @@ function freshDatabase(): DatabaseHandle {
       proposed_slot TEXT,
       proposed_value TEXT,
       proposed_event_time TEXT,
-      mode_id TEXT
+      mode_id TEXT,
+      sources_json TEXT
     );
     CREATE TABLE fact_extraction_state (
       conversation_id TEXT PRIMARY KEY NOT NULL,
@@ -99,7 +103,12 @@ describe("what the extractor is allowed to read", () => {
     // messages therefore cuts the whole attack path — no filter on the content
     // of a message could, since a stored message cannot say which of its
     // sentences came from outside.
-    addMessage("m1", "owner", "We moved to 44 New Road last March.", "2026-08-01T10:00:00.000Z");
+    addMessage(
+      "m1",
+      "owner",
+      "We moved to 44 New Road last March.",
+      "2026-08-01T10:00:00.000Z",
+    );
     addMessage(
       "m2",
       "assistant",
@@ -157,7 +166,9 @@ describe("when it runs", () => {
 });
 
 describe("what it proposes", () => {
-  const queue = (proposals: Parameters<typeof queueProposedFacts>[1]["proposals"]) =>
+  const queue = (
+    proposals: Parameters<typeof queueProposedFacts>[1]["proposals"],
+  ) =>
     queueProposedFacts(database, {
       conversationId: "conv-1",
       modeId: null,
@@ -169,21 +180,33 @@ describe("what it proposes", () => {
     // ⚠ Nothing proposed affects an answer until the Owner approves it.
     expect(
       queue([
-        { slot: "home_address", value: "44 New Road", eventTime: "2025-03", evidence: "We moved last March." },
+        {
+          slot: "home_address",
+          value: "44 New Road",
+          eventTime: "2025-03",
+          evidence: "We moved last March.",
+        },
       ]),
     ).toBe(1);
     expect(listCurrentFacts(database)).toHaveLength(0);
 
     const pending = database.sqlite
-      .prepare(`SELECT * FROM vaenyx_me_candidates WHERE status = 'pending_review'`)
-      .all() as unknown as { proposed_event_time: string; proposed_slot: string }[];
+      .prepare(
+        `SELECT * FROM vaenyx_me_candidates WHERE status = 'pending_review'`,
+      )
+      .all() as unknown as {
+      proposed_event_time: string;
+      proposed_slot: string;
+    }[];
     expect(pending).toHaveLength(1);
     expect(pending[0]?.proposed_slot).toBe("home_address");
     expect(pending[0]?.proposed_event_time).toBe("2025-03");
   });
 
   it("throws away a slot it was not offered", () => {
-    expect(queue([{ slot: "favourite_dinosaur", value: "stegosaur", evidence: "" }])).toBe(0);
+    expect(
+      queue([{ slot: "favourite_dinosaur", value: "stegosaur", evidence: "" }]),
+    ).toBe(0);
   });
 
   it("throws away anything that looks like a credential", () => {
@@ -194,7 +217,13 @@ describe("what it proposes", () => {
     expect(looksSecret("我们家的密码是 1234")).toBe(true);
     expect(looksSecret("we live at 44 New Road")).toBe(false);
     expect(
-      queue([{ slot: "preference:login", value: "password is hunter2", evidence: "" }]),
+      queue([
+        {
+          slot: "preference:login",
+          value: "password is hunter2",
+          evidence: "",
+        },
+      ]),
     ).toBe(0);
   });
 
@@ -212,7 +241,12 @@ describe("approving one", () => {
       modeId: null,
       ownerId: "owner-1",
       proposals: [
-        { slot: "home_address", value: "12 Old Street", evidence: "", confidence: 80 },
+        {
+          slot: "home_address",
+          value: "12 Old Street",
+          evidence: "",
+          confidence: 80,
+        },
       ],
     });
     const first = database.sqlite
