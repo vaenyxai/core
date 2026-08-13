@@ -8026,12 +8026,15 @@ body {
 @keyframes unread-breathe {
   0%,
   100% {
-    opacity: 0.4;
-    transform: scale(0.8);
+    opacity: 0.3;
+    transform: scale(0.65);
   }
   50% {
     opacity: 1;
-    transform: scale(1.25);
+    /* Swings to 1.6× (Oskar, 2026-08-12: the old 1.25× read as barely
+       alive on a phone). The dot is ~8px, so the peak is still only ~13px —
+       loud enough to catch, small enough to stay a dot. */
+    transform: scale(1.6);
   }
 }
 

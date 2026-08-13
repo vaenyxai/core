@@ -524,7 +524,15 @@ export async function createForgeTask(
       ) VALUES (?, ?, ?, '', 'running', 'owner', ?, ?,
         'openai-subscription-auth', 'codex-harness', 'Forge', 0, ?, NULL, NULL, ?)`,
     )
-    .run(id, title, request, project.id, skill?.id ?? null, now, memories.length);
+    .run(
+      id,
+      title,
+      request,
+      project.id,
+      skill?.id ?? null,
+      now,
+      memories.length,
+    );
 
   ensureTaskThread(database, {
     taskId: id,
@@ -613,7 +621,11 @@ export function createResearchTask(
     input.title?.trim() ||
     (request.length > 64 ? `${request.slice(0, 61)}...` : request);
   const memories = listTaskProjectMemories(database, project.id);
-  const sourceChat = getSourceChat(database, input.sourceChatId ?? null, ownerId);
+  const sourceChat = getSourceChat(
+    database,
+    input.sourceChatId ?? null,
+    ownerId,
+  );
 
   database.sqlite
     .prepare(
@@ -624,7 +636,15 @@ export function createResearchTask(
       ) VALUES (?, ?, ?, '', 'running', 'owner', ?, ?,
         'openai-subscription-auth', 'codex-harness', 'Vaenyx', 0, ?, NULL, NULL, ?)`,
     )
-    .run(id, title, request, project.id, skill?.id ?? null, now, memories.length);
+    .run(
+      id,
+      title,
+      request,
+      project.id,
+      skill?.id ?? null,
+      now,
+      memories.length,
+    );
 
   ensureTaskThread(database, {
     taskId: id,
@@ -640,9 +660,11 @@ export function createResearchTask(
     .filter(Boolean)
     .join("\n\n");
   void executeTaskRun(database, id, "manual", (signal) =>
-    getDefaultProvider().sendChat([{ content: request, role: "owner" }], context, {
-      signal,
-    }).then((reply) => reply.answer),
+    getDefaultProvider()
+      .sendChat([{ content: request, role: "owner" }], context, {
+        signal,
+      })
+      .then((reply) => reply.answer),
   );
 
   return {
@@ -726,6 +748,17 @@ function appendRunResultToConversation(
 ): void {
   if (!result.trim()) return;
   try {
+    // The thread rises in the sidebar the moment a run lands, whether or not
+    // its conversation was ever opened (Oskar, 2026-08-12: a scheduled task
+    // that wrote today sat buried under yesterday's chats — this bump used to
+    // live BEHIND the conversation-exists check, and an unopened task has no
+    // conversation yet). The sidebar orders by exactly this column.
+    database.sqlite
+      .prepare(
+        `UPDATE vaenyx_threads SET updated_at = ?
+         WHERE task_id = ? AND kind = 'task'`,
+      )
+      .run(finishedAt, taskId);
     const row = database.sqlite
       .prepare(
         `SELECT conversation_id FROM vaenyx_threads
@@ -745,12 +778,6 @@ function appendRunResultToConversation(
         `UPDATE ask_vaenyx_conversations SET updated_at = ? WHERE id = ?`,
       )
       .run(finishedAt, row.conversation_id);
-    database.sqlite
-      .prepare(
-        `UPDATE vaenyx_threads SET updated_at = ?
-         WHERE task_id = ? AND kind = 'task'`,
-      )
-      .run(finishedAt, taskId);
   } catch {
     // Best-effort: a missed append never fails the run itself.
   }
@@ -793,15 +820,27 @@ async function executeTaskRun(
     // same prompt usually goes straight through on the next attempt. A daily
     // 7am task whose whole value is being there at 7am should not be lost to
     // one such decision, so it gets exactly one more go (2026-07-27).
-    if (code.startsWith("CODEX_ASK_VAENYX_BOUNDARY_VIOLATION") && !controller.signal.aborted) {
+    if (
+      code.startsWith("CODEX_ASK_VAENYX_BOUNDARY_VIOLATION") &&
+      !controller.signal.aborted
+    ) {
       try {
         result = await run(controller.signal);
         status = "completed";
         runningTasks.delete(id);
-        return await finishTaskRun(database, id, runId, trigger, result, status);
+        return await finishTaskRun(
+          database,
+          id,
+          runId,
+          trigger,
+          result,
+          status,
+        );
       } catch (retryError) {
         code =
-          retryError instanceof Error ? retryError.message : "CODEX_UNKNOWN_ERROR";
+          retryError instanceof Error
+            ? retryError.message
+            : "CODEX_UNKNOWN_ERROR";
       }
     }
     result =
@@ -1009,7 +1048,10 @@ export function setTaskSchedule(
   const dayOfMonth = input.dayOfMonth ?? null;
   const nextRunAt =
     enabled && input.cadence
-      ? computeNextRun({ cadence: input.cadence, time, dayOfWeek, dayOfMonth }, Date.now())
+      ? computeNextRun(
+          { cadence: input.cadence, time, dayOfWeek, dayOfMonth },
+          Date.now(),
+        )
       : null;
 
   database.sqlite
@@ -1088,11 +1130,7 @@ function buildDeliveredContext(
   database: DatabaseHandle,
   taskId: string,
 ): string | undefined {
-  const runs = recentCompletedRuns(
-    database,
-    taskId,
-    DELIVERED_RUNS_IN_CONTEXT,
-  );
+  const runs = recentCompletedRuns(database, taskId, DELIVERED_RUNS_IN_CONTEXT);
   if (runs.length === 0) return undefined;
   const delivered = runs
     .map(
@@ -1200,10 +1238,12 @@ function runTaskById(
       .filter(Boolean)
       .join("\n\n");
     run = (signal) =>
-      getDefaultProvider().sendChat([{ content: task.request, role: "owner" }], context, {
-        signal,
-        onThinking: (text) => appendRunThinking(task.id, text),
-      }).then((reply) => reply.answer);
+      getDefaultProvider()
+        .sendChat([{ content: task.request, role: "owner" }], context, {
+          signal,
+          onThinking: (text) => appendRunThinking(task.id, text),
+        })
+        .then((reply) => reply.answer);
   }
 
   database.sqlite
@@ -1265,9 +1305,7 @@ export function runDueTasks(database: DatabaseHandle): number {
 export function retryTask(database: DatabaseHandle, taskId: string): Task {
   const existing = database.sqlite
     .prepare("SELECT id, status, harness FROM tasks WHERE id = ?")
-    .get(taskId) as
-    | { id: string; status: string; harness: string }
-    | undefined;
+    .get(taskId) as { id: string; status: string; harness: string } | undefined;
   if (!existing) throw new Error("TASK_NOT_FOUND");
   if (existing.status === "running") throw new Error("TASK_ALREADY_RUNNING");
   if (existing.harness !== "codex-harness") {

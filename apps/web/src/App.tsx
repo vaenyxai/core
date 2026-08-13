@@ -636,7 +636,10 @@ function threadStatusChips(thread: VaenyxThread, tasks: Task[]): ThreadChip[] {
   if (task?.scheduleEnabled && task.scheduleCadence) {
     chips.push({
       key: "scheduled",
-      label: "Scheduled",
+      // "SCH", the same short form the task view wears (Oskar, 2026-08-12:
+      // 胶囊统一 — the sidebar said "Scheduled" while the conversation said
+      // "SCH", two spellings of one capsule). Hover still spells it out.
+      label: "SCH",
       tone: "scheduled",
       title: describeSchedule(task),
     });
