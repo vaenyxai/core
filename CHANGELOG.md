@@ -4,6 +4,18 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.6.0 — 2026-08-15
+
+**No more white screens.** Opening Vaenyx while its computer was still
+booting — most often from a phone — could land on a blank page that never
+recovered. Two faults stacked: a page held over from an older build asked
+for files that no longer exist and was answered with the home page instead
+of an honest "gone", and the offline fallback served a stale copy of the
+app's shell. Both are fixed, and the fallback is now a small page that says
+*Starting up… this page will open by itself* — it checks every two seconds
+and walks into the app the moment the server answers. Restart the computer,
+open Vaenyx immediately, and it simply arrives.
+
 ## v0.4.5.0 — 2026-08-12
 
 **The first run is a short walk that finishes the job.** Create the account —
