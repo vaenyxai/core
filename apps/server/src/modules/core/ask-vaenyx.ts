@@ -152,13 +152,63 @@ const MAX_OWNER_PROFILE_ITEMS = 12;
 // them, forever". The full list stays on the Vaenyx Me screen.
 const MAX_FACTS_PER_TURN = 40;
 
+// ── Compaction disciplines (ported as ideas from DeepSeek Harness, MIT,
+//    2026-08-15; all code here is Vaenyx's own) ─────────────────────────────
+
+// The cut between "compacted" and "shown in full" may never split a pair: an
+// Owner message and the assistant replies that answer it stay on the same
+// side — above all a message carrying an attachment and the reply that
+// interprets it, or the model ends up citing something it can no longer see.
+// The boundary therefore always lands ON an Owner message; when it would land
+// on an assistant reply it walks back (keeping MORE verbatim) until it does.
+// Walking all the way back to zero means nothing compacts this turn.
+export function pairSafeCutIndex(
+  history: ReadonlyArray<{ role: "owner" | "assistant" }>,
+): number {
+  let cut = Math.max(0, history.length - MAX_HISTORY_MESSAGES);
+  while (cut > 0 && history[cut]?.role === "assistant") cut -= 1;
+  return cut;
+}
+
+// The checkpoint is a fixed form, not free prose: free summaries drift over
+// recursive re-compaction — every rewrite loses a little shape until the
+// early facts dissolve. Fixed sections hold the shape; the merge rules stop
+// the copy-forward rot. Headings stay in English (they are structure); the
+// bullet content follows the conversation's language.
+export const CHECKPOINT_SECTIONS = [
+  "## Goals and ongoing work",
+  "## Established facts and decisions",
+  "## Open items and promises",
+  "## Corrections and preferences",
+  "## Where things stand",
+  "## Next step",
+] as const;
+
+export const CHECKPOINT_INSTRUCTION = [
+  "You are now acting as the compaction engine for this conversation. Condense the conversation above into a structured checkpoint that lets the assistant continue with no loss of essential context.",
+  'Use EXACTLY these sections, in this order, as markdown headings, with terse bullet lines under each. A section with nothing to say keeps its heading with "(none)" under it. Never drop or rename a section.',
+  ...CHECKPOINT_SECTIONS,
+  "",
+  "Rules:",
+  "- Keep exact numbers, dates, names, amounts and identifiers verbatim.",
+  "- If an earlier-messages checkpoint appears above, it is a PRIOR checkpoint, not content to repeat: keep what is still true, drop what is superseded, and merge everything into this one new checkpoint.",
+  "- Write the bullet content in the language the conversation is in; keep the section headings exactly as given.",
+  "- Do not mention this request, the checkpoint itself, or that anything was condensed.",
+  "- Output only the checkpoint text — no preamble, no other action.",
+].join("\n");
+
+// A structured checkpoint needs room for its six sections; still capped so a
+// runaway answer cannot ride every later turn.
+const MAX_CHECKPOINT_CHARS = 6000;
+
 // The long-conversation memory (Oskar, 2026-07-29). A chat used to forget its
 // own beginning: only the last 30 messages reached the model and the rest were
 // simply dropped. Now everything that ages out is folded into a rolling
-// summary — recursively, so the summary of the first 100 messages becomes part
-// of the summary of the first 200 — and that summary rides every later turn.
-// Best-effort by design: a failed compaction returns the previous summary (or
-// none) and the reply proceeds; memory is never a reason to lose an answer.
+// checkpoint — recursively, so the checkpoint of the first 100 messages
+// becomes part of the checkpoint of the first 200 — and that checkpoint rides
+// every later turn. Best-effort by design: a failed compaction returns the
+// previous checkpoint (or none) and the reply proceeds; memory is never a
+// reason to lose an answer.
 async function compactConversationHistory(
   database: DatabaseHandle,
   conversationId: string,
@@ -166,7 +216,7 @@ async function compactConversationHistory(
   provider: ModelProvider,
   signal?: AbortSignal,
 ): Promise<string | null> {
-  const olderCount = Math.max(0, usableHistory.length - MAX_HISTORY_MESSAGES);
+  const olderCount = pairSafeCutIndex(usableHistory);
   const row = database.sqlite
     .prepare(
       `SELECT history_summary, history_summary_count
@@ -179,48 +229,43 @@ async function compactConversationHistory(
   const storedCount = row?.history_summary_count ?? 0;
 
   const formatSummary = (summary: string): string =>
-    `Earlier in this conversation (a summary of the ${storedCount > 0 ? "older" : "earlier"} messages, which are no longer shown in full):\n${summary}`;
+    [
+      "Earlier in this conversation (a checkpoint of the earlier messages, which are no longer shown in full). Treat it as established background and build on it without restating it or mentioning it:",
+      summary,
+    ].join("\n");
 
   if (olderCount === 0) return null;
   if (storedSummary && olderCount - storedCount < SUMMARY_REFRESH_EVERY) {
     return formatSummary(storedSummary);
   }
 
-  // Only the messages that have aged out since the last summary need reading;
-  // the previous summary carries everything before them.
+  // Only the messages that have aged out since the last checkpoint need
+  // reading; the previous checkpoint carries everything before them.
   const fresh = usableHistory.slice(storedCount, olderCount);
   if (fresh.length === 0) {
     return storedSummary ? formatSummary(storedSummary) : null;
   }
-  const transcript = fresh
-    .map(
-      (message) =>
-        `${message.role === "owner" ? "Owner" : "Vaenyx"}: ${message.content.slice(0, 2000)}`,
-    )
-    .join("\n");
 
   try {
+    // Prefix-cache alignment: the aged-out messages are replayed VERBATIM as
+    // real conversation messages — the same shape the real requests carried
+    // them — with the one novel thing, the compaction instruction, appended
+    // as the final Owner message. A provider that caches request prefixes
+    // re-uses what the real turns already paid for; one that does not is no
+    // worse off, so the shape is uniform across providers. The prior
+    // checkpoint rides the same context channel the real turns use.
     const result = await provider.sendChat(
       [
-        {
-          role: "owner",
-          content: [
-            "Update the running summary of a conversation so nothing important is lost when the older messages stop being shown in full.",
-            "Keep it SHORT and factual: bullet lines, one fact per line — decisions made, things the Owner stated about themselves or their situation, open threads, and anything they asked you to remember.",
-            "Drop small talk and anything already superseded. Write in the language the conversation is in. No preamble, no headings — lines only.",
-            "",
-            storedSummary
-              ? `Summary so far:\n${storedSummary}\n`
-              : "There is no summary yet.\n",
-            "New messages to fold in:",
-            transcript,
-          ].join("\n"),
-        },
+        ...fresh.map((message) => ({
+          content: message.content,
+          role: message.role,
+        })),
+        { role: "owner" as const, content: CHECKPOINT_INSTRUCTION },
       ],
-      undefined,
+      storedSummary ? formatSummary(storedSummary) : undefined,
       { ...(signal ? { signal } : {}) },
     );
-    const summary = result.answer.trim().slice(0, 4000);
+    const summary = result.answer.trim().slice(0, MAX_CHECKPOINT_CHARS);
     if (!summary) return storedSummary ? formatSummary(storedSummary) : null;
     database.sqlite
       .prepare(
@@ -952,10 +997,15 @@ export async function createAskVaenyxMessage(
       (message) =>
         !(message.role === "assistant" && message.status === "failed"),
     );
-  const history = usableHistory.slice(-MAX_HISTORY_MESSAGES).map((message) => ({
-    content: message.content,
-    role: message.role,
-  }));
+  // The verbatim window starts at the SAME pair-safe boundary the compaction
+  // folds up to — computed once, shared by both sides, so no message can fall
+  // into the hole between "summarized" and "shown in full".
+  const history = usableHistory
+    .slice(pairSafeCutIndex(usableHistory))
+    .map((message) => ({
+      content: message.content,
+      role: message.role,
+    }));
   let assistantContent: string;
   let assistantStatus: "completed" | "failed";
   let webSearchUsed = false;

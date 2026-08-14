@@ -14,6 +14,7 @@ const filesToScan = [
   "README.md",
   "CONTRIBUTING.md",
   "TODO.md",
+  "docs/architecture.md",
   "docs/architecture-guardrails.md",
   "docs/chat-handoff.md",
   "docs/MVP-IMPLEMENTATION-PLAN.md",
@@ -39,22 +40,26 @@ const allowedSeparationWords = [
 const checks = [
   {
     concept: "Vaenyx Me vs Agent Profiles",
-    pattern: /\bvaenyx me\b[^.!?\n]*(agent profile|agent profiles|sub agent|sub agents|forge|scribe|scout|lens|vault|ledger|nest|oracle)/iu,
+    pattern:
+      /\bvaenyx me\b[^.!?\n]*(agent profile|agent profiles|sub agent|sub agents|forge|scribe|scout|lens|vault|ledger|nest|oracle)/iu,
     allowedWhen: allowedSeparationWords,
   },
   {
     concept: "Agent Profiles vs Digital Self",
-    pattern: /\bagent profiles?\b[^.!?\n]*(digital self|owner traits|owner's inspectable digital self|long-term user model)/iu,
+    pattern:
+      /\bagent profiles?\b[^.!?\n]*(digital self|owner traits|owner's inspectable digital self|long-term user model)/iu,
     allowedWhen: allowedSeparationWords,
   },
   {
     concept: "Project vs Agent",
-    pattern: /\bproject\b[^.!?\n]*(is an agent|agent identity|agent personality)/iu,
+    pattern:
+      /\bproject\b[^.!?\n]*(is an agent|agent identity|agent personality)/iu,
     allowedWhen: allowedSeparationWords,
   },
   {
     concept: "Skill vs Agent",
-    pattern: /\bskill\b[^.!?\n]*(is an agent|agent identity|agent personality)/iu,
+    pattern:
+      /\bskill\b[^.!?\n]*(is an agent|agent identity|agent personality)/iu,
     allowedWhen: allowedSeparationWords,
   },
 ];

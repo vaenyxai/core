@@ -146,8 +146,9 @@ Read this inside the app: **Settings → Manual**.
 - **Rename, archive, delete a chat** — the ⋮ menu at the top of the chat.
 - **Unread** — the coloured dot beside a conversation breathes when there is
   something new in it.
-- **What it remembers** — the last thirty messages in full, plus a rolling
-  summary of everything before that, plus your approved *Vaenyx Me* facts.
+- **What it remembers** — the most recent thirty-odd messages in full (a
+  question and its answer are never split apart), plus a structured running
+  checkpoint of everything before that, plus your approved *Vaenyx Me* facts.
 - **Looking things up** — whether it really goes and looks depends on which main
   model you are on. Only the ChatGPT (Codex CLI) and Claude subscriptions search
   the web today; every other model answers from what it memorised when it was
