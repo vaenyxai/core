@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  findFunnelEnableUrl,
   parseBackendStatus,
   parseServeStatus,
 } from "../src/modules/core/phone-access.js";
@@ -111,5 +112,53 @@ describe("parseServeStatus", () => {
   it("survives empty and non-JSON output", () => {
     expect(parseServeStatus("{}").tunnelUp).toBe(false);
     expect(parseServeStatus("No serve config").tunnelUp).toBe(false);
+  });
+});
+
+// The Surface lesson (2026-08-15): local serve config can say "funnel on"
+// while the Tailscale cloud never published the name, because the tailnet
+// still wants a one-time approval. The CLI prints the approval link — this
+// finder must lift it out of real CLI phrasing so the UI can make it a
+// button.
+describe("findFunnelEnableUrl", () => {
+  it("lifts the approval link out of the CLI's warning text", () => {
+    const cliText = [
+      "Funnel is not enabled on your tailnet.",
+      "To enable, visit:",
+      "",
+      "\thttps://login.tailscale.com/f/funnel?node=nHcc7yqFEt11CNTRL",
+      "",
+    ].join("\n");
+    expect(findFunnelEnableUrl(cliText)).toBe(
+      "https://login.tailscale.com/f/funnel?node=nHcc7yqFEt11CNTRL",
+    );
+  });
+
+  it("stops at quotes and closing brackets around the link", () => {
+    expect(
+      findFunnelEnableUrl(
+        'visit "https://login.tailscale.com/f/funnel?node=abc123" to enable',
+      ),
+    ).toBe("https://login.tailscale.com/f/funnel?node=abc123");
+    expect(
+      findFunnelEnableUrl(
+        "(see https://login.tailscale.com/f/funnel?node=abc123)",
+      ),
+    ).toBe("https://login.tailscale.com/f/funnel?node=abc123");
+  });
+
+  it("returns null for healthy funnel output and unrelated links", () => {
+    const healthy = [
+      "# Funnel on:",
+      "#     - https://example-pc.taile1234.ts.net",
+      "",
+      "https://example-pc.taile1234.ts.net (Funnel on)",
+      "|-- / proxy http://127.0.0.1:3000",
+    ].join("\n");
+    expect(findFunnelEnableUrl(healthy)).toBeNull();
+    expect(
+      findFunnelEnableUrl("https://login.tailscale.com/a/0123456789abcdef"),
+    ).toBeNull();
+    expect(findFunnelEnableUrl("")).toBeNull();
   });
 });

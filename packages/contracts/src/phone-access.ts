@@ -28,6 +28,17 @@ export const PhoneAccessStatusSchema = Type.Object(
       Type.Literal("failed"),
     ]),
     detail: Type.Union([Type.String(), Type.Null()]),
+    // The CLOUD's verdict on the public side (2026-08-15): does the funnel
+    // name actually exist in public DNS, asked over DNS-over-HTTPS — which
+    // bypasses MagicDNS, so this machine CAN verify it after all. true =
+    // a phone can open it; false = Tailscale has not published it (most
+    // often the one-time Funnel approval is missing); null = could not ask.
+    publiclyResolvable: Type.Optional(
+      Type.Union([Type.Boolean(), Type.Null()]),
+    ),
+    // The one-time approval link Tailscale prints when the tailnet has not
+    // allowed this node to Funnel — one click on that page fixes it.
+    funnelEnableUrl: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   {
     $id: "PhoneAccessStatus",

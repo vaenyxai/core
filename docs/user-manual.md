@@ -565,6 +565,12 @@ Read this inside the app: **Settings → Manual**.
   *Phone channel on* — each with a button that fixes it: Vaenyx installs the
   free Tailscale client, opens its sign-in page, and turns the channel on.
   When all three are green, a QR code appears.
+- **The QR code waits for the public side** — before showing it, Vaenyx asks
+  public DNS itself whether the address really exists out on the internet.
+  While it does not yet, the page says so and keeps rechecking. If Tailscale
+  wants its one-time approval first (a tailnet-wide setting called Funnel),
+  Vaenyx shows an **Approve It On Tailscale** button — one click on that page,
+  once ever, and the recheck turns green by itself.
 - **Scan the code** — with the phone's camera, then open the link. The QR code
   is drawn on your own machine by Vaenyx itself; the address is never sent to
   any outside QR or link service.
@@ -577,9 +583,10 @@ Read this inside the app: **Settings → Manual**.
   Screen*. Android: Chrome → top-right menu → *Install app* (or *Add to Home
   screen*). It then behaves like an app.
 - **If the phone cannot open it** — a freshly opened channel can take a minute
-  or two to become reachable from the internet. Wait a minute and scan again.
-  The computer cannot confirm the public side itself — only the phone can
-  prove it.
+  or two to become reachable from the internet. The Phone Access page keeps
+  rechecking and shows the QR code once the address is confirmed live; if the
+  page could not reach public DNS to check, wait a minute and scan again —
+  then only the phone can prove it.
 - **Notifications** — Settings → Notifications → allow, then **Test** to prove
   one arrives.
 - **Several results fold into one** — a notification arriving while another is

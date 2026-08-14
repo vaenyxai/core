@@ -14651,12 +14651,22 @@ function PhoneAccessPanel() {
           next.installPhase === "failed" ||
           (next.installPhase !== "installing" &&
             next.installed &&
-            next.signedIn);
+            next.signedIn &&
+            !(next.tunnelUp && next.publiclyResolvable === false));
         if (settled) setWatching(false);
       });
     }, 5000);
     return () => window.clearInterval(timer);
   }, [watching, refresh]);
+
+  // A channel that is on locally but not live on the public internet yet
+  // (Tailscale still publishing, or waiting for the one-time Funnel approval)
+  // settles OUTSIDE this page too — keep watching until the name resolves.
+  const awaitingPublic =
+    status !== null && status.tunnelUp && status.publiclyResolvable === false;
+  useEffect(() => {
+    if (awaitingPublic) setWatching(true);
+  }, [awaitingPublic]);
 
   async function doInstall() {
     setBusy("install");
@@ -14861,7 +14871,13 @@ function PhoneAccessPanel() {
           </span>
         </p>
         {status.tunnelUp ? (
-          done(zh ? "已开启" : "On")
+          status.publiclyResolvable === false ? (
+            <span className="library-chip">
+              {zh ? "等公网生效" : "Not Public Yet"}
+            </span>
+          ) : (
+            done(zh ? "已开启" : "On")
+          )
         ) : (
           <>
             {notYet}
@@ -14897,23 +14913,77 @@ function PhoneAccessPanel() {
         </p>
       ) : null}
 
-      {status.tunnelUp && status.phoneUrl ? (
+      {/* The QR code only comes out once the public side is REAL (or at
+          least not provably missing). The server asks public DNS itself
+          over DNS-over-HTTPS — bypassing MagicDNS — so a green light here
+          means a phone can actually open the address (the Surface lesson,
+          2026-08-15: local config said "on" while the cloud had never
+          published the name). */}
+      {status.tunnelUp && status.phoneUrl && awaitingPublic ? (
+        <>
+          <div className="settings-card-divider" />
+          {status.funnelEnableUrl ? (
+            <>
+              <p className="settings-card-copy">
+                {zh
+                  ? "还差一步:Tailscale 要你在它的网站上点一次「批准」,才肯把这个地址对外发布(只需要这一次)。点下面的按钮,在打开的页面上确认,然后回到这里 —— 这个页面会自动重新检查,好了就出二维码。"
+                  : "One step left: Tailscale wants a one-time approval on its own website before it publishes this address (just this once). Click below, confirm on the page that opens, then come back — this page rechecks by itself and shows the QR code the moment it works."}
+              </p>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  if (status.funnelEnableUrl) {
+                    window.open(status.funnelEnableUrl, "_blank", "noopener");
+                  }
+                }}
+                type="button"
+              >
+                {zh ? "去 Tailscale 批准(只需一次)" : "Approve It On Tailscale"}
+              </button>
+              <p className="settings-card-copy phone-step-fine">
+                <a
+                  href={status.funnelEnableUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {zh
+                    ? "没弹出窗口?点这里打开批准页 ↗"
+                    : "No window? Open the approval page ↗"}
+                </a>
+              </p>
+            </>
+          ) : (
+            <p className="settings-card-copy">
+              {zh
+                ? "通道已开启,但这个地址还没在公网上生效 —— 通常要 1–3 分钟。这个页面会自动重新检查,好了就出二维码。"
+                : "The channel is on, but the address is not live on the public internet yet — that usually takes 1–3 minutes. This page keeps rechecking and shows the QR code the moment it works."}
+            </p>
+          )}
+        </>
+      ) : null}
+
+      {status.tunnelUp && status.phoneUrl && !awaitingPublic ? (
         <>
           <div className="settings-card-divider" />
           <h3 className="settings-subhead">
             {zh ? "用手机扫这个码" : "Scan This With The Phone"}
           </h3>
           <PhoneQrCode url={status.phoneUrl} />
-          {/* Honest reachability (a real lesson): a fresh funnel takes a
-              minute to reach the public internet, and THIS machine cannot
-              verify the public side — its own lookup resolves through
-              MagicDNS straight back into the tailnet. Only the phone can
-              prove it, so the copy never claims this machine confirmed it. */}
-          <p className="settings-card-copy phone-step-fine">
-            {zh
-              ? "刚开启的通道要过一两分钟才能从外网打开。手机打不开的话,等一分钟再扫一次 —— 这台电脑自己没法确认外网那一侧,能证明的只有手机。"
-              : "A freshly opened channel can take a minute or two to work from the internet. If the phone cannot open it, wait a minute and scan again — this computer cannot confirm the public side itself; only the phone can."}
-          </p>
+          {status.publiclyResolvable === true ? (
+            <p className="settings-card-copy phone-step-fine">
+              {zh
+                ? "这台电脑已经向公网确认过:这个地址在外面是真的打得开。直接扫就行。"
+                : "This computer has checked with the public internet: the address really is live out there. Just scan."}
+            </p>
+          ) : (
+            // publiclyResolvable === null: could not ask (offline resolvers,
+            // blocked DoH) — fall back to the honest hedge.
+            <p className="settings-card-copy phone-step-fine">
+              {zh
+                ? "刚开启的通道要过一两分钟才能从外网打开。手机打不开的话,等一分钟再扫一次 —— 这台电脑此刻问不到公网那一侧,能证明的只有手机。"
+                : "A freshly opened channel can take a minute or two to work from the internet. If the phone cannot open it, wait a minute and scan again — this computer could not reach the public side to check right now; only the phone can prove it."}
+            </p>
+          )}
           <PhoneInstructions url={status.phoneUrl} />
         </>
       ) : null}

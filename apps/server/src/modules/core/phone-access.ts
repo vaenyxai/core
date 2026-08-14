@@ -8,10 +8,15 @@
 // Honesty rules baked in here:
 //   * every status field comes from actually running the tailscale CLI —
 //     nothing is inferred from wishes;
-//   * this machine can NEVER verify the public side of a fresh funnel (its
-//     own lookup resolves through MagicDNS back inside the tailnet), so no
-//     field claims public reachability — the UI tells the owner the phone is
-//     the only real test.
+//   * the PUBLIC side is verified from here after all (2026-08-15). The old
+//     rule said only the phone could prove it, because this machine's own
+//     lookup resolves through MagicDNS back inside the tailnet — true for
+//     the OS resolver, not for DNS-over-HTTPS: asking a public resolver
+//     over plain HTTPS bypasses MagicDNS entirely. Funnel creates a public
+//     DNS record the moment the cloud actually accepts it, so "does the
+//     name exist publicly" is exactly the truth the QR code promises — and
+//     the Owner's Surface proved the gap: local config said ON, the public
+//     name did not exist, the QR led nowhere.
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
@@ -167,6 +172,68 @@ export function parseBackendStatus(jsonText: string): ParsedBackendStatus {
   } catch {
     return { backendState: null, authUrl: null, dnsName: null };
   }
+}
+
+// ── The public side, asked directly ───────────────────────────────────────
+
+// Cached briefly: the panel polls every few seconds, and a DNS record does
+// not flicker. A fresh tunnel-enable clears the cache so the first status
+// read after it asks for real.
+let dnsCache: { host: string; at: number; value: boolean | null } = {
+  host: "",
+  at: 0,
+  value: null,
+};
+
+export function clearPublicDnsCache(): void {
+  dnsCache = { host: "", at: 0, value: null };
+}
+
+export async function checkPublicDns(host: string): Promise<boolean | null> {
+  if (dnsCache.host === host && Date.now() - dnsCache.at < 30_000) {
+    return dnsCache.value;
+  }
+  const resolvers = [
+    `https://dns.google/resolve?name=${encodeURIComponent(host)}&type=A`,
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=A`,
+  ];
+  let value: boolean | null = null;
+  for (const url of resolvers) {
+    try {
+      const response = await fetch(url, {
+        headers: { accept: "application/dns-json" },
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!response.ok) continue;
+      const parsed = (await response.json()) as {
+        Status?: number;
+        Answer?: unknown[];
+      };
+      // 0 with answers = the name exists; 3 = NXDOMAIN, it does not.
+      if (parsed.Status === 0 && (parsed.Answer?.length ?? 0) > 0) {
+        value = true;
+        break;
+      }
+      if (parsed.Status === 3) {
+        value = false;
+        break;
+      }
+    } catch {
+      // Try the next resolver; both failing leaves null = unknown, which the
+      // UI treats as "cannot check", never as a verdict.
+    }
+  }
+  dnsCache = { host, at: Date.now(), value };
+  return value;
+}
+
+/** The one-time approval link Tailscale prints when the tailnet has not
+ *  allowed this node to Funnel. One click on that page (signed in) fixes it
+ *  for good — so it must reach the Owner as a button, never as a line lost
+ *  in CLI output. */
+export function findFunnelEnableUrl(text: string): string | null {
+  const match = text.match(/https:\/\/login\.tailscale\.com\/f\/[^\s"')]+/);
+  return match ? match[0] : null;
 }
 
 export interface ParsedServeStatus {
@@ -348,6 +415,8 @@ export async function getPhoneAccessStatus(): Promise<PhoneAccessStatus> {
     phoneUrl: null,
     installPhase: installState.phase,
     detail: installState.detail,
+    publiclyResolvable: null,
+    funnelEnableUrl: null,
   };
   if (!command) return base;
 
@@ -381,6 +450,27 @@ export async function getPhoneAccessStatus(): Promise<PhoneAccessStatus> {
     // a tunnel that is not up.
     if (serve.tunnelUp && !serve.phoneUrl && backend.dnsName) {
       base.phoneUrl = `https://${backend.dnsName}`;
+    }
+    if (base.tunnelUp && base.phoneUrl) {
+      // The cloud's verdict, not the local config's: the local serve config
+      // can say AllowFunnel while Tailscale never published the name — the
+      // QR then leads nowhere. Public DNS is the truth the phone will meet.
+      try {
+        base.publiclyResolvable = await checkPublicDns(
+          new URL(base.phoneUrl).hostname,
+        );
+      } catch {
+        base.publiclyResolvable = null;
+      }
+      if (base.publiclyResolvable === false) {
+        // Not published: ask the CLI why. A missing one-time Funnel
+        // approval prints its enable link here; the panel turns it into a
+        // button.
+        const funnelStatus = await run(command, ["funnel", "status"]);
+        base.funnelEnableUrl = findFunnelEnableUrl(
+          `${funnelStatus.stdout}\n${funnelStatus.stderr}`,
+        );
+      }
     }
   }
   return base;
@@ -517,6 +607,9 @@ export async function enablePhoneTunnel(
     ["funnel", "--bg", String(LOCAL_PORT)],
     30_000,
   );
+  // A fresh enable changes the public side: the next status read must ask
+  // DNS for real instead of serving a cached "not yet".
+  clearPublicDnsCache();
   // Trust the re-read config, not the command's own claims.
   const serveResult = await run(command, ["serve", "status", "--json"]);
   const serve = parseServeStatus(serveResult.stdout);
