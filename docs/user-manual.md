@@ -41,8 +41,14 @@ Read this inside the app: **Settings → Manual**.
   first start and shows you each one. That is deliberate: a component that
   will not download can then say so without taking the install down with it.
 - **Ticking phone access installs Tailscale; it does not connect it.** The
-  first screen after setup takes you through signing in with your own free
-  Tailscale account and shows the QR code for your phone.
+  first run takes you through signing in with your own free Tailscale account
+  and shows the QR code for your phone.
+- **The first run is a short walk, in order** — create the account (a local
+  password, six characters or more; nothing else on that page), connect a
+  model (your ChatGPT or Claude subscription, or an API key from the
+  drop-down), then set up the phone: install if it is missing, sign in, scan
+  the QR. Every fresh account walks these steps — nothing essential is left
+  for you to find in Settings later.
 - **Not enough disk space** — Vaenyx says so before it starts, names the drive
   and how much is short. It checks two drives when they differ: where Vaenyx
   goes, and the Windows drive the downloads unpack through.

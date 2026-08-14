@@ -23,7 +23,9 @@ export const BootstrapStatusSchema = Type.Object(
 export const SetupOwnerRequestSchema = Type.Object(
   {
     name: Type.String({ minLength: 1, maxLength: 80 }),
-    password: Type.String({ minLength: 8, maxLength: 200 }),
+    // Six, not eight (Oskar, 2026-08-12): this is a LOCAL password on the
+    // household's own machine, not an internet-facing account.
+    password: Type.String({ minLength: 6, maxLength: 200 }),
   },
   { additionalProperties: false },
 );
@@ -38,7 +40,7 @@ export const LoginRequestSchema = Type.Object(
 export const ChangePasswordRequestSchema = Type.Object(
   {
     currentPassword: Type.String({ minLength: 1, maxLength: 200 }),
-    newPassword: Type.String({ minLength: 8, maxLength: 200 }),
+    newPassword: Type.String({ minLength: 6, maxLength: 200 }),
   },
   { additionalProperties: false },
 );

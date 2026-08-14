@@ -438,80 +438,9 @@ textarea::placeholder {
   text-align: center;
 }
 
-/* Sign-in page quick-connect: pick a model, land on its connect card */
-.auth-models {
-  margin-top: 22px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.auth-models-title {
-  margin: 0 0 8px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.auth-models-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-/* One block per route, numbered, so the choice reads as three answers to one
-   question rather than a row of twelve names. */
-.auth-route {
-  margin: 0 0 14px;
-}
-
-.auth-route-head {
-  margin: 0 0 2px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.auth-route-copy {
-  margin: 0 0 8px;
-  color: var(--text-faint);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-/* Skipping is allowed, and it does not look like the thing to press. */
-.auth-model-button--quiet {
-  border-style: dashed;
-  opacity: 0.85;
-}
-
-.auth-model-button {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.auth-model-button:hover {
-  border-color: var(--accent);
-  color: var(--text);
-}
-
-.auth-model-button.selected {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--text);
-}
-
-.auth-models-hint {
-  margin: 8px 0 0;
-  color: #6b685f;
-  font-size: 10px;
-  line-height: 1.5;
-}
+/* The model routes left the sign-in page (Oskar, 2026-08-12): creating the
+   account is one decision, and connecting a model is the wizard's next page.
+   Their styles went with them. */
 
 /* The connect card a sign-in-page model button points at */
 .settings-card.connect-target,
@@ -7897,19 +7826,6 @@ select {
    and WebKit mask via text-security; Firefox shows the text plainly.) */
 .key-input {
   -webkit-text-security: disc;
-}
-/* Login-page model chips: readable, not a wall of identical pills. */
-.auth-model-button {
-  color: var(--text);
-  background: var(--accent-soft);
-}
-.auth-model-button:hover {
-  border-color: var(--accent);
-}
-.auth-model-button.selected {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
 }
 .free-refresh-row {
   display: flex;

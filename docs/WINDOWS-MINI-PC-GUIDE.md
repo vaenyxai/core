@@ -80,7 +80,7 @@ double-click `Vaenyx-Setup.cmd` again.
 
 Three short screens, once only.
 
-1. **Create Your Vaenyx.** Type an owner name and a password (at least 8
+1. **Create Your Vaenyx.** Type an owner name and a password (at least 6
    characters), then the password again. This password is stored only on this
    machine. **There is no password recovery today** — if you lose it, you lose
    access to the instance. Write it down somewhere safe.

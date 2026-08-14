@@ -712,29 +712,6 @@ function AuthScreen({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // Quick-connect: picking a model here routes straight to its connect card
-  // in Settings → Models after sign-in (parked in localStorage — connecting
-  // itself needs an unlocked instance, keys never touch this page).
-  const [connectChoice, setConnectChoice] = useState<string | null>(() =>
-    localStorage.getItem(CONNECT_MODEL_INTENT),
-  );
-
-  function chooseModel(id: string) {
-    // "Go on without a model" is a real choice, not a missing one: it clears
-    // any parked intent so sign-in lands on the ordinary screen.
-    if (!id) {
-      localStorage.removeItem(CONNECT_MODEL_INTENT);
-      setConnectChoice(null);
-      return;
-    }
-    if (connectChoice === id) {
-      localStorage.removeItem(CONNECT_MODEL_INTENT);
-      setConnectChoice(null);
-      return;
-    }
-    localStorage.setItem(CONNECT_MODEL_INTENT, id);
-    setConnectChoice(id);
-  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -750,6 +727,17 @@ function AuthScreen({
     try {
       if (bootstrap.setupRequired) {
         await setupOwner({ name, password });
+        // A JUST-CREATED account walks the whole first run — model step, then
+        // phone step — no matter what an earlier install left behind (Oskar,
+        // 2026-08-12: the test machine's surviving userdata carried a
+        // signed-in ChatGPT, so the wizard judged "has a model" and dropped
+        // the new Owner straight into the app). Session-scoped: a reload
+        // after finishing does not restart the tour.
+        try {
+          window.sessionStorage.setItem("vaenyx.freshOwner", "1");
+        } catch {
+          // Best-effort.
+        }
       } else {
         await loginOwner(password);
       }
@@ -811,11 +799,11 @@ function AuthScreen({
               autoComplete={
                 bootstrap.setupRequired ? "new-password" : "current-password"
               }
-              minLength={bootstrap.setupRequired ? 8 : 1}
+              minLength={bootstrap.setupRequired ? 6 : 1}
               onChange={(event) => setPassword(event.target.value)}
               placeholder={
                 bootstrap.setupRequired
-                  ? "At least 8 characters"
+                  ? "At least 6 characters"
                   : "Enter your password"
               }
               required
@@ -829,7 +817,7 @@ function AuthScreen({
               Confirm password
               <input
                 autoComplete="new-password"
-                minLength={8}
+                minLength={6}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="Enter it again"
                 required
@@ -854,97 +842,11 @@ function AuthScreen({
           </button>
         </form>
 
-        {/* THREE ROUTES, NOT TWELVE BUTTONS (Oskar, 2026-08-07). A new Owner
-            standing here has one question — "what do I need for this to
-            work?" — and a flat row of every provider answers it with a quiz.
-            There are really only three answers: use a subscription you pay
-            for already, take a free key, or go on without one and accept
-            what that means. The whole list is still one screen away, in
-            Models. */}
-        <div className="auth-models">
-          <p className="auth-models-title">
-            {bootstrap.setupRequired
-              ? "Vaenyx needs a model to think with"
-              : "Connect a model after sign-in"}
-          </p>
-
-          <div className="auth-route">
-            <p className="auth-route-head">
-              1 · Use a subscription you already pay for
-            </p>
-            <p className="auth-route-copy">
-              Nothing extra to buy. One sign-in, in the app.
-            </p>
-            <div className="auth-models-row">
-              {["codex", "claude-sub"].map((id) => (
-                <button
-                  aria-pressed={connectChoice === id}
-                  className={
-                    connectChoice === id
-                      ? "auth-model-button selected"
-                      : "auth-model-button"
-                  }
-                  key={id}
-                  onClick={() => chooseModel(id)}
-                  type="button"
-                >
-                  {id === "codex" ? "ChatGPT" : "Claude"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="auth-route">
-            <p className="auth-route-head">2 · Take a free key</p>
-            <p className="auth-route-copy">
-              No card, a few minutes on the provider's site, and you paste one
-              line back here.
-            </p>
-            <div className="auth-models-row">
-              {["gemini", "groq"].map((id) => (
-                <button
-                  aria-pressed={connectChoice === id}
-                  className={
-                    connectChoice === id
-                      ? "auth-model-button selected"
-                      : "auth-model-button"
-                  }
-                  key={id}
-                  onClick={() => chooseModel(id)}
-                  type="button"
-                >
-                  {id === "gemini" ? "Gemini" : "Groq"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="auth-route">
-            <p className="auth-route-head">3 · Skip for now</p>
-            {/* Said plainly, because the consequence is total: without a
-                model Vaenyx has nothing to think with. Everything else — the
-                library, the settings, your data — is still here. */}
-            <p className="auth-route-copy">
-              Vaenyx opens, but it cannot answer anything: there is no model
-              behind it yet. Connect one later under Settings → AI Settings →
-              Models.
-            </p>
-            <button
-              className="auth-model-button auth-model-button--quiet"
-              onClick={() => chooseModel("")}
-              type="button"
-            >
-              Go on without a model
-            </button>
-          </div>
-
-          <p className="auth-models-hint">
-            {connectChoice
-              ? "You'll land on that model's connection card."
-              : "All the other backends are in Settings → Models."}
-          </p>
-        </div>
-
+        {/* Nothing else on this page (Oskar, 2026-08-12): creating the
+            account is one decision, and the model routes that used to sit
+            below the form are the NEXT page of the first run — the wizard
+            asks about subscriptions, keys and the phone in order, every
+            fresh account, right after Create. */}
         <p className="privacy-note">
           Local-first / 127.0.0.1 / Owner-controlled
         </p>
@@ -15108,8 +15010,8 @@ function SettingsPanel({
     setPasswordError(null);
     setPasswordSaved(false);
 
-    if (newPassword.length < 8) {
-      setPasswordError("New password must be at least 8 characters.");
+    if (newPassword.length < 6) {
+      setPasswordError("New password must be at least 6 characters.");
       return;
     }
 
@@ -23697,6 +23599,18 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   // Asked once. "Answered" covers both yes and no, so a household that
   // skipped is never asked a second time.
   const [phoneAnswered, setPhoneAnswered] = useState(false);
+  // Whether Tailscale is already on this machine — the installer's tick plus
+  // the first-boot auto-install. Installed means the offer page would ask a
+  // question the installer already answered, so the phone step goes straight
+  // to CONNECTING — sign-in, tunnel, QR — instead (Oskar, 2026-08-12:
+  // 前面有了,就在这一步把手机连接设置好). Fetched at mount so the answer is
+  // in hand before the model step finishes.
+  const [phoneInstalled, setPhoneInstalled] = useState<boolean | null>(null);
+  useEffect(() => {
+    void fetchPhoneAccessStatus()
+      .then((status) => setPhoneInstalled(status.installed))
+      .catch(() => setPhoneInstalled(false));
+  }, []);
 
   useEffect(() => {
     void fetchModelProviders()
@@ -23861,7 +23775,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   // shared Phone Access panel. Always skippable; Done and Skip both land in
   // the workspace, and Settings → Phone Access carries the same flow forever.
   // The step after the model, shown to everybody exactly once.
-  if (finished && !phoneAnswered) {
+  if (finished && !phoneAnswered && phoneInstalled !== true) {
     return (
       <main className="acceptance-screen">
         <div className="acceptance-card">
@@ -23916,7 +23830,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
     );
   }
 
-  if (finished && phoneSetup) {
+  if (finished && (phoneSetup || (phoneInstalled === true && !phoneAnswered))) {
     return (
       <main className="acceptance-screen">
         <div className="acceptance-card">
@@ -24202,6 +24116,14 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
 function ModelConnectGate({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState<boolean | null>(() => {
     try {
+      // A JUST-CREATED account always walks the first run (Oskar,
+      // 2026-08-12), whatever an earlier install on this machine left
+      // behind: userdata survives a reinstall by design, so a leftover
+      // signed-in model — or this browser's old "done" mark — must not
+      // swallow the new Owner's tour.
+      if (window.sessionStorage.getItem("vaenyx.freshOwner") === "1") {
+        return false;
+      }
       return window.localStorage.getItem(MODEL_STEP_DONE_KEY) === "1"
         ? true
         : null;
@@ -24252,7 +24174,18 @@ function ModelConnectGate({ children }: { children: ReactNode }) {
     );
   }
   if (ready) return <>{children}</>;
-  return <ModelConnectStep onDone={() => setReady(true)} />;
+  return (
+    <ModelConnectStep
+      onDone={() => {
+        try {
+          window.sessionStorage.removeItem("vaenyx.freshOwner");
+        } catch {
+          // Best-effort.
+        }
+        setReady(true);
+      }}
+    />
+  );
 }
 
 // The install-time acceptance screen: A1 (AI notice), A3 (the sharing-preference
