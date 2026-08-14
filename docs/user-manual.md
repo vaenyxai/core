@@ -37,9 +37,12 @@ Read this inside the app: **Settings → Manual**.
   free-disk-space line at the bottom of the page checks the real numbers.
 - **Anything you skip is still one click away** later, in Settings — the same
   buttons, the same downloads, no reinstall.
-- **They are fetched after the install, not during it** — Vaenyx does it on its
-  first start and shows you each one. That is deliberate: a component that
-  will not download can then say so without taking the install down with it.
+- **The big pieces are fetched after the install, not during it** — the
+  subscription channels and voices download on Vaenyx's first start, each one
+  shown. That is deliberate: a component that will not download can say so
+  without taking the install down with it. **Tailscale is the exception**: it
+  installs during setup itself, so the phone step right after can connect
+  straight away.
 - **Ticking phone access installs Tailscale; it does not connect it.** The
   first run takes you through signing in with your own free Tailscale account
   and shows the QR code for your phone.

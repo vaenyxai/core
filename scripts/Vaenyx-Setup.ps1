@@ -51,6 +51,10 @@ $Messages = @{
   "path.cloud.why"  = @{ en = "Vaenyx keeps a live database here; cloud sync will corrupt it."; zh = "Vaenyx 会在这里放一个正在使用的数据库,云同步会把它弄坏。" }
   "path.cloud.fix"  = @{ en = "Move the folder somewhere like C:\Vaenyx and run this again."; zh = "把文件夹移到 C:\Vaenyx 这类位置,然后重新运行。" }
   "path.long"       = @{ en = "This folder path is very long, which breaks the install on Windows."; zh = "这个路径太长,Windows 上会导致安装失败。" }
+  "tailscale.installing" = @{ en = "Installing Tailscale (about 37 MB) so your phone can connect..."; zh = "正在安装 Tailscale(约 37 MB),用于手机连接..." }
+  "tailscale.present"    = @{ en = "Tailscale is already on this computer."; zh = "Tailscale 已经在这台电脑上。" }
+  "tailscale.done"       = @{ en = "Tailscale installed. The sign-in happens in Vaenyx, on the phone step."; zh = "Tailscale 装好了。登录在 Vaenyx 首次运行的手机一步里完成。" }
+  "tailscale.failed"     = @{ en = "Tailscale could not be installed here - Vaenyx will offer it again on its phone step."; zh = "这里没装上 Tailscale —— Vaenyx 首次运行的手机一步会再装一次。" }
   "path.long.fix"   = @{ en = "Move the folder somewhere short, like C:\Vaenyx, and run this again."; zh = "把文件夹移到短一点的位置(如 C:\Vaenyx),然后重新运行。" }
   "path.spaces"     = @{ en = "This folder path contains spaces. It usually works, but C:\Vaenyx is safer."; zh = "路径里有空格。通常没问题,但放在 C:\Vaenyx 更稳妥。" }
   "notvaenyx"       = @{ en = "This does not look like a Vaenyx folder (apps\server is missing)."; zh = "这看起来不是 Vaenyx 文件夹(缺少 apps\server)。" }
@@ -480,6 +484,46 @@ function Start-Elevated {
     return Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru
   }
   return Start-Process -FilePath $FilePath -ArgumentList $Arguments -Verb RunAs -Wait -PassThru
+}
+
+# -- 0c. Tailscale, INSIDE the install (Oskar, 2026-08-12) ----
+#
+# The phone tick used to be honoured AFTER setup finished: the app's first
+# boot downloaded the MSI in the background, so the Owner pressed "Open
+# Vaenyx", reached the first-run phone step, and was told Tailscale was not
+# installed - it was still downloading. If the tick asked for it, it installs
+# HERE, synchronously, before the finish page exists; the app's phone step
+# stays as the retry for a failed install. Only Tailscale gets this treatment:
+# it is 37 MB and the phone step depends on it, while the half-gigabyte
+# subscription components stay app-side downloads with visible progress.
+if ((@($Components.Split(",") | ForEach-Object { $_.Trim().ToLowerInvariant() })) -contains "tailscale" `
+    -and -not $SelfTest) {
+  $tailscaleExe = Join-Path $env:ProgramFiles "Tailscale\tailscale.exe"
+  if (Test-Path $tailscaleExe) {
+    Write-Info (Say "tailscale.present")
+  } else {
+    Write-Info (Say "tailscale.installing")
+    $tailscaleMsi = Join-Path $env:TEMP "vaenyx-tailscale-setup.msi"
+    try {
+      Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
+        -OutFile $tailscaleMsi -UseBasicParsing
+      $tailscaleRun = Start-Elevated -FilePath "msiexec.exe" `
+        -Arguments "/i `"$tailscaleMsi`" /quiet /norestart"
+      if ($tailscaleRun.ExitCode -eq 0 -and (Test-Path $tailscaleExe)) {
+        # The silent MSI reliably copies Tailscale but does not reliably leave
+        # its service running (the whole "restart the computer" folklore) -
+        # start it now so the phone step's sign-in works immediately.
+        try { Start-Process -FilePath "sc.exe" -ArgumentList "start", "Tailscale" -WindowStyle Hidden -Wait } catch { }
+        Write-Good (Say "tailscale.done")
+      } else {
+        Write-Warn (Say "tailscale.failed")
+      }
+    } catch {
+      Write-Warn (Say "tailscale.failed")
+    } finally {
+      Remove-Item $tailscaleMsi -Force -ErrorAction SilentlyContinue
+    }
+  }
 }
 
 # THE LANDMINE THIS SCRIPT WALKED ON FOR MONTHS, and what it cost:
