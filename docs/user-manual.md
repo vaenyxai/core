@@ -136,6 +136,13 @@ Read this inside the app: **Settings → Manual**.
   format and send that.
   - Over ten pages, Vaenyx asks first and tells you the page count, because long
     documents cost real money on a paid model.
+  - **Very long text never gets silently cut.** When a document's words are
+    too many to hand the model whole, Vaenyx saves the full text on your
+    machine and hands over the beginning, the end, and an honest note saying
+    which pages sit in between. A model that can use tools (the Claude
+    subscription) fetches any pages it needs by itself; on other models,
+    just say the pages — "看第 5–8 页" or "show pages 5–8" — and they arrive
+    with your next message.
   - With **Reading** switched off (AI Settings → Capabilities) the file is
     refused at the door, and Vaenyx names what stopped it: the switch on that
     row, or the mode you are in, which is not a switch and not one you can

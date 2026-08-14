@@ -44,10 +44,21 @@ import {
   DOCUMENT_GATE_PAGES,
   DOCUMENT_NATIVE_PROVIDER_IDS,
   extractDocumentText,
+  hasDocumentText,
   isPdfDocument,
   inspectDocument,
   readDocument,
+  readDocumentText,
+  saveDocumentText,
 } from "./documents.js";
+import {
+  DOCUMENT_INLINE_BUDGET_CHARS,
+  type DocumentSpillAccess,
+  buildSpillPreview,
+  createDocumentSpillAccess,
+  parsePartRequest,
+  sliceDocumentPart,
+} from "./document-spill.js";
 import {
   annotateImage,
   describeImage,
@@ -279,6 +290,33 @@ async function compactConversationHistory(
     // A failed compaction must never cost the Owner their answer.
     return storedSummary ? formatSummary(storedSummary) : null;
   }
+}
+
+// The conversation's most recent document whose extracted text was spilled
+// to disk (document-spill.ts). Resolved from the conversation's OWN message
+// rows — the conversation is already owner-checked upstream, so this lookup
+// IS the ownership check; no id from the model or the request is trusted.
+function latestSpilledDocument(
+  database: DatabaseHandle,
+  conversationId: string,
+  dataDirectory: string,
+): { documentId: string; documentName: string | null } | null {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT document_id, document_name FROM ask_vaenyx_messages
+       WHERE conversation_id = ? AND document_id IS NOT NULL
+       ORDER BY created_at DESC, id DESC LIMIT 8`,
+    )
+    .all(conversationId) as {
+    document_id: string;
+    document_name: string | null;
+  }[];
+  for (const row of rows) {
+    if (hasDocumentText(dataDirectory, row.document_id)) {
+      return { documentId: row.document_id, documentName: row.document_name };
+    }
+  }
+  return null;
 }
 
 // The long-term memory layer: the Owner's OWN approved Vaenyx Me profile.
@@ -1202,6 +1240,64 @@ export async function createAskVaenyxMessage(
       }
     }
 
+    // SPILL (idea ported from DeepSeek Harness, MIT): extracted text over the
+    // inline budget stops riding the context whole. The full text is saved
+    // next to the document itself and the context gets head + tail + an
+    // honest note naming what is omitted and how to get it back. Best-effort:
+    // if the save fails, the old bounded slice below still applies.
+    if (
+      documentText.length > DOCUMENT_INLINE_BUDGET_CHARS &&
+      options?.documentId &&
+      options.dataDirectory &&
+      saveDocumentText(options.dataDirectory, options.documentId, documentText)
+    ) {
+      documentText = buildSpillPreview(documentText, {
+        canUseTool: FETCHING_TOOL_LOOP_PROVIDER_IDS.includes(provider.id),
+      });
+    }
+
+    // A later turn can come back for any part of a spilled document. Two
+    // layers, matched to what the backend can actually do: a tool-loop
+    // backend gets a live reader (read_document_part); everything else gets
+    // the named pages injected when the Owner asks for them ("看第 5–8 页") —
+    // the model was told to ask the Owner, never that it can fetch anything
+    // itself. Both stay behind the Reading switch like the document itself.
+    let spilledPartContext: string | null = null;
+    let documentSpillAccess: DocumentSpillAccess | null = null;
+    if (options?.dataDirectory && !readingRefused) {
+      const spilled = latestSpilledDocument(
+        database,
+        conversationId,
+        options.dataDirectory,
+      );
+      if (spilled) {
+        if (FETCHING_TOOL_LOOP_PROVIDER_IDS.includes(provider.id)) {
+          documentSpillAccess = createDocumentSpillAccess(
+            options.dataDirectory,
+            spilled,
+          );
+        }
+        if (!options.documentId) {
+          const request = parsePartRequest(trimmedContent);
+          const full = request
+            ? readDocumentText(options.dataDirectory, spilled.documentId)
+            : null;
+          const part =
+            full && request
+              ? sliceDocumentPart(full, request.from, request.to)
+              : null;
+          if (part) {
+            spilledPartContext = [
+              `The Owner asked to see part of the document attached earlier${
+                spilled.documentName ? ` (${spilled.documentName})` : ""
+              }. Here is ${part.label} of its saved text, exactly as extracted:`,
+              part.text,
+            ].join("\n");
+          }
+        }
+      }
+    }
+
     // Long-conversation memory (Oskar, 2026-07-29): what has aged out of the
     // message window rides along as a rolling summary, so a long thread stops
     // forgetting its own beginning. Regenerated only when enough new messages
@@ -1260,6 +1356,7 @@ export async function createAskVaenyxMessage(
         currentFacts,
         projectContext,
         documentContext,
+        spilledPartContext,
         documentRefusedNote,
       ]
         .filter((part): part is string => Boolean(part && part.trim()))
@@ -1603,6 +1700,7 @@ export async function createAskVaenyxMessage(
       ...(documentBase64 ? { documentBase64 } : {}),
       ...(options?.documentName ? { documentName: options.documentName } : {}),
       ...(hasToolLoop && fetchAccess ? { fetchAccess } : {}),
+      ...(documentSpillAccess ? { documentSpill: documentSpillAccess } : {}),
     });
     assistantContent = result.answer;
     assistantStatus = "completed";

@@ -32,6 +32,11 @@ import {
   fetchToolBriefing,
   fetchToolServer,
 } from "./fetch-tools.js";
+import {
+  DOCUMENT_TOOL_NAMES,
+  documentToolBriefing,
+  documentToolServer,
+} from "./document-tools.js";
 import type {
   ModelChatMessage,
   ModelChatOptions,
@@ -185,10 +190,12 @@ export async function claudeSubscriptionVision(
       // A vision call is Vaenyx's own spend, same as chat.
       noteCoreUsage("claude-cli");
       if (message.subtype === "success") answer = message.result;
-      else throw new Error(`VISION_DESCRIBE_FAILED:claude-sub:${message.subtype}`);
+      else
+        throw new Error(`VISION_DESCRIBE_FAILED:claude-sub:${message.subtype}`);
     }
   }
-  if (!answer.trim()) throw new Error("VISION_DESCRIBE_FAILED:claude-sub:empty");
+  if (!answer.trim())
+    throw new Error("VISION_DESCRIBE_FAILED:claude-sub:empty");
   return answer.trim();
 }
 
@@ -248,7 +255,10 @@ export async function claudeSubscriptionRelay(
       type: "user",
       message: {
         role: "user",
-        content: [...(block ? [block] : []), { type: "text", text: promptText }],
+        content: [
+          ...(block ? [block] : []),
+          { type: "text", text: promptText },
+        ],
       },
       parent_tool_use_id: null,
     };
@@ -321,6 +331,10 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     // provider that looked the folders up for itself would hand them to that
     // door too. Absent here means the turn cannot open a file, full stop.
     const files = options?.fetchAccess ?? null;
+    // SPILLED DOCUMENT (same contract as fetchAccess): a live reader over
+    // one document's saved text, handed in by the caller or absent. Absent
+    // means this turn has no spilled document to read back.
+    const docSpill = options?.documentSpill ?? null;
 
     // Vision (probe-verified 2026-07-29): the SDK's streaming input takes
     // native image content blocks, so a conversation photo rides the request
@@ -336,7 +350,12 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
       "Continue this Vaenyx Chat conversation and answer the latest Owner message.",
       files
         ? fetchToolBriefing(files.folders)
-        : "You have no tools, no file access and no web access — answer from knowledge and the conversation alone, and say so plainly when something needs live data.",
+        : docSpill
+          ? // With only the document reader, the machine itself stays closed:
+            // the reach is one saved document, not the disk.
+            "Beyond the document tool described below you have no other file access — the rest of this machine is closed to you."
+          : "You have no tools, no file access and no web access — answer from knowledge and the conversation alone, and say so plainly when something needs live data.",
+      ...(docSpill ? [documentToolBriefing(docSpill)] : []),
       ...(imageMatch
         ? [
             "The attached image is the photo from the conversation's most recent photo message — you are seeing it first-hand.",
@@ -416,6 +435,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
             // household chat — and safe because the permission is not what
             // guards the disk: the handler behind this name is.
             ...(files ? FETCH_TOOL_NAMES : []),
+            ...(docSpill ? DOCUMENT_TOOL_NAMES : []),
           ],
           disallowedTools:
             options?.allowWeb === false ? DENIED_TOOLS : MACHINE_TOOLS,
@@ -427,7 +447,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           // written against a file path would not see them coming. Ordinary
           // turns are left exactly as they were — one lockdown to reason
           // about, changed only where the risk actually changes.
-          ...(files
+          ...(files || docSpill
             ? { tools: options?.allowWeb === false ? [] : [...WEB_TOOLS] }
             : {}),
           cwd: jail,
@@ -441,7 +461,12 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
           // Never read the machine's Claude settings, CLAUDE.md or MCP config.
           // The one server that can ever appear here is built in this process
           // from the Owner's own folder list; nothing is read off the disk.
-          mcpServers: files ? { vaenyx_files: fetchToolServer(sdk, files) } : {},
+          mcpServers: {
+            ...(files ? { vaenyx_files: fetchToolServer(sdk, files) } : {}),
+            ...(docSpill
+              ? { vaenyx_document: documentToolServer(sdk, docSpill) }
+              : {}),
+          },
           settingSources: [],
           systemPrompt:
             // The connector line: it kept closing briefings with a note about
@@ -524,7 +549,10 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
       if (options?.onDelta) options.onDelta(trimmed);
       return { answer: trimmed, webSearchUsed: searched };
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith("MODEL_PROVIDER_ERROR:")) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith("MODEL_PROVIDER_ERROR:")
+      ) {
         throw error;
       }
       const detail = error instanceof Error ? error.message : "unknown";

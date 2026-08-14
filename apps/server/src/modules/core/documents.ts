@@ -29,6 +29,11 @@ export const MAX_DOCUMENT_PAGES = 600;
 // is one people learn to dismiss without reading.
 export const DOCUMENT_GATE_PAGES = 10;
 
+// Extraction sanity ceiling. NOT the context bound — that is spill mode's
+// job (document-spill.ts): text over the inline budget is saved whole and
+// served in parts, so cutting it low here would lose pages spill can serve.
+export const MAX_EXTRACTED_TEXT_CHARS = 2_000_000;
+
 const DOCUMENT_ID_PATTERN = /^[0-9a-f-]{36}\.pdf$/;
 
 // Backends that read a PDF the way the M1 copy describes — every page as a
@@ -64,10 +69,57 @@ export function readDocument(
   }
 }
 
+// The extracted-text sidecar (spill mode, see document-spill.ts): when a
+// document's text is too big to ride the context whole, the WHOLE text is
+// saved next to the original — same directory, same id, ".txt" appended —
+// so any part of it can be served later. Lives and dies with the document.
+function documentTextPath(dataDirectory: string, documentId: string): string {
+  return resolve(documentsDirectory(dataDirectory), `${documentId}.txt`);
+}
+
+export function saveDocumentText(
+  dataDirectory: string,
+  documentId: string,
+  text: string,
+): boolean {
+  if (!DOCUMENT_ID_PATTERN.test(documentId)) return false;
+  try {
+    mkdirSync(documentsDirectory(dataDirectory), { recursive: true });
+    writeFileSync(documentTextPath(dataDirectory, documentId), text, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function hasDocumentText(
+  dataDirectory: string,
+  documentId: string,
+): boolean {
+  if (!DOCUMENT_ID_PATTERN.test(documentId)) return false;
+  return existsSync(documentTextPath(dataDirectory, documentId));
+}
+
+export function readDocumentText(
+  dataDirectory: string,
+  documentId: string,
+): string | null {
+  if (!DOCUMENT_ID_PATTERN.test(documentId)) return null;
+  const path = documentTextPath(dataDirectory, documentId);
+  if (!existsSync(path)) return null;
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
 // pdf.js in plain Node (probe-verified): page count and per-page text with no
 // canvas and no native build. The legacy build is the Node-safe entry point.
 async function loadPdfJs(): Promise<{
-  getDocument: (options: Record<string, unknown>) => { promise: Promise<PdfDoc> };
+  getDocument: (options: Record<string, unknown>) => {
+    promise: Promise<PdfDoc>;
+  };
 }> {
   // pathToFileURL, not a hand-built "file:///" template: Windows paths need
   // real encoding, and a template literal makes bundlers warn about an import
@@ -197,16 +249,18 @@ export async function inspectDocument(file: Buffer): Promise<DocumentFacts> {
 // layout), which is exactly why the M1 copy is only shown for the real path.
 export async function extractDocumentText(
   file: Buffer,
-  maxPages = 40,
+  maxPages = MAX_DOCUMENT_PAGES,
 ): Promise<string> {
   // Office files become their words here — never a native document block, on
   // any backend: the native path is a PDF thing, and pretending a spreadsheet
   // went that way would make the M1 cost sentence a lie. A text file IS its
-  // own extraction. Both are capped so a huge file cannot crowd the whole
-  // conversation out of the model's window.
+  // own extraction. The caps here are sanity ceilings only (a 32 MiB file
+  // cannot produce more): spill mode (document-spill.ts) is what keeps the
+  // model context bounded now, and a low cap HERE would silently cut off
+  // pages that spill could otherwise serve on request.
   if (!isPdfDocument(file)) {
     if (detectOfficeKind(file)) return extractOfficeText(file);
-    return file.toString("utf8").slice(0, 200_000);
+    return file.toString("utf8").slice(0, MAX_EXTRACTED_TEXT_CHARS);
   }
   const pdfjs = await loadPdfJs();
   const doc = await pdfjs.getDocument({

@@ -15,10 +15,11 @@ import { inflateRawSync } from "node:zlib";
 // bomb, and the refusal names the honest reason either way.
 export const MAX_OFFICE_XML_BYTES = 50 * 1024 * 1024;
 
-// Extraction output cap, matching the plain-text cap in documents.ts: a
-// monster spreadsheet must not crowd the whole conversation out of the
-// model's window.
-const MAX_OFFICE_TEXT_CHARS = 200_000;
+// Extraction output cap, matching the plain-text ceiling in documents.ts.
+// A sanity ceiling only — keeping the model context bounded is spill mode's
+// job now (document-spill.ts), and a low cap here would silently lose rows
+// that spill could otherwise serve on request.
+const MAX_OFFICE_TEXT_CHARS = 2_000_000;
 
 export type OfficeKind = "docx" | "xlsx" | "pptx";
 
@@ -205,7 +206,11 @@ function decodeXmlEntities(text: string): string {
             body[0] === "x" || body[0] === "X"
               ? Number.parseInt(body.slice(1), 16)
               : Number.parseInt(body, 10);
-          if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+          if (
+            !Number.isFinite(codePoint) ||
+            codePoint < 0 ||
+            codePoint > 0x10ffff
+          ) {
             return entity;
           }
           try {

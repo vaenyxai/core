@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "../../config.js";
 import { npmRunner } from "../core/component-install.js";
+import type { DocumentSpillAccess } from "../core/document-spill.js";
 import type { FetchAccess } from "../core/fetching.js";
 
 export interface CodexStatus {
@@ -113,14 +114,28 @@ function findNpmGlobalCodexScript(): string | null {
     return cachedCodexScript;
   }
   cachedCodexScript = null;
-  const npmSuffix = ["npm", "node_modules", "@openai", "codex", "bin", "codex.js"];
+  const npmSuffix = [
+    "npm",
+    "node_modules",
+    "@openai",
+    "codex",
+    "bin",
+    "codex.js",
+  ];
   const candidates: string[] = [];
   // Vaenyx's own copy first: it is the one this build installs.
   if (vaenyxCodexHome) {
     candidates.push(resolve(vaenyxCodexHome, ...npmSuffix));
     // npm on Windows puts a --prefix install directly under the prefix.
     candidates.push(
-      resolve(vaenyxCodexHome, "node_modules", "@openai", "codex", "bin", "codex.js"),
+      resolve(
+        vaenyxCodexHome,
+        "node_modules",
+        "@openai",
+        "codex",
+        "bin",
+        "codex.js",
+      ),
     );
   }
   if (process.env.APPDATA) {
@@ -535,7 +550,8 @@ export async function runForgeReadOnly(
   const status = getCodexStatus();
   if (!status.installed) throw new Error("CODEX_NOT_INSTALLED");
   if (!status.loggedIn) throw new Error("CODEX_NOT_LOGGED_IN");
-  if (status.authMethod !== "chatgpt") throw new Error("CODEX_CHATGPT_REQUIRED");
+  if (status.authMethod !== "chatgpt")
+    throw new Error("CODEX_CHATGPT_REQUIRED");
 
   const executable = findCodexCommand();
 
@@ -593,16 +609,16 @@ export async function runForgeReadOnly(
 
   return await new Promise<string>((resolvePromise, rejectPromise) => {
     timeout = setTimeout(() => {
-      finish(
-        resolvePromise,
-        rejectPromise,
-        new Error("CODEX_TASK_TIMED_OUT"),
-      );
+      finish(resolvePromise, rejectPromise, new Error("CODEX_TASK_TIMED_OUT"));
     }, 180_000);
 
     if (signal) {
       if (signal.aborted) {
-        finish(resolvePromise, rejectPromise, new Error("CODEX_TASK_CANCELLED"));
+        finish(
+          resolvePromise,
+          rejectPromise,
+          new Error("CODEX_TASK_CANCELLED"),
+        );
         return;
       }
       signal.addEventListener(
@@ -1087,7 +1103,8 @@ export async function runCodexChatTest(request: string): Promise<string> {
   const status = getCodexStatus();
   if (!status.installed) throw new Error("CODEX_NOT_INSTALLED");
   if (!status.loggedIn) throw new Error("CODEX_NOT_LOGGED_IN");
-  if (status.authMethod !== "chatgpt") throw new Error("CODEX_CHATGPT_REQUIRED");
+  if (status.authMethod !== "chatgpt")
+    throw new Error("CODEX_CHATGPT_REQUIRED");
 
   let releaseQueue: () => void = () => undefined;
   const previous = chatSessionQueue;
@@ -1179,7 +1196,8 @@ export async function runCodexMethodOffline(
   const status = getCodexStatus();
   if (!status.installed) throw new Error("CODEX_NOT_INSTALLED");
   if (!status.loggedIn) throw new Error("CODEX_NOT_LOGGED_IN");
-  if (status.authMethod !== "chatgpt") throw new Error("CODEX_CHATGPT_REQUIRED");
+  if (status.authMethod !== "chatgpt")
+    throw new Error("CODEX_CHATGPT_REQUIRED");
 
   let releaseQueue: () => void = () => undefined;
   const previous = methodSessionQueue;
@@ -1659,6 +1677,14 @@ export interface RunAskVaenyxOptions {
   // the Owner's disk. Absent means the turn cannot open a file — there is
   // nothing to fall back to and nothing to infer.
   fetchAccess?: FetchAccess;
+  // SPILLED DOCUMENT — a live reader over the saved full text of an
+  // oversized document in this conversation, for tool-loop backends. Like
+  // fetchAccess it is the LIVE access passed per call, never looked up by
+  // the backend itself; it reads only the one document the caller resolved
+  // from the conversation's own rows, so the model never names a path or an
+  // id. NOT the Fetching capability — the Owner already attached this file
+  // to this conversation. Backends without a tool loop ignore it.
+  documentSpill?: DocumentSpillAccess;
 }
 
 export async function runAskVaenyxChat(
@@ -1669,7 +1695,8 @@ export async function runAskVaenyxChat(
   const status = getCodexStatus();
   if (!status.installed) throw new Error("CODEX_NOT_INSTALLED");
   if (!status.loggedIn) throw new Error("CODEX_NOT_LOGGED_IN");
-  if (status.authMethod !== "chatgpt") throw new Error("CODEX_CHATGPT_REQUIRED");
+  if (status.authMethod !== "chatgpt")
+    throw new Error("CODEX_CHATGPT_REQUIRED");
 
   let releaseQueue: () => void = () => undefined;
   const previous = askVaenyxSessionQueue;
