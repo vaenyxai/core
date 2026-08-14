@@ -4,6 +4,23 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.5.0 — 2026-08-12
+
+**The first run is a short walk that finishes the job.** Create the account —
+a clean page, just a name and a local password (six characters or more now) —
+then connect a model: your ChatGPT subscription, your Claude subscription, or
+an API key from a preset drop-down. Then the phone step. Every fresh account
+walks these steps in order, whatever an earlier install on the same machine
+left behind, and nothing essential is left for you to find in Settings later.
+
+**Tailscale installs during setup, not after it.** Ticking phone access used
+to be honoured in the background after setup finished — so the first-run
+phone step could greet you with "not installed" while the download was still
+running. The setup window now installs it on the spot, starts its service,
+and says so; by the time you reach the phone step it goes straight to
+signing in, opening the tunnel and showing the QR code. If the install fails
+there, the phone step offers it again — nothing breaks.
+
 ## v0.4.4.0 — 2026-08-12
 
 **The review queue converges instead of repeating itself.** Twins now fold
