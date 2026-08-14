@@ -1,0 +1,65 @@
+{
+  "note": "Bilingual documentation pairs, verified by scripts/Vaenyx-Check-Translations.mjs as part of npm run check. The blob hashes record each side's content at the last confirmed-consistent state; after editing either side, bring the other along and re-record with: node scripts/Vaenyx-Check-Translations.mjs --write",
+  "pairs": [
+    {
+      "en": "docs/glossary.md",
+      "zh": "docs/glossary.zh.md",
+      "enBlob": "7df26c685b03ea6c21430872059a40a0ecaf4385",
+      "zhBlob": "75d1ca15f29a2db314974c59e4f4cf7e19384879"
+    },
+    {
+      "en": "docs/user-manual.md",
+      "zh": "docs/user-manual.zh.md",
+      "enBlob": "cf814a5281bbd078c17fbf413a0b1a0380a2579f",
+      "zhBlob": "2f7a6b877436b8e59d54af4ac5f723e89ee3d8de"
+    },
+    {
+      "en": "docs/MIGRATE-TO-NEW-PC.md",
+      "zh": "docs/MIGRATE-TO-NEW-PC.zh-CN.md",
+      "enBlob": "0f2b8664e2f18a5d2866914ef32986415e92a7a6",
+      "zhBlob": "1c53c7057cf80b74843c395e4f39a0e55b918958"
+    },
+    {
+      "en": "docs/WINDOWS-MINI-PC-GUIDE.md",
+      "zh": "docs/WINDOWS-MINI-PC-GUIDE.zh-CN.md",
+      "enBlob": "8c46a8a2473614be177b7928a6377b6981caad13",
+      "zhBlob": "8229bc7d33068ebd2eef08ddc36bbfe707af0709"
+    },
+    {
+      "en": "docs/legal/terms-of-service.md",
+      "zh": "docs/legal/terms-of-service.zh.md",
+      "enBlob": "285692056f1ad0378abd2c8a02996015129da902",
+      "zhBlob": "09769c83feb679386fee14733741ff8d62b0adc9"
+    },
+    {
+      "en": "docs/legal/privacy-policy.md",
+      "zh": "docs/legal/privacy-policy.zh.md",
+      "enBlob": "5484af095d87c1ead9f247e4f6cd4d9dc9579551",
+      "zhBlob": "4bd5e34f3fd2ca30967defff82ac21967e4a81b2"
+    },
+    {
+      "en": "docs/legal/contributor-agreement.md",
+      "zh": "docs/legal/contributor-agreement.zh.md",
+      "enBlob": "7d33493a82e4805f79400b2d8044c241054662e1",
+      "zhBlob": "b468c289d41621adf1d3997012ab82d6ae376624"
+    },
+    {
+      "en": "docs/legal/trademark-policy.md",
+      "zh": "docs/legal/trademark-policy.zh.md",
+      "enBlob": "cd8161e6ab6179b5a70837d73d9d0d4d87e76421",
+      "zhBlob": "bf4d0b36f4198e373b86f932dd92f334569797e4"
+    },
+    {
+      "en": "docs/legal/implementation-status.md",
+      "zh": "docs/legal/implementation-status.zh.md",
+      "enBlob": "aa547db5825cf81ee0a6935109baef0d8e8af4ef",
+      "zhBlob": "6281998d22ab2e434c5b5ff5bcbcdfd56717a8c0"
+    },
+    {
+      "en": "docs/legal/THIRD_PARTY_NOTICES.md",
+      "zh": "docs/legal/THIRD_PARTY_NOTICES.zh.md",
+      "enBlob": "40ba84396262166f910002858f7655f22a52d2e4",
+      "zhBlob": "800d2b7fd943e694c3b4f6f2236b0fce3f43b4e8"
+    }
+  ]
+}

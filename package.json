@@ -11,9 +11,10 @@
   "scripts": {
     "build": "npm run build -w @vaenyx/contracts && npm run build -w @vaenyx/server && npm run build -w @vaenyx/web",
     "backup": "node scripts/backup.mjs",
-    "check": "npm run check:naming && npm run check:architecture && npm run lint && npm run typecheck && npm run test && npm run build",
+    "check": "npm run check:naming && npm run check:architecture && npm run check:translations && npm run lint && npm run typecheck && npm run test && npm run build",
     "check:architecture": "node scripts/Vaenyx-Check-Architecture.mjs",
     "check:naming": "node scripts/Vaenyx-Check-Naming.mjs",
+    "check:translations": "node scripts/Vaenyx-Check-Translations.mjs",
     "dev": "npm run build -w @vaenyx/contracts && concurrently -n server,web -c cyan,magenta \"npm run dev -w @vaenyx/server\" \"npm run dev -w @vaenyx/web\"",
     "diagnose": "node scripts/diagnose.mjs",
     "format": "prettier --write .",

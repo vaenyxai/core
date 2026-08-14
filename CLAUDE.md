@@ -17,8 +17,12 @@ are the `Vaenyx-*.cmd` files at the repo root.
 
 ## Working rules
 
-- `npm run check` must pass before any commit (naming/architecture checks,
-  lint, typecheck, tests, build).
+- `npm run check` must pass before any commit (naming/architecture/translation
+  checks, lint, typecheck, tests, build).
+- English/Chinese doc pairs are enforced: `docs/translation-pairs.json` records
+  each pair's last confirmed-consistent state. After editing either side,
+  update the twin in the same commit, then re-record with
+  `node scripts/Vaenyx-Check-Translations.mjs --write`.
 - Regenerate `THIRD_PARTY_LICENSES.md` with `npm run licenses` when
   dependencies change; it ships with every release.
 - `docs/user-manual.md` (English, authoritative) and `docs/user-manual.zh.md`
