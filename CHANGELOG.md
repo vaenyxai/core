@@ -4,6 +4,37 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.4.0 — 2026-08-12
+
+**The review queue converges instead of repeating itself.** Twins now fold
+wherever they hide: two wordings of the same stored value, two observations
+that lead to the same conclusion, a prose note restating a structured fact —
+and anything that merely repeats what you already approved retires on its
+own. Merging runs hourly with the fact distiller, so a twin lives an hour,
+not a day. Each judgment is its own card, the sentence you actually answer
+sits in its own highlighted block, and the grounds are short points in the
+language of the conversation they came from.
+
+**One card cites every origin.** A merged proposal lists each conversation it
+was seen in — one line per source, each with its own View source. And when a
+proposal would change something already approved, the card says so: an amber
+*was → now proposed*, with **Change it / Keep the old one**. Choosing the new
+value dates the old one into history rather than erasing it.
+
+**Quieter, clearer chat.** One status indicator from the moment you send —
+the orb, with the real status beside it — instead of a text marker first and
+the orb later. A device with Vaenyx open on screen shows no notification at
+all; elsewhere, results arriving together fold into one expandable entry.
+Enter makes a new line and Shift+Enter sends, so long messages stop firing
+off half-typed.
+
+**Small things in their right places.** A scheduled task jumps to the top of
+the sidebar the moment its result lands, opened or not. The unread dot
+visibly breathes. The schedule capsule reads SCH everywhere. A picker near
+the bottom of the screen opens upward instead of running off it. And what
+each chat carries about you is bounded, so the per-question cost cannot creep
+up as Vaenyx learns more.
+
 ## v0.4.3.0 — 2026-08-11
 
 **Phone access without the reboot.** Installing Tailscale used to end with
