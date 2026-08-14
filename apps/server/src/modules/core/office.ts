@@ -420,5 +420,8 @@ export function extractOfficeText(file: Buffer): string {
   if (kind === "docx") text = extractDocxText(file, entries);
   else if (kind === "xlsx") text = extractXlsxText(file, entries);
   else text = extractPptxText(file, entries);
-  return text.slice(0, MAX_OFFICE_TEXT_CHARS);
+  // Even the sanity ceiling is never SILENT: when it fires, the text says so.
+  return text.length > MAX_OFFICE_TEXT_CHARS
+    ? `${text.slice(0, MAX_OFFICE_TEXT_CHARS)}\n[cut at the ${MAX_OFFICE_TEXT_CHARS.toLocaleString("en-US")}-character safety ceiling — the file goes on beyond this]`
+    : text;
 }

@@ -481,7 +481,9 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
                   // it cannot do: it has to know the reach is a few named
                   // folders and not the machine.
                   "You can also open text files, but ONLY from the folders named in the Owner's message — those folders are the whole of your reach into this machine, and everything else on it is closed to you."
-                : "You have no other tools and no access to this machine."
+                : docSpill
+                  ? "You can also read parts of the Owner's saved document through the read_document_part tool — that one document is the whole of your reach into this machine, and everything else on it is closed to you."
+                  : "You have no other tools and no access to this machine."
             } You are NOT claude.ai: there are no connectors here, no Gmail, no Calendar, no Drive, no way to send or file anything, and no authorisation the Owner could grant to change that. Never mention connectors or ask him to authorise one. If something is outside what you can do, name that one thing in a short line and stop.`,
           ...(options?.model?.trim() ? { model: options.model.trim() } : {}),
         },

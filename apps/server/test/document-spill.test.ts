@@ -98,6 +98,17 @@ describe("parsePartRequest", () => {
     expect(parsePartRequest("第2部分呢")).toEqual({ from: 2, to: 2 });
   });
 
+  it("reads full range phrasing as the range, never narrowed to its first page", () => {
+    expect(parsePartRequest("第5页到第8页给我看看")).toEqual({
+      from: 5,
+      to: 8,
+    });
+    expect(parsePartRequest("page 5 to page 8 please")).toEqual({
+      from: 5,
+      to: 8,
+    });
+  });
+
   it("reads English page asks", () => {
     expect(parsePartRequest("show me page 9")).toEqual({ from: 9, to: 9 });
     expect(parsePartRequest("what do pages 4-7 say")).toEqual({
@@ -111,6 +122,13 @@ describe("parsePartRequest", () => {
     expect(parsePartRequest("我 3 点有空,买 5 个")).toBeNull();
     expect(parsePartRequest("the meeting is at 3")).toBeNull();
     expect(parsePartRequest("")).toBeNull();
+    // 第3张 usually means the third PHOTO — bare 张 must not match, only
+    // the explicit 张幻灯片.
+    expect(parsePartRequest("第3张照片拍得不错")).toBeNull();
+    expect(parsePartRequest("第3张幻灯片写了什么")).toEqual({
+      from: 3,
+      to: 3,
+    });
   });
 });
 
@@ -157,6 +175,25 @@ describe("document text sidecar + spill access", () => {
     expect(access?.read(7, 7)).toContain("Content of page 7.");
     expect(() => access?.read(90, 95)).toThrowError(DocumentPartError);
     expect(() => access?.read(90, 95)).toThrowError(/has 12 pages/);
+  });
+
+  it("tells the truth about in-range pages that produced no text", () => {
+    // Page 3 is a pure drawing: extraction emitted no [page 3] marker, so
+    // the markers are 1,2,4..6. Asking for 3 must NOT be answered with
+    // "outside the document" — 3 exists; it just has no text layer.
+    const gappy = [1, 2, 4, 5, 6]
+      .map((n) => `[page ${n}]\n${"words ".repeat(50)}`)
+      .join("\n\n");
+    const gapId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf";
+    expect(saveDocumentText(dataDirectory, gapId, gappy)).toBe(true);
+    const access = createDocumentSpillAccess(dataDirectory, {
+      documentId: gapId,
+      documentName: null,
+    });
+    expect(access?.count).toBe(6);
+    expect(() => access?.read(3, 3)).toThrowError(/produced no text/);
+    expect(() => access?.read(3, 3)).not.toThrowError(/outside/);
+    expect(() => access?.read(9, 9)).toThrowError(/outside them/);
   });
 
   it("returns null for a document that never spilled", () => {

@@ -4,6 +4,7 @@ import {
   CHECKPOINT_INSTRUCTION,
   CHECKPOINT_SECTIONS,
   pairSafeCutIndex,
+  windowStartIndex,
 } from "../src/modules/core/ask-vaenyx.js";
 
 type Role = "owner" | "assistant";
@@ -50,9 +51,39 @@ describe("pairSafeCutIndex", () => {
     expect(history[6]?.role).toBe("owner");
   });
 
-  it("compacts nothing when only assistant messages would remain", () => {
+  it("gives up on a run longer than the walk bound instead of ballooning the window", () => {
+    // A scheduled task's thread can hold hundreds of assistant results in a
+    // row (review, 2026-08-15). An unbounded walk would retreat past the
+    // whole run and ship it all verbatim on every turn. Past the bound, the
+    // cut stays at the base index — a run that long is not a pair.
+    const history = conversation("o" + "a".repeat(120) + "oa".repeat(5));
+    const base = history.length - 30;
+    expect(history[base]?.role).toBe("assistant");
+    expect(pairSafeCutIndex(history)).toBe(base);
+  });
+
+  it("compacts at the base even when only assistant messages surround it", () => {
     const history = conversation("a".repeat(40));
-    expect(pairSafeCutIndex(history)).toBe(0);
+    expect(pairSafeCutIndex(history)).toBe(10);
+  });
+});
+
+describe("windowStartIndex", () => {
+  it("starts the window at the checkpoint's real seam, so nothing sits in neither", () => {
+    // Checkpoint covers 20, cut sits at 27 (refresh pending): the window
+    // must reach back to 20 or messages 20–26 vanish from both sides.
+    expect(windowStartIndex(27, 20)).toBe(20);
+    // Fresh checkpoint: seam and cut agree.
+    expect(windowStartIndex(30, 30)).toBe(30);
+    // A checkpoint that covers MORE than the cut (the cut walked back):
+    // start at the cut — overlap is safe, a hole is not.
+    expect(windowStartIndex(25, 30)).toBe(25);
+  });
+
+  it("bounds the window when compaction keeps failing", () => {
+    // Covered stuck at 0 while the conversation grew to 300: the window may
+    // not grow without limit — it floors at three full windows back.
+    expect(windowStartIndex(270, 0)).toBe(180);
   });
 });
 

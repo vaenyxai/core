@@ -72,7 +72,10 @@ export function readDocument(
 // The extracted-text sidecar (spill mode, see document-spill.ts): when a
 // document's text is too big to ride the context whole, the WHOLE text is
 // saved next to the original — same directory, same id, ".txt" appended —
-// so any part of it can be served later. Lives and dies with the document.
+// so any part of it can be served later. Honest note: documents have no
+// delete/GC path at all today, and the sidecar shares that gap — both stay
+// on disk until a cleanup feature exists. It holds nothing the original
+// file does not already hold, and userdata/ never enters git or a deploy.
 function documentTextPath(dataDirectory: string, documentId: string): string {
   return resolve(documentsDirectory(dataDirectory), `${documentId}.txt`);
 }
@@ -260,7 +263,13 @@ export async function extractDocumentText(
   // pages that spill could otherwise serve on request.
   if (!isPdfDocument(file)) {
     if (detectOfficeKind(file)) return extractOfficeText(file);
-    return file.toString("utf8").slice(0, MAX_EXTRACTED_TEXT_CHARS);
+    const text = file.toString("utf8");
+    // Even the sanity ceiling is never SILENT (the promise the manual
+    // makes): when it fires, the text says so, so neither the model nor a
+    // saved spill sidecar can mistake the cut for the end of the document.
+    return text.length > MAX_EXTRACTED_TEXT_CHARS
+      ? `${text.slice(0, MAX_EXTRACTED_TEXT_CHARS)}\n[cut at the ${MAX_EXTRACTED_TEXT_CHARS.toLocaleString("en-US")}-character safety ceiling — the file goes on beyond this]`
+      : text;
   }
   const pdfjs = await loadPdfJs();
   const doc = await pdfjs.getDocument({

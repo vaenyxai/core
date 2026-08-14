@@ -4,6 +4,40 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.7.0 — 2026-08-15
+
+**The phone QR code stops lying.** The Phone Access panel could show three
+green lights and a QR code while the phone got "site can't be reached" —
+the machine's own settings said the channel was on, but Tailscale's cloud
+had never actually published the address. Vaenyx now checks the public
+side itself, from the outside, before calling anything green: the QR code
+appears only once the address is confirmed live. If Tailscale is waiting
+for its one-time approval, the panel says so and gives you an **Approve It
+On Tailscale** button — one click, once ever, and the page rechecks by
+itself until the code comes out.
+
+**Long documents are never silently cut short.** A big PDF or a 30-page
+scanned drawing set used to be trimmed to fit the model, and the trimmed
+part could be exactly the page that mattered — without a word. Now the
+full text is saved on your machine and the model is handed the beginning,
+the end, and an honest note naming the pages in between. On the Claude
+subscription the model fetches any pages it needs by itself; on other
+models, say the pages — "看第 5–8 页" or "show pages 5–8" — and they
+arrive with your next message.
+
+**Long conversations remember in better shape.** What scrolls out of the
+recent window is folded into a structured checkpoint — goals, settled
+facts and decisions, open promises, your corrections, where things stand,
+the next step — instead of free-form notes that blur a little with every
+rewrite. Exact numbers, dates and names are kept verbatim, and a question
+is never split from its answer at the fold. The checkpoint request is also
+shaped to reuse what earlier turns already paid for on backends that cache.
+
+**English and Chinese docs can no longer drift apart.** Every bilingual
+document pair in the project is now verified by the build checks: change
+one side without the other and the build fails, naming the pair. This
+guards the manual you read in Settings as much as the legal texts.
+
 ## v0.4.6.0 — 2026-08-15
 
 **No more white screens.** Opening Vaenyx while its computer was still
@@ -12,7 +46,7 @@ recovered. Two faults stacked: a page held over from an older build asked
 for files that no longer exist and was answered with the home page instead
 of an honest "gone", and the offline fallback served a stale copy of the
 app's shell. Both are fixed, and the fallback is now a small page that says
-*Starting up… this page will open by itself* — it checks every two seconds
+_Starting up… this page will open by itself_ — it checks every two seconds
 and walks into the app the moment the server answers. Restart the computer,
 open Vaenyx immediately, and it simply arrives.
 
@@ -47,7 +81,7 @@ language of the conversation they came from.
 **One card cites every origin.** A merged proposal lists each conversation it
 was seen in — one line per source, each with its own View source. And when a
 proposal would change something already approved, the card says so: an amber
-*was → now proposed*, with **Change it / Keep the old one**. Choosing the new
+_was → now proposed_, with **Change it / Keep the old one**. Choosing the new
 value dates the old one into history rather than erasing it.
 
 **Quieter, clearer chat.** One status indicator from the moment you send —
@@ -108,7 +142,7 @@ the conversation happens to be scrolled — under the header on a computer,
 up from the bottom on a phone.
 
 **Several results, one notification.** A result arriving while another is
-still showing folds into a single *Vaenyx (n)* entry, one item per line —
+still showing folds into a single _Vaenyx (n)_ entry, one item per line —
 expand it to read them, tap it to open Vaenyx. Dismiss it and the next result
 is a full single notification again.
 
@@ -179,7 +213,7 @@ never by asking the model, because a model has no clock and gets worse at that
 the more you tell it.
 
 **It asks before it learns anything.** Half an hour after a conversation goes
-quiet, Vaenyx reads back what *you* said in it and proposes anything durable.
+quiet, Vaenyx reads back what _you_ said in it and proposes anything durable.
 Proposals wait in the review list you already use and change no answer until you
 approve them. Passwords, keys and card numbers are dropped whatever was said.
 
@@ -256,7 +290,7 @@ one screen.
 ## v0.3.5 — 2026-08-07
 
 **Pick the model, not just the provider.** Connect a backend, open it under
-Models and press *List available models*: Vaenyx asks that provider, with
+Models and press _List available models_: Vaenyx asks that provider, with
 your own key, what it will accept, and offers the answer as a list — so you
 choose the current name instead of guessing between versions. Nothing is
 stored; it asks again whenever you want it.

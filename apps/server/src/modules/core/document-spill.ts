@@ -82,9 +82,15 @@ export function catalogDocumentText(text: string): DocumentPartCatalog {
     count,
     slice(from, to) {
       if (from > count || to < 1) return null;
-      const start = (Math.max(1, from) - 1) * PLAIN_PART_CHARS;
+      const start = snapToCodePoint(
+        text,
+        (Math.max(1, from) - 1) * PLAIN_PART_CHARS,
+      );
       const end = Math.min(to, count) * PLAIN_PART_CHARS;
-      return text.slice(start, end);
+      return text.slice(
+        start,
+        end >= text.length ? text.length : snapToCodePoint(text, end),
+      );
     },
   };
 }
@@ -110,14 +116,22 @@ function omittedSpan(
   return first && last ? { from: first.number, to: last.number } : null;
 }
 
+// A fixed offset can land between the two halves of a surrogate pair (an
+// emoji, a rare CJK character); a cut there produces broken characters at
+// both boundary edges. Nudging one code unit left keeps the split clean.
+function snapToCodePoint(text: string, index: number): number {
+  const code = text.charCodeAt(index);
+  return index > 0 && code >= 0xdc00 && code <= 0xdfff ? index - 1 : index;
+}
+
 export function buildSpillPreview(
   text: string,
   options: { canUseTool: boolean; budget?: number },
 ): string {
   const budget = options.budget ?? DOCUMENT_INLINE_BUDGET_CHARS;
   if (text.length <= budget) return text;
-  const headEnd = Math.ceil(budget / 2);
-  const tailStart = text.length - Math.floor(budget / 2);
+  const headEnd = snapToCodePoint(text, Math.ceil(budget / 2));
+  const tailStart = snapToCodePoint(text, text.length - Math.floor(budget / 2));
   const head = text.slice(0, headEnd);
   const tail = text.slice(tailStart);
   const omitted = text.length - head.length - tail.length;
@@ -148,14 +162,21 @@ export interface PartRequest {
 }
 
 // Deliberately narrow: a number tied to a page/slide/part word, in either
-// language. A stray number in ordinary talk must not trigger an injection.
-const ZH_REQUEST =
-  /第\s*(\d+)(?:\s*[-–—~]\s*|\s*[到至]\s*)?(\d+)?\s*(?:页|张|部分)/u;
+// language. A stray number in ordinary talk must not trigger an injection —
+// so bare 「张」 is NOT accepted (第3张 usually means the third PHOTO), only
+// 「张幻灯片」; and full range phrasing (「第5页到第8页」, "page 5 to page 8")
+// is read as the range, never silently narrowed to its first page.
+const ZH_RANGE =
+  /第\s*(\d+)\s*(?:页|部分|张幻灯片)?\s*(?:[-–—~]|到|至)\s*(?:第\s*)?(\d+)\s*(?:页|部分|张幻灯片)/u;
+const ZH_SINGLE = /第\s*(\d+)\s*(?:页|部分|张幻灯片)/u;
 const EN_REQUEST =
-  /\b(?:pages?|slides?|parts?)\s*(\d+)(?:\s*(?:[-–—~]|to)\s*(\d+))?/iu;
+  /\b(?:pages?|slides?|parts?)\s*(\d+)(?:\s*(?:[-–—~]|to)\s*(?:(?:pages?|slides?|parts?)\s*)?(\d+))?/iu;
 
 export function parsePartRequest(message: string): PartRequest | null {
-  const match = ZH_REQUEST.exec(message) ?? EN_REQUEST.exec(message);
+  const match =
+    ZH_RANGE.exec(message) ??
+    ZH_SINGLE.exec(message) ??
+    EN_REQUEST.exec(message);
   if (!match) return null;
   const first = Number(match[1]);
   const second = match[2] ? Number(match[2]) : first;
@@ -222,6 +243,15 @@ export function createDocumentSpillAccess(
       }
       const part = sliceDocumentPart(text, from, to);
       if (!part) {
+        // Two honest refusals, not one lie: pages with no extracted text
+        // (a pure drawing, a blank) never got a [page N] marker, so an
+        // in-range ask that finds nothing means "nothing was READ there" —
+        // which is not the same as "the document has no such page".
+        if (from <= catalog.count && to >= 1) {
+          throw new DocumentPartError(
+            `${unitWord(catalog.kind)} ${from}–${to} exist but produced no text when the document was read (a drawing or blank page has no text layer) — there is nothing saved to show for them.`,
+          );
+        }
         throw new DocumentPartError(
           `The saved text has ${catalog.count} ${unitWord(catalog.kind)} — ${from}–${to} is outside them.`,
         );
