@@ -6606,6 +6606,12 @@ function AskVaenyxPanel({
         return;
       }
     }
+    // Bottom-follow belongs to a reply BEING WRITTEN, and to nothing else
+    // (Oskar, 2026-08-15: opening an unread scheduled chat landed on the
+    // first unread for a frame — then a dependency flicker re-ran this
+    // effect, both branches skipped as already-handled, and this line
+    // yanked the view to the bottom anyway).
+    if (!sending && !streamStatus && !streamThinking) return;
     lastAnchorAtRef.current = Date.now();
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [
@@ -6668,6 +6674,10 @@ function AskVaenyxPanel({
         return;
       }
     }
+    // Same rule as the chat effect: bottom-follow only while a reply is
+    // being written — never as a side effect of a dependency flicker after
+    // the opening landed the view where it belongs.
+    if (!sendingTaskMessage && !streamStatus && !streamThinking) return;
     lastAnchorAtRef.current = Date.now();
     taskEndRef.current?.scrollIntoView({ block: "end" });
   }, [
