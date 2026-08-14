@@ -380,6 +380,17 @@ export async function buildApp(
           error: "Not Found",
         });
       }
+      // A MISSING ASSET IS A 404, NEVER THE HOME PAGE (Oskar, 2026-08-15:
+      // the phone went white). Every deploy renames the hashed bundles, so a
+      // page held over from an older build asks for JS files that no longer
+      // exist — and this fallback used to answer those requests with
+      // index.html, HTTP 200. The browser then parsed HTML as JavaScript and
+      // painted nothing. Asset names are content-addressed: if the exact
+      // file is not on disk, the only honest answer is "gone", which lets
+      // the page fail loudly and the retry shell take over.
+      if (request.url.startsWith("/assets/")) {
+        return reply.code(404).send({ error: "Not Found" });
+      }
 
       return reply.sendFile("index.html");
     });

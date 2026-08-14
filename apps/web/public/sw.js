@@ -1,12 +1,16 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v7";
+const CACHE_NAME = "vaenyx-shell-v8";
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(["/", "/index.html"])),
-  );
+self.addEventListener("install", () => {
+  // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
+  // shell was the poison: opened during the boot window, the SW served an
+  // index.html from an older build, whose hashed assets no longer exist —
+  // a dead white page that never healed. The app cannot do anything without
+  // its server anyway, so an offline copy of its shell buys nothing; when
+  // the server is unreachable the fetch handler now answers with a small
+  // self-retrying page instead.
   self.skipWaiting();
 });
 
@@ -25,16 +29,44 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// The page shown when the server cannot be reached — a computer that is
+// still booting, mid-restart, or briefly off the tailnet. It retries by
+// itself every two seconds and reloads into the real app the moment the
+// server answers, so nobody is left staring at a dead page wondering
+// whether to refresh (Oskar, 2026-08-15, and his "页面自愈" pick).
+function bootWaitPage() {
+  const html = [
+    '<!doctype html><html><head><meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    "<title>Vaenyx</title>",
+    "<style>body{margin:0;display:grid;place-items:center;min-height:100dvh;",
+    "background:#262624;color:#ece9e0;font-family:system-ui,sans-serif}",
+    "div{text-align:center}p{color:#8f8c83;font-size:14px}",
+    "b{font-size:18px;font-weight:600}</style></head><body><div>",
+    "<b>Vaenyx</b>",
+    "<p>Starting up… this page will open by itself.<br>",
+    "正在启动…这个页面会自己打开。</p>",
+    "</div><script>setInterval(function(){",
+    'fetch("/v1/system/status",{cache:"no-store"}).then(function(r){',
+    "if(r.ok)location.reload()}).catch(function(){})},2000)",
+    "</scr" + "ipt></body></html>",
+  ].join("");
+  return new Response(html, {
+    status: 503,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || event.request.mode !== "navigate") {
     return;
   }
 
-  // Network-first for navigations: always try the live (no-cache) index.html so a
-  // fresh build is picked up immediately; fall back to the cached shell offline.
-  event.respondWith(
-    fetch(event.request).catch(() => caches.match("/index.html")),
-  );
+  // Network-first for navigations: always try the live index.html so a fresh
+  // build is picked up immediately. When the server is unreachable the
+  // answer is the self-retrying wait page — never a stale cached shell,
+  // whose long-gone hashed assets were exactly the phone's white screen.
+  event.respondWith(fetch(event.request).catch(() => bootWaitPage()));
 });
 
 // Web Push: something finished — show it. The payload is JSON
