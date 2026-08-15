@@ -143,6 +143,10 @@ Read this inside the app: **Settings → Manual**.
     subscription) fetches any pages it needs by itself; on other models,
     just say the pages — "看第 5–8 页" or "show pages 5–8" — and they arrive
     with your next message.
+  - **Deleting a chat deletes its files.** Documents attached to a
+    conversation are removed from this machine when the conversation is
+    deleted (kept if another chat still uses them), and any leftover no chat
+    references is cleaned up in the background within a day.
   - With **Reading** switched off (AI Settings → Capabilities) the file is
     refused at the door, and Vaenyx names what stopped it: the switch on that
     row, or the mode you are in, which is not a switch and not one you can

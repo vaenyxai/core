@@ -237,11 +237,7 @@ import {
   type RelayRunRequest,
   type UpdateRelaySettingsRequest,
 } from "@vaenyx/contracts";
-import type {
-  FastifyInstance,
-  FastifyReply,
-  FastifyRequest,
-} from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { AppConfig } from "../../config.js";
 import type { DatabaseHandle } from "../../db/database.js";
@@ -423,7 +419,11 @@ import { classifyRoutineIntent } from "../core/routine-intent.js";
 import { getFreePicks, refreshFreePicks } from "../core/free-picks.js";
 import { getDefaultProvider, initModelRegistry } from "../models/registry.js";
 import type { ModelProvider } from "../models/provider.js";
-import { fetchCatalogue, installRoutine, installMethod } from "../core/catalogue.js";
+import {
+  fetchCatalogue,
+  installRoutine,
+  installMethod,
+} from "../core/catalogue.js";
 import {
   recordLegalAcknowledgement,
   listLegalAcknowledgements,
@@ -1018,9 +1018,7 @@ export async function registerGatewayRoutes(
     ): { error: string } | null => {
       const row = context.database.sqlite
         .prepare(`SELECT mode_id FROM ${table} WHERE id = ?`)
-        .get(decodeURIComponent(id)) as
-        | { mode_id: string | null }
-        | undefined;
+        .get(decodeURIComponent(id)) as { mode_id: string | null } | undefined;
       if (row && (row.mode_id ?? null) !== sessionMode) {
         return { error: `${label} not found.` };
       }
@@ -1072,7 +1070,9 @@ export async function registerGatewayRoutes(
     run: (
       options: CreateAskVaenyxMessageOptions,
     ) => ReturnType<typeof createAskVaenyxMessage>,
-    audit: (response: Awaited<ReturnType<typeof createAskVaenyxMessage>>) => void,
+    audit: (
+      response: Awaited<ReturnType<typeof createAskVaenyxMessage>>,
+    ) => void,
   ): Promise<void> {
     reply.hijack();
     const raw = reply.raw;
@@ -1187,10 +1187,15 @@ export async function registerGatewayRoutes(
   // not surface in another's chat, and a rule that lives in a prompt leaks.
   app.get(
     "/v1/facts",
-    { schema: { response: { 200: FactsResponseSchema, 401: ErrorResponseSchema } } },
+    {
+      schema: {
+        response: { 200: FactsResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       return { facts: listCurrentFacts(context.database, owner.modeId) };
     },
   );
@@ -1201,17 +1206,25 @@ export async function registerGatewayRoutes(
     "/v1/facts/history/:slot",
     {
       schema: {
-        params: Type.Object({ slot: Type.String({ minLength: 1 }) }, {
-          additionalProperties: false,
-        }),
+        params: Type.Object(
+          { slot: Type.String({ minLength: 1 }) },
+          {
+            additionalProperties: false,
+          },
+        ),
         response: { 200: FactsResponseSchema, 401: ErrorResponseSchema },
       },
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       return {
-        facts: listFactHistory(context.database, request.params.slot, owner.modeId),
+        facts: listFactHistory(
+          context.database,
+          request.params.slot,
+          owner.modeId,
+        ),
       };
     },
   );
@@ -1229,7 +1242,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       const query = request.query.q?.trim() ?? "";
       if (!query) return { facts: [] };
       return { facts: searchFacts(context.database, query, owner.modeId) };
@@ -1254,7 +1268,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       try {
         recordFact(context.database, {
           eventTime: request.body.eventTime ?? null,
@@ -1292,9 +1307,12 @@ export async function registerGatewayRoutes(
     "/v1/facts/:id",
     {
       schema: {
-        params: Type.Object({ id: Type.String({ minLength: 1 }) }, {
-          additionalProperties: false,
-        }),
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          {
+            additionalProperties: false,
+          },
+        ),
         response: {
           200: FactsResponseSchema,
           401: ErrorResponseSchema,
@@ -1304,7 +1322,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       if (!retireFact(context.database, request.params.id)) {
         return reply.code(404).send({ error: "That memory is not there." });
       }
@@ -1327,9 +1346,12 @@ export async function registerGatewayRoutes(
     "/v1/facts/candidates/:id/approve",
     {
       schema: {
-        params: Type.Object({ id: Type.String({ minLength: 1 }) }, {
-          additionalProperties: false,
-        }),
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          {
+            additionalProperties: false,
+          },
+        ),
         response: {
           200: FactsResponseSchema,
           400: ErrorResponseSchema,
@@ -1339,12 +1361,16 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       try {
         approveFactCandidate(context.database, request.params.id, owner.id);
       } catch (error) {
         return reply.code(400).send({
-          error: error instanceof Error ? error.message : "That could not be approved.",
+          error:
+            error instanceof Error
+              ? error.message
+              : "That could not be approved.",
         });
       }
       return { facts: listCurrentFacts(context.database, owner.modeId) };
@@ -1589,8 +1615,7 @@ export async function registerGatewayRoutes(
         actorName: owner.name,
         action: "phone.login",
         decision: "allowed",
-        reason:
-          "Owner started the Tailscale browser sign-in from phone setup.",
+        reason: "Owner started the Tailscale browser sign-in from phone setup.",
         resourceType: "system",
       });
       return startTailscaleLogin(request.query.lang === "zh" ? "zh" : "en");
@@ -1988,7 +2013,9 @@ export async function registerGatewayRoutes(
       // touch it. This press is the moment it is actually wanted, so this is
       // where it is fetched — the same shape as the ChatGPT button, and the
       // same rule about what reaches the browser: a code, never a shell line.
-      const ready = await ensureClaudeSdkInstalled(context.config.dataDirectory);
+      const ready = await ensureClaudeSdkInstalled(
+        context.config.dataDirectory,
+      );
       if (ready === "install-failed") {
         return reply.code(502).send({
           error:
@@ -2123,7 +2150,9 @@ export async function registerGatewayRoutes(
 
       const { id } = request.params;
       if (!backupExists(context.config, id)) {
-        return reply.code(400).send({ error: "That backup could not be found." });
+        return reply
+          .code(400)
+          .send({ error: "That backup could not be found." });
       }
 
       requestRestore(context.config, id);
@@ -2466,10 +2495,7 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
 
-      if (
-        request.body.projectId !== null &&
-        !request.body.projectId.trim()
-      ) {
+      if (request.body.projectId !== null && !request.body.projectId.trim()) {
         return reply.code(400).send({
           error: "Project is required, or choose Inbox.",
         });
@@ -2892,8 +2918,8 @@ export async function registerGatewayRoutes(
       // connected. The photo is never sent anywhere.
       const visionRefused = Boolean(
         request.body.imageId &&
-          !request.body.input &&
-          capabilityRefusal("vision", owner, runLanguage),
+        !request.body.input &&
+        capabilityRefusal("vision", owner, runLanguage),
       );
       if (request.body.imageId && !request.body.input && !visionRefused) {
         const found = readImage(
@@ -3025,8 +3051,11 @@ export async function registerGatewayRoutes(
             // is several Method runs in a row, so it cannot be the one path
             // that ignores a switch every single Method run honours.
             narrow: (declared) =>
-              decideCapabilities(context.database, declared, owner.modeId ?? null)
-                .allowed,
+              decideCapabilities(
+                context.database,
+                declared,
+                owner.modeId ?? null,
+              ).allowed,
           },
         );
         touchChatThread(
@@ -3156,6 +3185,7 @@ export async function registerGatewayRoutes(
           context.database,
           request.params.id,
           owner.id,
+          context.config.dataDirectory,
         );
         recordAudit(context.database, {
           actorType: "owner",
@@ -4129,7 +4159,9 @@ export async function registerGatewayRoutes(
               ...(request.body.voiceAudioId
                 ? { voiceAudioId: request.body.voiceAudioId }
                 : {}),
-              ...(request.body.imageId ? { imageId: request.body.imageId } : {}),
+              ...(request.body.imageId
+                ? { imageId: request.body.imageId }
+                : {}),
               ...(request.body.annotate ? { annotate: true } : {}),
               ...(request.body.documentId
                 ? { documentId: request.body.documentId }
@@ -4427,7 +4459,8 @@ export async function registerGatewayRoutes(
             error.message === "SOURCE_CHAT_NOT_FOUND")
         ) {
           return reply.code(400).send({
-            error: "The selected project, skill, or source chat is unavailable.",
+            error:
+              "The selected project, skill, or source chat is unavailable.",
           });
         }
 
@@ -4822,12 +4855,13 @@ export async function registerGatewayRoutes(
         return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
       }
       if (!knocker) {
-        return reply.code(401).send({ error: "A valid App Token is required." });
+        return reply
+          .code(401)
+          .send({ error: "A valid App Token is required." });
       }
       return relayHealth(context.database, knocker.profileId);
     },
   );
-
 
   app.post<{ Body: RelayRunRequest }>(
     "/v1/ai/run",
@@ -4880,7 +4914,9 @@ export async function registerGatewayRoutes(
           reason: "Invalid or disabled App Token.",
           resourceType: "relay_request",
         });
-        return reply.code(401).send({ error: "A valid App Token is required." });
+        return reply
+          .code(401)
+          .send({ error: "A valid App Token is required." });
       }
 
       const started = Date.now();
@@ -5085,7 +5121,8 @@ export async function registerGatewayRoutes(
         }
         return await startCodexLogin(profile.id);
       } catch (error) {
-        const code = error instanceof Error ? error.message : "RELAY_LOGIN_FAILED";
+        const code =
+          error instanceof Error ? error.message : "RELAY_LOGIN_FAILED";
         // One codex login at a time across the machine (its browser flow hosts
         // a local callback port); "busy" is a retry, not a failure.
         return reply
@@ -5144,7 +5181,8 @@ export async function registerGatewayRoutes(
         });
         return { connected: true };
       } catch (error) {
-        const code = error instanceof Error ? error.message : "RELAY_LOGIN_FAILED";
+        const code =
+          error instanceof Error ? error.message : "RELAY_LOGIN_FAILED";
         return reply.code(502).send({ error: code });
       }
     },
@@ -5341,7 +5379,9 @@ export async function registerGatewayRoutes(
         needsOwnTokenApproval: [...NEEDS_OWN_TOKEN_APPROVAL],
         // How many Methods declared each capability — so the row can say who
         // would notice before the switch goes off. A view; it decides nothing.
-        usedByMethods: countMethodsPerCapability(context.config.libraryDirectory),
+        usedByMethods: countMethodsPerCapability(
+          context.config.libraryDirectory,
+        ),
       };
     },
   );
@@ -5376,7 +5416,9 @@ export async function registerGatewayRoutes(
       // own mode. Mode management is already User-Mode-only for the same
       // reason; this is the other half of the same door.
       if (owner.modeId) {
-        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+        return reply
+          .code(403)
+          .send({ error: switchesLiveInUserMode(language) });
       }
       const unknown = Object.keys(request.body).filter(
         (name) => !isCapability(name),
@@ -5497,7 +5539,9 @@ export async function registerGatewayRoutes(
       // ticked, which would leave every unlocked mode able to hand itself back
       // whatever it was denied.
       if (owner.modeId) {
-        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+        return reply
+          .code(403)
+          .send({ error: switchesLiveInUserMode(language) });
       }
       const unknown = Object.keys(request.body).filter(
         (name) => !isCapability(name),
@@ -5704,7 +5748,9 @@ export async function registerGatewayRoutes(
       // Same door as the switches: whoever is inside a mode is not the person
       // who answers a question about what this instance records.
       if (owner.modeId) {
-        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+        return reply
+          .code(403)
+          .send({ error: switchesLiveInUserMode(language) });
       }
       const named = request.body.capabilities.filter(isCapability);
       if (named.length === 0) {
@@ -5770,7 +5816,9 @@ export async function registerGatewayRoutes(
       // whoever happens to be sitting inside a mode — the same door the
       // switches themselves have.
       if (owner.modeId) {
-        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+        return reply
+          .code(403)
+          .send({ error: switchesLiveInUserMode(language) });
       }
       const capability = request.params.capability;
       if (!isCapability(capability)) {
@@ -5826,10 +5874,11 @@ export async function registerGatewayRoutes(
         actorName: owner.name,
         action: "capability.test",
         decision: result.status === "ok" ? "allowed" : "denied",
-        reason: `${capability} test: ${result.status}${result.engine ? ` (${result.engine})` : ""} — ${result.detail}`.slice(
-          0,
-          500,
-        ),
+        reason:
+          `${capability} test: ${result.status}${result.engine ? ` (${result.engine})` : ""} — ${result.detail}`.slice(
+            0,
+            500,
+          ),
         resourceType: "capability",
         resourceId: capability,
       });
@@ -5884,7 +5933,7 @@ export async function registerGatewayRoutes(
   // working the instant this returns, which is how an app is cut off without
   // closing the door on the others. The plain text is returned exactly once and
   // stored nowhere — only its hash and its last four characters are kept.
-  
+
   // The Test button sends a REAL request down the engine the Owner is looking
   // at. It never reads a config file, never trusts a vendor page, and never
   // asks the model whether it works.
@@ -6075,7 +6124,10 @@ export async function registerGatewayRoutes(
         });
         return profile;
       } catch (error) {
-        if (error instanceof Error && error.message === "APP_PROFILE_NOT_FOUND") {
+        if (
+          error instanceof Error &&
+          error.message === "APP_PROFILE_NOT_FOUND"
+        ) {
           return reply.code(404).send({ error: "App Profile not found." });
         }
         throw error;
@@ -6118,7 +6170,10 @@ export async function registerGatewayRoutes(
         });
         return { message: "App Profile deleted." };
       } catch (error) {
-        if (error instanceof Error && error.message === "APP_PROFILE_NOT_FOUND") {
+        if (
+          error instanceof Error &&
+          error.message === "APP_PROFILE_NOT_FOUND"
+        ) {
           return reply.code(404).send({ error: "App Profile not found." });
         }
         throw error;
@@ -6859,7 +6914,9 @@ export async function registerGatewayRoutes(
         request.log.warn({ message }, "vision describe failed");
         return reply
           .code(502)
-          .send({ error: `Photo analysis failed: ${message || "unknown error"}` });
+          .send({
+            error: `Photo analysis failed: ${message || "unknown error"}`,
+          });
       }
     },
   );
@@ -7136,10 +7193,7 @@ export async function registerGatewayRoutes(
           request.body.id,
         );
       } catch (error) {
-        if (
-          error instanceof Error &&
-          error.message === "LOCAL_VOICE_UNKNOWN"
-        ) {
+        if (error instanceof Error && error.message === "LOCAL_VOICE_UNKNOWN") {
           return reply.code(400).send({ error: "Unknown local voice." });
         }
         throw error;
@@ -7397,7 +7451,10 @@ export async function registerGatewayRoutes(
         request.body.language === "zh" ? "zh" : "en";
       const refused = capabilityRefusal("vision", owner, language);
       if (refused) return reply.code(403).send({ error: refused });
-      const found = readImage(context.config.dataDirectory, request.body.imageId);
+      const found = readImage(
+        context.config.dataDirectory,
+        request.body.imageId,
+      );
       if (!found) {
         return reply.code(404).send({ error: "Image not found." });
       }
@@ -7591,7 +7648,10 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      const found = readImage(context.config.dataDirectory, request.body.imageId);
+      const found = readImage(
+        context.config.dataDirectory,
+        request.body.imageId,
+      );
       if (!found) {
         return reply.code(404).send({ error: "Image not found." });
       }
@@ -7744,7 +7804,10 @@ export async function registerGatewayRoutes(
         });
         return { token };
       } catch (error) {
-        if (error instanceof Error && error.message === "APP_PROFILE_NOT_FOUND") {
+        if (
+          error instanceof Error &&
+          error.message === "APP_PROFILE_NOT_FOUND"
+        ) {
           return reply.code(404).send({ error: "App Profile not found." });
         }
         throw error;
@@ -7788,13 +7851,17 @@ export async function registerGatewayRoutes(
           actorName: owner.name,
           action: "app_profile.regenerate_token",
           decision: "allowed",
-          reason: "Owner reset an App Profile token; the previous token is void.",
+          reason:
+            "Owner reset an App Profile token; the previous token is void.",
           resourceType: "app_profile",
           resourceId: result.profile.id,
         });
         return result;
       } catch (error) {
-        if (error instanceof Error && error.message === "APP_PROFILE_NOT_FOUND") {
+        if (
+          error instanceof Error &&
+          error.message === "APP_PROFILE_NOT_FOUND"
+        ) {
           return reply.code(404).send({ error: "App Profile not found." });
         }
         throw error;
@@ -7851,7 +7918,10 @@ export async function registerGatewayRoutes(
         });
         return { profile };
       } catch (error) {
-        if (error instanceof Error && error.message === "APP_PROFILE_NOT_FOUND") {
+        if (
+          error instanceof Error &&
+          error.message === "APP_PROFILE_NOT_FOUND"
+        ) {
           return reply.code(404).send({ error: "App Profile not found." });
         }
 
@@ -7917,7 +7987,9 @@ export async function registerGatewayRoutes(
       const language: CapabilityLanguage =
         request.query.lang === "zh" ? "zh" : "en";
       if (owner.modeId) {
-        return reply.code(403).send({ error: switchesLiveInUserMode(language) });
+        return reply
+          .code(403)
+          .send({ error: switchesLiveInUserMode(language) });
       }
       const named = [
         ...Object.keys(request.body.changes),
@@ -7964,7 +8036,10 @@ export async function registerGatewayRoutes(
             ),
           });
         }
-        if (error instanceof Error && error.message === "APP_PROFILE_NOT_FOUND") {
+        if (
+          error instanceof Error &&
+          error.message === "APP_PROFILE_NOT_FOUND"
+        ) {
           return reply.code(404).send({ error: "App Profile not found." });
         }
         throw error;
@@ -8027,7 +8102,8 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
 
-      const file = request.query.lang === "zh" ? "glossary.zh.md" : "glossary.md";
+      const file =
+        request.query.lang === "zh" ? "glossary.zh.md" : "glossary.md";
       const path = join(context.config.docsDirectory, file);
       const markdown = existsSync(path) ? readFileSync(path, "utf8") : "";
       return { markdown };
@@ -8202,7 +8278,10 @@ export async function registerGatewayRoutes(
       });
 
       try {
-        return await draftMethodSpec(request.body.description, controller.signal);
+        return await draftMethodSpec(
+          request.body.description,
+          controller.signal,
+        );
       } catch (error) {
         return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
       }
@@ -8279,7 +8358,10 @@ export async function registerGatewayRoutes(
         });
       }
 
-      const method = createMethod(context.config.libraryDirectory, request.body);
+      const method = createMethod(
+        context.config.libraryDirectory,
+        request.body,
+      );
       recordAudit(context.database, {
         actorType: "owner",
         actorId: owner.id,
@@ -8396,7 +8478,9 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       if (request.body.steps.length === 0) {
-        return reply.code(400).send({ error: "A routine needs at least one step." });
+        return reply
+          .code(400)
+          .send({ error: "A routine needs at least one step." });
       }
 
       try {
@@ -8658,7 +8742,9 @@ export async function registerGatewayRoutes(
   // reassuring half and is said out loud for that reason.
   //
   // Read-only. Nothing here changes anything.
-  app.get<{ Querystring: { id: string; kind: "method" | "routine"; version: string } }>(
+  app.get<{
+    Querystring: { id: string; kind: "method" | "routine"; version: string };
+  }>(
     "/v1/library/updates/preview",
     {
       schema: {
@@ -8675,7 +8761,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
 
       const loaded =
         request.query.kind === "method"
@@ -8688,7 +8775,11 @@ export async function registerGatewayRoutes(
         kind: request.query.kind,
         libraryDirectory: context.config.libraryDirectory,
         rollbackAvailable: Boolean(
-          availableRollback(context.database, request.query.id, request.query.kind),
+          availableRollback(
+            context.database,
+            request.query.id,
+            request.query.kind,
+          ),
         ),
       });
       if (!consequences) return { offer: null };
@@ -8736,8 +8827,12 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
-      const forkId = toFolderId(request.body.name, `${request.body.methodId}-mine`);
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
+      const forkId = toFolderId(
+        request.body.name,
+        `${request.body.methodId}-mine`,
+      );
       try {
         const result = forkMethod({
           forkId,
@@ -8794,7 +8889,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       const method = loadMethod(
         context.config.libraryDirectory,
         request.params.id,
@@ -8859,7 +8955,14 @@ export async function registerGatewayRoutes(
   // truthfully is worse than no light at all.
   app.get(
     "/v1/library/checks",
-    { schema: { response: { 200: RegressionListResponseSchema, 401: ErrorResponseSchema } } },
+    {
+      schema: {
+        response: {
+          200: RegressionListResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
     async (request, reply) => {
       if (!requireOwner(request)) {
         return reply.code(401).send({ error: "Owner login required." });
@@ -8893,7 +8996,8 @@ export async function registerGatewayRoutes(
     { schema: { response: { 401: ErrorResponseSchema } } },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       return { items: listInstalledItems(context.database) };
     },
   );
@@ -8927,7 +9031,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       setUpdatePolicy(
         context.database,
         request.body.id,
@@ -8956,7 +9061,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       const controller = new AbortController();
       reply.raw.on("close", () => {
         if (!reply.raw.writableEnded) controller.abort();
@@ -9010,7 +9116,9 @@ export async function registerGatewayRoutes(
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         if (message.startsWith("METHOD_MISSING")) {
-          return reply.code(404).send({ error: "That Method is not installed." });
+          return reply
+            .code(404)
+            .send({ error: "That Method is not installed." });
         }
         return reply.code(502).send({
           error: "Could not update from the community catalogue.",
@@ -9036,7 +9144,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       const controller = new AbortController();
       reply.raw.on("close", () => {
         if (!reply.raw.writableEnded) controller.abort();
@@ -9083,7 +9192,9 @@ export async function registerGatewayRoutes(
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         if (message.startsWith("ROUTINE_MISSING")) {
-          return reply.code(404).send({ error: "That Routine is not installed." });
+          return reply
+            .code(404)
+            .send({ error: "That Routine is not installed." });
         }
         return reply.code(502).send({
           error: "Could not update from the community catalogue.",
@@ -9108,7 +9219,8 @@ export async function registerGatewayRoutes(
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
       const restored = restoreRollback(
         context.database,
         request.body.methodId,
@@ -9118,7 +9230,8 @@ export async function registerGatewayRoutes(
       // Putting the old version back also puts the question back: whatever the
       // check said about the version being removed no longer describes what is
       // on disk.
-      if (restored) clearRegression(context.database, request.body.methodId, "method");
+      if (restored)
+        clearRegression(context.database, request.body.methodId, "method");
       if (!restored) {
         return reply
           .code(404)
@@ -9201,7 +9314,11 @@ export async function registerGatewayRoutes(
       // No state = not an operator (403) or the service is unreachable. Either
       // way the switch simply does not appear.
       return state
-        ? { available: true, paused: state.paused, envOverride: state.envOverride }
+        ? {
+            available: true,
+            paused: state.paused,
+            envOverride: state.envOverride,
+          }
         : { available: false, paused: false, envOverride: false };
     },
   );
@@ -9236,7 +9353,11 @@ export async function registerGatewayRoutes(
           .send({ error: "The publish service is not connected." });
       }
       try {
-        await setPublishingPause(serviceUrl, session.token, request.body.paused);
+        await setPublishingPause(
+          serviceUrl,
+          session.token,
+          request.body.paused,
+        );
       } catch {
         return reply
           .code(503)
@@ -9487,7 +9608,9 @@ export async function registerGatewayRoutes(
       if (!preview.recipe.trim()) {
         return reply
           .code(400)
-          .send({ error: "Nothing was left to import once the code was dropped." });
+          .send({
+            error: "Nothing was left to import once the code was dropped.",
+          });
       }
       const created = createMethod(context.config.libraryDirectory, {
         name: preview.name,
@@ -9577,14 +9700,17 @@ export async function registerGatewayRoutes(
   ): void {
     try {
       if (sharingChoice().mode === "off") return;
-      if (!communityItemIdFor(context.config.libraryDirectory, methodId)) return;
+      if (!communityItemIdFor(context.config.libraryDirectory, methodId))
+        return;
       // 🔴 A FORK NEVER SENDS ANYTHING UPSTREAM. Once the Owner has changed the
       // recipe, a correction from it describes something its original author
       // never wrote — and they have no way to tell. Sending it is not a privacy
       // problem, it is misinformation: their general recipe would be taught
       // this household's local convention. The corrections stay here, where
       // the recipe that produced them lives.
-      if (!mayReturnCorrectionsUpstream(context.config.libraryDirectory, methodId)) {
+      if (
+        !mayReturnCorrectionsUpstream(context.config.libraryDirectory, methodId)
+      ) {
         return;
       }
       queueExample(context.database, {
@@ -9624,7 +9750,9 @@ export async function registerGatewayRoutes(
         output: item.output,
         note: item.note,
         redactions: item.redactions.length,
-        redactionKinds: [...new Set(item.redactions.map((entry) => entry.kind))],
+        redactionKinds: [
+          ...new Set(item.redactions.map((entry) => entry.kind)),
+        ],
         sensitive: item.sensitive,
         released: item.releasedAt !== null,
         createdAt: item.createdAt,
@@ -9642,7 +9770,9 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       if (!withdrawQueued(context.database, request.params.id)) {
-        return reply.code(404).send({ error: "That item is no longer waiting." });
+        return reply
+          .code(404)
+          .send({ error: "That item is no longer waiting." });
       }
       recordAudit(context.database, {
         actorType: "owner",
@@ -9751,10 +9881,15 @@ export async function registerGatewayRoutes(
   // model is never asked how many things are waiting.
   app.get(
     "/v1/inbox",
-    { schema: { response: { 200: InboxSummarySchema, 401: ErrorResponseSchema } } },
+    {
+      schema: {
+        response: { 200: InboxSummarySchema, 401: ErrorResponseSchema },
+      },
+    },
     async (request, reply) => {
       const owner = requireOwner(request);
-      if (!owner) return reply.code(401).send({ error: "Owner login required." });
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
 
       const modeId = owner.modeId ?? null;
       const mode = modeId ? findMode(context.database, modeId) : null;
@@ -9852,7 +9987,10 @@ export async function registerGatewayRoutes(
           { id: Type.String({ minLength: 1 }) },
           { additionalProperties: false },
         ),
-        response: { 200: MethodExamplesResponseSchema, 401: ErrorResponseSchema },
+        response: {
+          200: MethodExamplesResponseSchema,
+          401: ErrorResponseSchema,
+        },
       },
     },
     async (request, reply) => {
@@ -9961,7 +10099,9 @@ export async function registerGatewayRoutes(
         if (code === "METHOD_NOT_FOUND") {
           return reply.code(404).send({ error: "Method not found." });
         }
-        return reply.code(400).send({ error: "That example could not be saved." });
+        return reply
+          .code(400)
+          .send({ error: "That example could not be saved." });
       }
 
       // It has been kept, so it stops waiting. Recorded rather than deleted:
@@ -10143,7 +10283,9 @@ export async function registerGatewayRoutes(
         if (code === "METHOD_NOT_FOUND") {
           return reply.code(404).send({ error: "Method not found." });
         }
-        return reply.code(400).send({ error: "That recipe could not be saved." });
+        return reply
+          .code(400)
+          .send({ error: "That recipe could not be saved." });
       }
 
       // Owner's own method: every grant follows the edit right here, so the
@@ -10219,7 +10361,8 @@ export async function registerGatewayRoutes(
         actorName: owner.name,
         action: "library.method.tags",
         decision: "allowed",
-        reason: "Owner set a Library Method's tags (hash + token lock unchanged).",
+        reason:
+          "Owner set a Library Method's tags (hash + token lock unchanged).",
         resourceType: "method",
         resourceId: request.params.id,
       });
@@ -10417,7 +10560,9 @@ export async function registerGatewayRoutes(
           reason: "Invalid or disabled App Token.",
           resourceType: "method_request",
         });
-        return reply.code(401).send({ error: "A valid App Token is required." });
+        return reply
+          .code(401)
+          .send({ error: "A valid App Token is required." });
       }
 
       const methodId = request.params.id;
@@ -10525,7 +10670,10 @@ export async function registerGatewayRoutes(
         // Method declared. `files` is stripped here whatever anyone ticked —
         // reading the Owner's disk for another app is not something a token
         // carries.
-        const tokenGrants = readProfileCapabilities(context.database, profile.id);
+        const tokenGrants = readProfileCapabilities(
+          context.database,
+          profile.id,
+        );
         const tokenAllowed = decideTokenCapabilities(
           context.database,
           capabilitiesFromManifest(method.manifest).capabilities,
@@ -10625,7 +10773,9 @@ export async function registerGatewayRoutes(
           reason: "Invalid or disabled App Token.",
           resourceType: "method_request",
         });
-        return reply.code(401).send({ error: "A valid App Token is required." });
+        return reply
+          .code(401)
+          .send({ error: "A valid App Token is required." });
       }
 
       const methodId = request.params.id;
@@ -10696,7 +10846,8 @@ export async function registerGatewayRoutes(
             actorName: profile.name,
             action: "library.method.feedback",
             decision: "denied",
-            reason: "Corrected output did not match the method's output schema.",
+            reason:
+              "Corrected output did not match the method's output schema.",
             resourceType: "method",
             resourceId: methodId,
           });
@@ -10973,7 +11124,8 @@ export async function registerGatewayRoutes(
           .code(503)
           .send({ error: "The publish service is not configured." });
       }
-      const provider = request.query.provider === "google" ? "google" : "github";
+      const provider =
+        request.query.provider === "google" ? "google" : "github";
       // Where to send the browser back to after login (the page the user was on).
       // Same-origin path only — never an absolute or protocol-relative URL.
       const rawReturn = request.query.return_to;
@@ -10998,45 +11150,42 @@ export async function registerGatewayRoutes(
 
   app.get<{
     Querystring: { token?: string; state?: string; return_to?: string };
-  }>(
-    "/v1/publish-auth/callback",
-    async (request, reply) => {
-      const rawReturn = request.query.return_to;
-      // Same-origin path only: must start with a single "/" and the next char
-      // must be neither "/" (protocol-relative) nor "\" (browsers normalize \ to
-      // / for http(s), so /\evil.com would resolve off-site).
-      const returnTo =
-        typeof rawReturn === "string" && /^\/(?![/\\])/.test(rawReturn)
-          ? rawReturn
-          : "/";
-      const dest = (marker: string) =>
-        `${returnTo}${returnTo.includes("?") ? "&" : "?"}publish=${marker}`;
-      const serviceUrl = context.config.publishServiceUrl;
-      if (!serviceUrl) return reply.redirect(dest("unconfigured"));
-      const { token, state } = request.query;
-      if (!token || !state) return reply.redirect(dest("cancelled"));
-      const stateRow = takeOAuthState(context.database, state);
-      if (!stateRow) return reply.redirect(dest("expired"));
-      const identity = await fetchServiceIdentity(serviceUrl, token);
-      if (!identity) return reply.redirect(dest("failed"));
-      saveServiceSession(
-        context.database,
-        stateRow.ownerId,
-        token,
-        identity.displayName,
-      );
-      recordAudit(context.database, {
-        actorType: "owner",
-        actorId: stateRow.ownerId,
-        actorName: identity.displayName,
-        action: "publish.service.connect",
-        decision: "allowed",
-        reason: `Connected the publish service as "${identity.displayName}".`,
-        resourceType: "system",
-      });
-      return reply.redirect(dest("linked"));
-    },
-  );
+  }>("/v1/publish-auth/callback", async (request, reply) => {
+    const rawReturn = request.query.return_to;
+    // Same-origin path only: must start with a single "/" and the next char
+    // must be neither "/" (protocol-relative) nor "\" (browsers normalize \ to
+    // / for http(s), so /\evil.com would resolve off-site).
+    const returnTo =
+      typeof rawReturn === "string" && /^\/(?![/\\])/.test(rawReturn)
+        ? rawReturn
+        : "/";
+    const dest = (marker: string) =>
+      `${returnTo}${returnTo.includes("?") ? "&" : "?"}publish=${marker}`;
+    const serviceUrl = context.config.publishServiceUrl;
+    if (!serviceUrl) return reply.redirect(dest("unconfigured"));
+    const { token, state } = request.query;
+    if (!token || !state) return reply.redirect(dest("cancelled"));
+    const stateRow = takeOAuthState(context.database, state);
+    if (!stateRow) return reply.redirect(dest("expired"));
+    const identity = await fetchServiceIdentity(serviceUrl, token);
+    if (!identity) return reply.redirect(dest("failed"));
+    saveServiceSession(
+      context.database,
+      stateRow.ownerId,
+      token,
+      identity.displayName,
+    );
+    recordAudit(context.database, {
+      actorType: "owner",
+      actorId: stateRow.ownerId,
+      actorName: identity.displayName,
+      action: "publish.service.connect",
+      decision: "allowed",
+      reason: `Connected the publish service as "${identity.displayName}".`,
+      resourceType: "system",
+    });
+    return reply.redirect(dest("linked"));
+  });
 
   // Change the public display name (community byline) on the service. Owner-only.
   app.patch<{ Body: { displayName?: unknown } }>(
@@ -11092,10 +11241,7 @@ export async function registerGatewayRoutes(
         return reply.code(200).send({ displayName: saved });
       } catch (error) {
         // The service blocks names that could be mistaken for Vaenyx staff.
-        if (
-          error instanceof Error &&
-          error.message.includes("RESERVED_NAME")
-        ) {
+        if (error instanceof Error && error.message.includes("RESERVED_NAME")) {
           return reply.code(400).send({
             error:
               "That name is reserved — pick something that couldn't be mistaken for Vaenyx or its staff.",
@@ -11557,7 +11703,9 @@ export async function registerGatewayRoutes(
             resourceId: routineId,
           });
           if (message.startsWith("ROUTINE_NOT_FOUND")) {
-            return reply.code(404).send({ error: "That routine was not found." });
+            return reply
+              .code(404)
+              .send({ error: "That routine was not found." });
           }
           if (message.startsWith("ROUTINE_UNRESOLVED")) {
             return reply.code(409).send({
@@ -11683,7 +11831,9 @@ export async function registerGatewayRoutes(
           reason: "Invalid or disabled App Token.",
           resourceType: "routine_request",
         });
-        return reply.code(401).send({ error: "A valid App Token is required." });
+        return reply
+          .code(401)
+          .send({ error: "A valid App Token is required." });
       }
 
       const routineId = request.params.id;
@@ -11844,7 +11994,9 @@ export async function registerGatewayRoutes(
     async (request, reply) => {
       const profile = authenticateAppProfile(context.database, request);
       if (!profile) {
-        return reply.code(401).send({ error: "A valid App Token is required." });
+        return reply
+          .code(401)
+          .send({ error: "A valid App Token is required." });
       }
       if (!profile.fetchRecipe) {
         recordAudit(context.database, {
@@ -11873,7 +12025,9 @@ export async function registerGatewayRoutes(
           resourceType: "routine",
           resourceId: request.params.id,
         });
-        return reply.code(403).send({ error: "This key is for a different Routine." });
+        return reply
+          .code(403)
+          .send({ error: "This key is for a different Routine." });
       }
 
       const routine = loadRoutine(
@@ -11886,7 +12040,10 @@ export async function registerGatewayRoutes(
       }
 
       const steps = routine.flow.map((step) => {
-        const method = loadMethod(context.config.libraryDirectory, step.methodId);
+        const method = loadMethod(
+          context.config.libraryDirectory,
+          step.methodId,
+        );
         return {
           // The step id travels with it: a correction that comes back has to
           // say WHICH step it is about, or a multi-step Routine learns the
@@ -11946,7 +12103,9 @@ export async function registerGatewayRoutes(
           reason: "Invalid or disabled App Token.",
           resourceType: "method_request",
         });
-        return reply.code(401).send({ error: "A valid App Token is required." });
+        return reply
+          .code(401)
+          .send({ error: "A valid App Token is required." });
       }
 
       const methodId = request.params.id;

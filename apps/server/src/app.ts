@@ -33,6 +33,7 @@ import {
   autoScanVaenyxMe,
   mergePendingCandidates,
 } from "./modules/core/vaenyx-me.js";
+import { sweepOrphanDocuments } from "./modules/core/document-gc.js";
 import { runDueModeDigests } from "./modules/core/modes.js";
 import { bindUsageDatabase } from "./modules/core/relay-usage.js";
 import { sweepFlywheel } from "./modules/core/flywheel-send.js";
@@ -169,6 +170,22 @@ export async function buildApp(
     void autoScanVaenyxMe(database).catch((error) => app.log.error(error));
   }, 3 * 60_000);
   vaenyxMeWarmup.unref();
+
+  // Document orphan sweep (document-gc.ts): the safety net behind the
+  // delete-with-conversation cleanup. Once per boot, a few minutes in, so a
+  // deleted Mode inbox or a never-attached upload cannot strand files
+  // forever. Age-gated inside, so nothing recent is ever touched.
+  const documentSweep = setTimeout(() => {
+    try {
+      const removed = sweepOrphanDocuments(database, config.dataDirectory);
+      if (removed > 0) {
+        app.log.info({ removed }, "orphaned document files removed");
+      }
+    } catch (error) {
+      app.log.error(error);
+    }
+  }, 4 * 60_000);
+  documentSweep.unref();
 
   // FACTS, distilled out of quiet conversations. Hourly, because the machine
   // is the household's own and idle most of the night — a cloud assistant pays

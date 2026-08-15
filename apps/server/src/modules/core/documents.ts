@@ -6,7 +6,15 @@
 // refusing what cannot be read with a reason the Owner can act on. Nothing
 // here talks to a model; the page count exists so the gate can name it.
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -72,10 +80,10 @@ export function readDocument(
 // The extracted-text sidecar (spill mode, see document-spill.ts): when a
 // document's text is too big to ride the context whole, the WHOLE text is
 // saved next to the original — same directory, same id, ".txt" appended —
-// so any part of it can be served later. Honest note: documents have no
-// delete/GC path at all today, and the sidecar shares that gap — both stay
-// on disk until a cleanup feature exists. It holds nothing the original
-// file does not already hold, and userdata/ never enters git or a deploy.
+// so any part of it can be served later. Both live and die with the
+// messages that reference them: deleting a conversation removes its
+// no-longer-referenced files (ask-vaenyx.ts), and a post-boot sweep
+// removes whatever any other path orphans (document-gc.ts).
 function documentTextPath(dataDirectory: string, documentId: string): string {
   return resolve(documentsDirectory(dataDirectory), `${documentId}.txt`);
 }
@@ -115,6 +123,53 @@ export function readDocumentText(
   } catch {
     return null;
   }
+}
+
+// Remove a document's file and its text sidecar. The id-pattern guard is the
+// whole safety story: nothing outside the documents directory can ever be
+// named, so nothing outside it can ever be deleted. Best-effort — a locked
+// file fails quietly and the sweep gets another chance next boot.
+export function deleteDocumentFiles(
+  dataDirectory: string,
+  documentId: string,
+): boolean {
+  if (!DOCUMENT_ID_PATTERN.test(documentId)) return false;
+  try {
+    rmSync(resolve(documentsDirectory(dataDirectory), documentId), {
+      force: true,
+    });
+    rmSync(documentTextPath(dataDirectory, documentId), { force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Every stored document id on disk, with its file's age — the orphan sweep's
+// view of the directory. Only names matching the id pattern are reported;
+// anything else in the directory is not ours to touch.
+export function listStoredDocuments(
+  dataDirectory: string,
+): { documentId: string; modifiedAt: number }[] {
+  const directory = documentsDirectory(dataDirectory);
+  if (!existsSync(directory)) return [];
+  const found: { documentId: string; modifiedAt: number }[] = [];
+  try {
+    for (const name of readdirSync(directory)) {
+      if (!DOCUMENT_ID_PATTERN.test(name)) continue;
+      try {
+        found.push({
+          documentId: name,
+          modifiedAt: statSync(resolve(directory, name)).mtimeMs,
+        });
+      } catch {
+        // Vanished between listing and stat: nothing to report.
+      }
+    }
+  } catch {
+    return [];
+  }
+  return found;
 }
 
 // pdf.js in plain Node (probe-verified): page count and per-page text with no

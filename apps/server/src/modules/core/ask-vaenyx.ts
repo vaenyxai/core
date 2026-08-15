@@ -59,6 +59,7 @@ import {
   parsePartRequest,
   sliceDocumentPart,
 } from "./document-spill.js";
+import { removeUnreferencedDocuments } from "./document-gc.js";
 import {
   annotateImage,
   describeImage,
@@ -765,6 +766,10 @@ export function deleteAskVaenyxConversation(
   database: DatabaseHandle,
   conversationId: string,
   ownerId: string,
+  // Where the document files live. Optional so callers without a config in
+  // hand still work; without it the post-boot sweep (document-gc.ts) is the
+  // one that reclaims the files, a day later instead of now.
+  dataDirectory?: string | null,
 ): AskVaenyxConversation {
   const conversation = toConversation(
     getConversationRow(database, conversationId, ownerId),
@@ -779,6 +784,19 @@ export function deleteAskVaenyxConversation(
     throw new Error("CONVERSATION_PROTECTED");
   }
 
+  // The cascade is about to erase the evidence of which documents this
+  // conversation held — collect them first, sweep after.
+  const documentIds = dataDirectory
+    ? (
+        database.sqlite
+          .prepare(
+            `SELECT DISTINCT document_id FROM ask_vaenyx_messages
+             WHERE conversation_id = ? AND document_id IS NOT NULL`,
+          )
+          .all(conversationId) as { document_id: string }[]
+      ).map((row) => row.document_id)
+    : [];
+
   database.sqlite
     .prepare(
       `DELETE FROM ask_vaenyx_conversations
@@ -786,6 +804,10 @@ export function deleteAskVaenyxConversation(
          AND owner_id = ?`,
     )
     .run(conversationId, ownerId);
+
+  if (dataDirectory && documentIds.length > 0) {
+    removeUnreferencedDocuments(database, dataDirectory, documentIds);
+  }
 
   return conversation;
 }
