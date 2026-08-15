@@ -1074,7 +1074,7 @@ export async function createAskVaenyxMessage(
   // actually ends this turn (windowStartIndex), because the refresh cadence
   // means the checkpoint can lag the pair-safe cut by a few messages — and
   // those messages must ride verbatim, not vanish into the gap.
-  let history: { content: string; role: "owner" | "assistant" }[] = [];
+  let history: { content: string; role: "owner" | "assistant" }[];
   let assistantContent: string;
   let assistantStatus: "completed" | "failed";
   let webSearchUsed = false;
