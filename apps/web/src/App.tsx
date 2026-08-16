@@ -6572,6 +6572,75 @@ function AskVaenyxPanel({
     });
   }
 
+  // LANDING IS AN INTENT, NOT A SINGLE SCROLL CALL (Oskar, 2026-08-16: every
+  // scheduled task opened at the very top). The task view renders its
+  // messages, run history and header on their own network clocks — a scroll
+  // fired the moment the message STATE arrived ran against a 32-pixel page,
+  // reached the bottom of nothing, and the real content grew in below it.
+  // Photos do the same to chats a beat later. And "wait until stable" is not
+  // enough either: the stages arrive many frames apart, so any stillness
+  // test lands between two of them (measured: 32px → 301px → still 1300px
+  // short).
+  //
+  // So the intent stays alive: for a few seconds after opening, every time
+  // the page grows while the target exists, it lands again — the view stays
+  // pinned where the opening meant it to be while the page builds out. The
+  // Owner's own first touch (wheel, finger, key, click) cancels it at once:
+  // the moment they start reading, the page is theirs, not the intent's.
+  const pendingLandingRef = useRef<{ key: string } | null>(null);
+  const landingFrameRef = useRef(0);
+  const LANDING_HOLD_MS = 5000;
+
+  function requestLanding(
+    key: string,
+    target: () => Element | null,
+    align: "end" | "start",
+  ): void {
+    pendingLandingRef.current = { key };
+    cancelAnimationFrame(landingFrameRef.current);
+    const startedAt = Date.now();
+    let heightAtLastLand = -1;
+    const cancel = () => {
+      if (pendingLandingRef.current?.key === key) {
+        pendingLandingRef.current = null;
+      }
+      removeListeners();
+    };
+    const inputEvents = [
+      "wheel",
+      "touchstart",
+      "keydown",
+      "pointerdown",
+    ] as const;
+    const removeListeners = () => {
+      for (const name of inputEvents) window.removeEventListener(name, cancel);
+    };
+    for (const name of inputEvents) {
+      window.addEventListener(name, cancel, { passive: true });
+    }
+    const attempt = () => {
+      const pending = pendingLandingRef.current;
+      if (!pending || pending.key !== key) {
+        removeListeners();
+        return;
+      }
+      if (Date.now() - startedAt > LANDING_HOLD_MS) {
+        pendingLandingRef.current = null;
+        removeListeners();
+        return;
+      }
+      const element = target();
+      const height = document.documentElement.scrollHeight;
+      if (element && height !== heightAtLastLand) {
+        heightAtLastLand = height;
+        if (align === "end") element.scrollIntoView({ block: "end" });
+        else scrollToMessageStart(element);
+      }
+      landingFrameRef.current = requestAnimationFrame(attempt);
+    };
+    landingFrameRef.current = requestAnimationFrame(attempt);
+  }
+
   function reanchorAfterImageLoad() {
     if (Date.now() - lastAnchorAtRef.current > 3000) return;
     const target = view === "task" ? taskEndRef.current : chatEndRef.current;
@@ -6591,7 +6660,11 @@ function AskVaenyxPanel({
           // back to the bottom while the Owner is reading from here.
           lastAnchorAtRef.current = 0;
           openedThreadRef.current = `chat:${activeConversationId ?? ""}`;
-          scrollToMessageStart(document.getElementById(`message-${first.id}`));
+          requestLanding(
+            `chat:${activeConversationId ?? ""}`,
+            () => document.getElementById(`message-${first.id}`),
+            "start",
+          );
           return;
         }
       }
@@ -6605,7 +6678,7 @@ function AskVaenyxPanel({
       if (openedThreadRef.current !== key && !sending) {
         openedThreadRef.current = key;
         lastAnchorAtRef.current = 0;
-        chatEndRef.current?.scrollIntoView({ block: "end" });
+        requestLanding(key, () => chatEndRef.current, "end");
         return;
       }
     }
@@ -6659,19 +6732,24 @@ function AskVaenyxPanel({
         if (first) {
           lastAnchorAtRef.current = 0;
           openedThreadRef.current = `task:${focusedTaskId ?? ""}`;
-          scrollToMessageStart(document.getElementById(`message-${first.id}`));
+          requestLanding(
+            `task:${focusedTaskId ?? ""}`,
+            () => document.getElementById(`message-${first.id}`),
+            "start",
+          );
           return;
         }
       }
       // Same one rule as a chat: read = the bottom, unread = the earliest
-      // unread message. A scheduled task is where the old "start of the
-      // newest message" rule hurt most — its results are long, so the start
-      // of one looked exactly like the top of the thread.
+      // unread message. The task view was where the landing broke hardest:
+      // its header, run chips and messages render on their own clocks, so an
+      // immediate scroll ran against a page whose content had not arrived —
+      // requestLanding waits it out.
       const key = `task:${focusedTaskId ?? ""}`;
       if (openedThreadRef.current !== key && !sendingTaskMessage) {
         openedThreadRef.current = key;
         lastAnchorAtRef.current = 0;
-        taskEndRef.current?.scrollIntoView({ block: "end" });
+        requestLanding(key, () => taskEndRef.current, "end");
         return;
       }
     }
@@ -22135,11 +22213,12 @@ function SidebarThreadTree({
     const seen = justSeen[thread.id] ?? thread.seenAt ?? "";
     if (seen >= thread.updatedAt) return;
     // Unread until this very moment: hand the OLD watermark to the view so it
-    // opens at the first message the Owner has not seen. An empty watermark
-    // (never opened anywhere) means the whole thread is unread — the view
-    // lands on its first message, which is the honest reading of "earliest
-    // unread".
-    noteUnreadOpen(seen);
+    // opens at the first message the Owner has not seen. An EMPTY watermark
+    // is not a watermark (a thread restored from an old backup has none) —
+    // landing such a thread on message #1 would read as "jumped to the top",
+    // so it lands at the bottom like a read one. New threads are born with
+    // seen_at seeded, so this is a backstop, not the normal path.
+    if (seen) noteUnreadOpen(seen);
     setJustSeen((current) => ({ ...current, [thread.id]: thread.updatedAt }));
     void markVaenyxThreadSeen(thread.id).catch(() => {
       // A failed mark leaves the instance's watermark where it was, so the

@@ -278,12 +278,15 @@ export function ensureChatThread(
     updatedAt: string;
   },
 ): void {
+  // seen_at is seeded on INSERT only: a thread the Owner just made is not
+  // "unread" — they are looking at it. Later activity bumps updated_at alone
+  // (the conflict branch), which is exactly what unread means.
   database.sqlite
     .prepare(
       `INSERT INTO vaenyx_threads (
          id, owner_id, kind, title, project_id, status, conversation_id,
-         routine_id, created_at, updated_at, mode_id
-       ) VALUES (?, ?, 'chat', ?, ?, 'active', ?, ?, ?, ?,
+         routine_id, created_at, updated_at, seen_at, mode_id
+       ) VALUES (?, ?, 'chat', ?, ?, 'active', ?, ?, ?, ?, ?,
          (SELECT mode_id FROM ask_vaenyx_conversations WHERE id = ?))
        ON CONFLICT(id) DO UPDATE SET
          owner_id = excluded.owner_id,
@@ -302,6 +305,7 @@ export function ensureChatThread(
       input.conversationId,
       input.routineId ?? null,
       input.createdAt,
+      input.updatedAt,
       input.updatedAt,
       input.conversationId,
     );
@@ -367,12 +371,14 @@ export function ensureTaskThread(
 ): void {
   const ownerId = resolveLocalOwnerId(database, input.ownerId);
 
+  // Same seeding rule as ensureChatThread: born read (the request is the
+  // Owner's own words); only later runs make it unread.
   database.sqlite
     .prepare(
       `INSERT INTO vaenyx_threads (
          id, owner_id, kind, title, project_id, status, source_chat_id, task_id,
-         created_at, updated_at, mode_id
-       ) VALUES (?, ?, 'task', ?, ?, 'active', ?, ?, ?, ?,
+         created_at, updated_at, seen_at, mode_id
+       ) VALUES (?, ?, 'task', ?, ?, 'active', ?, ?, ?, ?, ?,
          (SELECT mode_id FROM tasks WHERE id = ?))
        ON CONFLICT(id) DO UPDATE SET
          owner_id = excluded.owner_id,
@@ -391,6 +397,7 @@ export function ensureTaskThread(
       input.sourceChatId ?? null,
       input.taskId,
       input.createdAt,
+      input.updatedAt,
       input.updatedAt,
       input.taskId,
     );

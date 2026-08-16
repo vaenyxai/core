@@ -86,10 +86,10 @@ export function ensureInboxThread(
       .prepare(
         `INSERT INTO vaenyx_threads
            (id, owner_id, kind, title, status, conversation_id, mode_id,
-            created_at, updated_at)
-         VALUES (?, ?, 'inbox', ?, 'pinned', ?, ?, ?, ?)`,
+            created_at, updated_at, seen_at)
+         VALUES (?, ?, 'inbox', ?, 'pinned', ?, ?, ?, ?, ?)`,
       )
-      .run(id, ownerId, title, id, modeId, now, now);
+      .run(id, ownerId, title, id, modeId, now, now, now);
   } catch (error) {
     // Lost a race against another caller: the row the winner wrote is just as
     // good as the one this call wanted, so read it rather than throwing.
