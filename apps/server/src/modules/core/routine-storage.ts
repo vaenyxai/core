@@ -19,6 +19,18 @@ import type {
 
 import type { DatabaseHandle } from "../../db/database.js";
 
+// SQLite's CURRENT_TIMESTAMP is "YYYY-MM-DD HH:MM:SS" in UTC — no T, no Z.
+// Chat messages carry real ISO strings, and the chat timeline string-sorts
+// the two together: the space sorts before "T", so every run's rows landed
+// ABOVE every same-day message, at the wrong displayed hour (Oskar,
+// 2026-08-16 screenshot: a 20:44 run shown as "10:44 am" above the 7 pm
+// notes). Rows normalise to ISO UTC on the way OUT; the DB stays as it is.
+function isoTimestamp(raw: string): string {
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)
+    ? `${raw.replace(" ", "T")}Z`
+    : raw;
+}
+
 interface JournalRow {
   id: string;
   routine_id: string;
@@ -68,7 +80,7 @@ function toJournalEntry(row: JournalRow): RoutineJournalEntry {
     routineId: row.routine_id,
     chatId: row.chat_id,
     content: JSON.parse(row.content),
-    createdAt: row.created_at,
+    createdAt: isoTimestamp(row.created_at),
     imageId: row.image_id ?? null,
     imageAnnotations,
   };
@@ -103,7 +115,7 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
     stepId: row.step_id,
     output: JSON.parse(row.output),
     outputValid: row.output_valid === 1,
-    createdAt: row.created_at,
+    createdAt: isoTimestamp(row.created_at),
     ...(viewSnapshot !== undefined ? { viewSnapshot } : {}),
     routineHash: row.routine_hash ?? null,
     imageId: row.image_id ?? null,

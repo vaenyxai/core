@@ -266,10 +266,14 @@ async function askVisionModelOnce(
     return { engine: candidate.id, model: candidate.model, text: text.trim() };
   }
 
-  // The candidate's own model, never `connection.model`: that field holds the
-  // CHAT model the Owner picked for this backend, and pointing a picture at it
-  // would send the photo to a text-only model.
-  const model = candidate.model;
+  // The Owner's chosen model for this backend drives its capabilities too
+  // (owner decision 2026-08-16: 上面 capability 直接调用下面 Models 里选的
+  // 型号). On these providers the flagship chat models read pictures, and
+  // the pinned candidate model — an alias Google routes wherever it likes —
+  // was the thing 503ing. No chosen model = the pinned default; a chosen
+  // model that cannot see fails with the provider's own words, said out
+  // loud, never silently.
+  const model = connection?.model?.trim() || candidate.model;
   const response = await fetch(
     `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,
     {

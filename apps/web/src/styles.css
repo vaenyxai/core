@@ -8752,3 +8752,15 @@ body {
   font-size: var(--fs-sm);
   color: var(--text-dim, inherit);
 }
+
+/* The confirm card's photo leads but stays modest (owner, 2026-08-16): the
+   summary fields get the room. */
+.confirm-photo .annotated-photo {
+  max-width: 100%;
+}
+.confirm-photo .message-photo {
+  max-height: 32vh;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}

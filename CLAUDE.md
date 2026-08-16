@@ -47,3 +47,12 @@ are the `Vaenyx-*.cmd` files at the repo root.
   on the user's behalf (ambiguous intent, either-way choices), it shows a
   chooser instead of guessing. Chooser text and options must be large and
   unmissable — sized for non-technical family members, never a footnote.
+- **Dot points, never walls.** Any model-generated text shown to the user —
+  routine results, photo transcripts, parsed fields — reads as short
+  one-per-line points, never prose crammed into a single blob. Prompts that
+  produce user-facing text say so explicitly.
+- **The owner's chosen model drives capabilities.** A capability slot
+  (Vision, …) pointed at a provider uses the model the owner selected for
+  that provider in Settings → Models; a pinned default applies only when
+  none is chosen. A chosen model that cannot do the job fails out loud with
+  the provider's words — never silently swapped for another model.

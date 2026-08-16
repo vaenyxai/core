@@ -6896,10 +6896,17 @@ function AskVaenyxPanel({
           } else if (Array.isArray(parsed)) {
             values[field.key] = parsed.map((item) => String(item)).join("\n");
           } else if (parsed !== undefined && parsed !== null) {
-            values[field.key] =
+            const rawValue =
               typeof parsed === "object"
                 ? JSON.stringify(parsed)
                 : String(parsed);
+            // Dot-point rule (owner, 2026-08-16): a list crammed into one
+            // semicolon line reads as a wall — show one item per line.
+            values[field.key] =
+              typeof parsed === "string" &&
+              (rawValue.match(/;\s/g)?.length ?? 0) >= 2
+                ? rawValue.replace(/;\s*/g, "\n")
+                : rawValue;
           } else {
             values[field.key] = "";
           }
@@ -6950,15 +6957,47 @@ function AskVaenyxPanel({
         if (newest) setAutoSpeakGalleryId(newest.id);
       }
       void onWorkspaceRefresh();
+      // The fresh result lands at the BOTTOM of the timeline — go there
+      // (Oskar, 2026-08-16: coming back from the confirm card left the view
+      // where it was). Held intent, so late-loading photos cannot outrun it.
+      requestLanding(
+        `routine-run-${conversationId}-${Date.now()}`,
+        () => chatEndRef.current,
+        "end",
+      );
     } catch (nextError) {
       setRoutineJournal((current) =>
         current.filter((entry) => entry.id !== tempId),
       );
-      setError(
+      // A run that died mid-flight (phone network, restart) still WROTE the
+      // journal entry before it ran — reload the truth instead of showing
+      // nothing, and say what happened in the chat itself.
+      void fetchChatRoutineData(conversationId)
+        .then((data) => {
+          if (activeConversationIdRef.current !== conversationId) return;
+          setRoutineJournal(data.journal);
+          setRoutineGallery(data.gallery);
+        })
+        .catch(() => {});
+      const reason =
         nextError instanceof Error
           ? nextError.message
-          : "Vaenyx could not run this routine.",
-      );
+          : "Vaenyx could not run this routine.";
+      setError(reason);
+      void appendConversationNote(
+        conversationId,
+        lang === "zh"
+          ? `⚠ 这次运行没有完成(${reason.slice(0, 160)})。你喂的内容已经存进 Journal,再点一次 Run 可以重跑。`
+          : `⚠ This run did not finish (${reason.slice(0, 160)}). What you fed is saved in the Journal; press Run again to retry.`,
+      )
+        .then((note) =>
+          setMessages((current) =>
+            activeConversationIdRef.current === conversationId
+              ? [...current, note]
+              : current,
+          ),
+        )
+        .catch(() => {});
     } finally {
       setSending(false);
     }
@@ -9313,24 +9352,29 @@ function AskVaenyxPanel({
             {/* Photo mode (visual first): the marked photo IS the primary
                 field — rename / add / remove marks on the picture itself.
                 The other fields are secondary and stay compact. */}
-            {routineInputConfirm.marks && routineInputConfirm.imageId ? (
-              <AnnotatedPhotoEditor
-                imageId={routineInputConfirm.imageId}
-                marks={routineInputConfirm.marks}
-                onChange={(next) =>
-                  setRoutineInputConfirm((current) =>
-                    current ? { ...current, marks: next } : current,
-                  )
-                }
-              />
-            ) : routineInputConfirm.imageId ? (
-              // Marks failed or absent: the photo still LEADS the card
-              // (visual first) — just without editable dots this time.
-              <AnnotatedPhoto
-                annotations={null}
-                imageId={routineInputConfirm.imageId}
-              />
-            ) : null}
+            {/* Photo leads but does not fill the screen (owner, 2026-08-16:
+                照片占的比例小一点,总结的框大一点) — capped by CSS so the
+                fields get the room. */}
+            <div className="confirm-photo">
+              {routineInputConfirm.marks && routineInputConfirm.imageId ? (
+                <AnnotatedPhotoEditor
+                  imageId={routineInputConfirm.imageId}
+                  marks={routineInputConfirm.marks}
+                  onChange={(next) =>
+                    setRoutineInputConfirm((current) =>
+                      current ? { ...current, marks: next } : current,
+                    )
+                  }
+                />
+              ) : routineInputConfirm.imageId ? (
+                // Marks failed or absent: the photo still LEADS the card
+                // (visual first) — just without editable dots this time.
+                <AnnotatedPhoto
+                  annotations={null}
+                  imageId={routineInputConfirm.imageId}
+                />
+              ) : null}
+            </div>
             <div
               style={{
                 display: "flex",
@@ -9409,13 +9453,17 @@ function AskVaenyxPanel({
                             ? t("routine.confirm.onePerLine")
                             : ""
                         }
-                        rows={
-                          routineInputConfirm.marks
+                        rows={(() => {
+                          const lines = (
+                            routineInputConfirm.values[field.key] ?? ""
+                          ).split("\n").length;
+                          if (lines > 1) return Math.min(8, lines + 1);
+                          return routineInputConfirm.marks
                             ? 1
                             : field.type === "array"
                               ? 3
-                              : 2
-                        }
+                              : 2;
+                        })()}
                         value={routineInputConfirm.values[field.key] ?? ""}
                       />
                     )}
@@ -9620,15 +9668,11 @@ function AskVaenyxPanel({
                         <strong>Vaenyx</strong>
                         <small>{formatTime(node.at)}</small>
                       </div>
-                      {/* Visual first (owner rule): the run's marked photo
-                          LEADS the result wherever one exists. */}
-                      {node.item.imageId ? (
-                        <AnnotatedPhoto
-                          annotations={node.item.imageAnnotations ?? null}
-                          imageId={node.item.imageId}
-                          onLoad={reanchorAfterImageLoad}
-                        />
-                      ) : null}
+                      {/* No photo here: the journal row directly above this
+                          result already shows the marked photo, and showing
+                          it twice in one exchange is noise (Oskar,
+                          2026-08-16). The Gallery grid, where results stand
+                          alone, keeps its photo lead. */}
                       <RoutineResultView
                         output={node.item.output}
                         view={

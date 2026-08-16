@@ -406,6 +406,9 @@ export async function parseChatRoutineInput(
     "  contain; simply omit fields the message does not provide.",
     "- Emit numbers as JSON numbers, booleans as true/false, lists as JSON",
     "  arrays.",
+    "- A STRING field that holds several items keeps them one per line",
+    "  (newline-separated), never crammed into one semicolon sentence — the",
+    "  Owner reads these as a list.",
     "",
     "Output ONE JSON object with only these fields and nothing else.",
   ].join("\n");
