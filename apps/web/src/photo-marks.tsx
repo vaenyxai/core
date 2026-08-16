@@ -305,8 +305,7 @@ function distanceToSegment(point: Point, segment: Segment): number {
     point.y - (segment.a.y + along * dy),
   );
 }
-const WIDE_CHARACTER_RANGE =
-  /[ᄀ-ᇿ⺀-꓏ꥠ-꥿가-퟿豈-﫿︐-﹯＀-｠￠-￦]/;
+const WIDE_CHARACTER_RANGE = /[ᄀ-ᇿ⺀-꓏ꥠ-꥿가-퟿豈-﫿︐-﹯＀-｠￠-￦]/;
 
 // Chinese characters take a full em, latin letters a little over half.
 function labelPixelWidth(name: string): number {
@@ -403,7 +402,8 @@ export function layoutLabels(
         if (pointInBox(neighbour, grow(box, CLEARANCE + DOT_RADIUS))) {
           touching += COST_NAME_ON_DOT;
         } else if (
-          distanceToSegment(neighbour, line) < DOT_RADIUS + CLEARANCE
+          distanceToSegment(neighbour, line) <
+          DOT_RADIUS + CLEARANCE
         ) {
           touching += COST_LINE_ON_DOT;
         }
@@ -500,13 +500,21 @@ export function layoutLabels(
     .map(({ index }) => index);
   const orders = [byHeight, byLength, [...byHeight].reverse(), byLength];
 
-  let best = { boxes: [...boxes], lines: [...lines], rightward: [...rightward] };
+  let best = {
+    boxes: [...boxes],
+    lines: [...lines],
+    rightward: [...rightward],
+  };
   let bestTotal = Number.POSITIVE_INFINITY;
   const remember = () => {
     const total = contactTotal();
     if (total < bestTotal) {
       bestTotal = total;
-      best = { boxes: [...boxes], lines: [...lines], rightward: [...rightward] };
+      best = {
+        boxes: [...boxes],
+        lines: [...lines],
+        rightward: [...rightward],
+      };
     }
     return total;
   };
@@ -740,19 +748,49 @@ export function AnnotatedPhotoEditor({
   const { t } = useI18n();
   const [selected, setSelected] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
+  // Which dot the finger is currently carrying. The vision model gets an
+  // item's rough position, not its exact one (Oskar, 2026-08-16: "有些很边"),
+  // so a mark that landed beside its thing is simply dragged onto it.
+  const [dragging, setDragging] = useState<number | null>(null);
   const { frame, ref } = usePhotoFrame();
+
+  function pointToPercent(
+    element: HTMLElement,
+    clientX: number,
+    clientY: number,
+  ): { x: number; y: number } {
+    const rect = element.getBoundingClientRect();
+    const x = Math.round(((clientX - rect.left) / rect.width) * 1000) / 10;
+    const y = Math.round(((clientY - rect.top) / rect.height) * 1000) / 10;
+    return {
+      x: Math.min(100, Math.max(0, x)),
+      y: Math.min(100, Math.max(0, y)),
+    };
+  }
+
+  function dragTo(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragging === null) return;
+    event.preventDefault();
+    const at = pointToPercent(
+      event.currentTarget,
+      event.clientX,
+      event.clientY,
+    );
+    onChange(
+      marks.map((item, index) =>
+        index === dragging ? { ...item, x: at.x, y: at.y } : item,
+      ),
+    );
+  }
 
   function addAt(event: React.MouseEvent<HTMLDivElement>) {
     if (!adding) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x =
-      Math.round(((event.clientX - rect.left) / rect.width) * 1000) / 10;
-    const y =
-      Math.round(((event.clientY - rect.top) / rect.height) * 1000) / 10;
-    onChange([
-      ...marks,
-      { name: "", x: Math.min(100, Math.max(0, x)), y: Math.min(100, Math.max(0, y)) },
-    ]);
+    const at = pointToPercent(
+      event.currentTarget,
+      event.clientX,
+      event.clientY,
+    );
+    onChange([...marks, { name: "", x: at.x, y: at.y }]);
     setSelected(marks.length);
     setAdding(false);
   }
@@ -767,6 +805,9 @@ export function AnnotatedPhotoEditor({
           adding ? "annotated-photo annotate-editor--adding" : "annotated-photo"
         }
         onClick={addAt}
+        onPointerCancel={() => setDragging(null)}
+        onPointerMove={dragTo}
+        onPointerUp={() => setDragging(null)}
       >
         <img
           alt=""
@@ -797,7 +838,20 @@ export function AnnotatedPhotoEditor({
           return (
             <span key={index}>
               <span
-                className="annotate-dot"
+                className={
+                  dragging === index
+                    ? "annotate-dot annotate-dot--draggable annotate-dot--dragging"
+                    : "annotate-dot annotate-dot--draggable"
+                }
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  // Keep the move events on the photo frame (which measures
+                  // the percentages) instead of capturing them to the dot.
+                  event.currentTarget.releasePointerCapture?.(event.pointerId);
+                  setDragging(index);
+                  setSelected(index);
+                  setAdding(false);
+                }}
                 style={{ left: `${item.x}%`, top: `${item.y}%` }}
               />
               <button

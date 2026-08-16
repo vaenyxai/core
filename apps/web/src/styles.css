@@ -8767,3 +8767,34 @@ body {
   font-size: var(--fs-base);
   line-height: 1.6;
 }
+
+/* A mark can be dragged onto its thing (owner, 2026-08-16): the vision model
+   aims close, not exact. Only the editor's dots take pointer events — a chat
+   photo's marks stay untouchable. */
+.annotate-dot--draggable {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  /* A 10px dot is not a finger target; the padding box is. */
+  padding: 12px;
+  margin: -12px;
+  background-clip: content-box;
+}
+
+.annotate-dot--dragging {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.35);
+}
+
+/* The marks standing in for the field they fill: same label and framing as a
+   real field, but the picture above owns the editing. */
+.confirm-marks-field {
+  margin-bottom: var(--space-3);
+}
+
+.confirm-marks-field .confirm-mark-list {
+  margin: 0;
+  padding: var(--space-2) var(--space-3) var(--space-2) 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--r, 10px);
+}

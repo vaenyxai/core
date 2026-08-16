@@ -40,6 +40,8 @@ interface JournalRow {
   image_id: string | null;
   // From the LEFT JOIN on image_annotations (absent on the by-id lookup).
   annotation_items?: string | null;
+  // The marks as CONFIRMED for this row, frozen at write time.
+  annotations_snapshot: string | null;
 }
 
 interface GalleryRow {
@@ -59,15 +61,22 @@ interface GalleryRow {
   // result card can lead with it. Marks ride via the LEFT JOIN below.
   image_id: string | null;
   annotation_items?: string | null;
+  // The marks as CONFIRMED for this row, frozen at write time.
+  annotations_snapshot: string | null;
   // The GENERATED picture of this result, when the Routine asked for one.
   result_image_id: string | null;
 }
 
 function toJournalEntry(row: JournalRow): RoutineJournalEntry {
   let imageAnnotations: RoutineJournalEntry["imageAnnotations"] = null;
-  if (row.annotation_items) {
+  // The row's OWN snapshot wins over the live join: marks belong to the run
+  // they were confirmed for, so editing a photo's marks later cannot rewrite
+  // what a past run showed (owner, 2026-08-16). No snapshot = a row from
+  // before this, which keeps reading the live marks as it always did.
+  const rawAnnotations = row.annotations_snapshot ?? row.annotation_items;
+  if (rawAnnotations) {
     try {
-      const parsed = JSON.parse(row.annotation_items) as unknown;
+      const parsed = JSON.parse(rawAnnotations) as unknown;
       if (Array.isArray(parsed)) {
         imageAnnotations = parsed as NonNullable<
           RoutineJournalEntry["imageAnnotations"]
@@ -98,9 +107,14 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
     }
   }
   let imageAnnotations: RoutineGalleryItem["imageAnnotations"] = null;
-  if (row.annotation_items) {
+  // The row's OWN snapshot wins over the live join: marks belong to the run
+  // they were confirmed for, so editing a photo's marks later cannot rewrite
+  // what a past run showed (owner, 2026-08-16). No snapshot = a row from
+  // before this, which keeps reading the live marks as it always did.
+  const rawAnnotations = row.annotations_snapshot ?? row.annotation_items;
+  if (rawAnnotations) {
     try {
-      const parsed = JSON.parse(row.annotation_items) as unknown;
+      const parsed = JSON.parse(rawAnnotations) as unknown;
       if (Array.isArray(parsed)) {
         imageAnnotations = parsed as NonNullable<
           RoutineGalleryItem["imageAnnotations"]
@@ -126,6 +140,25 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
   };
 }
 
+// The marks a photo carries right now. Read at run time so they can be
+// frozen onto that run's rows — after which editing the photo's marks moves
+// only future runs, never the record of past ones.
+export function readStoredAnnotations(
+  database: DatabaseHandle,
+  imageId: string,
+): unknown {
+  const row = database.sqlite
+    .prepare(`SELECT items FROM image_annotations WHERE image_id = ?`)
+    .get(imageId) as { items: string } | undefined;
+  if (!row?.items) return null;
+  try {
+    const parsed = JSON.parse(row.items) as unknown;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export function addJournalEntry(
   database: DatabaseHandle,
   input: {
@@ -133,13 +166,15 @@ export function addJournalEntry(
     chatId?: string | null;
     content: unknown;
     imageId?: string | null;
+    // The marks as confirmed for THIS run, frozen onto the row.
+    imageAnnotations?: unknown;
   },
 ): RoutineJournalEntry {
   const id = randomUUID();
   database.sqlite
     .prepare(
-      `INSERT INTO routine_journal (id, routine_id, chat_id, content, image_id)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO routine_journal (id, routine_id, chat_id, content, image_id, annotations_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -147,6 +182,7 @@ export function addJournalEntry(
       input.chatId ?? null,
       JSON.stringify(input.content ?? null),
       input.imageId ?? null,
+      input.imageAnnotations ? JSON.stringify(input.imageAnnotations) : null,
     );
 
   const row = database.sqlite
@@ -294,13 +330,15 @@ export function addGalleryItem(
     routineHash?: string | null;
     // Visual-first: the photo the run was fed, so the card can lead with it.
     imageId?: string | null;
+    // The marks as confirmed for THIS run, frozen onto the row.
+    imageAnnotations?: unknown;
   },
 ): RoutineGalleryItem {
   const id = randomUUID();
   database.sqlite
     .prepare(
-      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid, view_snapshot, routine_hash, image_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid, view_snapshot, routine_hash, image_id, annotations_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -314,6 +352,7 @@ export function addGalleryItem(
         : null,
       input.routineHash ?? null,
       input.imageId ?? null,
+      input.imageAnnotations ? JSON.stringify(input.imageAnnotations) : null,
     );
 
   const row = database.sqlite

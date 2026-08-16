@@ -9394,27 +9394,44 @@ function AskVaenyxPanel({
                 />
               ) : null}
             </div>
-            {/* What the marks SAY, in words. On a phone the labels sit on top
-                of each other and cannot be read (Oskar, 2026-08-16), and the
-                field they fill is hidden precisely because the picture owns
-                it — so the list has to appear somewhere, as dot points. */}
+            {/* The marks in WORDS, standing in the field they fill — the
+                photo owns that field, so the field's own box shows what the
+                photo says instead of an empty text area (Oskar, 2026-08-16).
+                On a phone the labels overlap on the picture; this list is
+                where the Owner actually reads them. */}
             {routineInputConfirm.marks &&
             routineInputConfirm.marks.length > 0 ? (
-              <ul className="confirm-mark-list">
-                {[
-                  ...routineInputConfirm.marks
-                    .map((mark) => mark.name.trim())
-                    .filter(Boolean)
-                    .reduce(
-                      (counts, name) =>
-                        counts.set(name, (counts.get(name) ?? 0) + 1),
-                      new Map<string, number>(),
-                    )
-                    .entries(),
-                ].map(([name, count]) => (
-                  <li key={name}>{count > 1 ? `${name} ×${count}` : name}</li>
-                ))}
-              </ul>
+              <label
+                className="confirm-marks-field"
+                style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+              >
+                <span className="eyebrow" style={{ margin: 0 }}>
+                  {routineInputConfirm.primaryKey ?? ""}
+                </span>
+                <span
+                  className="settings-card-copy"
+                  style={{ margin: 0, opacity: 0.75 }}
+                >
+                  {lang === "zh"
+                    ? "照片上标出来的东西 —— 点照片上的标签可以改名或删掉,拖红点可以挪位置。"
+                    : "What the photo marks say — tap a label on the picture to rename or remove it, drag a dot to move it."}
+                </span>
+                <ul className="confirm-mark-list">
+                  {[
+                    ...routineInputConfirm.marks
+                      .map((mark) => mark.name.trim())
+                      .filter(Boolean)
+                      .reduce(
+                        (counts, name) =>
+                          counts.set(name, (counts.get(name) ?? 0) + 1),
+                        new Map<string, number>(),
+                      )
+                      .entries(),
+                  ].map(([name, count]) => (
+                    <li key={name}>{count > 1 ? `${name} ×${count}` : name}</li>
+                  ))}
+                </ul>
+              </label>
             ) : null}
             <div
               style={{

@@ -100,6 +100,10 @@ export async function runRoutine(
     // The photo this run was fed with — kept on the journal entry so the chat
     // shows a picture, never a text dump ("visual first", Oskar 2026-07-28).
     imageId?: string | null;
+    // The photo's marks AS CONFIRMED for this run. Frozen onto the journal
+    // and gallery rows so re-marking that photo later cannot rewrite what a
+    // past run showed (owner, 2026-08-16).
+    imageAnnotations?: unknown;
     // What the layers above this run allow each step to reach for. Absent = the
     // Method's own declaration alone, which is all a caller with no database
     // could ask about anyway.
@@ -134,6 +138,7 @@ export async function runRoutine(
           chatId,
           content: journalInput,
           imageId: options.imageId ?? null,
+          imageAnnotations: options.imageAnnotations,
         })
       : null;
 
@@ -204,6 +209,7 @@ export async function runRoutine(
           // Visual-first (owner rule): the result card leads with the photo
           // this run was fed, marks and all.
           imageId: options.imageId ?? null,
+          imageAnnotations: options.imageAnnotations,
         })
       : null;
 

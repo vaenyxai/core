@@ -470,6 +470,7 @@ import {
   listJournalEntries,
   addParseExample,
   listParseExamples,
+  readStoredAnnotations,
 } from "../core/routine-storage.js";
 import {
   listProviderModels,
@@ -3197,6 +3198,14 @@ export async function registerGatewayRoutes(
           {
             chatId: request.params.id,
             imageId: request.body.imageId ?? null,
+            // The marks as they stand for THIS run — the Owner's corrections
+            // included — frozen onto its rows, so re-marking the photo later
+            // cannot rewrite what this run showed.
+            imageAnnotations:
+              photoAnnotations ??
+              (request.body.imageId
+                ? readStoredAnnotations(context.database, request.body.imageId)
+                : null),
             // The Owner's own run meets the two layers a session has: the
             // global switches and whatever mode this session is in. A Routine
             // is several Method runs in a row, so it cannot be the one path
