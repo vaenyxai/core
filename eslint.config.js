@@ -40,4 +40,12 @@ export default tseslint.config(
       "no-undef": "off",
     },
   },
+  {
+    // Playwright UI specs: page.evaluate callbacks run in the BROWSER, where
+    // window/document are real — Node-side lint cannot know that.
+    files: ["tests/ui/**/*.mjs"],
+    rules: {
+      "no-undef": "off",
+    },
+  },
 );
