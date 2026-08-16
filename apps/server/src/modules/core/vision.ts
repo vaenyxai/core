@@ -212,32 +212,37 @@ export async function askVisionModel(
   mimeType: string,
   options: { failureCode: string; temperature?: number },
 ): Promise<VisionAnswer> {
-  // Vision providers flake (measured 2026-08-16: intermittent 503s on a real
-  // instance turned into "it recognises nothing"). One retry after a short
-  // breath absorbs the blip; a second failure is a real answer and surfaces.
-  try {
-    return await askVisionModelOnce(
-      secretsDirectory,
-      prompt,
-      image,
-      mimeType,
-      options,
-    );
-  } catch (error) {
-    const transient =
-      error instanceof Error &&
-      (/:5\d\d(?::|$)/.test(error.message) ||
-        error.message.includes("fetch failed"));
-    if (!transient) throw error;
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    return askVisionModelOnce(
-      secretsDirectory,
-      prompt,
-      image,
-      mimeType,
-      options,
-    );
+  // Vision providers flake, and free tiers throttle (measured 2026-08-16 on a
+  // real instance: intermittent 503s, then 429 rate limits — both surfaced as
+  // "it recognises nothing"). A 429 is not an error to report, it is a queue
+  // to wait in: a free tier counts requests per MINUTE, so the backoff climbs
+  // into seconds rather than giving up after a polite pause. Anything else
+  // still fails fast with the provider's own words.
+  const attempts = [1_500, 5_000, 12_000];
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= attempts.length; attempt += 1) {
+    try {
+      return await askVisionModelOnce(
+        secretsDirectory,
+        prompt,
+        image,
+        mimeType,
+        options,
+      );
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : "";
+      const rateLimited = /:429(?::|$)/.test(message);
+      const serverFlake =
+        /:5\d\d(?::|$)/.test(message) || message.includes("fetch failed");
+      const wait = attempts[attempt];
+      // A 429 gets the whole ladder; a server blip gets one quick retry.
+      if (wait === undefined) break;
+      if (!rateLimited && !(serverFlake && attempt === 0)) break;
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
   }
+  throw lastError;
 }
 
 async function askVisionModelOnce(

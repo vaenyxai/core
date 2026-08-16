@@ -3000,9 +3000,12 @@ export async function registerGatewayRoutes(
           request.body.imageId,
         );
         if (found) {
-          // Marks and extraction run in PARALLEL ("recipe 可以是标着东西的
-          // 照片", Oskar): the confirm card gets the marked photo to edit, and
-          // the marks are stored so journal/result show them too.
+          // Marks first, transcript only if needed. These used to fire in
+          // PARALLEL, which doubled the request rate against a free tier that
+          // counts requests per minute — and 429s read to the Owner as "it
+          // recognises nothing" (measured 2026-08-16). The marks already NAME
+          // every item they point at, so when they land the second call is
+          // pure waste; it is made only when marking came back with nothing.
           const photoId = request.body.imageId;
           const marksPromise = annotateImage(
             context.config.secretsDirectory,
@@ -3014,34 +3017,50 @@ export async function registerGatewayRoutes(
               thread.routineId,
             ),
           ).catch(() => null);
-          try {
-            const extracted = await describeImage(
-              context.config.secretsDirectory,
-              found.image,
-              found.mimeType,
-              runLanguage,
-            );
-            if (extracted.trim()) {
-              effectiveContent =
-                request.body.content.trim() &&
-                request.body.content.trim() !== "(Photo)"
-                  ? `${request.body.content.trim()}\n${extracted.trim()}`
-                  : extracted.trim();
-            }
-          } catch (visionError) {
-            // The typed words still run — but a failed photo read must SAY SO
-            // (owner, 2026-08-16: a flaky vision backend looked like "it
-            // recognises nothing" because this swallowed the error).
-            photoError =
-              visionError instanceof Error
-                ? visionError.message.slice(0, 200)
-                : "vision failed";
-            request.log.warn(
-              { err: visionError },
-              "routine-run photo describe failed; running on typed words only",
-            );
-          }
           photoAnnotations = await marksPromise;
+          const joinWithTyped = (extracted: string) => {
+            const typed = request.body.content.trim();
+            effectiveContent =
+              typed && typed !== "(Photo)"
+                ? `${typed}\n${extracted}`
+                : extracted;
+          };
+          if (photoAnnotations && photoAnnotations.length > 0) {
+            // The marks NAME what they point at, so they already ARE the item
+            // list — no second call, and no second chance to be throttled.
+            const counts = new Map<string, number>();
+            for (const item of photoAnnotations) {
+              const name = item.name.trim();
+              if (!name) continue;
+              counts.set(name, (counts.get(name) ?? 0) + 1);
+            }
+            const markList = [...counts.entries()]
+              .map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
+              .join("\n");
+            if (markList) joinWithTyped(markList);
+          } else {
+            try {
+              const extracted = await describeImage(
+                context.config.secretsDirectory,
+                found.image,
+                found.mimeType,
+                runLanguage,
+              );
+              if (extracted.trim()) joinWithTyped(extracted.trim());
+            } catch (visionError) {
+              // The typed words still run — but a failed photo read must SAY
+              // SO (owner, 2026-08-16: a flaky vision backend looked like "it
+              // recognises nothing" because this swallowed the error).
+              photoError =
+                visionError instanceof Error
+                  ? visionError.message.slice(0, 200)
+                  : "vision failed";
+              request.log.warn(
+                { err: visionError },
+                "routine-run photo read failed; running on typed words only",
+              );
+            }
+          }
           if (photoAnnotations) {
             context.database.sqlite
               .prepare(
@@ -3055,31 +3074,6 @@ export async function registerGatewayRoutes(
                 JSON.stringify(photoAnnotations),
                 new Date().toISOString(),
               );
-          }
-          // The photo goes out as TWO independent calls, and providers flake
-          // per-call (measured 2026-08-16: marks landed while describe
-          // 503ed, so the card showed a fully marked photo NEXT TO "could
-          // not be read"). When the marks made it, their names ARE the item
-          // list — use them, and there is no failure left to report. Only
-          // both doors closing is an error.
-          if (photoError && photoAnnotations && photoAnnotations.length > 0) {
-            const counts = new Map<string, number>();
-            for (const item of photoAnnotations) {
-              const name = item.name.trim();
-              if (!name) continue;
-              counts.set(name, (counts.get(name) ?? 0) + 1);
-            }
-            const markList = [...counts.entries()]
-              .map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
-              .join("\n");
-            if (markList) {
-              effectiveContent =
-                request.body.content.trim() &&
-                request.body.content.trim() !== "(Photo)"
-                  ? `${request.body.content.trim()}\n${markList}`
-                  : markList;
-              photoError = null;
-            }
           }
         }
       }

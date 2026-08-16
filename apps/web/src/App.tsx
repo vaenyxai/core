@@ -9591,7 +9591,9 @@ function AskVaenyxPanel({
                       <strong>You</strong>
                       <small>{formatTime(entry.createdAt)}</small>
                     </div>
-                    <p>{journalText(entry.content)}</p>
+                    {journalText(entry.content) ? (
+                      <p>{journalText(entry.content)}</p>
+                    ) : null}
                   </article>
                 ))
               )
@@ -9683,7 +9685,9 @@ function AskVaenyxPanel({
                           onLoad={reanchorAfterImageLoad}
                         />
                       ) : null}
-                      <p>{journalText(node.entry.content)}</p>
+                      {journalText(node.entry.content) ? (
+                        <p>{journalText(node.entry.content)}</p>
+                      ) : null}
                     </article>
                   ) : (
                     <article
@@ -21863,6 +21867,17 @@ function spokenResultText(output: unknown, view?: unknown): string {
 }
 
 function journalText(content: unknown): string {
+  const text = journalTextRaw(content);
+  // A photo sent with no words carries the placeholder "(Photo)" so the
+  // message is not empty on the way in. The picture is right there above it,
+  // so printing the word is noise (Oskar, 2026-08-16) — the same for a
+  // document's placeholder.
+  const bare = text.trim();
+  if (bare === "(Photo)" || /^\(Document: .*\)$/.test(bare)) return "";
+  return text;
+}
+
+function journalTextRaw(content: unknown): string {
   if (typeof content === "string") return content;
   if (
     content !== null &&
