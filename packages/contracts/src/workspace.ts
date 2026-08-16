@@ -2696,6 +2696,9 @@ export const RoutineRunNeedsInputSchema = Type.Object(
     // The fed photo's marks, so the confirm card can show — and let the Owner
     // edit — the annotated picture itself (visual first).
     annotations: Type.Optional(Type.Array(ImageAnnotationItemSchema)),
+    // A photo read that FAILED says so here (provider's own words) instead of
+    // silently looking like "it recognises nothing" (owner, 2026-08-16).
+    photoError: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

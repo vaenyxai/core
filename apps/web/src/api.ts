@@ -720,10 +720,14 @@ export function fetchProviderModels(id: string): Promise<{ models: string[] }> {
 export function appendConversationNote(
   conversationId: string,
   content: string,
+  role?: "assistant" | "owner",
 ): Promise<AskVaenyxMessage> {
   return requestJson<AskVaenyxMessage>(
     `/v1/ask-vaenyx/conversations/${conversationId}/notes`,
-    { method: "POST", body: JSON.stringify({ content }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ content, ...(role ? { role } : {}) }),
+    },
   );
 }
 

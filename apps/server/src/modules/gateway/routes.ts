@@ -2980,6 +2980,9 @@ export async function registerGatewayRoutes(
           : "en";
       let effectiveContent = request.body.content;
       let photoAnnotations: ImageAnnotationItem[] | null = null;
+      // A failed photo read is said out loud on the confirm card, never
+      // swallowed into "it recognises nothing" (owner, 2026-08-16).
+      let photoError: string | null = null;
       // Vision switched off refuses the LOOKING, not the run: the typed words
       // still go through, exactly as they do when no vision model is
       // connected. The photo is never sent anywhere.
@@ -3022,8 +3025,18 @@ export async function registerGatewayRoutes(
                   ? `${request.body.content.trim()}\n${extracted.trim()}`
                   : extracted.trim();
             }
-          } catch {
-            // No vision model or it refused: the typed words still run.
+          } catch (visionError) {
+            // The typed words still run — but a failed photo read must SAY SO
+            // (owner, 2026-08-16: a flaky vision backend looked like "it
+            // recognises nothing" because this swallowed the error).
+            photoError =
+              visionError instanceof Error
+                ? visionError.message.slice(0, 200)
+                : "vision failed";
+            request.log.warn(
+              { err: visionError },
+              "routine-run photo describe failed; running on typed words only",
+            );
           }
           photoAnnotations = await marksPromise;
           if (photoAnnotations) {
@@ -3081,6 +3094,23 @@ export async function registerGatewayRoutes(
         );
         if (wrapped.ok) {
           journalInput = wrapped.input;
+          // Single-field routines get no confirm card, so a failed photo
+          // read must speak HERE — a note in the chat — or the owner sees
+          // the silent "it recognises nothing" this exists to end.
+          if (photoError) {
+            try {
+              appendAssistantNote(
+                context.database,
+                request.params.id,
+                owner.id,
+                runLanguage === "zh"
+                  ? `⚠ 照片这次没读出来(${photoError})。这次结果只基于你打的字;照片可以重发一次再试。`
+                  : `⚠ The photo could not be read this time (${photoError}). This run used only your typed words; resend the photo to try again.`,
+              );
+            } catch {
+              // The run itself still proceeds.
+            }
+          }
         } else {
           try {
             const routineForRev = loadRoutine(
@@ -3124,6 +3154,7 @@ export async function registerGatewayRoutes(
               ...parsed,
               content: effectiveContent,
               ...(photoAnnotations ? { annotations: photoAnnotations } : {}),
+              ...(photoError ? { photoError } : {}),
             };
           } catch (error) {
             return reply
@@ -3801,7 +3832,10 @@ export async function registerGatewayRoutes(
   // a Method/Routine, it posts the confirmation note here. The note is a normal
   // assistant message, so the Owner sees it in place and the model knows about
   // the creation on every later turn.
-  app.post<{ Body: { content: string }; Params: { id: string } }>(
+  app.post<{
+    Body: { content: string; role?: "assistant" | "owner" };
+    Params: { id: string };
+  }>(
     "/v1/ask-vaenyx/conversations/:id/notes",
     {
       schema: {
@@ -3810,7 +3844,14 @@ export async function registerGatewayRoutes(
           { additionalProperties: false },
         ),
         body: Type.Object(
-          { content: Type.String({ minLength: 1, maxLength: 4000 }) },
+          {
+            content: Type.String({ minLength: 1, maxLength: 4000 }),
+            // "owner" keeps the Owner's own words on the record (an edit
+            // request in a routine chat must never vanish).
+            role: Type.Optional(
+              Type.Union([Type.Literal("assistant"), Type.Literal("owner")]),
+            ),
+          },
           { additionalProperties: false },
         ),
         response: {
@@ -3831,6 +3872,7 @@ export async function registerGatewayRoutes(
           request.params.id,
           owner.id,
           request.body.content,
+          request.body.role ?? "assistant",
         );
       } catch (error) {
         if (

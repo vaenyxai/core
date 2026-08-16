@@ -212,6 +212,41 @@ export async function askVisionModel(
   mimeType: string,
   options: { failureCode: string; temperature?: number },
 ): Promise<VisionAnswer> {
+  // Vision providers flake (measured 2026-08-16: intermittent 503s on a real
+  // instance turned into "it recognises nothing"). One retry after a short
+  // breath absorbs the blip; a second failure is a real answer and surfaces.
+  try {
+    return await askVisionModelOnce(
+      secretsDirectory,
+      prompt,
+      image,
+      mimeType,
+      options,
+    );
+  } catch (error) {
+    const transient =
+      error instanceof Error &&
+      (/:5\d\d(?::|$)/.test(error.message) ||
+        error.message.includes("fetch failed"));
+    if (!transient) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    return askVisionModelOnce(
+      secretsDirectory,
+      prompt,
+      image,
+      mimeType,
+      options,
+    );
+  }
+}
+
+async function askVisionModelOnce(
+  secretsDirectory: string,
+  prompt: string,
+  image: Buffer,
+  mimeType: string,
+  options: { failureCode: string; temperature?: number },
+): Promise<VisionAnswer> {
   const connections = readProviderConnections(secretsDirectory);
   const candidate = pickCandidate(connections);
   if (!candidate) {

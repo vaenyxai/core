@@ -901,6 +901,10 @@ export function appendAssistantNote(
   conversationId: string,
   ownerId: string,
   content: string,
+  // "owner" keeps the Owner's OWN words on the record (a routine-chat edit
+  // request must never vanish — owner rule, 2026-08-16); default stays the
+  // assistant-side receipt this has always been.
+  role: "assistant" | "owner" = "assistant",
 ): AskVaenyxMessage {
   getConversationRow(database, conversationId, ownerId);
   const id = randomUUID();
@@ -909,9 +913,9 @@ export function appendAssistantNote(
     .prepare(
       `INSERT INTO ask_vaenyx_messages (
         id, conversation_id, role, content, status, web_search_used, created_at
-      ) VALUES (?, ?, 'assistant', ?, 'completed', 0, ?)`,
+      ) VALUES (?, ?, ?, ?, 'completed', 0, ?)`,
     )
-    .run(id, conversationId, content.trim(), now);
+    .run(id, conversationId, role, content.trim(), now);
   database.sqlite
     .prepare(`UPDATE ask_vaenyx_conversations SET updated_at = ? WHERE id = ?`)
     .run(now, conversationId);
@@ -919,7 +923,7 @@ export function appendAssistantNote(
   return {
     id,
     conversationId,
-    role: "assistant",
+    role,
     content: content.trim(),
     status: "completed",
     webSearchUsed: false,

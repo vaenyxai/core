@@ -2164,6 +2164,33 @@ function Composer({
               }
             }
           }}
+          // A photo on the clipboard pastes straight into the message (owner,
+          // 2026-08-16) — same downscale/upload lane as the picker buttons,
+          // in every conversation, because there is only one Composer.
+          onPaste={(event) => {
+            // Mirrors the camera button: no vision surface, no photo paste —
+            // and never mid-send.
+            if (attachDisabled || !showCamera || busy) return;
+            const file = Array.from(event.clipboardData?.files ?? []).find(
+              (candidate) => candidate.type.startsWith("image/"),
+            );
+            if (!file) return;
+            event.preventDefault();
+            onPhotoPreview(URL.createObjectURL(file));
+            const upload = (async () => {
+              const blob = await downscalePhoto(file);
+              return (await uploadPhoto(blob)).imageId;
+            })();
+            onUploadStart(upload);
+            upload.then(onPhoto).catch(() => {
+              onPhotoPreview("");
+              showErrorToast(
+                lang === "zh"
+                  ? "粘贴的照片没能上传。"
+                  : "The pasted photo could not be uploaded.",
+              );
+            });
+          }}
           placeholder={placeholder}
           required={!hasAttachment}
           rows={2}
@@ -6186,6 +6213,9 @@ function AskVaenyxPanel({
     conversationId: string;
     routineId: string;
     content: string;
+    // The words the Owner actually TYPED (content above may carry the vision
+    // extraction too) — closing the card restores THESE, never the dump.
+    typedContent: string;
     imageId: string | null;
     // Spoken in → the eventual result is spoken out, even across the card.
     speakResult: boolean;
@@ -6194,6 +6224,8 @@ function AskVaenyxPanel({
     // they feed; initialMarks (JSON) detects real corrections for learning.
     marks: ImageAnnotationItem[] | null;
     initialMarks: string;
+    // A failed photo read, said out loud on the card (owner, 2026-08-16).
+    photoError: string | null;
     primaryKey: string | null;
     fields: RoutineInputField[];
     values: Record<string, string>;
@@ -6885,10 +6917,15 @@ function AskVaenyxPanel({
           // lines) — the confirm round sends it back so the learn example
           // pairs the parse with its real source.
           content: result.content ?? content,
+          typedContent: content,
           imageId: imageId ?? null,
           speakResult: speakResult ?? false,
           marks,
           initialMarks: JSON.stringify(marks ?? []),
+          photoError:
+            "photoError" in result && typeof result.photoError === "string"
+              ? result.photoError
+              : null,
           primaryKey:
             result.fields.find(
               (field) => field.required && field.type !== "boolean",
@@ -7100,6 +7137,18 @@ function AskVaenyxPanel({
     // The propose contract caps the request at 2000 characters; sending the
     // overflow would 400 the whole flow rather than trim an ask this long.
     const trimmedRequest = request.slice(0, 2000);
+    // The Owner's own words go on the record FIRST (owner rule, 2026-08-16:
+    // 我的所有输入都要保留在对话里) — whatever the proposal does next, the ask
+    // itself stays visible in the timeline.
+    void appendConversationNote(conversationId, trimmedRequest, "owner")
+      .then((note) =>
+        setMessages((current) =>
+          activeConversationIdRef.current === conversationId
+            ? [...current, note]
+            : current,
+        ),
+      )
+      .catch(() => {});
     setRoutineEditChat({
       conversationId,
       routineId,
@@ -9235,10 +9284,32 @@ function AskVaenyxPanel({
 
         {routineInputConfirm ? (
           <Modal
-            onClose={() => setRoutineInputConfirm(null)}
+            onClose={() => {
+              // Closing the card must not eat the words (owner, 2026-08-16):
+              // what was about to be fed goes back into the composer.
+              setPrompt(
+                routineInputConfirm.typedContent === "(Photo)"
+                  ? ""
+                  : routineInputConfirm.typedContent,
+              );
+              if (routineInputConfirm.imageId) {
+                setPendingImageId(routineInputConfirm.imageId);
+              }
+              setRoutineInputConfirm(null);
+            }}
             title={t("routine.confirm.title")}
           >
             <p className="settings-card-copy">{t("routine.confirm.copy")}</p>
+            {/* A failed photo read is said OUT LOUD, in the provider's own
+                words — a silent empty card read as "it recognises nothing"
+                when the vision backend was just having a bad minute. */}
+            {routineInputConfirm.photoError ? (
+              <p className="form-error">
+                {lang === "zh"
+                  ? `照片这次没读出来(${routineInputConfirm.photoError})。可以关掉重发一次,或手动填下面的字段。`
+                  : `The photo could not be read this time (${routineInputConfirm.photoError}). Close and resend, or fill the fields by hand.`}
+              </p>
+            ) : null}
             {/* Photo mode (visual first): the marked photo IS the primary
                 field — rename / add / remove marks on the picture itself.
                 The other fields are secondary and stay compact. */}
@@ -9251,6 +9322,13 @@ function AskVaenyxPanel({
                     current ? { ...current, marks: next } : current,
                   )
                 }
+              />
+            ) : routineInputConfirm.imageId ? (
+              // Marks failed or absent: the photo still LEADS the card
+              // (visual first) — just without editable dots this time.
+              <AnnotatedPhoto
+                annotations={null}
+                imageId={routineInputConfirm.imageId}
               />
             ) : null}
             <div
@@ -9352,7 +9430,18 @@ function AskVaenyxPanel({
             <div className="modal-actions">
               <button
                 className="text-button"
-                onClick={() => setRoutineInputConfirm(null)}
+                onClick={() => {
+                  // Same as the ×: the typed words AND the photo go back.
+                  setPrompt(
+                    routineInputConfirm.typedContent === "(Photo)"
+                      ? ""
+                      : routineInputConfirm.typedContent,
+                  );
+                  if (routineInputConfirm.imageId) {
+                    setPendingImageId(routineInputConfirm.imageId);
+                  }
+                  setRoutineInputConfirm(null);
+                }}
                 type="button"
               >
                 {t("routine.confirm.cancel")}
