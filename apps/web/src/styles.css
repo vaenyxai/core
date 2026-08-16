@@ -7834,17 +7834,12 @@ select {
   margin: var(--space-2) 0;
   flex-wrap: wrap;
 }
-/* The browser gesture that reloads the whole app is off; pulling down inside a
-   conversation refreshes that conversation instead (App.tsx pull handlers). */
+/* The browser gesture that reloads the whole app is off, and so is the
+   rubber-band bounce — pull-to-refresh itself was removed (Oskar,
+   2026-08-16); fresh data arrives on open, after sends, and by polling. */
 html,
 body {
   overscroll-behavior-y: none;
-}
-.pull-refresh-hint {
-  margin: 0 0 var(--space-2);
-  text-align: center;
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
 }
 .hard-refresh-button {
   display: none;

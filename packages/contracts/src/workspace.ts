@@ -1759,6 +1759,12 @@ export const RoutineGalleryItemSchema = Type.Object(
     // this result renders with, whatever the routine's view says today.
     viewSnapshot: Type.Optional(Type.Unknown()),
     routineHash: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // Visual-first (owner rule, 2026-08-16): the photo this run was fed and
+    // its stored marks — the result card leads with it.
+    imageId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    imageAnnotations: Type.Optional(
+      Type.Union([Type.Array(ImageAnnotationItemSchema), Type.Null()]),
+    ),
   },
   { additionalProperties: false },
 );

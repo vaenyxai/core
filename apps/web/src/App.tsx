@@ -1151,9 +1151,15 @@ function CameraButton({
       // 2026-07-26). Reading it is the server's job now: a vision-capable
       // backend sees it first-hand, and any other backend gets the vision
       // model's description as context.
+      //
+      // The thumbnail comes from the ORIGINAL file, before the downscale: a
+      // fresh 12MP camera shot takes a couple of seconds to shrink, and the
+      // photo has to look "held" the instant it is taken (Oskar, 2026-08-16
+      // — "拍完照要等两秒才固定住"). The downscaled copy is only what
+      // uploads.
+      if (onAttach) onPreview?.(URL.createObjectURL(file));
       const blob = await downscalePhoto(file);
       if (onAttach) {
-        onPreview?.(URL.createObjectURL(blob));
         const upload = uploadPhoto(blob).then((result) => result.imageId);
         onUploadStart?.(upload);
         onAttach(await upload);
@@ -6365,34 +6371,10 @@ function AskVaenyxPanel({
     return () => window.clearTimeout(timer);
   }, [loadingMessages, messages.length]);
 
-  // Pulling down at the top of a conversation refreshes THAT conversation —
-  // the browser's whole-page reload gesture is switched off in CSS, because
-  // reloading the entire app to see a new message is a sledgehammer (Oskar,
-  // 2026-07-27).
-  const pullStartY = useRef<number | null>(null);
-  const [pullReady, setPullReady] = useState(false);
-
-  function handleMessagesPullStart(event: React.TouchEvent<HTMLDivElement>) {
-    const atTop =
-      (window.scrollY ?? 0) <= 0 && event.currentTarget.scrollTop <= 0;
-    pullStartY.current = atTop ? (event.touches[0]?.clientY ?? null) : null;
-  }
-
-  function handleMessagesPullMove(event: React.TouchEvent<HTMLDivElement>) {
-    if (pullStartY.current === null) return;
-    const pulled =
-      (event.touches[0]?.clientY ?? pullStartY.current) - pullStartY.current;
-    setPullReady(pulled > 70);
-  }
-
-  async function handleMessagesPullEnd() {
-    pullStartY.current = null;
-    if (!pullReady) return;
-    setPullReady(false);
-    if (view === "chat" && activeConversationId) {
-      await openConversation(activeConversationId);
-    }
-  }
+  // Pull-to-refresh is GONE (Oskar, 2026-08-16): the drag gesture fought the
+  // normal scroll on a phone and made conversations feel different from each
+  // other. The browser's whole-page reload gesture stays off in CSS; fresh
+  // data arrives on open, after every send, and via the update polling.
 
   useEffect(() => {
     if (!requestedConversationId) return;
@@ -7147,11 +7129,15 @@ function AskVaenyxPanel({
         setRoutineEditChat((current) =>
           isThisAttempt(current) ? null : current,
         );
+        // Honest, and the words survive: "nothing needed changing" usually
+        // means the recipe ALREADY says this — the ask goes back into the
+        // composer so it can be sharpened, never silently swallowed.
+        setPrompt(trimmedRequest);
         const note = await appendConversationNote(
           conversationId,
           lang === "zh"
-            ? `「${routineName}」照这句话看没有需要改的地方,什么都没动。`
-            : `Nothing in "${routineName}" needed changing for that, so nothing was changed.`,
+            ? `「${routineName}」的提案没有产生新改动 —— 多半是它的做法里已经写了这一条。想改的是显示效果的话,说得再具体一点(比如"结果最上面放照片");你的原话已放回输入框。`
+            : `The proposal for "${routineName}" produced no new change — most likely its recipe already says this. If it is the LOOK you want changed, say it more concretely (e.g. "photo at the top of the result"); your words are back in the composer.`,
         );
         setMessages((current) =>
           activeConversationIdRef.current === conversationId
@@ -7172,11 +7158,13 @@ function AskVaenyxPanel({
           ? null
           : current,
       );
+      // The words survive a failure too.
+      setPrompt(trimmedRequest);
       await appendConversationNote(
         conversationId,
         lang === "zh"
-          ? "⚠ 这次没能起草修改。把要改的地方再说一遍,我重试。"
-          : "⚠ That change could not be drafted. Say what to change again and I'll retry.",
+          ? "⚠ 这次没能起草修改。你的原话已放回输入框,再发一次我重试。"
+          : "⚠ That change could not be drafted. Your words are back in the composer — send again and I'll retry.",
       )
         .then((note) =>
           setMessages((current) =>
@@ -9429,19 +9417,7 @@ function AskVaenyxPanel({
           </Modal>
         ) : null}
 
-        <div
-          className="ask-vaenyx-messages"
-          onTouchEnd={() => void handleMessagesPullEnd()}
-          onTouchMove={handleMessagesPullMove}
-          onTouchStart={handleMessagesPullStart}
-        >
-          {pullReady ? (
-            <p className="pull-refresh-hint">
-              {lang === "zh"
-                ? "松手刷新这个对话"
-                : "Release to refresh this chat"}
-            </p>
-          ) : null}
+        <div className="ask-vaenyx-messages">
           {isRoutine ? (
             capabilityTab === "journal" ? (
               routineJournal.length === 0 ? (
@@ -9474,6 +9450,14 @@ function AskVaenyxPanel({
                   {routineGallery.map((item) => (
                     <article className="routine-gallery-card" key={item.id}>
                       <small>{formatTime(item.createdAt)}</small>
+                      {/* Visual first (owner rule): the run's marked photo
+                          LEADS the result card wherever one exists. */}
+                      {item.imageId ? (
+                        <AnnotatedPhoto
+                          annotations={item.imageAnnotations ?? null}
+                          imageId={item.imageId}
+                        />
+                      ) : null}
                       {/* A result renders with the view it was MADE under
                           (Edit Routine v1): a later view edit must not
                           re-dress history. Absent snapshot = made before any
@@ -9547,6 +9531,15 @@ function AskVaenyxPanel({
                         <strong>Vaenyx</strong>
                         <small>{formatTime(node.at)}</small>
                       </div>
+                      {/* Visual first (owner rule): the run's marked photo
+                          LEADS the result wherever one exists. */}
+                      {node.item.imageId ? (
+                        <AnnotatedPhoto
+                          annotations={node.item.imageAnnotations ?? null}
+                          imageId={node.item.imageId}
+                          onLoad={reanchorAfterImageLoad}
+                        />
+                      ) : null}
                       <RoutineResultView
                         output={node.item.output}
                         view={

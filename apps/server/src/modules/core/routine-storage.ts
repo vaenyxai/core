@@ -43,6 +43,10 @@ interface GalleryRow {
   // the routine revision that produced it.
   view_snapshot: string | null;
   routine_hash: string | null;
+  // Visual-first (owner rule, 2026-08-16): the photo the run was fed, so the
+  // result card can lead with it. Marks ride via the LEFT JOIN below.
+  image_id: string | null;
+  annotation_items?: string | null;
 }
 
 function toJournalEntry(row: JournalRow): RoutineJournalEntry {
@@ -79,6 +83,19 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
       viewSnapshot = undefined;
     }
   }
+  let imageAnnotations: RoutineGalleryItem["imageAnnotations"] = null;
+  if (row.annotation_items) {
+    try {
+      const parsed = JSON.parse(row.annotation_items) as unknown;
+      if (Array.isArray(parsed)) {
+        imageAnnotations = parsed as NonNullable<
+          RoutineGalleryItem["imageAnnotations"]
+        >;
+      }
+    } catch {
+      // A corrupt row just means no overlay.
+    }
+  }
   return {
     id: row.id,
     routineId: row.routine_id,
@@ -89,6 +106,8 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
     createdAt: row.created_at,
     ...(viewSnapshot !== undefined ? { viewSnapshot } : {}),
     routineHash: row.routine_hash ?? null,
+    imageId: row.image_id ?? null,
+    imageAnnotations,
   };
 }
 
@@ -258,13 +277,15 @@ export function addGalleryItem(
     // made under, so a later edit cannot re-dress old results.
     viewSnapshot?: unknown;
     routineHash?: string | null;
+    // Visual-first: the photo the run was fed, so the card can lead with it.
+    imageId?: string | null;
   },
 ): RoutineGalleryItem {
   const id = randomUUID();
   database.sqlite
     .prepare(
-      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid, view_snapshot, routine_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid, view_snapshot, routine_hash, image_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -277,10 +298,16 @@ export function addGalleryItem(
         ? JSON.stringify(input.viewSnapshot ?? null)
         : null,
       input.routineHash ?? null,
+      input.imageId ?? null,
     );
 
   const row = database.sqlite
-    .prepare("SELECT * FROM routine_gallery WHERE id = ?")
+    .prepare(
+      `SELECT g.*, a.items AS annotation_items
+       FROM routine_gallery g
+       LEFT JOIN image_annotations a ON a.image_id = g.image_id
+       WHERE g.id = ?`,
+    )
     .get(id) as unknown as GalleryRow;
   return toGalleryItem(row);
 }
@@ -290,17 +317,22 @@ export function listGalleryItems(
   routineId: string,
   chatId?: string | null,
 ): RoutineGalleryItem[] {
+  // The fed photo's stored marks ride along (same join as journal rows), so
+  // a result card can lead with the marked photo — visual first.
+  const select = `SELECT g.*, a.items AS annotation_items
+                  FROM routine_gallery g
+                  LEFT JOIN image_annotations a ON a.image_id = g.image_id`;
   const rows = (chatId === undefined
     ? database.sqlite
         .prepare(
-          `SELECT * FROM routine_gallery WHERE routine_id = ?
-             ORDER BY created_at DESC, id DESC`,
+          `${select} WHERE g.routine_id = ?
+             ORDER BY g.created_at DESC, g.id DESC`,
         )
         .all(routineId)
     : database.sqlite
         .prepare(
-          `SELECT * FROM routine_gallery WHERE routine_id = ? AND chat_id IS ?
-             ORDER BY created_at DESC, id DESC`,
+          `${select} WHERE g.routine_id = ? AND g.chat_id IS ?
+             ORDER BY g.created_at DESC, g.id DESC`,
         )
         .all(routineId, chatId)) as unknown as GalleryRow[];
   return rows.map(toGalleryItem);

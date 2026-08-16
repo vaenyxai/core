@@ -234,7 +234,9 @@ Read this inside the app: **Settings → Manual**.
 
 - **Method** — one small job Vaenyx knows how to do, described in plain steps.
 - **Routine** — a finished thing you use, made of one or more Methods. It looks
-  like a chat that grows extra buttons (Journal, Gallery) as you use it.
+  like a chat that grows extra buttons (Journal, Gallery) as you use it. When a
+  run was fed a photo, the result leads with that photo — marks and all — and
+  the text follows it.
 - **Make one** — describe the steps in chat. One step becomes a Method, several
   become a Routine. Vaenyx drafts it and offers a test run before saving.
 - **Improve one** — just say so. In the Routine's own chat, say what should
