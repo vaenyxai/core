@@ -4,6 +4,44 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.8.0 — 2026-08-16
+
+**The install says what happened to every tick.** The end of setup now
+lists each component you ticked with its real outcome: Tailscale installed
+(or already there, or FAILED — with where its retry button lives), and
+which sign-in components download inside Vaenyx on first run. A flaky
+download no longer scrolls past as one quiet line, and the Tailscale
+download itself now retries three times before giving up.
+
+**The first-run model page shows the download it used to hide.** Ticking
+ChatGPT in the installer starts a 250 MB download on Vaenyx's first boot —
+which this page used to keep invisible, so pressing Sign In felt like an
+unexplained wait. It now says what is downloading and that the button works
+the moment it lands; if the download failed, it says that too, and the
+button is the retry.
+
+**Read is read on every device.** The unread dot used to live in each
+browser, so reading a result on the phone left it lit on the computer. The
+watermark now lives on your Vaenyx itself: open a conversation anywhere and
+the dot goes out everywhere (other devices notice within a minute, or the
+moment you look at them).
+
+**One landing rule for every conversation.** Opening a conversation lands
+at the bottom, on the newest message; an unread one lands at the first
+message you have not seen. Long scheduled results no longer open at their
+own top, and the landing survives slow-loading pages — it holds its aim
+while the page builds out and lets go the moment you touch anything.
+
+**Deleting a chat deletes its files.** Documents attached to a conversation
+are removed from the machine when the conversation is deleted (kept if
+another chat still uses them), and leftovers no chat references are cleaned
+up within a day.
+
+**The waiting page tells the truth after 30 seconds.** If "Starting up…"
+stays put while a phone on mobile data can open Vaenyx, the page now says
+the problem is that device's network or the home router — instead of
+waiting silently forever.
+
 ## v0.4.7.0 — 2026-08-15
 
 **The phone QR code stops lying.** The Phone Access panel could show three

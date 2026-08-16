@@ -55,6 +55,14 @@ $Messages = @{
   "tailscale.present"    = @{ en = "Tailscale is already on this computer."; zh = "Tailscale 已经在这台电脑上。" }
   "tailscale.done"       = @{ en = "Tailscale installed. The sign-in happens in Vaenyx, on the phone step."; zh = "Tailscale 装好了。登录在 Vaenyx 首次运行的手机一步里完成。" }
   "tailscale.failed"     = @{ en = "Tailscale could not be installed here - Vaenyx will offer it again on its phone step."; zh = "这里没装上 Tailscale —— Vaenyx 首次运行的手机一步会再装一次。" }
+  "tailscale.retry"      = @{ en = "The download did not finish - trying again..."; zh = "下载没有完成 —— 正在重试..." }
+  "components.header"    = @{ en = "The components you ticked:"; zh = "你勾选的组件:" }
+  "components.ts.ok"     = @{ en = "Tailscale - installed."; zh = "Tailscale —— 已装好。" }
+  "components.ts.was"    = @{ en = "Tailscale - was already installed."; zh = "Tailscale —— 本来就装好了。" }
+  "components.ts.fail"   = @{ en = "Tailscale - NOT installed. Vaenyx's phone step has a button that retries it."; zh = "Tailscale —— 没装上。Vaenyx 首次运行的手机一步有按钮可以重装。" }
+  "components.codex"     = @{ en = "ChatGPT sign-in component - downloads inside Vaenyx on first run (about 250 MB); the model page shows its progress."; zh = "ChatGPT 登录组件 —— Vaenyx 首次运行时下载(约 250 MB),模型页会显示进度。" }
+  "components.claude"    = @{ en = "Claude sign-in component - downloads inside Vaenyx on first run; the model page shows its progress."; zh = "Claude 登录组件 —— Vaenyx 首次运行时下载,模型页会显示进度。" }
+  "components.voice"     = @{ en = "Voice - downloads inside Vaenyx on first run."; zh = "语音 —— Vaenyx 首次运行时下载。" }
   "path.long.fix"   = @{ en = "Move the folder somewhere short, like C:\Vaenyx, and run this again."; zh = "把文件夹移到短一点的位置(如 C:\Vaenyx),然后重新运行。" }
   "path.spaces"     = @{ en = "This folder path contains spaces. It usually works, but C:\Vaenyx is safer."; zh = "路径里有空格。通常没问题,但放在 C:\Vaenyx 更稳妥。" }
   "notvaenyx"       = @{ en = "This does not look like a Vaenyx folder (apps\server is missing)."; zh = "这看起来不是 Vaenyx 文件夹(缺少 apps\server)。" }
@@ -496,17 +504,38 @@ function Start-Elevated {
 # stays as the retry for a failed install. Only Tailscale gets this treatment:
 # it is 37 MB and the phone step depends on it, while the half-gigabyte
 # subscription components stay app-side downloads with visible progress.
+# The outcome is remembered so the FINISH of setup can say, per ticked
+# component, what actually happened (review, 2026-08-16: a failed component
+# install scrolled past as one warning line and the finish page read as
+# all-good - the Owner discovered "no Tailscale anywhere" only later).
+$Script:TailscaleOutcome = $null
 if ((@($Components.Split(",") | ForEach-Object { $_.Trim().ToLowerInvariant() })) -contains "tailscale" `
     -and -not $SelfTest) {
   $tailscaleExe = Join-Path $env:ProgramFiles "Tailscale\tailscale.exe"
   if (Test-Path $tailscaleExe) {
     Write-Info (Say "tailscale.present")
+    $Script:TailscaleOutcome = "present"
   } else {
     Write-Info (Say "tailscale.installing")
     $tailscaleMsi = Join-Path $env:TEMP "vaenyx-tailscale-setup.msi"
     try {
-      Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
-        -OutFile $tailscaleMsi -UseBasicParsing
+      # Three attempts: a home router's DNS can drop a single lookup, and one
+      # flaky answer must not cost the whole component (seen live 2026-08-16).
+      $downloaded = $false
+      for ($attempt = 1; $attempt -le 3 -and -not $downloaded; $attempt += 1) {
+        try {
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
+            -OutFile $tailscaleMsi -UseBasicParsing
+          $downloaded = $true
+        } catch {
+          if ($attempt -lt 3) {
+            Write-Info (Say "tailscale.retry")
+            Start-Sleep -Seconds 4
+          } else {
+            throw
+          }
+        }
+      }
       $tailscaleRun = Start-Elevated -FilePath "msiexec.exe" `
         -Arguments "/i `"$tailscaleMsi`" /quiet /norestart"
       if ($tailscaleRun.ExitCode -eq 0 -and (Test-Path $tailscaleExe)) {
@@ -515,11 +544,14 @@ if ((@($Components.Split(",") | ForEach-Object { $_.Trim().ToLowerInvariant() })
         # start it now so the phone step's sign-in works immediately.
         try { Start-Process -FilePath "sc.exe" -ArgumentList "start", "Tailscale" -WindowStyle Hidden -Wait } catch { }
         Write-Good (Say "tailscale.done")
+        $Script:TailscaleOutcome = "installed"
       } else {
         Write-Warn (Say "tailscale.failed")
+        $Script:TailscaleOutcome = "failed"
       }
     } catch {
       Write-Warn (Say "tailscale.failed")
+      $Script:TailscaleOutcome = "failed"
     } finally {
       Remove-Item $tailscaleMsi -Force -ErrorAction SilentlyContinue
     }
@@ -1023,6 +1055,32 @@ exit 0
         try { $appUrl | clip.exe; $copied = $true } catch { }
       }
       if ($copied) { Write-Info (Say "browser.copied") }
+    }
+  }
+
+  # Every ticked component gets its own closing line, loudly: what installed
+  # here, what downloads inside Vaenyx, and what FAILED and where its retry
+  # button lives. A tick that silently came to nothing is how the Owner ends
+  # up discovering "no Tailscale anywhere" a day later (2026-08-16).
+  $tickedComponents = @($Components.Split(",") |
+    ForEach-Object { $_.Trim().ToLowerInvariant() } |
+    Where-Object { $_ })
+  if ($tickedComponents.Count -gt 0) {
+    Write-Host ""
+    Write-Info (Say "components.header")
+    if ($tickedComponents -contains "tailscale") {
+      if ($Script:TailscaleOutcome -eq "failed") {
+        Write-Warn (Say "components.ts.fail")
+      } elseif ($Script:TailscaleOutcome -eq "present") {
+        Write-Good (Say "components.ts.was")
+      } else {
+        Write-Good (Say "components.ts.ok")
+      }
+    }
+    if ($tickedComponents -contains "codex") { Write-Info (Say "components.codex") }
+    if ($tickedComponents -contains "claude") { Write-Info (Say "components.claude") }
+    if ($tickedComponents -contains "voice-en" -or $tickedComponents -contains "voice-zh") {
+      Write-Info (Say "components.voice")
     }
   }
 

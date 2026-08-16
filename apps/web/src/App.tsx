@@ -271,6 +271,8 @@ import {
   updateVaenyxThreadStatus,
   updateVaenyxThreadTitle,
   markVaenyxThreadSeen,
+  fetchComponentProgress,
+  type ComponentBootProgress,
 } from "./api.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
 import { setToastListener, showErrorToast, type ToastTone } from "./toast.js";
@@ -23757,6 +23759,59 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
       .catch(() => undefined);
   }, []);
 
+  // THE INSTALLER'S TICKS, MADE VISIBLE (Oskar, 2026-08-16: "感觉安装的时候
+  // 打勾没有提前安装"). The ticked components download on first boot, in the
+  // background — which from this screen looked like nothing was happening,
+  // and pressing Sign In then waited on a download with no explanation. The
+  // boot installer has always reported progress at /v1/system/components;
+  // this screen just never asked. Poll while the work runs, say what is
+  // downloading, and say when a ticked download FAILED (the sign-in button
+  // is the retry, so the failure line points at it).
+  const [bootComponents, setBootComponents] =
+    useState<ComponentBootProgress | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    let timer = 0;
+    const poll = async () => {
+      const progress = await fetchComponentProgress().catch(() => null);
+      if (stopped) return;
+      if (progress) setBootComponents(progress);
+      if (progress && progress.current !== null) {
+        timer = window.setTimeout(() => void poll(), 2000);
+      }
+    };
+    void poll();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+  const bootDownloadNote = (() => {
+    const zhNote = lang === "zh";
+    if (!bootComponents) return null;
+    if (bootComponents.current === "codex") {
+      return zhNote
+        ? "正在下载你安装时勾选的 ChatGPT 登录组件(约 250 MB)…… 下完这里就能直接登录。"
+        : "Downloading the ChatGPT sign-in component you ticked during install (about 250 MB)... the button works the moment it lands.";
+    }
+    if (bootComponents.current === "claude") {
+      return zhNote
+        ? "正在下载你安装时勾选的 Claude 登录组件…… 下完这里就能直接登录。"
+        : "Downloading the Claude sign-in component you ticked during install... the button works the moment it lands.";
+    }
+    const failed = bootComponents.done.filter(
+      (entry) =>
+        entry.outcome === "failed" &&
+        (entry.id === "codex" || entry.id === "claude"),
+    );
+    if (failed.length > 0) {
+      return zhNote
+        ? "安装时勾选的登录组件没下载成功 —— 点下面的登录按钮会重新下载一次。"
+        : "A sign-in component you ticked during install did not download - the sign-in button below retries it.";
+    }
+    return null;
+  })();
+
   // Ticking "use Vaenyx on my phone" in the installer installs Tailscale and
   // nothing more — the sign-in is a browser thing, with the household's own
   // free Tailscale account, and a browser is exactly where this screen is.
@@ -24066,6 +24121,11 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
               ? "不用 API key,浏览器登录一次就好。"
               : "No API key. One browser sign-in."}
           </p>
+          {bootDownloadNote ? (
+            <p className="settings-card-copy wizard-boot-download">
+              {bootDownloadNote}
+            </p>
+          ) : null}
           {codexProvider?.healthy ? (
             <span className="library-chip chip-published">
               {zh ? "已连接" : "Connected"}

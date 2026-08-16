@@ -46,7 +46,18 @@ function bootWaitPage() {
     "<b>Vaenyx</b>",
     "<p>Starting up… this page will open by itself.<br>",
     "正在启动…这个页面会自己打开。</p>",
-    "</div><script>setInterval(function(){",
+    // After 30 seconds of failed probes this is no longer a restart window —
+    // say the honest likely cause instead of waiting forever in silence
+    // (2026-08-16: a router that answered IPv6-only stranded a laptop here
+    // while the phone on mobile data worked fine).
+    '<p id="hint" style="display:none;max-width:34em">',
+    "Still here after a while? Then this device cannot reach Vaenyx's computer.",
+    "If a phone on mobile data CAN open Vaenyx, the problem is this device's",
+    "network or the home router — restarting the router usually fixes it.<br>",
+    "一直停在这里?说明这台设备连不上 Vaenyx 所在的电脑。如果手机用流量能打开,",
+    "问题就在这台设备的网络或家里的路由器 —— 重启路由器通常能解决。</p>",
+    "</div><script>var n=0;setInterval(function(){n+=1;",
+    "if(n>=15)document.getElementById('hint').style.display='block';",
     'fetch("/v1/system/status",{cache:"no-store"}).then(function(r){',
     "if(r.ok)location.reload()}).catch(function(){})},2000)",
     "</scr" + "ipt></body></html>",

@@ -1051,6 +1051,19 @@ export function updateVaenyxThreadStatus(
   });
 }
 
+// What the installer's ticks are doing on first boot: which component is
+// downloading right now, and how each finished. The first-run model step
+// shows this so a ticked 250 MB download is visible work, not a dead wait.
+export interface ComponentBootProgress {
+  current: string | null;
+  done: { id: string; outcome: "installed" | "failed" | "skipped" }[];
+  wanted: string[];
+}
+
+export function fetchComponentProgress(): Promise<ComponentBootProgress> {
+  return requestJson<ComponentBootProgress>("/v1/system/components");
+}
+
 // Read state lives on the instance, so every device agrees about what has
 // been seen (Oskar, 2026-08-16). Fire-and-forget from the caller's point of
 // view: a failed mark leaves the dot lit, which is the safe way to be wrong.

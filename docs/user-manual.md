@@ -691,6 +691,7 @@ Read this inside the app: **Settings → Manual**.
 |---|---|
 | Nothing loads at all | The computer is off or asleep. Wake it. |
 | Phone cannot reach it, computer can | A freshly opened channel needs a minute — wait and retry. Still nothing: Settings → Phone Access, check the three lights. |
+| A computer cannot open it, a phone on mobile data can | The problem is that computer's network or the home router (a common one: the router answers with addresses that do not work). Restart the router; the waiting page says this too after 30 seconds. |
 | "Not signed in" on a subscription | Settings → AI Settings → sign in to that one again. |
 | An engine fails and nothing else happens | By design. Read which one failed, then pick another engine on that row. |
 | Voice button does nothing | The Hearing row has no engine, or Hearing is switched off. Settings → AI Settings → Capabilities → Hearing. |
@@ -708,5 +709,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.4.7** · last updated 2026-08-15.
+Manual for **v0.4.8** · last updated 2026-08-16.
 Keep this file up to date whenever a feature changes.
