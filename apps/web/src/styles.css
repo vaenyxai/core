@@ -8753,14 +8753,17 @@ body {
   color: var(--text-dim, inherit);
 }
 
-/* The confirm card's photo leads but stays modest (owner, 2026-08-16): the
-   summary fields get the room. */
+/* The confirm card's photo keeps its full size (owner, 2026-08-16, second
+   look): shrinking it packed the marks on top of each other and made the
+   labels unreadable — the photo IS the thing being checked. What the marks
+   say is listed underneath in words instead. */
 .confirm-photo .annotated-photo {
   max-width: 100%;
 }
-.confirm-photo .message-photo {
-  max-height: 32vh;
-  width: auto;
-  max-width: 100%;
-  object-fit: contain;
+
+.confirm-mark-list {
+  margin: var(--space-2) 0 var(--space-3);
+  padding-left: 20px;
+  font-size: var(--fs-base);
+  line-height: 1.6;
 }

@@ -9394,6 +9394,28 @@ function AskVaenyxPanel({
                 />
               ) : null}
             </div>
+            {/* What the marks SAY, in words. On a phone the labels sit on top
+                of each other and cannot be read (Oskar, 2026-08-16), and the
+                field they fill is hidden precisely because the picture owns
+                it — so the list has to appear somewhere, as dot points. */}
+            {routineInputConfirm.marks &&
+            routineInputConfirm.marks.length > 0 ? (
+              <ul className="confirm-mark-list">
+                {[
+                  ...routineInputConfirm.marks
+                    .map((mark) => mark.name.trim())
+                    .filter(Boolean)
+                    .reduce(
+                      (counts, name) =>
+                        counts.set(name, (counts.get(name) ?? 0) + 1),
+                      new Map<string, number>(),
+                    )
+                    .entries(),
+                ].map(([name, count]) => (
+                  <li key={name}>{count > 1 ? `${name} ×${count}` : name}</li>
+                ))}
+              </ul>
+            ) : null}
             <div
               style={{
                 display: "flex",
