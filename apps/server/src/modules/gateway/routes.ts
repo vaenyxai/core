@@ -3053,6 +3053,31 @@ export async function registerGatewayRoutes(
                 new Date().toISOString(),
               );
           }
+          // The photo goes out as TWO independent calls, and providers flake
+          // per-call (measured 2026-08-16: marks landed while describe
+          // 503ed, so the card showed a fully marked photo NEXT TO "could
+          // not be read"). When the marks made it, their names ARE the item
+          // list — use them, and there is no failure left to report. Only
+          // both doors closing is an error.
+          if (photoError && photoAnnotations && photoAnnotations.length > 0) {
+            const counts = new Map<string, number>();
+            for (const item of photoAnnotations) {
+              const name = item.name.trim();
+              if (!name) continue;
+              counts.set(name, (counts.get(name) ?? 0) + 1);
+            }
+            const markList = [...counts.entries()]
+              .map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
+              .join("\n");
+            if (markList) {
+              effectiveContent =
+                request.body.content.trim() &&
+                request.body.content.trim() !== "(Photo)"
+                  ? `${request.body.content.trim()}\n${markList}`
+                  : markList;
+              photoError = null;
+            }
+          }
         }
       }
 
