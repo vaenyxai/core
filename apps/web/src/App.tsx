@@ -13157,18 +13157,24 @@ function ModelsPanel({
   const [codexWaiting, setCodexWaiting] = useState(false);
   const [codexLoginUrl, setCodexLoginUrl] = useState<string | null>(null);
   async function signInCodex() {
+    // A remote viewer's sign-in cannot complete (the flow returns to
+    // localhost on the SERVER) — say so instead of starting a dead flow.
+    if (!viewerIsOnServerMachine()) {
+      setError(codexRemoteViewerNote(false));
+      return;
+    }
     setCodexWaiting(true);
     setError(null);
     setCodexLoginUrl(null);
     try {
-      const { url, detail } = await startCodexLogin();
+      const { url, detail, cliWindowVisible } = await startCodexLogin();
       if (detail) {
         setError(codexSignInError(detail, false));
         return;
       }
       if (url) {
         setCodexLoginUrl(url);
-        window.open(url, "_blank", "noreferrer");
+        openCodexSignInWindow(url, cliWindowVisible);
       }
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await new Promise((resolveWait) => setTimeout(resolveWait, 3000));
@@ -13179,9 +13185,15 @@ function ModelsPanel({
           // Only the attempt that succeeded is worth telling the other card
           // about; the forty that were still waiting changed nothing.
           onConnectionsChanged();
-          break;
+          return;
         }
       }
+      // The quiet give-up used to be WORDLESS — the button just reset, which
+      // on a machine where no window ever appeared read as "does nothing"
+      // (sweep, 2026-08-16). Now the card says where things stand.
+      setError(
+        "Sign-in has not completed yet. If a ChatGPT window opened, finish it and press the button again; if none did, use the sign-in link above.",
+      );
     } catch {
       setError("Could not start the ChatGPT sign-in.");
     } finally {
@@ -13809,7 +13821,10 @@ function ModelsPanel({
                             </p>
                           </>
                         ) : null}
-                        {codexWaiting && codexLoginUrl ? (
+                        {codexLoginUrl ? (
+                          // The link outlives the wait on purpose: on a
+                          // machine where no window can appear (the SYSTEM
+                          // autostart), this link IS the sign-in.
                           <a
                             className="model-key-link"
                             href={codexLoginUrl}
@@ -13821,8 +13836,9 @@ function ModelsPanel({
                         ) : null}
                         {codexWaiting ? (
                           <p className="library-note">
-                            Finish the ChatGPT login in the browser window that
-                            just opened — this card updates by itself.
+                            Finish the ChatGPT sign-in — in the window that
+                            opened, or through the link above if none did. This
+                            card updates by itself.
                           </p>
                         ) : null}
                       </>
@@ -21884,6 +21900,31 @@ export function noteUnreadOpen(cutoff: string): void {
   pendingUnreadCutoff = { cutoff, at: Date.now() };
 }
 
+// EXACTLY ONE ChatGPT window, wherever the pieces run (sweep, 2026-08-16).
+// The codex CLI opens a browser ITSELF on the server machine; whether that
+// window is VISIBLE is the server's knowledge — an interactive session shows
+// it, the SYSTEM autostart's session 0 opens it into the void — so the fact
+// rides the login response. The page opens its own window only when the
+// CLI's is invisible. And never for a remote viewer: the flow's callback
+// returns to localhost on the SERVER, so a remote sign-in cannot complete —
+// callers tell that viewer to do this step on the Vaenyx computer instead.
+function viewerIsOnServerMachine(): boolean {
+  const host = window.location.hostname;
+  return host === "127.0.0.1" || host === "localhost";
+}
+
+function openCodexSignInWindow(url: string, cliWindowVisible?: boolean): void {
+  if (!viewerIsOnServerMachine()) return;
+  if (cliWindowVisible) return;
+  window.open(url, "_blank", "noopener");
+}
+
+function codexRemoteViewerNote(zh: boolean): string {
+  return zh
+    ? "ChatGPT 登录要在运行 Vaenyx 的那台电脑上完成(它的登录页最后会跳回那台电脑)。请到那台电脑的浏览器里点这个按钮;在这台设备上,Claude 订阅或 API key 都可以直接连。"
+    : "The ChatGPT sign-in has to happen on the computer running Vaenyx (its sign-in page finishes by returning to that machine). Press this button in a browser on that computer; from this device, the Claude subscription or an API key connects fine.";
+}
+
 function consumeUnreadCutoff(): string | null {
   if (!pendingUnreadCutoff) return null;
   const { cutoff, at } = pendingUnreadCutoff;
@@ -23638,9 +23679,18 @@ function LegalDocLinks({ names }: { names?: string[] }) {
 const LEGAL_ACCEPT_CACHE = `vaenyx-legal-accepted-${LEGAL_CONSENT_FLOOR}`;
 
 function InstallAcceptanceGate({ children }: { children: ReactNode }) {
-  const [accepted, setAccepted] = useState<boolean | null>(() =>
-    localStorage.getItem(LEGAL_ACCEPT_CACHE) === "1" ? true : null,
-  );
+  const [accepted, setAccepted] = useState<boolean | null>(() => {
+    // A JUST-CREATED account never inherits the browser's cached acceptance:
+    // the cache belongs to whoever accepted on a previous install in this
+    // same browser, and a new Owner must see the gate and have their OWN
+    // acceptance recorded server-side (sweep, 2026-08-16 — legal exposure).
+    // The flag is only read, not consumed: ModelConnectGate still needs it.
+    if (window.sessionStorage.getItem("vaenyx.freshOwner") === "1") {
+      localStorage.removeItem(LEGAL_ACCEPT_CACHE);
+      return null;
+    }
+    return localStorage.getItem(LEGAL_ACCEPT_CACHE) === "1" ? true : null;
+  });
 
   useEffect(() => {
     if (accepted !== null) return;
@@ -23772,11 +23822,17 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     let stopped = false;
     let timer = 0;
+    const startedAt = Date.now();
     const poll = async () => {
       const progress = await fetchComponentProgress().catch(() => null);
       if (stopped) return;
       if (progress) setBootComponents(progress);
-      if (progress && progress.current !== null) {
+      // A FAILED fetch keeps polling too (sweep, 2026-08-16): the server
+      // restarts itself mid-deploy, and one missed answer used to stop the
+      // poll for good with "Downloading…" frozen on screen. A successful
+      // answer with nothing running is the real stop. Ten minutes bounds it.
+      const finished = progress !== null && progress.current === null;
+      if (!finished && Date.now() - startedAt < 10 * 60_000) {
         timer = window.setTimeout(() => void poll(), 2000);
       }
     };
@@ -23843,23 +23899,34 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
   }
 
   // Same flow as the Models panel (dev.111): the server drives the official
-  // Codex CLI login and we poll until the provider reports healthy.
+  // Codex CLI login and we poll until the provider reports healthy. The poll
+  // runs whether or not a URL came back (sweep, 2026-08-16): url:null is a
+  // REACHABLE answer — the CLI took longer than the server's capture window
+  // to print its link, or it was already signed in — and returning silently
+  // on it was a dead end that no press could escape.
   async function signInCodex() {
+    if (!viewerIsOnServerMachine()) {
+      setError(codexRemoteViewerNote(zh));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const { url, detail } = await startCodexLogin();
-      if (detail) setError(codexSignInError(detail, zh));
-      if (!url) {
+      const { url, detail, cliWindowVisible } = await startCodexLogin();
+      if (detail) {
+        setError(codexSignInError(detail, zh));
         setBusy(false);
         return;
       }
-      setCodexUrl(url);
+      if (url) {
+        setCodexUrl(url);
+        openCodexSignInWindow(url, cliWindowVisible);
+      }
       setCodexWaiting(true);
-      window.open(url, "_blank", "noopener");
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
         const result = await fetchModelProviders().catch(() => null);
+        if (result) setProviders(result.providers);
         const codex = result?.providers.find(
           (provider) => provider.id === "codex",
         );
@@ -23870,8 +23937,8 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
       }
       setError(
         zh
-          ? "还没检测到登录完成。登录后可以直接点“稍后再说”,连接会自动生效。"
-          : "Sign-in has not completed yet. You can press Skip — it will connect on its own once finished.",
+          ? "还没检测到登录完成。在弹出的窗口(或上面的链接)里完成登录后再点一次;也可以直接点“稍后再说”,连接会自动生效。"
+          : "Sign-in has not completed yet. Finish it in the window that opened (or through the link above), then press again — or press Skip; it connects on its own once finished.",
       );
     } catch (nextError) {
       setError(
@@ -24133,7 +24200,11 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
           ) : (
             <button
               className="primary-button"
-              disabled={busy}
+              // Disabled while the ticked component's own download runs: a
+              // press would start a SECOND npm install into the same tree
+              // (sweep, 2026-08-16), and the note above already says the
+              // button works the moment the download lands.
+              disabled={busy || bootComponents?.current === "codex"}
               onClick={() => void signInCodex()}
               type="button"
             >
@@ -24214,7 +24285,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
               </p>
               <button
                 className="primary-button"
-                disabled={busy}
+                disabled={busy || bootComponents?.current === "claude"}
                 onClick={() => void beginClaude()}
                 type="button"
               >

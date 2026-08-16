@@ -78,6 +78,18 @@ $stamped = $versionLine.Replace($configText, "version: `"$Version`"", 1)
 [System.IO.File]::WriteAllText($configPath, $stamped, (New-Object System.Text.UTF8Encoding($hadBom)))
 Write-Host "Stamped $Version into apps/server/src/config.ts" -ForegroundColor Cyan
 
+# -- 3b. The licence manifest, regenerated for THIS release ----
+# THIRD_PARTY_NOTICES.md section 3 requires the shipped manifest to match the
+# release; it used to be a separate step nobody ran (the shipped file was
+# stamped four minor versions back — sweep, 2026-08-16). Now the release IS
+# the step: regenerated after the stamp so it carries this version, committed
+# in the release commit below.
+cmd.exe /c "npm run licenses > nul 2>&1"
+if ($LASTEXITCODE -ne 0) {
+  throw "npm run licenses failed - the shipped licence manifest must match the release."
+}
+Write-Host "Regenerated THIRD_PARTY_LICENSES.md for $Version" -ForegroundColor Cyan
+
 # -- 4. The same gate CI runs ----
 if (-not $SkipChecks) {
   # Through cmd.exe WITH ITS OWN REDIRECT, and the redirect is the point. This
@@ -110,7 +122,7 @@ function Invoke-Git {
   if ($LASTEXITCODE -ne 0) { throw $Failure }
 }
 
-Invoke-Git "add apps/server/src/config.ts" "git add failed"
+Invoke-Git "add apps/server/src/config.ts THIRD_PARTY_LICENSES.md" "git add failed"
 Invoke-Git "commit -m ""release: $tag""" "git commit failed"
 Invoke-Git "tag $tag" "git tag failed"
 Invoke-Git "push origin main" "git push of main failed - the tag was NOT pushed. Resolve, then push main and the tag yourself."

@@ -179,7 +179,9 @@ export async function loadClaudeSdk(): Promise<ClaudeSdk> {
     const loaded = (await import(
       pathToFileURL(entry).href
     )) as Partial<ClaudeSdk> & { default?: Partial<ClaudeSdk> };
-    const sdk = (loaded.query ? loaded : loaded.default) as ClaudeSdk | undefined;
+    const sdk = (loaded.query ? loaded : loaded.default) as
+      | ClaudeSdk
+      | undefined;
     if (!sdk?.query) throw new ClaudeSdkNotInstalledError();
     cached = sdk;
     return sdk;
@@ -196,7 +198,24 @@ export async function loadClaudeSdk(): Promise<ClaudeSdk> {
  * turn into a sentence — a failure here disables the Claude subscription and
  * nothing else.
  */
-export async function ensureClaudeSdkInstalled(
+// ONE install at a time (sweep, 2026-08-16): the boot installer and the
+// sign-in button share no lock, and two concurrent npm installs into the
+// same prefix can corrupt the tree. A second caller awaits the first's.
+let claudeInstallInFlight: Promise<
+  "ready" | "installed" | "install-failed"
+> | null = null;
+
+export function ensureClaudeSdkInstalled(
+  dataDirectory: string,
+): Promise<"ready" | "installed" | "install-failed"> {
+  if (claudeInstallInFlight) return claudeInstallInFlight;
+  claudeInstallInFlight = installClaudeSdkOnce(dataDirectory).finally(() => {
+    claudeInstallInFlight = null;
+  });
+  return claudeInstallInFlight;
+}
+
+async function installClaudeSdkOnce(
   dataDirectory: string,
 ): Promise<"ready" | "installed" | "install-failed"> {
   if (isClaudeSdkInstalled()) return "ready";

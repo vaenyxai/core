@@ -713,11 +713,15 @@ export function appendConversationNote(
 export function startCodexLogin(): Promise<{
   url: string | null;
   detail: string | null;
+  // Whether the CLI's own browser window is visible on the server machine —
+  // the page opens its own window only when it is not, so there is one.
+  cliWindowVisible?: boolean;
 }> {
-  return requestJson<{ url: string | null; detail: string | null }>(
-    "/v1/models/codex/login",
-    { method: "POST" },
-  );
+  return requestJson<{
+    url: string | null;
+    detail: string | null;
+    cliWindowVisible?: boolean;
+  }>("/v1/models/codex/login", { method: "POST" });
 }
 
 export function connectModelProvider(

@@ -153,10 +153,10 @@ english.FinishedRunning=Vaenyx is installed and running.%n%nA Vaenyx icon is on 
 chinesesimplified.FinishedRunning=Vaenyx 已安装并正在运行。%n%n桌面上有一个 Vaenyx 图标 —— 随时双击即可打开 Vaenyx。
 english.FinishedFailed=Vaenyx was copied, but the preparing step did not finish.%n%nFix what the setup window said (usually the internet connection), then double-click Vaenyx-Setup.cmd in the install folder to finish. A Vaenyx icon is on your desktop for afterwards.
 chinesesimplified.FinishedFailed=Vaenyx 已复制完成,但准备步骤没有完成。%n%n按照安装窗口里的提示修复(通常是网络问题),然后双击安装文件夹里的 Vaenyx-Setup.cmd 完成安装。桌面上已放好 Vaenyx 图标,供之后使用。
-english.KeepDataQuestion=Keep your Vaenyx data?%n%nYES keeps your chats, settings, backups and sign-ins in %1, so installing Vaenyx there again later brings everything back.%n%nNO deletes all of it for good.
-chinesesimplified.KeepDataQuestion=保留你的 Vaenyx 数据吗?%n%n「是」会把聊天、设置、备份和登录信息保留在 %1,以后再装 Vaenyx 一切照旧。%n%n「否」会把这些数据永久删除。
-english.DataKept=Your data is still at %1.%nInstall Vaenyx into the same folder any time to keep using it. Deleting that folder later removes the data for good.
-chinesesimplified.DataKept=你的数据仍保存在 %1。%n以后把 Vaenyx 装回同一文件夹即可继续使用。之后删除该文件夹会永久删除这些数据。
+english.KeepDataQuestion=Keep your Vaenyx data?%n%nYES keeps your chats, settings, backups, sign-ins and API keys (the userdata and private folders in %1), so installing Vaenyx there again later brings everything back.%n%nNO deletes all of it for good.
+chinesesimplified.KeepDataQuestion=保留你的 Vaenyx 数据吗?%n%n「是」会把聊天、设置、备份、登录信息和 API key(%1 里的 userdata 和 private 两个文件夹)保留下来,以后再装 Vaenyx 一切照旧。%n%n「否」会把这些数据永久删除。
+english.DataKept=Your data is still in %1 - the userdata folder, plus API keys in the private folder.%nInstall Vaenyx into the same folder any time to keep using it. To remove the data for good later, delete BOTH folders.
+chinesesimplified.DataKept=你的数据仍保存在 %1 —— userdata 文件夹,以及 private 文件夹里的 API key。%n以后把 Vaenyx 装回同一文件夹即可继续使用。之后要彻底删除数据,这两个文件夹都要删。
 
 [Code]
 var
@@ -490,8 +490,13 @@ begin
   if CurUninstallStep = usUninstall then begin
     // Ask about the data first, while nothing has been touched. YES (keep) is
     // the default button.
+    // %1 is the INSTALL folder now, not userdata: the message names both
+    // kept folders (userdata AND private with the API keys), so it must
+    // point at their parent (sweep, 2026-08-16 - a user following the old
+    // wording deleted userdata and left their API keys behind for the next
+    // owner of the machine).
     DeleteUserData := SuppressibleMsgBox(
-      FmtMessage(CustomMessage('KeepDataQuestion'), [ExpandConstant('{app}\userdata')]),
+      FmtMessage(CustomMessage('KeepDataQuestion'), [ExpandConstant('{app}')]),
       mbConfirmation, MB_YESNO or MB_DEFBUTTON1, IDYES) = IDNO;
     Log('Vaenyx uninstall: delete userdata = ' + YesNo(DeleteUserData));
     // Remove the boot task, then stop the running server the same way the
@@ -533,7 +538,7 @@ begin
       RemoveDir(ExpandConstant('{app}'))
     else
       SuppressibleMsgBox(
-        FmtMessage(CustomMessage('DataKept'), [ExpandConstant('{app}\userdata')]),
+        FmtMessage(CustomMessage('DataKept'), [ExpandConstant('{app}')]),
         mbInformation, MB_OK, IDOK);
   end;
 end;

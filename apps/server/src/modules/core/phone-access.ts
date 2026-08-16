@@ -297,8 +297,12 @@ const installState: InstallState = { phase: "idle", detail: null };
 // Fire-and-poll rather than a long-hanging request: the download takes minutes
 // on a slow line. The failure detail is formatted in the language of the click
 // that started it, because the exit lands after that request has answered.
-const TAILSCALE_MSI_URL =
-  "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi";
+// By architecture (sweep, 2026-08-16): the amd64 MSI on Windows-on-ARM
+// installs a client whose tunnel driver cannot load, and the retry button
+// retried the same wrong package forever.
+const TAILSCALE_MSI_URL = `https://pkgs.tailscale.com/stable/tailscale-setup-latest-${
+  process.arch === "arm64" ? "arm64" : "amd64"
+}.msi`;
 
 export function installTailscale(lang: PhoneLang = "en"): InstallState {
   if (installState.phase === "installing") return installState;

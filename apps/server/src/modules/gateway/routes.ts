@@ -1828,6 +1828,10 @@ export async function registerGatewayRoutes(
             {
               url: Type.Union([Type.String(), Type.Null()]),
               detail: Type.Union([Type.String(), Type.Null()]),
+              // Whether the CLI's OWN browser window is visible on the
+              // server machine (interactive session) — the page opens its
+              // own window only when this is false, so there is exactly one.
+              cliWindowVisible: Type.Optional(Type.Boolean()),
             },
             { additionalProperties: false },
           ),

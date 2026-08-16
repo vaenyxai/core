@@ -522,9 +522,13 @@ if ((@($Components.Split(",") | ForEach-Object { $_.Trim().ToLowerInvariant() })
       # Three attempts: a home router's DNS can drop a single lookup, and one
       # flaky answer must not cost the whole component (seen live 2026-08-16).
       $downloaded = $false
+      # By architecture, like the Node install above: the amd64 MSI on a
+      # Snapdragon laptop installs a driver that cannot load (sweep,
+      # 2026-08-16), and every retry retried the same wrong package.
+      $tailscaleArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
       for ($attempt = 1; $attempt -le 3 -and -not $downloaded; $attempt += 1) {
         try {
-          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-$tailscaleArch.msi" `
             -OutFile $tailscaleMsi -UseBasicParsing
           $downloaded = $true
         } catch {
@@ -898,7 +902,24 @@ try {
   # Children re-inherit from the now-locked folder. userdata is never empty
   # here (logs\ and config\ were created above), so the glob always matches.
   & icacls "$userdataDirectory\*" /reset /T /C | Out-Null
-  if ($aclGrantCode -eq 0 -and $LASTEXITCODE -eq 0) {
+  $aclResetCode = $LASTEXITCODE
+  # private\ gets the SAME lock (sweep, 2026-08-16): the server's secrets
+  # directory defaults to private\secrets, and pasted model API keys land
+  # there in plain JSON. Locking only userdata left the keys readable by
+  # every other account on a shared family PC — the exact machine this
+  # product targets.
+  $privateDirectory = Join-Path $root "private"
+  if (-not (Test-Path $privateDirectory)) {
+    New-Item -ItemType Directory -Path $privateDirectory -Force | Out-Null
+  }
+  & icacls $privateDirectory /inheritance:r /grant:r `
+    "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "$($env:USERNAME):(OI)(CI)F" | Out-Null
+  $privateGrantCode = $LASTEXITCODE
+  if (Get-ChildItem -Path $privateDirectory -Force -ErrorAction SilentlyContinue |
+      Select-Object -First 1) {
+    & icacls "$privateDirectory\*" /reset /T /C | Out-Null
+  }
+  if ($aclGrantCode -eq 0 -and $aclResetCode -eq 0 -and $privateGrantCode -eq 0) {
     Write-Good (Say "acl.ok")
   } else {
     Write-Warn (Say "acl.fail")

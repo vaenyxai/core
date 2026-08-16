@@ -17,6 +17,9 @@ ENGLISH
    block unsigned programs with no "Run anyway" at all. A signed
    installer is on its way; until then such a machine needs Smart App
    Control set to Off in Windows Security > App & browser control.
+   Know before you switch: Windows cannot turn Smart App Control back
+   ON without reinstalling Windows. If you are unsure, wait for the
+   signed installer instead.
 
 2. Double-click Vaenyx-Setup.cmd (next to this file).
    It checks the computer, installs Node.js if it is missing, builds
@@ -49,6 +52,8 @@ and puts a Vaenyx icon on your desktop.
    Windows 会直接拦下未签名程序、没有「仍要运行」按钮。签名版
    正在申请中;在那之前这类电脑需要到「Windows 安全中心 →
    应用和浏览器控制」把智能应用控制设为「关」。
+   关之前要知道:Windows 不重装系统就无法把它重新打开。
+   拿不准的话,建议等签名版再装。
 
 2. 双击本文件旁边的 Vaenyx-Setup.cmd。
    它会检查电脑、按需安装 Node.js、构建 Vaenyx,

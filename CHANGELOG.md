@@ -4,6 +4,30 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.9.0 — 2026-08-16
+
+**One ChatGPT window, always.** Pressing Sign In With ChatGPT used to open
+two login windows (the sign-in tool opens one itself, and the page opened
+another) — and after a reboot, zero (the tool's window opened where nobody
+can see it). The server now tells the page whether the tool's own window is
+visible, and the page opens its own exactly when it is not. On a phone, the
+button now explains that this one sign-in must happen on the Vaenyx
+computer, instead of starting a flow that cannot finish there.
+
+**Sign-in dead ends got voices.** Every quiet failure around the ChatGPT
+sign-in now says where things stand and what to press: the first-run button
+no longer resets silently when the sign-in tool is slow to answer, the
+fallback link stays on screen instead of vanishing after two minutes, and a
+sign-in that finishes late is still detected.
+
+**Install hardening, round two.** API keys are now under the same
+other-accounts lock as your chats. Uninstall names BOTH folders it keeps
+(your data, and API keys) so nothing survives a hand-over unnoticed.
+Tailscale installs the right build on ARM laptops. The shipped licence
+manifest is regenerated with every release. And the note about Smart App
+Control now says the switch cannot be turned back on without reinstalling
+Windows.
+
 ## v0.4.8.0 — 2026-08-16
 
 **The install says what happened to every tick.** The end of setup now

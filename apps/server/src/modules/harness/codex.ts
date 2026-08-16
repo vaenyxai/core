@@ -404,7 +404,25 @@ function probeCodexStatus(): CodexStatus {
 // measured alternatives, because this fix was expensive and a second copy is
 // a second thing to forget.
 
-export async function ensureCodexInstalled(): Promise<
+// ONE install at a time (sweep, 2026-08-16): the boot installer and the
+// sign-in button share no lock, and two concurrent `npm install -g` runs
+// into the same prefix can corrupt the tree. A second caller simply awaits
+// the first's promise and gets the same answer.
+let codexInstallInFlight: Promise<
+  "ready" | "installed" | "install-failed"
+> | null = null;
+
+export function ensureCodexInstalled(): Promise<
+  "ready" | "installed" | "install-failed"
+> {
+  if (codexInstallInFlight) return codexInstallInFlight;
+  codexInstallInFlight = installCodexOnce().finally(() => {
+    codexInstallInFlight = null;
+  });
+  return codexInstallInFlight;
+}
+
+async function installCodexOnce(): Promise<
   "ready" | "installed" | "install-failed"
 > {
   if (getCodexStatus().installed) return "ready";
@@ -474,12 +492,27 @@ export async function ensureCodexInstalled(): Promise<
 // code so the second app is told "try again shortly", not "broken".
 let codexLoginInFlight: string | null = null;
 
+// Whether a browser window the codex CLI opens ITSELF would actually be
+// seen: only when this server runs in the logged-on user's session. The
+// production autostart runs as SYSTEM in session 0 (no SESSIONNAME), where
+// the CLI's window opens into the void — the web page must open its own
+// window then, and must NOT when the CLI's window is real (two ChatGPT
+// windows, Oskar 2026-08-16).
+export function codexLoginWindowVisible(): boolean {
+  return process.platform !== "win32" || Boolean(process.env.SESSIONNAME);
+}
+
 export function startCodexLogin(profileKey: string = "core"): Promise<{
   url: string | null;
   detail: string | null;
+  cliWindowVisible: boolean;
 }> {
   if (process.env.NODE_ENV === "test" && !process.env.VAENYX_CODEX_COMMAND) {
-    return Promise.resolve({ url: null, detail: null });
+    return Promise.resolve({
+      url: null,
+      detail: null,
+      cliWindowVisible: codexLoginWindowVisible(),
+    });
   }
   if (codexLoginInFlight && codexLoginInFlight !== profileKey) {
     return Promise.reject(new Error("CODEX_LOGIN_BUSY"));
@@ -501,7 +534,11 @@ export function startCodexLogin(profileKey: string = "core"): Promise<{
     const settle = (url: string | null, detail: string | null = null) => {
       if (settled) return;
       settled = true;
-      resolveLogin({ url, detail });
+      resolveLogin({
+        url,
+        detail,
+        cliWindowVisible: codexLoginWindowVisible(),
+      });
     };
     const timer = setTimeout(() => settle(null), 8000);
     timer.unref();
