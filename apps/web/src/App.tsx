@@ -270,6 +270,7 @@ import {
   updateVaenyxThreadProject,
   updateVaenyxThreadStatus,
   updateVaenyxThreadTitle,
+  markVaenyxThreadSeen,
 } from "./api.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
 import { setToastListener, showErrorToast, type ToastTone } from "./toast.js";
@@ -6581,7 +6582,9 @@ function AskVaenyxPanel({
     if (view !== "chat") return;
     if (!loadingMessages && messages.length > 0) {
       const cutoff = consumeUnreadCutoff();
-      if (cutoff) {
+      if (cutoff !== null) {
+        // "" = never opened anywhere, so everything counts as unread and the
+        // first message is the earliest unread one.
         const first = messages.find((message) => message.createdAt > cutoff);
         if (first) {
           // Zeroed, not stamped: the photo re-anchor must not drag the view
@@ -6592,17 +6595,17 @@ function AskVaenyxPanel({
           return;
         }
       }
-      // First settle after opening this conversation — and only then, so a
-      // reply arriving later still scrolls with the text as it is written.
+      // ONE RULE FOR EVERY CONVERSATION (Oskar, 2026-08-16: "不管哪一个对话
+      // 点进去,都是停在最底下,除非是一个未读的"): read = the bottom, unread
+      // = the start of the earliest unread message above. Landing on the
+      // START of the newest message (the 2026-08-07 rule) looked identical to
+      // "jumped to the top" whenever that message was a long scheduled
+      // result, which is exactly the case it was meant to help.
       const key = `chat:${activeConversationId ?? ""}`;
       if (openedThreadRef.current !== key && !sending) {
         openedThreadRef.current = key;
         lastAnchorAtRef.current = 0;
-        scrollToMessageStart(
-          document.getElementById(
-            `message-${messages[messages.length - 1]?.id ?? ""}`,
-          ),
-        );
+        chatEndRef.current?.scrollIntoView({ block: "end" });
         return;
       }
     }
@@ -6649,7 +6652,7 @@ function AskVaenyxPanel({
     if (view !== "task") return;
     if (!loadingTaskMessages && taskMessages.length > 0) {
       const cutoff = consumeUnreadCutoff();
-      if (cutoff) {
+      if (cutoff !== null) {
         const first = taskMessages.find(
           (message) => message.createdAt > cutoff,
         );
@@ -6660,17 +6663,15 @@ function AskVaenyxPanel({
           return;
         }
       }
-      // Same rule as a chat: opening a task lands on the first line of its
-      // newest run, which on a scheduled task is the whole point of opening it.
+      // Same one rule as a chat: read = the bottom, unread = the earliest
+      // unread message. A scheduled task is where the old "start of the
+      // newest message" rule hurt most — its results are long, so the start
+      // of one looked exactly like the top of the thread.
       const key = `task:${focusedTaskId ?? ""}`;
       if (openedThreadRef.current !== key && !sendingTaskMessage) {
         openedThreadRef.current = key;
         lastAnchorAtRef.current = 0;
-        scrollToMessageStart(
-          document.getElementById(
-            `message-${taskMessages[taskMessages.length - 1]?.id ?? ""}`,
-          ),
-        );
+        taskEndRef.current?.scrollIntoView({ block: "end" });
         return;
       }
     }
@@ -21810,46 +21811,17 @@ function consumeUnreadCutoff(): string | null {
   return Date.now() - at < 8000 ? cutoff : null;
 }
 
-// Per-device read tracking for the sidebar's unread dots (Oskar, 2026-07-28):
-// a thread is unread when its last activity is newer than the last time THIS
-// device had it open. Device-local on purpose — read state is a property of
-// the person at the screen, and it needs no server schema.
+// Read tracking for the sidebar's unread dots. It used to live in each
+// browser's localStorage, and that was wrong in the way one person with two
+// devices feels immediately: reading a result on the phone left the same
+// result lit on the computer (Oskar, 2026-08-16 — "手机读了,电脑就要读了").
+// The watermark now lives on the instance as thread.seenAt, so every device
+// reads and writes the same answer; the migration seeded it from each
+// thread's updatedAt, so nothing already there lights up.
 //
-// TWO parts, and the watermark is the important one. The per-thread map alone
-// meant "no entry = unread", so every chat missing from the map — anything the
-// map was not written with — stayed lit forever ("红点全部都在"). The watermark
-// is the moment this device started tracking: activity older than it is read,
-// full stop. So a thread's floor is its own entry when it has one, else the
-// watermark, and unknown chats simply do not light up for old activity.
-const THREAD_SEEN_KEY = "vaenyx-thread-seen-2";
-const THREAD_SEEN_SINCE_KEY = "vaenyx-thread-seen-since";
-
-function readThreadSeen(): Record<string, string> {
-  try {
-    return JSON.parse(localStorage.getItem(THREAD_SEEN_KEY) ?? "") as Record<
-      string,
-      string
-    >;
-  } catch {
-    return {};
-  }
-}
-
-function readThreadSeenSince(): string {
-  try {
-    return localStorage.getItem(THREAD_SEEN_SINCE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeThreadSeen(map: Record<string, string>): void {
-  try {
-    localStorage.setItem(THREAD_SEEN_KEY, JSON.stringify(map));
-  } catch {
-    // Storage full or blocked: the dots just stay conservative.
-  }
-}
+// The one thing kept locally is what THIS session has already marked, so the
+// dot goes out the instant a thread is opened instead of at the next
+// workspace refresh.
 
 function ThreadList({
   threads,
@@ -22147,43 +22119,33 @@ function SidebarThreadTree({
   const [pickedArchived, setPickedArchived] = useState<Set<string>>(new Set());
   // Deleting archived chats is the one destructive act here — two clicks.
   const [confirmArchiveDelete, setConfirmArchiveDelete] = useState(false);
-  // Unread dots: last-seen per thread, plus the tracking watermark. Device only.
-  const [threadSeen, setThreadSeen] =
-    useState<Record<string, string>>(readThreadSeen);
-  const [seenSince, setSeenSince] = useState<string>(readThreadSeenSince);
+  // What this session has already marked read on the server, so the dot goes
+  // out at once rather than at the next workspace refresh.
+  const [justSeen, setJustSeen] = useState<Record<string, string>>({});
 
-  // First run on this device: everything that already happened counts as read.
-  // A sidebar that lights up wall-to-wall on update says nothing.
-  useEffect(() => {
-    if (seenSince) return;
-    const now = new Date().toISOString();
-    try {
-      localStorage.setItem(THREAD_SEEN_SINCE_KEY, now);
-      // Superseded keys from earlier attempts at this.
-      localStorage.removeItem("vaenyx-thread-seen");
-    } catch {
-      // Storage blocked: the dots just stay quiet this session.
-    }
-    setSeenSince(now);
-  }, [seenSince]);
-
-  // The open thread is always read: opening marks it, and activity arriving
-  // while it is open keeps it marked.
+  // The open thread is always read: opening marks it on the INSTANCE (every
+  // device then agrees), and activity arriving while it is open marks it
+  // again.
   useEffect(() => {
     if (!selectedThreadId) return;
     const thread = workspace.threads.find(
       (candidate) => candidate.id === selectedThreadId,
     );
     if (!thread) return;
-    if ((threadSeen[thread.id] ?? "") >= thread.updatedAt) return;
-    // Unread until this very moment: keep the old watermark so the view can
-    // open at the first message the Owner has not seen, instead of the bottom.
-    const cutoff = threadSeen[thread.id] ?? seenSince;
-    if (cutoff) noteUnreadOpen(cutoff);
-    const next = { ...threadSeen, [thread.id]: thread.updatedAt };
-    setThreadSeen(next);
-    writeThreadSeen(next);
-  }, [selectedThreadId, workspace.threads, threadSeen, seenSince]);
+    const seen = justSeen[thread.id] ?? thread.seenAt ?? "";
+    if (seen >= thread.updatedAt) return;
+    // Unread until this very moment: hand the OLD watermark to the view so it
+    // opens at the first message the Owner has not seen. An empty watermark
+    // (never opened anywhere) means the whole thread is unread — the view
+    // lands on its first message, which is the honest reading of "earliest
+    // unread".
+    noteUnreadOpen(seen);
+    setJustSeen((current) => ({ ...current, [thread.id]: thread.updatedAt }));
+    void markVaenyxThreadSeen(thread.id).catch(() => {
+      // A failed mark leaves the instance's watermark where it was, so the
+      // dot returns at the next refresh — the safe way to be wrong.
+    });
+  }, [selectedThreadId, workspace.threads, justSeen]);
 
   const unreadIds: ReadonlySet<string> = new Set(
     workspace.threads
@@ -22191,10 +22153,7 @@ function SidebarThreadTree({
         (thread) =>
           thread.status !== "archived" &&
           thread.id !== selectedThreadId &&
-          // Its own last-read moment, or — never opened here — the moment this
-          // device started tracking. No watermark yet = nothing is unread.
-          Boolean(seenSince) &&
-          (threadSeen[thread.id] ?? seenSince) < thread.updatedAt,
+          (justSeen[thread.id] ?? thread.seenAt ?? "") < thread.updatedAt,
       )
       .map((thread) => thread.id),
   );
@@ -22789,6 +22748,27 @@ function VaenyxWorkspace({
   async function refreshWorkspace() {
     onWorkspaceChange(await fetchWorkspace());
   }
+
+  // READ STATE ARRIVES FROM ELSEWHERE NOW. With the watermark on the instance
+  // (thread.seenAt), a result read on the phone clears the dot on the
+  // computer — but only once this screen asks again. So it asks: on every
+  // return to the foreground, and every 45 seconds while it is being looked
+  // at (Oskar, 2026-08-16). Cheap: the server is on this machine, and a
+  // hidden tab asks for nothing at all.
+  const refreshWorkspaceRef = useRef(refreshWorkspace);
+  refreshWorkspaceRef.current = refreshWorkspace;
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshWorkspaceRef.current().catch(() => undefined);
+    };
+    const id = window.setInterval(refresh, 45_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
 
   async function createTaskFromPortal(
     content: string,

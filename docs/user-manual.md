@@ -156,7 +156,12 @@ Read this inside the app: **Settings → Manual**.
   They apply to this conversation only.
 - **Rename, archive, delete a chat** — the ⋮ menu at the top of the chat.
 - **Unread** — the coloured dot beside a conversation breathes when there is
-  something new in it.
+  something new in it. Read is read everywhere: open it on the phone and the
+  dot goes out on the computer too (the computer notices within a minute, or
+  the moment you look at it again).
+- **Where a conversation opens** — at the bottom, on the newest message, in
+  every conversation. The exception is an unread one: that opens at the
+  first message you have not seen, so you read forward from there.
 - **What it remembers** — the most recent thirty-odd messages in full (a
   question and its answer are never split apart), plus a structured running
   checkpoint of everything before that, plus your approved *Vaenyx Me* facts.

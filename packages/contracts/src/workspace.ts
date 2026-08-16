@@ -538,6 +538,10 @@ export const VaenyxThreadSchema = Type.Object(
     messageCount: Type.Integer({ minimum: 0 }),
     createdAt: Type.String(),
     updatedAt: Type.String(),
+    // The thread's updatedAt as it was when the Owner last had this thread
+    // open — on ANY device (read state is the Owner's, not the browser's).
+    // Unread is updatedAt > seenAt; null = never opened since it appeared.
+    seenAt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );

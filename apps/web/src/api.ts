@@ -249,15 +249,22 @@ export function recordFact(body: {
   sourceKind?: "external" | "manual";
   value: string;
 }): Promise<{ facts: FactRow[] }> {
-  return requestJson("/v1/facts", { method: "POST", body: JSON.stringify(body) });
+  return requestJson("/v1/facts", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 /** Forgetting dates the row rather than deleting it. */
 export function forgetFact(id: string): Promise<{ facts: FactRow[] }> {
-  return requestJson(`/v1/facts/${encodeURIComponent(id)}`, { method: "DELETE" });
+  return requestJson(`/v1/facts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
-export function approveFactCandidate(id: string): Promise<{ facts: FactRow[] }> {
+export function approveFactCandidate(
+  id: string,
+): Promise<{ facts: FactRow[] }> {
   return requestJson(`/v1/facts/candidates/${encodeURIComponent(id)}/approve`, {
     method: "POST",
     body: JSON.stringify({}),
@@ -326,7 +333,9 @@ export function updateMethodFromCommunity(methodId: string): Promise<unknown> {
   });
 }
 
-export function updateRoutineFromCommunity(routineId: string): Promise<unknown> {
+export function updateRoutineFromCommunity(
+  routineId: string,
+): Promise<unknown> {
   return requestJson("/v1/library/routines/update", {
     method: "POST",
     body: JSON.stringify({ routineId }),
@@ -538,10 +547,10 @@ export function publishRoutineToCommunity(
 export function setPublishDisplayName(
   displayName: string,
 ): Promise<{ displayName: string }> {
-  return requestJson<{ displayName: string }>(
-    "/v1/publish-auth/display-name",
-    { method: "PATCH", body: JSON.stringify({ displayName }) },
-  );
+  return requestJson<{ displayName: string }>("/v1/publish-auth/display-name", {
+    method: "PATCH",
+    body: JSON.stringify({ displayName }),
+  });
 }
 
 export async function logoutAllDevices(): Promise<void> {
@@ -555,7 +564,9 @@ export function fetchWorkspace(): Promise<Workspace> {
   return requestJson<Workspace>("/v1/workspace");
 }
 
-export function fetchAskVaenyxConversations(): Promise<AskVaenyxConversation[]> {
+export function fetchAskVaenyxConversations(): Promise<
+  AskVaenyxConversation[]
+> {
   return requestJson<AskVaenyxConversation[]>("/v1/ask-vaenyx/conversations");
 }
 
@@ -718,7 +729,6 @@ export function connectModelProvider(
     { method: "POST", body: JSON.stringify(input) },
   );
 }
-
 
 // In-app Claude subscription sign-in (codex-login pattern): start returns the
 // official sign-in URL to open on any device; after logging in, claude.com
@@ -924,7 +934,11 @@ export async function classifyMessage(
   if (cached) return cached;
   const verdict = await requestJson<ClassifyRoutineResponse>(
     `/v1/ask-vaenyx/conversations/${conversationId}/classify`,
-    { method: "POST", body: JSON.stringify({ content }), ...(signal ? { signal } : {}) },
+    {
+      method: "POST",
+      body: JSON.stringify({ content }),
+      ...(signal ? { signal } : {}),
+    },
   );
   classifyCache.set(key, verdict);
   if (classifyCache.size > 200) {
@@ -1037,6 +1051,15 @@ export function updateVaenyxThreadStatus(
   });
 }
 
+// Read state lives on the instance, so every device agrees about what has
+// been seen (Oskar, 2026-08-16). Fire-and-forget from the caller's point of
+// view: a failed mark leaves the dot lit, which is the safe way to be wrong.
+export function markVaenyxThreadSeen(threadId: string): Promise<VaenyxThread> {
+  return requestJson<VaenyxThread>(`/v1/threads/${threadId}/seen`, {
+    method: "POST",
+  });
+}
+
 export function updateVaenyxThreadTitle(
   threadId: string,
   input: UpdateVaenyxThreadTitleRequest,
@@ -1128,10 +1151,13 @@ export function updateAppProfile(
   profileId: string,
   input: UpdateAppProfileRequest,
 ): Promise<UpdateAppProfileResponse> {
-  return requestJson<UpdateAppProfileResponse>(`/v1/app-profiles/${profileId}`, {
-    method: "PUT",
-    body: JSON.stringify(input),
-  });
+  return requestJson<UpdateAppProfileResponse>(
+    `/v1/app-profiles/${profileId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    },
+  );
 }
 
 // WHAT ONE KEY MAY DO — the third capability layer. A CHANGE SET, never the
@@ -1514,10 +1540,7 @@ export async function uploadDocument(
   };
 }
 
-export async function describePhoto(
-  blob: Blob,
-  lang: string,
-): Promise<string> {
+export async function describePhoto(blob: Blob, lang: string): Promise<string> {
   const response = await fetch(`/v1/vision/describe?lang=${lang}`, {
     method: "POST",
     credentials: "same-origin",

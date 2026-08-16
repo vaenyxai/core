@@ -22,6 +22,7 @@ interface VaenyxThreadRow {
   message_count: number;
   created_at: string;
   updated_at: string;
+  seen_at: string | null;
 }
 
 function toThread(row: VaenyxThreadRow): VaenyxThread {
@@ -40,6 +41,7 @@ function toThread(row: VaenyxThreadRow): VaenyxThread {
     messageCount: row.message_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    seenAt: row.seen_at,
   };
 }
 
@@ -63,7 +65,7 @@ const threadSelect = `
          vaenyx_threads.conversation_id, vaenyx_threads.task_id,
          vaenyx_threads.routine_id,
          vaenyx_threads.summary, vaenyx_threads.created_at,
-         vaenyx_threads.updated_at,
+         vaenyx_threads.updated_at, vaenyx_threads.seen_at,
          COALESCE((
            SELECT COUNT(*)
            FROM ask_vaenyx_messages
@@ -189,6 +191,33 @@ export function updateVaenyxThreadStatus(
          AND (owner_id = ? OR owner_id IS NULL)`,
     )
     .run(input.status, now, threadId, ownerId);
+
+  return toThread(getThreadRow(database, threadId, ownerId));
+}
+
+/** The Owner has this thread open: everything in it up to its current
+ *  activity counts as read, on every device (Oskar, 2026-08-16 — reading a
+ *  result on the phone must clear the dot on the computer).
+ *
+ *  seen_at is copied FROM updated_at rather than stamped with a fresh clock
+ *  reading: the two values are then always in the same format and the same
+ *  timeline, so `updated_at > seen_at` cannot go wrong at a format seam, and
+ *  a message landing a second later is honestly still unread. */
+export function markVaenyxThreadSeen(
+  database: DatabaseHandle,
+  threadId: string,
+  ownerId: string,
+): VaenyxThread {
+  getThreadRow(database, threadId, ownerId);
+
+  database.sqlite
+    .prepare(
+      `UPDATE vaenyx_threads
+       SET seen_at = updated_at
+       WHERE id = ?
+         AND (owner_id = ? OR owner_id IS NULL)`,
+    )
+    .run(threadId, ownerId);
 
   return toThread(getThreadRow(database, threadId, ownerId));
 }

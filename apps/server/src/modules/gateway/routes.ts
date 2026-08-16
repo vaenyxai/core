@@ -546,6 +546,7 @@ import {
 } from "../core/tasks.js";
 import {
   listVaenyxThreads,
+  markVaenyxThreadSeen,
   setThreadRoutine,
   touchChatThread,
   updateVaenyxThreadProject,
@@ -2582,6 +2583,48 @@ export async function registerGatewayRoutes(
           resourceId: thread.id,
         });
         return thread;
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "VAENYX_THREAD_NOT_FOUND"
+        ) {
+          return reply.code(404).send({ error: "Vaenyx Thread not found." });
+        }
+
+        throw error;
+      }
+    },
+  );
+
+  // "I have this open" — the read watermark, kept on the instance so every
+  // device agrees (Oskar, 2026-08-16: reading on the phone must clear the dot
+  // on the computer). Not audited: it is the Owner looking at their own
+  // screen, and it fires every time a thread is opened.
+  app.post<{ Params: { id: string } }>(
+    "/v1/threads/:id/seen",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: VaenyxThreadSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+
+      try {
+        return markVaenyxThreadSeen(
+          context.database,
+          request.params.id,
+          owner.id,
+        );
       } catch (error) {
         if (
           error instanceof Error &&
@@ -6912,11 +6955,9 @@ export async function registerGatewayRoutes(
           });
         }
         request.log.warn({ message }, "vision describe failed");
-        return reply
-          .code(502)
-          .send({
-            error: `Photo analysis failed: ${message || "unknown error"}`,
-          });
+        return reply.code(502).send({
+          error: `Photo analysis failed: ${message || "unknown error"}`,
+        });
       }
     },
   );
@@ -9606,11 +9647,9 @@ export async function registerGatewayRoutes(
         request.body.source ?? null,
       );
       if (!preview.recipe.trim()) {
-        return reply
-          .code(400)
-          .send({
-            error: "Nothing was left to import once the code was dropped.",
-          });
+        return reply.code(400).send({
+          error: "Nothing was left to import once the code was dropped.",
+        });
       }
       const created = createMethod(context.config.libraryDirectory, {
         name: preview.name,
