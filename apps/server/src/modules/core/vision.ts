@@ -223,14 +223,19 @@ export async function askVisionModel(
   mimeType: string,
   options: { failureCode: string; temperature?: number },
 ): Promise<VisionAnswer> {
-  // Vision providers flake, and free tiers throttle (measured 2026-08-16 on a
-  // real instance: intermittent 503s, then 429 rate limits — both surfaced as
-  // "it recognises nothing"). A 429 is not an error to report, it is a queue
-  // to wait in: a free tier counts requests per MINUTE, so the backoff climbs
-  // into seconds rather than giving up after a polite pause. Anything else
-  // still fails fast with the provider's own words.
-  const attempts = [1_500, 5_000, 12_000];
+  // Vision providers flake, and free tiers throttle. MEASURED on this owner's
+  // own key, 2026-08-16, which is why the handling is shaped like this:
+  //   gemini-3.7-flash   429 "limit: 20, model: gemini-3.7-flash"
+  //   gemini-flash-latest same 429, naming 3.7 — the alias IS that model
+  //   gemini-3.5-flash-lite  OK in 1.7s, correct list
+  // The newest flagship is the most contended free bucket, and per-model
+  // limits mean a LIGHTER model of the same provider is a different queue —
+  // so a rate limit is answered by stepping down, not only by waiting. The
+  // step-down stays inside the provider the Owner chose: same account, same
+  // terms, same privacy, just a smaller model doing the looking.
+  const attempts = [1_200, 4_000, 10_000];
   let lastError: unknown;
+  let modelOverride: string | undefined;
   for (let attempt = 0; attempt <= attempts.length; attempt += 1) {
     try {
       return await askVisionModelOnce(
@@ -239,6 +244,7 @@ export async function askVisionModel(
         image,
         mimeType,
         options,
+        modelOverride,
       );
     } catch (error) {
       lastError = error;
@@ -250,11 +256,36 @@ export async function askVisionModel(
       // A 429 gets the whole ladder; a server blip gets one quick retry.
       if (wait === undefined) break;
       if (!rateLimited && !(serverFlake && attempt === 0)) break;
+      if (rateLimited && !modelOverride) {
+        const lighter = lighterVisionModel(secretsDirectory);
+        if (lighter) modelOverride = lighter;
+      }
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
   throw lastError;
 }
+
+// The smaller vision model of the SAME provider, used only after that
+// provider has said "too many". Null when there is nothing lighter to step
+// down to, or when the Owner is already on it.
+function lighterVisionModel(secretsDirectory: string): string | null {
+  const connections = readProviderConnections(secretsDirectory);
+  const candidate = pickCandidate(connections);
+  if (!candidate) return null;
+  const lighter = LIGHTER_VISION_MODELS[candidate.id];
+  if (!lighter) return null;
+  const current = connections[candidate.id]?.model?.trim() || candidate.model;
+  return current === lighter ? null : lighter;
+}
+
+// Probed on a real key (2026-08-16): 2.5-flash-lite answers 404 "no longer
+// available to new users" — the very trap the candidate table documents — so
+// the step-down names a CURRENT lite model, and gets re-probed whenever this
+// list is touched.
+const LIGHTER_VISION_MODELS: Record<string, string> = {
+  gemini: "gemini-3.5-flash-lite",
+};
 
 async function askVisionModelOnce(
   secretsDirectory: string,
@@ -262,6 +293,8 @@ async function askVisionModelOnce(
   image: Buffer,
   mimeType: string,
   options: { failureCode: string; temperature?: number },
+  // Set only by the rate-limit step-down above.
+  modelOverride?: string,
 ): Promise<VisionAnswer> {
   const connections = readProviderConnections(secretsDirectory);
   const candidate = pickCandidate(connections);
@@ -289,7 +322,7 @@ async function askVisionModelOnce(
   // was the thing 503ing. No chosen model = the pinned default; a chosen
   // model that cannot see fails with the provider's own words, said out
   // loud, never silently.
-  const model = connection?.model?.trim() || candidate.model;
+  const model = modelOverride ?? connection?.model?.trim() ?? candidate.model;
   const response = await fetch(
     `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,
     {
