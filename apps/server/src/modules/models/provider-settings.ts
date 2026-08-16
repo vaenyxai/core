@@ -182,14 +182,26 @@ export function listModelProviders(
 //   * vision   — VISION_CANDIDATES in core/vision.ts
 // Exported for the test that holds them against the engine tables.
 export const CAPABILITY_LISTS_FOR_TESTS = {
-  get hearing() { return STT_CAPABLE_PROVIDERS; },
-  get speaking() { return TTS_CAPABLE_PROVIDERS; },
-  get vision() { return VISION_CAPABLE_PROVIDERS; },
+  get hearing() {
+    return STT_CAPABLE_PROVIDERS;
+  },
+  get speaking() {
+    return TTS_CAPABLE_PROVIDERS;
+  },
+  get vision() {
+    return VISION_CAPABLE_PROVIDERS;
+  },
 };
 
 const STT_CAPABLE_PROVIDERS = ["groq", "openai"];
 const TTS_CAPABLE_PROVIDERS = ["gemini", "workersai"];
-const VISION_CAPABLE_PROVIDERS = ["gemini", "zhipu", "openai", "claude-sub"];
+const VISION_CAPABLE_PROVIDERS = [
+  "gemini",
+  "zhipu",
+  "openai",
+  "mistral",
+  "claude-sub",
+];
 const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
 
 /** What each backend can be used FOR, so the engine pickers can offer the
@@ -246,8 +258,7 @@ export function fillEngineDefaults(
   } else if (
     output.engine !== "browser" &&
     output.engine !== "local" &&
-    (!TTS_CAPABLE_PROVIDERS.includes(output.engine) ||
-      !hasKey(output.engine))
+    (!TTS_CAPABLE_PROVIDERS.includes(output.engine) || !hasKey(output.engine))
   ) {
     // Two ways to end up pointing at nothing usable: the provider lost its
     // key, or the slot names a backend this build cannot ask for speech at
@@ -321,7 +332,10 @@ export function normalizeEngineConnections(config: {
   let changed = false;
   if (connections.voice?.apiKey) {
     if (!connections.groq?.apiKey) {
-      connections.groq = { ...connections.groq, apiKey: connections.voice.apiKey };
+      connections.groq = {
+        ...connections.groq,
+        apiKey: connections.voice.apiKey,
+      };
     }
     connections.voice = { provider: "groq" };
     changed = true;

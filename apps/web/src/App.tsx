@@ -12747,7 +12747,13 @@ function CapabilitiesPanel({
       options: slotOptions("vision"),
       set: async (next) => {
         const status = await setVisionEngine(
-          next as "none" | "gemini" | "zhipu" | "openai" | "claude-sub",
+          next as
+            | "none"
+            | "gemini"
+            | "zhipu"
+            | "openai"
+            | "mistral"
+            | "claude-sub",
         );
         setVisionEngineState(status.provider ?? "none");
       },
@@ -21397,6 +21403,7 @@ const VISION_DIRECT_IDS = [
   "gemini",
   "zhipu",
   "openai",
+  "mistral",
   "codex",
   "anthropic",
   "claude-sub",

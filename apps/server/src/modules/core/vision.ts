@@ -86,6 +86,7 @@ export const VISION_DIRECT_PROVIDER_IDS = [
   "gemini",
   "zhipu",
   "openai",
+  "mistral",
   "codex",
   "anthropic",
   "claude-sub",
@@ -117,6 +118,15 @@ export const VISION_CANDIDATES = [
     model: "gpt-4o",
   },
   {
+    // Pixtral: measured on a real fridge photo 2026-08-16 — 4.3s, and it
+    // read the shelves accurately. Worth having beside Gemini because the
+    // two throttle independently: when one free tier says "too many", the
+    // other is a tap away in Settings.
+    id: "mistral",
+    baseUrl: "https://api.mistral.ai/v1",
+    model: "pixtral-12b-2409",
+  },
+  {
     id: "claude-sub",
     baseUrl: "",
     model: "",
@@ -132,6 +142,7 @@ export type VisionEngineChoice =
   | "gemini"
   | "zhipu"
   | "openai"
+  | "mistral"
   | "claude-sub";
 
 function pickCandidate(

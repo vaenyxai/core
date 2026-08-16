@@ -1490,7 +1490,7 @@ export function exitMode(secret?: string): Promise<{ ok: boolean }> {
 }
 
 export function setVisionEngine(
-  provider: "none" | "gemini" | "zhipu" | "openai" | "claude-sub",
+  provider: "none" | "gemini" | "zhipu" | "openai" | "mistral" | "claude-sub",
 ): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/vision/engine", {
     method: "POST",

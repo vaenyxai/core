@@ -1383,6 +1383,9 @@ export const ConnectVisionRequestSchema = Type.Object(
       Type.Literal("gemini"),
       Type.Literal("zhipu"),
       Type.Literal("openai"),
+      // Pixtral, on a key the Owner may already have for chat — a second
+      // free tier that throttles independently of Google's.
+      Type.Literal("mistral"),
       // The Owner's Claude subscription can power the vision engine too
       // (reads photos through the locked-down Agent SDK path).
       Type.Literal("claude-sub"),
