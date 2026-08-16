@@ -427,7 +427,9 @@ import {
   previewSkillImport,
 } from "../core/skills-interop.js";
 import {
+  buildImagePrompt,
   connectWorkersAi,
+  generateImage,
   getImageEngineStatus,
   setImageEngine,
   type ImageEngineChoice,
@@ -3210,6 +3212,45 @@ export async function registerGatewayRoutes(
                 declared,
                 owner.modeId ?? null,
               ).allowed,
+            // The picture of the result, when this Routine asks for one.
+            // generateImage holds the drawing ceiling itself (global switch
+            // + this session's mode), so a refusal here is simply no
+            // picture — never a failed run, never a bypassed switch.
+            //
+            // Two things this shares with the chat's draw path, because the
+            // reasons are the same: the words are translated into an ENGLISH
+            // image prompt first (image models are not chat models — handed
+            // Chinese, the free default drew pseudo-calligraphy), and the
+            // whole thing is bounded, so a stalled provider costs the
+            // illustration rather than the reply. The result row is already
+            // on disk before this runs.
+            drawResult: async (prompt) => {
+              try {
+                const english = await buildImagePrompt(
+                  getDefaultProvider(),
+                  prompt,
+                );
+                return await Promise.race([
+                  generateImage(
+                    context.database,
+                    context.config.secretsDirectory,
+                    context.config.dataDirectory,
+                    english,
+                    owner.modeId ?? null,
+                  ),
+                  new Promise<null>((resolve) => {
+                    const timer = setTimeout(() => resolve(null), 60_000);
+                    timer.unref?.();
+                  }),
+                ]);
+              } catch (error) {
+                request.log.warn(
+                  { err: error },
+                  "routine result image skipped",
+                );
+                return null;
+              }
+            },
           },
         );
         touchChatThread(

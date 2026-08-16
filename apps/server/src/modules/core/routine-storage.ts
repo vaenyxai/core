@@ -59,6 +59,8 @@ interface GalleryRow {
   // result card can lead with it. Marks ride via the LEFT JOIN below.
   image_id: string | null;
   annotation_items?: string | null;
+  // The GENERATED picture of this result, when the Routine asked for one.
+  result_image_id: string | null;
 }
 
 function toJournalEntry(row: JournalRow): RoutineJournalEntry {
@@ -120,6 +122,7 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
     routineHash: row.routine_hash ?? null,
     imageId: row.image_id ?? null,
     imageAnnotations,
+    resultImageId: row.result_image_id ?? null,
   };
 }
 
@@ -322,6 +325,18 @@ export function addGalleryItem(
     )
     .get(id) as unknown as GalleryRow;
   return toGalleryItem(row);
+}
+
+// The generated picture arrives AFTER the result row (the result must never
+// wait on an image provider), so it attaches to the row it belongs to.
+export function setGalleryResultImage(
+  database: DatabaseHandle,
+  galleryItemId: string,
+  resultImageId: string,
+): void {
+  database.sqlite
+    .prepare(`UPDATE routine_gallery SET result_image_id = ? WHERE id = ?`)
+    .run(resultImageId, galleryItemId);
 }
 
 export function listGalleryItems(

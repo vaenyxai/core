@@ -29,7 +29,11 @@ import {
   type MethodRunResult,
 } from "./methods.js";
 import { loadRoutine } from "./routines.js";
-import { addGalleryItem, addJournalEntry } from "./routine-storage.js";
+import {
+  addGalleryItem,
+  addJournalEntry,
+  setGalleryResultImage,
+} from "./routine-storage.js";
 
 export interface RoutineStepResult {
   stepId: string;
@@ -100,6 +104,12 @@ export async function runRoutine(
     // Method's own declaration alone, which is all a caller with no database
     // could ask about anyway.
     narrow?: CapabilityNarrowing;
+    // Draws the picture of the result when the Routine asks for one (visual
+    // first, part two). Injected rather than imported so this module keeps
+    // knowing nothing about image providers, capability ceilings or the data
+    // directory — the caller owns all three. Returning null (or throwing)
+    // just means no picture; a run NEVER fails over its illustration.
+    drawResult?: (prompt: string) => Promise<string | null>;
   } = {},
 ): Promise<RoutineRunResult> {
   const routine = loadRoutine(routinesDirectory, libraryDirectory, id);
@@ -175,7 +185,10 @@ export async function runRoutine(
   const output = last ? last.output : null;
   const outputValid = last ? last.outputValid : false;
 
-  // The Gallery keeps the final structured result (one item per run).
+  // The Gallery keeps the final structured result (one item per run). This
+  // is written BEFORE any illustration is attempted: the result is finished
+  // and already paid for, and a picture provider that stalls must never be
+  // able to lose it (a restart inside that window used to).
   const galleryItem =
     routine.storage.gallery && last && !stateless
       ? addGalleryItem(database, {
@@ -194,6 +207,33 @@ export async function runRoutine(
         })
       : null;
 
+  // A picture of the OUTCOME (visual first, part two): the Routine says in
+  // plain words what its result looks like, and the result's own words fill
+  // in tonight's specifics. Strictly an addition to a result that already
+  // exists on disk — a missing engine, a refused capability, a slow provider
+  // or a stopped run costs the illustration and nothing else. Drawn only
+  // when there is a Gallery row to hold it, so no picture is ever made and
+  // then thrown away.
+  if (
+    routine.resultImage &&
+    options.drawResult &&
+    outputValid &&
+    galleryItem &&
+    !signal.aborted
+  ) {
+    try {
+      const resultImageId = await options.drawResult(
+        resultImagePrompt(routine.resultImage, output),
+      );
+      if (resultImageId) {
+        setGalleryResultImage(database, galleryItem.id, resultImageId);
+        galleryItem.resultImageId = resultImageId;
+      }
+    } catch {
+      // No picture this time; the result stands on its own.
+    }
+  }
+
   return {
     routineId: id,
     journalEntry,
@@ -203,6 +243,35 @@ export async function runRoutine(
     outputValid,
     webSearchUsed,
   };
+}
+
+// The picture prompt for a result: the Routine's own words say WHAT to draw
+// ("the finished dish, plated"), and the result's headline strings say which
+// one it is tonight. Pure and small on purpose — a prompt is a photograph
+// brief, not an essay, and long ones drift off subject.
+//
+// Only the SHORT top-level strings are borrowed: step lists and paragraphs
+// describe how to cook, not what the plate looks like, and household detail
+// has no business travelling to an image provider.
+export function resultImagePrompt(
+  resultImage: string,
+  output: unknown,
+): string {
+  const subjects: string[] = [];
+  if (output && typeof output === "object" && !Array.isArray(output)) {
+    for (const value of Object.values(output as Record<string, unknown>)) {
+      if (typeof value !== "string") continue;
+      const trimmed = value.trim();
+      if (!trimmed || trimmed.length > 80) continue;
+      subjects.push(trimmed);
+      if (subjects.length === 2) break;
+    }
+  }
+  const brief = subjects.length > 0 ? `${subjects.join(", ")}. ` : "";
+  return `${brief}${resultImage.trim()}. Appetising, natural light, photographic, no text or labels.`.slice(
+    0,
+    600,
+  );
 }
 
 // Wrap a plain chat message into the first step's input shape (v1: a single text

@@ -237,6 +237,12 @@ Read this inside the app: **Settings → Manual**.
   like a chat that grows extra buttons (Journal, Gallery) as you use it. When a
   run was fed a photo, the result leads with that photo — marks and all — and
   the text follows it.
+- **A picture of the result** — a Routine can also draw what its outcome looks
+  like: the finished dish, the tidied room. Open it in the Library, press
+  **Edit**, and write what the picture should show under **Result picture**
+  (or just say so in its chat). Every run then leads with a freshly generated
+  picture. It needs a drawing model connected; without one the result simply
+  arrives as it always did, and nothing ever waits on a picture.
 - **Make one** — describe the steps in chat. One step becomes a Method, several
   become a Routine. Vaenyx drafts it and offers a test run before saving.
 - **Improve one** — just say so. In the Routine's own chat, say what should

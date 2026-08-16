@@ -9587,9 +9587,16 @@ function AskVaenyxPanel({
                   {routineGallery.map((item) => (
                     <article className="routine-gallery-card" key={item.id}>
                       <small>{formatTime(item.createdAt)}</small>
-                      {/* Visual first (owner rule): the run's marked photo
-                          LEADS the result card wherever one exists. */}
-                      {item.imageId ? (
+                      {/* Visual first: the generated picture of the outcome
+                          leads; without one, the photo the run was fed does
+                          (a Gallery card stands alone, so it keeps its
+                          picture either way). */}
+                      {item.resultImageId ? (
+                        <AnnotatedPhoto
+                          annotations={null}
+                          imageId={item.resultImageId}
+                        />
+                      ) : item.imageId ? (
                         <AnnotatedPhoto
                           annotations={item.imageAnnotations ?? null}
                           imageId={item.imageId}
@@ -9668,11 +9675,17 @@ function AskVaenyxPanel({
                         <strong>Vaenyx</strong>
                         <small>{formatTime(node.at)}</small>
                       </div>
-                      {/* No photo here: the journal row directly above this
-                          result already shows the marked photo, and showing
-                          it twice in one exchange is noise (Oskar,
-                          2026-08-16). The Gallery grid, where results stand
-                          alone, keeps its photo lead. */}
+                      {/* Visual first, part two: the GENERATED picture of
+                          the outcome leads the result. The fed photo is not
+                          repeated — the journal row right above already
+                          shows it (Oskar, 2026-08-16). */}
+                      {node.item.resultImageId ? (
+                        <AnnotatedPhoto
+                          annotations={null}
+                          imageId={node.item.resultImageId}
+                          onLoad={reanchorAfterImageLoad}
+                        />
+                      ) : null}
                       <RoutineResultView
                         output={node.item.output}
                         view={
@@ -20089,6 +20102,7 @@ function EditRoutinePanel({
   const [description, setDescription] = useState("");
   const [tagsText, setTagsText] = useState("");
   const [annotateFocus, setAnnotateFocus] = useState("");
+  const [resultImage, setResultImage] = useState("");
   const [viewFields, setViewFields] = useState<EditableViewField[]>([]);
   const [steps, setSteps] = useState<EditableRoutineStep[]>([]);
   const [addMethodId, setAddMethodId] = useState("");
@@ -20119,6 +20133,7 @@ function EditRoutinePanel({
     setDescription(next.routine.description);
     setTagsText(next.routine.tags.join(", "));
     setAnnotateFocus(next.routine.annotateFocus ?? "");
+    setResultImage(next.routine.resultImage ?? "");
     const parsedView = parseRoutineView(next.routine.view);
     setViewFields(
       parsedView
@@ -20255,6 +20270,7 @@ function EditRoutinePanel({
           .slice(0, 20),
         view: realViewFields.length > 0 ? { fields: realViewFields } : null,
         annotateFocus: annotateFocus.trim() ? annotateFocus.trim() : null,
+        resultImage: resultImage.trim() ? resultImage.trim() : null,
         flow,
       },
       problem: null,
@@ -20330,6 +20346,7 @@ function EditRoutinePanel({
     setDescription(proposed.description);
     setTagsText(proposed.tags.join(", "));
     setAnnotateFocus(proposed.annotateFocus ?? "");
+    setResultImage(proposed.resultImage ?? "");
     const parsedView = parseRoutineView(proposed.view);
     setViewFields(
       parsedView
@@ -20609,6 +20626,25 @@ function EditRoutinePanel({
             placeholder={zh ? "例如:只标食材" : "e.g. only mark food"}
             value={annotateFocus}
           />
+        </label>
+        <label className="library-tryit-label">
+          {zh ? "结果配图(留空 = 不生成)" : "Result picture (empty = none)"}
+          <input
+            className="text-input"
+            maxLength={200}
+            onChange={(event) => setResultImage(event.target.value)}
+            placeholder={
+              zh
+                ? "例如:做好的这道菜,装盘特写"
+                : "e.g. the finished dish, plated close-up"
+            }
+            value={resultImage}
+          />
+          <span className="settings-card-copy text-faint">
+            {zh
+              ? "写了就会在每次结果最上面生成一张图(需要连接画图模型)。"
+              : "With words here, every result leads with a generated picture (needs a drawing model connected)."}
+          </span>
         </label>
       </section>
 

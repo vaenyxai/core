@@ -1717,6 +1717,10 @@ export const LibraryRoutineSchema = Type.Object(
     executionHash: Type.Optional(Type.String()),
     packageHash: Type.Optional(Type.String()),
     annotateFocus: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // Plain words describing the PICTURE of this Routine's outcome ("the
+    // finished dish, plated"). The run generates one after the steps and
+    // the result card leads with it. Null/absent = no picture.
+    resultImage: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     resolved: Type.Boolean(),
     missingDeps: Type.Array(Type.String()),
     capabilities: Type.Optional(Type.Array(Type.String())),
@@ -1765,6 +1769,10 @@ export const RoutineGalleryItemSchema = Type.Object(
     imageAnnotations: Type.Optional(
       Type.Union([Type.Array(ImageAnnotationItemSchema), Type.Null()]),
     ),
+    // The GENERATED picture of this result (visual-first part two). Absent
+    // when the Routine asked for none, drawing is off, or the engine failed
+    // — the card then falls back to the fed photo.
+    resultImageId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -1849,6 +1857,7 @@ export const RoutineEditSaveRequestSchema = Type.Object(
     // null clears the custom view (back to the automatic template).
     view: Type.Union([Type.Unknown(), Type.Null()]),
     annotateFocus: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]),
+    resultImage: Type.Union([Type.String({ maxLength: 200 }), Type.Null()]),
     flow: Type.Array(RoutineEditStepSchema, { minItems: 1, maxItems: 12 }),
   },
   { additionalProperties: false },

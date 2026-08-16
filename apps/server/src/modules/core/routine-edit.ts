@@ -426,6 +426,7 @@ export function saveRoutineEdit(
     deepEqualJson(body.tags, current.tags) &&
     deepEqualJson(body.view ?? null, current.view ?? null) &&
     (body.annotateFocus ?? null) === current.annotateFocus &&
+    (body.resultImage ?? null) === current.resultImage &&
     deepEqualJson(
       candidateFlow,
       current.flow.map((step) => ({
@@ -492,6 +493,8 @@ export function saveRoutineEdit(
     else nextMeta.view = body.view;
     if (body.annotateFocus === null) delete nextMeta.annotateFocus;
     else nextMeta.annotateFocus = body.annotateFocus;
+    if (body.resultImage === null) delete nextMeta.resultImage;
+    else nextMeta.resultImage = body.resultImage;
     nextMeta.deps = deps;
     nextMeta.flow = finalFlow;
     nextMeta.capabilities = capabilitySet;
@@ -721,6 +724,7 @@ export async function proposeRoutineEdit(
     tags: draft.routine.tags,
     view: draft.routine.view ?? null,
     annotateFocus: draft.routine.annotateFocus ?? null,
+    resultImage: draft.routine.resultImage ?? null,
     flow: draft.steps.map((step) => ({
       stepId: step.stepId,
       methodId: step.method?.id ?? "",
@@ -764,6 +768,9 @@ export async function proposeRoutineEdit(
     '  "name", "description", "tags",',
     '  "view": the (possibly unchanged) view object or null,',
     '  "annotateFocus": string or null,',
+    '  "resultImage": string or null — plain words for a PICTURE of the',
+    '    result the app generates and shows above it ("the finished dish,',
+    '    plated"); null means no picture,',
     '  "flow": [ { "stepId": string|null, "methodId": string, "from": "journal"|"previous"|"static",',
     '              "value"?: any, "methodEdit"?: { "recipe", "inputSchema", "outputSchema" } } ]',
     "}",
@@ -805,6 +812,12 @@ export async function proposeRoutineEdit(
           ? parsed.annotateFocus.trim().slice(0, 120)
           : null
         : (draft.routine.annotateFocus ?? null),
+    resultImage:
+      "resultImage" in parsed
+        ? typeof parsed.resultImage === "string" && parsed.resultImage.trim()
+          ? parsed.resultImage.trim().slice(0, 200)
+          : null
+        : (draft.routine.resultImage ?? null),
     flow: flow
       .map((entry) => {
         if (!entry || typeof entry !== "object") return null;
@@ -890,6 +903,7 @@ export async function proposeRoutineEdit(
     deepEqualJson(proposed.view ?? null, draft.routine.view ?? null) &&
     (proposed.annotateFocus ?? null) ===
       (draft.routine.annotateFocus ?? null) &&
+    (proposed.resultImage ?? null) === (draft.routine.resultImage ?? null) &&
     !anyMethodEditChange &&
     deepEqualJson(
       proposed.flow.map((step) => ({

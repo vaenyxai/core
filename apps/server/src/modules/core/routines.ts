@@ -58,6 +58,11 @@ export interface LoadedRoutine extends LibraryRoutineSummary {
   executionHash: string;
   packageHash: string;
   annotateFocus: string | null;
+  // Visual-first, part two (owner, 2026-08-16): plain words describing the
+  // PICTURE of this Routine's outcome ("the finished dish, on a plate").
+  // Declarative like everything else — the run turns the result into a
+  // prompt with these words as the subject line. Null = no picture.
+  resultImage: string | null;
   resolved: boolean;
   missingDeps: string[];
 }
@@ -187,6 +192,10 @@ export function routineExecutionHashFrom(
     typeof meta.annotateFocus === "string" && meta.annotateFocus.trim()
       ? meta.annotateFocus.trim().slice(0, 120)
       : null;
+  // resultImage is deliberately ABSENT here: a token's run is stateless and
+  // stateless runs never draw, so the illustration cannot change what a
+  // token's run does. Including it would have moved every existing
+  // routine's hash and 409ed grants over a picture they never receive.
   const canonical = JSON.stringify({
     annotateFocus: focus,
     depHashes: Object.fromEntries(
@@ -216,6 +225,7 @@ export function routinePackageHashFrom(
   const canonical = JSON.stringify({
     annotateFocus:
       typeof meta.annotateFocus === "string" ? meta.annotateFocus : null,
+    resultImage: typeof meta.resultImage === "string" ? meta.resultImage : null,
     capabilities: readCapabilities(meta.capabilities),
     depHashes: Object.fromEntries(
       Object.entries(depHashes).sort(([a], [b]) => a.localeCompare(b)),
@@ -421,6 +431,10 @@ export function loadRoutine(
         typeof meta.annotateFocus === "string" && meta.annotateFocus.trim()
           ? meta.annotateFocus.trim().slice(0, 120)
           : null,
+      resultImage:
+        typeof meta.resultImage === "string" && meta.resultImage.trim()
+          ? meta.resultImage.trim().slice(0, 200)
+          : null,
       resolved: missingDeps.length === 0,
       missingDeps,
     };
@@ -450,6 +464,7 @@ export function toLibraryRoutine(routine: LoadedRoutine): LibraryRoutine {
     executionHash: routine.executionHash,
     packageHash: routine.packageHash,
     annotateFocus: routine.annotateFocus,
+    resultImage: routine.resultImage,
     resolved: routine.resolved,
     missingDeps: routine.missingDeps,
     capabilities: routine.capabilities,
