@@ -36,3 +36,14 @@ are the `Vaenyx-*.cmd` files at the repo root.
 - The server binds `127.0.0.1` only; never widen the bind address.
 - The "Vaenyx" name and brand assets are not MIT-licensed (see LICENSE and
   `docs/legal/trademark-policy.md`).
+
+## Product rules (owner-set, 2026-08-16)
+
+- **Visual output leads.** Whenever a feature touches images or its result
+  can be shown visually (Routine results, photo flows, previews), the visual
+  is the most prominent part of the output and text supports it. Pure-text
+  features are fine as text — but the moment a visual exists, it leads.
+- **Never decide silently.** When the app cannot confidently decide something
+  on the user's behalf (ambiguous intent, either-way choices), it shows a
+  chooser instead of guessing. Chooser text and options must be large and
+  unmissable — sized for non-technical family members, never a footnote.
