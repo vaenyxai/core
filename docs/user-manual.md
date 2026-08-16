@@ -237,14 +237,22 @@ Read this inside the app: **Settings → Manual**.
   like a chat that grows extra buttons (Journal, Gallery) as you use it.
 - **Make one** — describe the steps in chat. One step becomes a Method, several
   become a Routine. Vaenyx drafts it and offers a test run before saving.
-- **Improve one** — open your own Routine in the Library and press **Edit**.
-  Say what should improve and Vaenyx proposes the changes; review them, **Try
-  Changes** (a real run that writes nothing into the Journal or Gallery), then
-  **Save New Version**. It stays the SAME Routine: same chat, same history,
-  and old results keep the look they were made with. Vaenyx numbers the
-  versions itself. If the behaviour changed, any app keys granted to this
-  Routine stop working until you re-grant them under Tokens — never silently.
-  Community Routines cannot be edited in place.
+- **Improve one** — just say so. In the Routine's own chat, say what should
+  change ("give me three options from now on") and Vaenyx tells a change apart
+  from content to run on — when it genuinely can't tell, it asks with a big
+  two-way choice instead of guessing. Or say it in the main chat ("make the
+  dinner planner list what's missing") and Vaenyx jumps to that Routine's
+  conversation. Either way you get the same proposal card — a plain-language
+  summary and the changed lines, with **Try It First** (a real run that writes
+  nothing) and a Confirm button; nothing saves until you confirm. Method edits
+  use the exact same card. The Library's **Edit** page remains for hands-on
+  fine-tuning. However you change it, it stays the SAME Routine: same chat,
+  same history, and old results keep the look they were made with. Vaenyx
+  numbers the versions itself. If the behaviour changed, any app keys granted
+  to this Routine stop working until you re-grant them under Tokens — never
+  silently. Community Routines cannot be edited in place. And when a chat
+  conversation builds a new Routine, that conversation becomes the Routine's
+  first conversation — keep feeding it right there.
 - **Where they live** — the **Library** screen, in four tabs: Routines, Tokens,
   Methods, Community. Each tab says what it is on its own first line, and each
   has the same two buttons above its list: make a new one, or find one in the

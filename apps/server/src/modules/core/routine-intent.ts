@@ -43,14 +43,32 @@ function extractJson(raw: string): Record<string, unknown> | null {
  * client knows how to open; nothing here performs the change itself.
  */
 export const GO_TARGETS = [
-  { id: "settings", hint: "general settings: agent name, language, password, backups, models, phone access, sharing" },
-  { id: "projects", hint: "the projects screen: project instructions and memories" },
+  {
+    id: "settings",
+    hint: "general settings: agent name, language, password, backups, models, phone access, sharing",
+  },
+  {
+    id: "projects",
+    hint: "the projects screen: project instructions and memories",
+  },
   { id: "scheduled", hint: "scheduled tasks: timers, recurring runs" },
   { id: "library", hint: "the Library: installed Routines" },
-  { id: "library-methods", hint: "the Library's Methods tab: recipes, tags, corrections" },
-  { id: "library-tokens", hint: "the Library's Tokens tab: keys for outside apps" },
-  { id: "library-community", hint: "the Library's Community tab: publish account" },
-  { id: "vaenyx-me", hint: "Vaenyx Me: what Vaenyx has learned about the Owner" },
+  {
+    id: "library-methods",
+    hint: "the Library's Methods tab: recipes, tags, corrections",
+  },
+  {
+    id: "library-tokens",
+    hint: "the Library's Tokens tab: keys for outside apps",
+  },
+  {
+    id: "library-community",
+    hint: "the Library's Community tab: publish account",
+  },
+  {
+    id: "vaenyx-me",
+    hint: "Vaenyx Me: what Vaenyx has learned about the Owner",
+  },
   { id: "guard", hint: "Guard: the audit log of allowed and refused actions" },
 ] as const;
 
@@ -106,7 +124,8 @@ export async function classifyRoutineIntent(
 
   const history = listAskVaenyxMessages(database, conversationId, ownerId)
     .filter(
-      (message) => !(message.role === "assistant" && message.status === "failed"),
+      (message) =>
+        !(message.role === "assistant" && message.status === "failed"),
     )
     .slice(-8)
     .map(
@@ -137,7 +156,7 @@ export async function classifyRoutineIntent(
     '- "suggest-task": wants Vaenyx to go do a piece of work (research / summary /',
     "  something scheduled) and no Routine fits — offer to run it as a task.",
     '- "use-task": the Owner wants Vaenyx to go do a piece of work AND either',
-    "  (a) asked for it on a repeating schedule (\"every morning at 7\", 每天/每周),",
+    '  (a) asked for it on a repeating schedule ("every morning at 7", 每天/每周),',
     "  or (b) just AGREED to a previous offer to make a background task. Set",
     "  taskRequest to the thing to do. A clear recurring request needs no prior",
     "  offer — take it directly.",
@@ -152,6 +171,13 @@ export async function classifyRoutineIntent(
     "  to the Method being talked about and editRequest to what should change, in",
     "  the Owner's language. Only for a Method that is in the list above — never",
     "  invent an id, and never use this to build something new.",
+    '- "edit-routine": wants an ALREADY INSTALLED Routine to WORK differently —',
+    '  its steps, its result, its look ("让晚餐规划给三个选择", "把结果做成',
+    '  表格", "以后也列出缺的食材"). Set routineId to the Routine being talked',
+    "  about and editRequest to what should change, in the Owner's language.",
+    "  Only for a Routine in the list above — never invent an id, and never",
+    "  use this to build something new. Prefer edit-routine over edit-method",
+    "  when the Owner talks about the Routine as a whole.",
     '- "clarify-create": the Owner clearly wants something BUILT (create-method /',
     "  create-routine territory) but the description is too vague to build from —",
     "  the essentials are missing (what goes in, what should come out, or what the",
@@ -165,7 +191,7 @@ export async function classifyRoutineIntent(
     ...(imageEngineConnected
       ? [
           '- "draw": the Owner wants a picture GENERATED (drawn/created) — a fresh',
-          '  ask in any wording, or a follow-up that only makes sense as one here',
+          "  ask in any wording, or a follow-up that only makes sense as one here",
           '  ("try again", "就是一只卡通的猫咪你试一下" after image talk). NOT a',
           "  question about an existing photo. Set imagePrompt to ONE short",
           "  ENGLISH image prompt, subject first, then style.",
@@ -204,19 +230,19 @@ export async function classifyRoutineIntent(
     "",
     "If the Owner asked for something REPEATING (every morning / 每天 / weekly /",
     "每周 / at 7am / 定时), also fill taskSchedule so the task is scheduled in the",
-    "same step. Read the time they said: \"早上7点\" and \"7am\" are time \"07:00\";",
-    "a bare \"每天早上\" with no hour is time \"07:00\" as a sensible default. Use",
+    'same step. Read the time they said: "早上7点" and "7am" are time "07:00";',
+    'a bare "每天早上" with no hour is time "07:00" as a sensible default. Use',
     "cadence hourly/daily/weekly/monthly; for weekly set dayOfWeek (0=Sunday), for",
     "monthly set dayOfMonth. If nothing repeating was asked for, taskSchedule null.",
     "",
     "Output ONE JSON object and nothing else:",
     '{ "decision": "none" | "use-routine" | "suggest-routine" | "suggest-task" |',
     '    "use-task" | "create-method" | "create-routine" | "clarify-create" |',
-    '    "edit-method",',
+    '    "edit-method" | "edit-routine",',
     '  "routineId": "<routine id or null>",',
     '  "methodId": "<for edit-method, the installed method id, else null>",',
-    '  "editRequest": "<for edit-method, what to change, in the Owner\'s',
-    '    language, else null>",',
+    '  "editRequest": "<for edit-method or edit-routine, what to change, in',
+    "    the Owner's language, else null>\",",
     '  "taskRequest": "<for use-task, the thing to do, else null>",',
     '  "taskTitle": "<for use-task, a title of 2-6 words in the Owner\'s',
     '    language (e.g. 墨尔本建筑新闻早报), else null>",',
@@ -224,9 +250,9 @@ export async function classifyRoutineIntent(
     '      "time": "HH:MM" or null, "dayOfWeek": 0-6 or null,',
     '      "dayOfMonth": 1-31 or null } or null,',
     '  "createDescription": "<for create-*, one clean paragraph describing what',
-    '    to build, in the Owner\'s language, else null>",',
+    "    to build, in the Owner's language, else null>\",",
     '  "clarifyQuestion": "<for clarify-create, the one question to ask, in the',
-    '    Owner\'s language, else null>",',
+    "    Owner's language, else null>\",",
     '  "imagePrompt": "<for draw, one short English image prompt, else null>",',
     '  "goTarget": "<for go-to, one id from the list above, else null>",',
     '  "note": "<one short sentence, or empty>" }',
@@ -256,6 +282,7 @@ export async function classifyRoutineIntent(
     "create-routine",
     "clarify-create",
     "edit-method",
+    "edit-routine",
     "go-to",
     // draw/annotate only count while their engines can actually run; a stray
     // verdict from a model that ignored the missing option degrades to chat.
@@ -322,7 +349,12 @@ export async function classifyRoutineIntent(
   // parse cleanly degrades to "no schedule" — the task is still created, just
   // unscheduled, which the Owner can see and fix.
   const rawSchedule = parsed.taskSchedule as
-    | { cadence?: unknown; time?: unknown; dayOfWeek?: unknown; dayOfMonth?: unknown }
+    | {
+        cadence?: unknown;
+        time?: unknown;
+        dayOfWeek?: unknown;
+        dayOfMonth?: unknown;
+      }
     | null
     | undefined;
   let taskSchedule: ClassifyRoutineResponse["taskSchedule"] = null;
@@ -415,6 +447,36 @@ export async function classifyRoutineIntent(
     };
   }
 
+  if (decision === "edit-routine") {
+    // The Routine must be installed AND the Owner's own — community Routines
+    // are not editable in place, so a verdict against one degrades to plain
+    // chat (the reply can still explain copying). A missing editRequest means
+    // there is nothing safe to draft from.
+    if (
+      !routineId ||
+      !editRequest ||
+      !routines.some(
+        (routine) => routine.id === routineId && routine.origin !== "community",
+      )
+    ) {
+      return none;
+    }
+    return {
+      decision,
+      routineId,
+      methodId: null,
+      editRequest,
+      taskRequest: null,
+      taskSchedule: null,
+      createDescription: null,
+      clarifyQuestion: null,
+      imagePrompt: null,
+      goTarget: null,
+      taskTitle,
+      note,
+    };
+  }
+
   if (decision === "edit-method") {
     // The Method must be one the Owner actually has, and there must be a stated
     // change. Anything else degrades to plain chat rather than guessing at
@@ -477,4 +539,58 @@ export async function classifyRoutineIntent(
     taskTitle,
     note,
   };
+}
+
+// ── Inside a Routine's own chat: feed or edit? ─────────────────────────────
+//
+// Every message in a routine chat is normally CONTENT for a run. This single
+// judgment tells that apart from "change how the routine itself works", and
+// "unsure" is a first-class verdict: the client shows a LARGE chooser instead
+// of guessing (owner rule 2026-08-16: never decide silently). Parsing is
+// factored out pure so it is testable without a model.
+
+export type RoutineChatDecision = "feed" | "edit" | "unsure";
+
+export function parseRoutineChatDecision(raw: string): RoutineChatDecision {
+  const parsed = extractJson(raw);
+  const decision = parsed?.decision;
+  if (decision === "feed" || decision === "edit" || decision === "unsure") {
+    return decision;
+  }
+  // An unreadable answer IS "can't decide" — surface the chooser.
+  return "unsure";
+}
+
+export async function classifyRoutineChatMessage(
+  routine: { name: string; description: string },
+  content: string,
+  signal: AbortSignal,
+): Promise<RoutineChatDecision> {
+  const prompt = [
+    `The Owner is inside the chat of their saved Routine "${routine.name}"`,
+    `(${routine.description}). Every normal message here is CONTENT the`,
+    "routine runs on. Decide what the latest message is:",
+    '- "feed": content, data or a request FOR THIS RUN (ingredients, a note,',
+    "  a question the routine should process). This is the default.",
+    '- "edit": the Owner wants to CHANGE how the routine itself works from now',
+    '  on — its steps, output shape, look, or standing rules ("以后给三个选择",',
+    '  "把结果做成表格", "add the shopping list to the result").',
+    '- "unsure": genuinely ambiguous between the two ("不要猪肉" could be',
+    "  tonight's preference or a permanent rule).",
+    "",
+    `Owner's message: "${content.trim().slice(0, 2000)}"`,
+    "",
+    'Output ONE JSON object and nothing else: { "decision": "feed" | "edit" | "unsure" }',
+  ].join("\n");
+  try {
+    const result = await getDefaultProvider().sendChat(
+      [{ content: prompt, role: "owner" }],
+      undefined,
+      { signal },
+    );
+    return parseRoutineChatDecision(result.answer);
+  } catch {
+    // No verdict is still a verdict: let the Owner choose, never guess.
+    return "unsure";
+  }
 }

@@ -668,6 +668,23 @@ export function runRoutineInChat(
   );
 }
 
+// Inside a routine chat: is this message content to run on, or a request to
+// change the routine itself? "unsure" means the app must ask, never guess.
+export function classifyRoutineChatIntent(
+  conversationId: string,
+  content: string,
+  signal?: AbortSignal,
+): Promise<{ decision: "feed" | "edit" | "unsure" }> {
+  return requestJson<{ decision: "feed" | "edit" | "unsure" }>(
+    `/v1/ask-vaenyx/conversations/${conversationId}/routine-chat-intent`,
+    {
+      method: "POST",
+      body: JSON.stringify({ content }),
+      ...(signal ? { signal } : {}),
+    },
+  );
+}
+
 // Attach (or change) the Routine on an existing chat — the "+" entry that turns
 // an ongoing chat into a routine chat.
 export function attachRoutineToChat(

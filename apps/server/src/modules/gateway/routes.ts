@@ -97,6 +97,9 @@ import {
   RoutineEditSaveRequestSchema,
   ProposeRoutineEditRequestSchema,
   RoutineEditTestRequestSchema,
+  RoutineChatIntentRequestSchema,
+  RoutineChatIntentResponseSchema,
+  type RoutineChatIntentRequest,
   type RoutineRunChatRequest,
   PlanRoutineRequestSchema,
   RoutinePlanSchema,
@@ -429,7 +432,10 @@ import {
   setImageEngine,
   type ImageEngineChoice,
 } from "../core/image-gen.js";
-import { classifyRoutineIntent } from "../core/routine-intent.js";
+import {
+  classifyRoutineChatMessage,
+  classifyRoutineIntent,
+} from "../core/routine-intent.js";
 import { getFreePicks, refreshFreePicks } from "../core/free-picks.js";
 import { getDefaultProvider, initModelRegistry } from "../models/registry.js";
 import type { ModelProvider } from "../models/provider.js";
@@ -3550,6 +3556,66 @@ export async function registerGatewayRoutes(
           note: "",
         };
       }
+    },
+  );
+
+  // Inside a Routine's chat: is this message content to run on, or a request
+  // to change the routine itself? "unsure" makes the client show a large
+  // chooser — the app never decides silently (owner rule, 2026-08-16).
+  app.post<{ Params: { id: string }; Body: RoutineChatIntentRequest }>(
+    "/v1/ask-vaenyx/conversations/:id/routine-chat-intent",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: RoutineChatIntentRequestSchema,
+        response: {
+          200: RoutineChatIntentResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const thread = listVaenyxThreads(context.database, owner.id).find(
+        (candidate) => candidate.conversationId === request.params.id,
+      );
+      if (!thread?.routineId) {
+        return reply
+          .code(400)
+          .send({ error: "This chat is not bound to a routine." });
+      }
+      const routine = loadRoutine(
+        context.config.routinesDirectory,
+        context.config.libraryDirectory,
+        thread.routineId,
+      );
+      if (!routine) {
+        return reply.code(400).send({ error: "That routine is missing." });
+      }
+      // A community routine is not editable in place, so its chat can only
+      // ever be feeding — answering "feed" without a model call keeps the
+      // two entry points (this chat, the main-chat classifier) agreeing.
+      if (routine.origin === "community") {
+        return { decision: "feed" as const };
+      }
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+      return {
+        decision: await classifyRoutineChatMessage(
+          { name: routine.name, description: routine.description },
+          request.body.content,
+          controller.signal,
+        ),
+      };
     },
   );
 

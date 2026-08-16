@@ -152,6 +152,8 @@ import {
   proposeRoutineEditDraft,
   testRoutineEdit,
   saveRoutineEditDraft,
+  classifyRoutineChatIntent,
+  attachRoutineToChat,
   type RoutineEditDraft,
   type RoutineEditProposal,
   type RoutineEditTestResult,
@@ -6023,6 +6025,28 @@ function AskVaenyxPanel({
     forkName: string;
   } | null>(null);
   const [applyingEdit, setApplyingEdit] = useState(false);
+  // NL routine edit (owner model, 2026-08-16): a routine-chat message judged
+  // ambiguous between "content to run on" and "change the routine" waits in
+  // the big chooser; a clear (or chosen) edit request drives the proposal
+  // card below. Both are per-conversation and vanish on cancel.
+  const [routineFeedOrEdit, setRoutineFeedOrEdit] = useState<{
+    conversationId: string;
+    routineId: string;
+    content: string;
+    imageId?: string;
+    speakResult: boolean;
+  } | null>(null);
+  const [routineEditChat, setRoutineEditChat] = useState<{
+    conversationId: string;
+    routineId: string;
+    routineName: string;
+    request: string;
+    proposal: RoutineEditProposal | null;
+    saving: boolean;
+    trying: boolean;
+    tryResult: RoutineEditTestResult | null;
+    tryError: string | null;
+  } | null>(null);
   // Voice (dev.133): the mic shows once a voice connection exists; the speaker
   // toggle reads finished replies aloud (persisted per device).
   const [voiceReady, setVoiceReady] = useState(false);
@@ -7058,6 +7082,224 @@ function AskVaenyxPanel({
     }
   }
 
+  // ── NL routine edit (owner model, 2026-08-16) ────────────────────────────
+  // The engine is Edit Routine v1; these are the chat's wires to it. A change
+  // request in the routine's own chat (or jumped in from the main chat)
+  // drafts a proposal and opens THE edit card — the same card Method edits
+  // use. Nothing is written until Confirm, and saving keeps every v1 safety
+  // rule (version bump, stale-token 409s, never a silent republish).
+  async function startRoutineChatEdit(
+    conversationId: string,
+    routineId: string,
+    request: string,
+  ): Promise<void> {
+    const routineName =
+      libraryRoutines.find((routine) => routine.id === routineId)?.name ??
+      routineId;
+    // The propose contract caps the request at 2000 characters; sending the
+    // overflow would 400 the whole flow rather than trim an ask this long.
+    const trimmedRequest = request.slice(0, 2000);
+    setRoutineEditChat({
+      conversationId,
+      routineId,
+      routineName,
+      request: trimmedRequest,
+      proposal: null,
+      saving: false,
+      trying: false,
+      tryResult: null,
+      tryError: null,
+    });
+    try {
+      const proposal = await proposeRoutineEditDraft(routineId, trimmedRequest);
+      // Only this drafting attempt's own card may be touched: a cancelled or
+      // superseded attempt resolving late must not clear or overwrite a
+      // newer one.
+      const isThisAttempt = (
+        current: typeof routineEditChat,
+      ): current is NonNullable<typeof routineEditChat> =>
+        Boolean(
+          current &&
+          current.conversationId === conversationId &&
+          current.request === trimmedRequest &&
+          current.proposal === null,
+        );
+      if (proposal.unchanged) {
+        setRoutineEditChat((current) =>
+          isThisAttempt(current) ? null : current,
+        );
+        const note = await appendConversationNote(
+          conversationId,
+          lang === "zh"
+            ? `「${routineName}」照这句话看没有需要改的地方,什么都没动。`
+            : `Nothing in "${routineName}" needed changing for that, so nothing was changed.`,
+        );
+        setMessages((current) =>
+          activeConversationIdRef.current === conversationId
+            ? [...current, note]
+            : current,
+        );
+        return;
+      }
+      setRoutineEditChat((current) =>
+        isThisAttempt(current) ? { ...current, proposal } : current,
+      );
+    } catch {
+      setRoutineEditChat((current) =>
+        current &&
+        current.conversationId === conversationId &&
+        current.request === trimmedRequest &&
+        current.proposal === null
+          ? null
+          : current,
+      );
+      await appendConversationNote(
+        conversationId,
+        lang === "zh"
+          ? "⚠ 这次没能起草修改。把要改的地方再说一遍,我重试。"
+          : "⚠ That change could not be drafted. Say what to change again and I'll retry.",
+      )
+        .then((note) =>
+          setMessages((current) =>
+            activeConversationIdRef.current === conversationId
+              ? [...current, note]
+              : current,
+          ),
+        )
+        .catch(() => {});
+    }
+  }
+
+  async function saveRoutineChatEdit(): Promise<void> {
+    if (!routineEditChat?.proposal || routineEditChat.saving) return;
+    const { conversationId, routineId, routineName, proposal } =
+      routineEditChat;
+    setRoutineEditChat((current) =>
+      current ? { ...current, saving: true } : current,
+    );
+    try {
+      const result = await saveRoutineEditDraft(routineId, proposal.proposed);
+      // Close only THIS proposal's card — never one a later edit opened.
+      setRoutineEditChat((current) =>
+        current && current.proposal === proposal ? null : current,
+      );
+      const parts: string[] = [];
+      if (result.unchanged) {
+        parts.push(
+          lang === "zh"
+            ? `「${routineName}」没有实际改动,什么都没保存。`
+            : `"${routineName}" had no real change; nothing was saved.`,
+        );
+      } else {
+        parts.push(
+          lang === "zh"
+            ? `✔ 「${routineName}」已升级到 v${result.routine.version}。${proposal.summary}`
+            : `✔ "${routineName}" upgraded to v${result.routine.version}. ${proposal.summary}`,
+        );
+        if (result.staleTokens > 0) {
+          parts.push(
+            lang === "zh"
+              ? `${result.staleTokens} 个 Routine Token 因为行为变化需要重新授权(Library → Tokens)。`
+              : `${result.staleTokens} Routine Token(s) need re-granting (Library → Tokens) because the behaviour changed.`,
+          );
+        }
+        if (result.publishedStale) {
+          parts.push(
+            lang === "zh"
+              ? "已发布的版本落后了(不会自动重新发布)。"
+              : "The published copy is now behind (nothing republishes on its own).",
+          );
+        }
+      }
+      const note = await appendConversationNote(
+        conversationId,
+        parts.join(" "),
+      );
+      setMessages((current) =>
+        activeConversationIdRef.current === conversationId
+          ? [...current, note]
+          : current,
+      );
+      onLibraryRefresh();
+    } catch (caught) {
+      setRoutineEditChat((current) =>
+        current && current.proposal === proposal ? null : current,
+      );
+      if (caught instanceof VaenyxRequestError && caught.status === 409) {
+        await appendConversationNote(
+          conversationId,
+          lang === "zh"
+            ? "⚠ 这个 Routine 刚在别处被改过,这次没有覆盖任何东西。再说一遍要改什么,我按最新版重新起草。"
+            : "⚠ This Routine was just changed somewhere else; nothing here overwrote it. Say the change again and I'll redraft against the newest version.",
+        )
+          .then((note) =>
+            setMessages((current) =>
+              activeConversationIdRef.current === conversationId
+                ? [...current, note]
+                : current,
+            ),
+          )
+          .catch(() => {});
+      }
+      // Other failures: the request toast already said what went wrong.
+    }
+  }
+
+  async function tryRoutineChatEdit(): Promise<void> {
+    if (!routineEditChat?.proposal || routineEditChat.trying) return;
+    const { conversationId, routineId, proposal } = routineEditChat;
+    setRoutineEditChat((current) =>
+      current ? { ...current, trying: true, tryError: null } : current,
+    );
+    try {
+      // Rehearsal input: the newest thing this chat actually fed it (real
+      // family data beats an empty form), else a skeleton from the draft's
+      // step-1 shape. The run writes nothing anywhere.
+      let input: unknown;
+      try {
+        const data = await fetchChatRoutineData(conversationId);
+        input = data.journal[0]?.content;
+      } catch {
+        // Fall through to the skeleton.
+      }
+      if (input === undefined || input === null) {
+        let schema: unknown =
+          proposal.proposed.flow[0]?.methodEdit?.inputSchema;
+        if (schema === undefined) {
+          const detail = await fetchRoutineEditDraft(routineId);
+          schema = detail.steps[0]?.method?.inputSchema;
+        }
+        input = buildRoutineInputSkeleton(schema);
+      }
+      const result = await testRoutineEdit(routineId, {
+        draft: proposal.proposed,
+        input,
+      });
+      // A rehearsal that outlived its card (cancelled, superseded) lands
+      // nowhere — the identity check is the proposal object itself.
+      setRoutineEditChat((current) =>
+        current && current.proposal === proposal
+          ? { ...current, trying: false, tryResult: result }
+          : current,
+      );
+    } catch (caught) {
+      setRoutineEditChat((current) =>
+        current && current.proposal === proposal
+          ? {
+              ...current,
+              trying: false,
+              tryError:
+                caught instanceof Error
+                  ? caught.message
+                  : lang === "zh"
+                    ? "试跑失败了。"
+                    : "The test run failed.",
+            }
+          : current,
+      );
+    }
+  }
+
   async function buildFromChat(
     conversationId: string,
     kind: "method" | "routine",
@@ -7067,6 +7309,7 @@ function AskVaenyxPanel({
     let note: string;
     try {
       let builtName: string;
+      let boundHere = false;
       if (kind === "method") {
         const draft = await draftMethod(description);
         const created = await createMethod(draft);
@@ -7075,9 +7318,27 @@ function AskVaenyxPanel({
         const plan = await planRoutine(description);
         const created = await createRoutine(plan);
         builtName = created.name;
+        // Owner model (2026-08-16): the conversation that created a Routine
+        // IS that Routine's first conversation. Bind it — but never steal a
+        // chat that already belongs to another routine, and never a
+        // non-chat thread (inbox).
+        const thread = workspace.threads.find(
+          (candidate) => candidate.conversationId === conversationId,
+        );
+        if (!thread || (thread.kind === "chat" && !thread.routineId)) {
+          try {
+            await attachRoutineToChat(conversationId, created.id);
+            boundHere = true;
+          } catch {
+            // Binding is a convenience; the build itself succeeded.
+          }
+        }
       }
-      note =
-        lang === "zh"
+      note = boundHere
+        ? lang === "zh"
+          ? `✔ Routine「${builtName}」已建好。这个对话现在就是它的对话 —— 直接在这里喂内容用它;想细调,去 Settings → Library 打开它。`
+          : `✔ The Routine "${builtName}" is built. This conversation is now its conversation — feed it here to use it; to fine-tune, open it under Settings → Library.`
+        : lang === "zh"
           ? `✔ ${kind === "method" ? "Method" : "Routine"}「${builtName}」已建好,已存入你的资源库。直接说"用它"就可以开始用;想细调,去 Settings → Library 打开它。`
           : `✔ The ${kind === "method" ? "Method" : "Routine"} "${builtName}" is built and saved to your Library. Just ask to use it; to fine-tune it, open it under Settings → Library.`;
     } catch (buildError) {
@@ -7129,6 +7390,63 @@ function AskVaenyxPanel({
     clearPendingPhoto();
     setPendingDocument(null);
     if (activeThread?.routineId && activeConversationId) {
+      // A photo always means content for a run, and a COMMUNITY routine's
+      // chat only ever feeds (not editable in place — the server gate says
+      // the same). Words alone that SOUND like a change request get one
+      // cheap judgment; a clear edit request opens the proposal card
+      // instead of being cooked as input, and "unsure" opens the big
+      // chooser (owner rule: never decide silently).
+      const chatRoutineOrigin = libraryRoutines.find(
+        (routine) => routine.id === activeThread.routineId,
+      )?.origin;
+      if (
+        !imageId &&
+        chatRoutineOrigin !== "community" &&
+        maybeRoutineEditIntent(content)
+      ) {
+        // Stop must bite during this judgment too, exactly like the
+        // main-chat judge: register the controller, and a Stop pressed
+        // mid-classify means NOTHING fires afterwards.
+        const chatIntentController = new AbortController();
+        streamControllerRef.current = chatIntentController;
+        setSending(true);
+        setPrompt("");
+        setStreamStatus("classifying");
+        let decision: "feed" | "edit" | "unsure" = "unsure";
+        try {
+          decision = (
+            await classifyRoutineChatIntent(
+              activeConversationId,
+              content,
+              chatIntentController.signal,
+            )
+          ).decision;
+        } catch {
+          // No verdict is still a verdict: ask, never guess.
+        }
+        setStreamStatus(null);
+        setSending(false);
+        if (chatIntentController.signal.aborted) {
+          return;
+        }
+        if (decision === "edit") {
+          await startRoutineChatEdit(
+            activeConversationId,
+            activeThread.routineId,
+            content,
+          );
+          return;
+        }
+        if (decision === "unsure") {
+          setRoutineFeedOrEdit({
+            conversationId: activeConversationId,
+            routineId: activeThread.routineId,
+            content,
+            speakResult: Boolean(voiceAudioId),
+          });
+          return;
+        }
+      }
       await runRoutineMessage(
         activeConversationId,
         activeThread.routineId,
@@ -7327,6 +7645,69 @@ function AskVaenyxPanel({
           return;
         } catch {
           // Jump/run failed — fall through to a normal reply here instead.
+        }
+      }
+      if (
+        verdict?.decision === "edit-routine" &&
+        verdict.routineId &&
+        verdict.editRequest
+      ) {
+        try {
+          // Same jump discipline as use-routine — the Routine's newest chat,
+          // or a fresh one — but what travels is a CHANGE request: the
+          // destination opens the proposal card, and nothing saves until the
+          // Owner confirms there.
+          const editRoutineId = verdict.routineId;
+          const editAsk = verdict.editRequest;
+          if (activeThread?.routineId === editRoutineId) {
+            setSending(false);
+            await startRoutineChatEdit(
+              classifyConversationId,
+              editRoutineId,
+              editAsk,
+            );
+            return;
+          }
+          const existing = workspace.threads
+            .filter(
+              (thread) =>
+                thread.routineId === editRoutineId &&
+                thread.kind === "chat" &&
+                thread.status !== "archived" &&
+                thread.conversationId,
+            )
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+          let targetId = existing?.conversationId ?? null;
+          if (!targetId) {
+            const routineName = libraryRoutines.find(
+              (routine) => routine.id === editRoutineId,
+            )?.name;
+            const created = await createAskVaenyxConversation({
+              routineId: editRoutineId,
+              ...(routineName ? { title: routineName } : {}),
+            });
+            onConversationsChange([
+              created,
+              ...conversations.filter((item) => item.id !== created.id),
+            ]);
+            targetId = created.id;
+          }
+          const targetName =
+            libraryRoutines.find((routine) => routine.id === editRoutineId)
+              ?.name ?? editRoutineId;
+          await appendConversationNote(
+            classifyConversationId,
+            lang === "zh"
+              ? `→ 去「${targetName}」改它 —— 先看修改提案,你确认才会保存。`
+              : `→ Off to change "${targetName}" — review the proposal there; nothing saves until you confirm.`,
+          ).catch(() => {});
+          await onWorkspaceRefresh();
+          await openConversation(targetId);
+          setSending(false);
+          await startRoutineChatEdit(targetId, editRoutineId, editAsk);
+          return;
+        } catch {
+          // Jump failed — fall through to a normal reply here instead.
         }
       }
       if (verdict?.decision === "use-task" && verdict.taskRequest) {
@@ -8587,19 +8968,23 @@ function AskVaenyxPanel({
             that published itself would make those warranties for the Owner
             without asking (ToS 7.2(d), copy pack G5). */}
         {recipeEdit ? (
-          <Modal
-            onClose={() => setRecipeEdit(null)}
-            title={recipeEdit.draft.methodName}
-            variant="doc"
-          >
-            {/* Editing somebody else's Method does not edit it. The notice
-                says so BEFORE the diff, because by the time a person has read
-                the changed lines they have already decided. */}
-            <p className="settings-card-copy">
-              {recipeEdit.draft.methodOrigin === "community"
+          /* THE edit card — the same one a Routine edit opens (owner rule:
+             one interaction, never two look-alike flows). The notice renders
+             BEFORE the diff, because by the time a person has read the
+             changed lines they have already decided. */
+          <EditProposalCard
+            confirmBusy={applyingEdit}
+            confirmLabel={t("method.edit.apply")}
+            diffs={[{ lines: recipeEdit.draft.diff }]}
+            notice={
+              recipeEdit.draft.methodOrigin === "community"
                 ? t("method.fork.notice")
-                : t("legal.notice.method.edit")}
-            </p>
+                : t("legal.notice.method.edit")
+            }
+            onClose={() => setRecipeEdit(null)}
+            onConfirm={() => void applyRecipeEdit()}
+            title={recipeEdit.draft.methodName}
+          >
             {recipeEdit.draft.methodOrigin === "community" ? (
               <label className="fork-name-field">
                 <span className="method-picker-label">
@@ -8619,41 +9004,138 @@ function AskVaenyxPanel({
                 />
               </label>
             ) : null}
-            <div className="recipe-diff">
-              {recipeEdit.draft.diff.map((line, index) => (
-                <div
-                  className={`recipe-diff-line ${line.kind}`}
-                  key={`${index}-${line.kind}`}
-                >
-                  <span className="recipe-diff-mark">
-                    {line.kind === "added"
-                      ? "+"
-                      : line.kind === "removed"
-                        ? "−"
-                        : " "}
-                  </span>
-                  <span>{line.text || " "}</span>
-                </div>
-              ))}
-            </div>
-            <div className="modal-actions">
-              <button
-                className="text-button"
-                onClick={() => setRecipeEdit(null)}
-                type="button"
-              >
-                {t("routine.confirm.cancel")}
-              </button>
-              <button
-                className="primary-button"
-                disabled={applyingEdit}
-                onClick={() => void applyRecipeEdit()}
-                type="button"
-              >
-                {applyingEdit ? "…" : t("method.edit.apply")}
-              </button>
-            </div>
-          </Modal>
+          </EditProposalCard>
+        ) : null}
+
+        {/* NL routine edit: the drafting spinner, then THE edit card with the
+            proposal — summary, per-step diffs, optional rehearsal, and big
+            Confirm/Cancel. Saving keeps every Edit Routine v1 safety rule. */}
+        {routineEditChat ? (
+          routineEditChat.proposal ? (
+            <EditProposalCard
+              confirmBusy={routineEditChat.saving}
+              confirmLabel={
+                lang === "zh" ? "确认保存新版本" : "Save New Version"
+              }
+              diffs={routineEditChat.proposal.recipeDiffs.map((entry) => ({
+                label: entry.methodName,
+                lines: entry.diff,
+              }))}
+              extraChanges={
+                routineEditChat.proposal.proposed.name !==
+                routineEditChat.routineName
+                  ? [
+                      lang === "zh"
+                        ? `名称:${routineEditChat.routineName} → ${routineEditChat.proposal.proposed.name}`
+                        : `Name: ${routineEditChat.routineName} → ${routineEditChat.proposal.proposed.name}`,
+                    ]
+                  : undefined
+              }
+              notice={
+                lang === "zh"
+                  ? "确认后还是同一个 Routine,升一个版本;对话、Journal、Gallery 全保留。"
+                  : "Confirm keeps this the same Routine, one version up; its chat, Journal and Gallery all stay."
+              }
+              onClose={() => {
+                // Cancel puts the typed request back in the composer — a
+                // changed mind must never cost the words.
+                setPrompt(routineEditChat.request);
+                setRoutineEditChat(null);
+              }}
+              onConfirm={() => void saveRoutineChatEdit()}
+              onTry={() => void tryRoutineChatEdit()}
+              summary={routineEditChat.proposal.summary}
+              title={routineEditChat.routineName}
+              tryError={routineEditChat.tryError}
+              tryLabel={lang === "zh" ? "先试跑一次" : "Try It First"}
+              trying={routineEditChat.trying}
+              tryResult={
+                routineEditChat.tryResult ? (
+                  <div
+                    className={`library-result ${routineEditChat.tryResult.outputValid ? "valid" : "invalid"}`}
+                  >
+                    <RoutineResultView
+                      output={routineEditChat.tryResult.output}
+                      view={routineEditChat.proposal.proposed.view ?? undefined}
+                    />
+                  </div>
+                ) : null
+              }
+            />
+          ) : (
+            <Modal
+              onClose={() => {
+                // Cancel puts the typed request back in the composer — a
+                // changed mind must never cost the words.
+                setPrompt(routineEditChat.request);
+                setRoutineEditChat(null);
+              }}
+              title={routineEditChat.routineName}
+            >
+              <p className="settings-card-copy">
+                {lang === "zh"
+                  ? "正在起草修改提案…"
+                  : "Drafting the proposal..."}
+              </p>
+            </Modal>
+          )
+        ) : null}
+
+        {/* Feed or edit? When the judge cannot tell, the Owner decides — on a
+            chooser that is impossible to miss (owner rule: never decide
+            silently). Closing it puts the message back in the composer. */}
+        {routineFeedOrEdit ? (
+          <BigChoiceModal
+            onClose={() => {
+              setPrompt(routineFeedOrEdit.content);
+              setRoutineFeedOrEdit(null);
+            }}
+            options={[
+              {
+                label: lang === "zh" ? "喂给它,照常运行" : "Run it on this",
+                description:
+                  lang === "zh"
+                    ? "这句话是这一次的内容,交给它处理"
+                    : "This message is content for this run",
+                onPick: () => {
+                  const pending = routineFeedOrEdit;
+                  setRoutineFeedOrEdit(null);
+                  void runRoutineMessage(
+                    pending.conversationId,
+                    pending.routineId,
+                    pending.content,
+                    undefined,
+                    undefined,
+                    pending.imageId,
+                    pending.speakResult,
+                  );
+                },
+              },
+              {
+                label:
+                  lang === "zh" ? "修改这个 Routine" : "Change this Routine",
+                description:
+                  lang === "zh"
+                    ? "按这句话改它以后每次的做法(先看提案,确认才保存)"
+                    : "Change how it works from now on (review a proposal first)",
+                onPick: () => {
+                  const pending = routineFeedOrEdit;
+                  setRoutineFeedOrEdit(null);
+                  void startRoutineChatEdit(
+                    pending.conversationId,
+                    pending.routineId,
+                    pending.content,
+                  );
+                },
+              },
+            ]}
+            question={
+              lang === "zh"
+                ? `「${routineFeedOrEdit.content.length > 80 ? `${routineFeedOrEdit.content.slice(0, 80)}…` : routineFeedOrEdit.content}」—— 这句是给它的内容,还是想改它?`
+                : `"${routineFeedOrEdit.content.length > 80 ? `${routineFeedOrEdit.content.slice(0, 80)}…` : routineFeedOrEdit.content}" — content for it, or a change to it?`
+            }
+            title={lang === "zh" ? "需要你选一下" : "Your call"}
+          />
         ) : null}
 
         {/* M1 — the document cost gate. Full-screen and blocking, never a
@@ -19208,6 +19690,148 @@ function CreateRoutinePanel({
   );
 }
 
+// ── The ONE edit-proposal card ──────────────────────────────────────────────
+// Owner rule (2026-08-16): Routine and Method edits are the SAME interaction,
+// never two look-alike flows. Wherever a change is asked for — the main chat,
+// a Routine's own chat, or the Library editor — review happens on this card:
+// a plain-language summary, the changed lines, and big buttons. Nothing is
+// written until Confirm.
+function EditProposalCard({
+  title,
+  notice,
+  summary,
+  extraChanges,
+  diffs,
+  children,
+  tryLabel,
+  trying,
+  onTry,
+  tryResult,
+  tryError,
+  confirmLabel,
+  confirmBusy,
+  confirmDisabled,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  notice?: ReactNode;
+  summary?: string;
+  extraChanges?: string[];
+  diffs: {
+    label?: string;
+    lines: { kind: "same" | "added" | "removed"; text: string }[];
+  }[];
+  children?: ReactNode;
+  tryLabel?: string;
+  trying?: boolean;
+  onTry?: () => void;
+  tryResult?: ReactNode;
+  tryError?: string | null;
+  confirmLabel: string;
+  confirmBusy?: boolean;
+  confirmDisabled?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <Modal onClose={onClose} title={title} variant="doc">
+      {summary ? <p className="proposal-summary">{summary}</p> : null}
+      {notice ? <p className="settings-card-copy">{notice}</p> : null}
+      {children}
+      {extraChanges && extraChanges.length > 0 ? (
+        <ul className="proposal-extra-changes">
+          {extraChanges.map((line, index) => (
+            <li key={index}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
+      {diffs.map((entry, index) => (
+        <div key={index}>
+          {entry.label ? <p className="eyebrow">{entry.label}</p> : null}
+          <div className="recipe-diff">
+            {entry.lines.map((line, lineIndex) => (
+              <div
+                className={`recipe-diff-line ${line.kind}`}
+                key={`${lineIndex}-${line.kind}`}
+              >
+                <span className="recipe-diff-mark">
+                  {line.kind === "added"
+                    ? "+"
+                    : line.kind === "removed"
+                      ? "−"
+                      : " "}
+                </span>
+                <span>{line.text || " "}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {tryError ? <p className="form-error">{tryError}</p> : null}
+      {tryResult}
+      <div className="modal-actions proposal-actions">
+        <button className="text-button" onClick={onClose} type="button">
+          {t("routine.confirm.cancel")}
+        </button>
+        {onTry ? (
+          <button
+            className="secondary-button"
+            disabled={trying || confirmBusy}
+            onClick={onTry}
+            type="button"
+          >
+            {trying ? "…" : tryLabel}
+          </button>
+        ) : null}
+        <button
+          className="primary-button"
+          disabled={confirmBusy || trying || confirmDisabled}
+          onClick={onConfirm}
+          type="button"
+        >
+          {confirmBusy ? "…" : confirmLabel}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// Owner rule (2026-08-16): when the app cannot decide something on the
+// Owner's behalf, it asks with a chooser that is impossible to miss — a
+// large question and large, self-explaining option buttons. Never a guess.
+function BigChoiceModal({
+  title,
+  question,
+  options,
+  onClose,
+}: {
+  title: string;
+  question: string;
+  options: { label: string; description: string; onPick: () => void }[];
+  onClose: () => void;
+}) {
+  return (
+    <Modal onClose={onClose} title={title}>
+      <div className="big-choice">
+        <p className="big-choice-question">{question}</p>
+        {options.map((option, index) => (
+          <button
+            className="big-choice-option"
+            key={index}
+            onClick={option.onPick}
+            type="button"
+          >
+            <strong>{option.label}</strong>
+            <span>{option.description}</span>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 // ── Edit Routine v1 — upgrade an existing self Routine in place ─────────────
 // Open a full draft, optionally ask Vaenyx for a proposal, review the diffs,
 // try-run the draft (nothing written anywhere), then Save New Version. The
@@ -20231,54 +20855,32 @@ function EditRoutinePanel({
       </section>
 
       {proposal ? (
-        <Modal
-          onClose={() => setProposal(null)}
-          title={zh ? "修改提案" : "Proposed Changes"}
-          variant="doc"
-        >
-          <p className="settings-card-copy">{proposal.summary}</p>
-          {proposal.unchanged ? (
-            <p className="settings-card-copy">
-              {zh
+        /* THE edit card again — same interaction as chat edits; here Confirm
+           only puts the proposal INTO the editor, it saves nothing. */
+        <EditProposalCard
+          confirmBusy={false}
+          confirmDisabled={proposal.unchanged}
+          confirmLabel={
+            zh ? "放进编辑器(还没保存)" : "Apply To Editor (Not Saved Yet)"
+          }
+          diffs={proposal.recipeDiffs.map((entry) => ({
+            label: entry.methodName,
+            lines: entry.diff,
+          }))}
+          notice={
+            proposal.unchanged
+              ? zh
                 ? "Vaenyx 认为不需要改动。"
-                : "Vaenyx found nothing that needs changing."}
-            </p>
-          ) : null}
-          {proposal.recipeDiffs.map((entry) => (
-            <div key={entry.stepId}>
-              <p className="eyebrow">{entry.methodName}</p>
-              <div className="recipe-diff">
-                {entry.diff.map((line, index) => (
-                  <div className={`recipe-diff-line ${line.kind}`} key={index}>
-                    {line.kind === "added"
-                      ? "+ "
-                      : line.kind === "removed"
-                        ? "− "
-                        : "  "}
-                    {line.text}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <div className="modal-actions">
-            <button
-              className="text-button"
-              onClick={() => setProposal(null)}
-              type="button"
-            >
-              {zh ? "不用" : "Cancel"}
-            </button>
-            <button
-              className="primary-button"
-              disabled={proposal.unchanged}
-              onClick={applyProposal}
-              type="button"
-            >
-              {zh ? "放进编辑器(还没保存)" : "Apply To Editor (Not Saved Yet)"}
-            </button>
-          </div>
-        </Modal>
+                : "Vaenyx found nothing that needs changing."
+              : undefined
+          }
+          onClose={() => setProposal(null)}
+          onConfirm={() => {
+            if (!proposal.unchanged) applyProposal();
+          }}
+          summary={proposal.summary}
+          title={zh ? "修改提案" : "Proposed Changes"}
+        />
       ) : null}
     </div>
   );
@@ -20645,6 +21247,16 @@ function messageIsCreationAsk(content: string): boolean {
   );
 }
 
+// Words that MIGHT mean "change the routine" rather than content for it,
+// inside a routine's own chat. A hit only spends one cheap judgment; a miss
+// runs as usual — so the list leans broad on verbs, and a false positive
+// costs a moment, never a wrong action.
+function maybeRoutineEditIntent(content: string): boolean {
+  return /(修改|改成|改一下|改进|改善|优化|調整|调整|升级|换成|變成|变成|别再|別再|不要再|不再|以后都|以後都|加一步|加个步骤|删掉|刪掉|去掉|edit|change|modify|adjust|improve|instead of|from now on|stop (showing|giving|recommending)|add a step|no longer|make it)/i.test(
+    content,
+  );
+}
+
 function messageMaybeIntent(
   content: string,
   messages: AskVaenyxMessage[],
@@ -20692,9 +21304,12 @@ function messageMaybeIntent(
     return true;
   }
   // Strong-intent keywords only (dropped broad everyday words — help me / record
-  // / report / track / monitor — that fire on ordinary chat).
+  // / report / track / monitor — that fire on ordinary chat). Edit verbs are
+  // here too, so "把晚餐规划改成三个选择" reaches the judge — the
+  // routine-mention gate below still stands between a keyword and a model
+  // call.
   if (
-    !/(要不要|整理|汇总|彙整|研究|每天|每周|每月|定时|定時|提醒|summari[sz]e|research|every ?day|every ?week|every ?month|daily|weekly|monthly|schedule|remind|digest|tidy|organi[sz]e)/i.test(
+    !/(要不要|整理|汇总|彙整|研究|每天|每周|每月|定时|定時|提醒|修改|改成|改一下|改进|改善|优化|调整|升级|换成|别再|不要再|summari[sz]e|research|every ?day|every ?week|every ?month|daily|weekly|monthly|schedule|remind|digest|tidy|organi[sz]e|edit|change|modify|adjust|improve)/i.test(
       content,
     )
   ) {

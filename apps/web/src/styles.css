@@ -8693,3 +8693,67 @@ body {
   gap: var(--space-2);
   margin: 0 0 var(--space-2);
 }
+
+/* ── The ONE edit-proposal card + the big chooser (owner rules 2026-08-16:
+   Routine and Method edits are the same interaction; when the app cannot
+   decide, it asks with something impossible to miss). ─────────────────── */
+
+.proposal-summary {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+.proposal-extra-changes {
+  margin: 0 0 var(--space-3);
+  padding-left: 18px;
+  font-size: var(--fs-base);
+}
+
+.proposal-actions .primary-button,
+.proposal-actions .secondary-button {
+  font-size: var(--fs-md);
+  padding: 10px 18px;
+  min-height: 44px;
+}
+
+.big-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.big-choice-question {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  margin: 0;
+}
+
+.big-choice-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.35));
+  border-radius: var(--r, 10px);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.big-choice-option:hover {
+  border-color: var(--accent, #7aa2ff);
+}
+
+.big-choice-option strong {
+  font-size: var(--fs-lg);
+}
+
+.big-choice-option span {
+  font-size: var(--fs-sm);
+  color: var(--text-dim, inherit);
+}

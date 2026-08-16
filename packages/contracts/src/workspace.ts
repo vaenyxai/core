@@ -413,6 +413,12 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       // quote one include GST"). The chat proposes the edit and shows what
       // changed; nothing is written until they approve it (copy pack B4).
       Type.Literal("edit-method"),
+      // The Owner wants an installed self Routine to WORK differently — its
+      // steps, result or look ("让晚餐规划给三个选择"). The chat jumps to that
+      // Routine's own conversation and shows the same proposal card there;
+      // routineId + editRequest carry the target and the ask. Community
+      // Routines never match (not editable in place).
+      Type.Literal("edit-routine"),
       // The Owner wants a picture GENERATED. Only offered while an image
       // engine is connected; imagePrompt carries the English prompt, so the
       // one classification answers routine/task/create/draw in a single call
@@ -433,7 +439,8 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       Type.Literal("go-to"),
     ]),
     routineId: Type.Union([Type.String(), Type.Null()]),
-    // For edit-method: which installed Method, and what to change about it.
+    // For edit-method: which installed Method. editRequest carries what to
+    // change for BOTH edit-method and edit-routine.
     methodId: Type.Union([Type.String(), Type.Null()]),
     editRequest: Type.Union([Type.String(), Type.Null()]),
     // For use-task: the thing to do, extracted from the conversation.
@@ -1861,6 +1868,26 @@ export const RoutineEditTestRequestSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Inside a Routine's own chat, every message is normally CONTENT fed to the
+// routine. This one judgment tells feeding apart from "change how the routine
+// itself works" — and "unsure" is a first-class answer: the client shows a
+// large chooser instead of guessing (owner rule: never decide silently).
+export const RoutineChatIntentRequestSchema = Type.Object(
+  { content: Type.String({ minLength: 1, maxLength: 8000 }) },
+  { additionalProperties: false },
+);
+
+export const RoutineChatIntentResponseSchema = Type.Object(
+  {
+    decision: Type.Union([
+      Type.Literal("feed"),
+      Type.Literal("edit"),
+      Type.Literal("unsure"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
 export type RoutineEditStep = Static<typeof RoutineEditStepSchema>;
 export type RoutineEditSaveRequest = Static<
   typeof RoutineEditSaveRequestSchema
@@ -1870,6 +1897,12 @@ export type ProposeRoutineEditRequest = Static<
 >;
 export type RoutineEditTestRequest = Static<
   typeof RoutineEditTestRequestSchema
+>;
+export type RoutineChatIntentRequest = Static<
+  typeof RoutineChatIntentRequestSchema
+>;
+export type RoutineChatIntentResponse = Static<
+  typeof RoutineChatIntentResponseSchema
 >;
 
 // ── Library v2: distribution (④) — the shared catalogue served from the CDN ───
