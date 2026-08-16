@@ -6927,11 +6927,16 @@ function AskVaenyxPanel({
           initialValues: { ...values },
           initialChecks: { ...checks },
         };
-        // NOTHING could be read out of the message, and no photo carried it:
-        // an empty card is the app pretending it understood (Oskar,
-        // 2026-08-16 — "给结果配一张照片" landed here as ingredients). That
-        // is the moment to ask, not to present blanks.
+        // NOTHING could be read out of the WORDS: an empty card is the app
+        // pretending it understood (Oskar, 2026-08-16 — "给结果配一张照片"
+        // landed here as ingredients), so that is the moment to ask.
+        //
+        // A PHOTO is never that question. A photo is content by definition,
+        // and asking "content, or a change to it?" about one is nonsense —
+        // when its reading failed, the form opens with the picture and the
+        // reason on it, ready to fill in.
         const parsedNothing =
+          !imageId &&
           !marks &&
           Object.values(values).every((value) => value.trim() === "") &&
           Object.values(checks).every((checked) => !checked);
