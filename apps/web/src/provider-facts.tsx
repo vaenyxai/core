@@ -69,7 +69,9 @@ export function costBadge(id: string, lang: Lang): string | null {
 
 /** "This provider charges for THIS job even though it is otherwise free." */
 export function capabilityCostsMoney(id: string, capability: string): boolean {
-  return Boolean(PROVIDER_COST_FACTS[id]?.paidCapabilities?.includes(capability));
+  return Boolean(
+    PROVIDER_COST_FACTS[id]?.paidCapabilities?.includes(capability),
+  );
 }
 
 export function capabilityCostNote(
@@ -79,4 +81,18 @@ export function capabilityCostNote(
 ): string | null {
   if (!capabilityCostsMoney(id, capability)) return null;
   return lang === "zh" ? "这一项要付费" : "paid for this job";
+}
+
+/** Marking a photo is not the same job as describing one (measured on a real
+ *  fridge photo, 2026-08-16): every vision backend can LIST what it sees, but
+ *  putting each dot on the right object needs a model trained on coordinates.
+ *  Gemini is, and its own box format is what the annotate prompt asks for;
+ *  Pixtral reads the shelves well and then scatters the dots. The picker says
+ *  so, because the Owner meets that difference as "the marks got worse" with
+ *  nothing on screen explaining why. */
+const ACCURATE_MARK_PROVIDERS = ["gemini", "openai", "zhipu", "claude-sub"];
+
+export function visionMarkNote(id: string, lang: Lang): string | null {
+  if (ACCURATE_MARK_PROVIDERS.includes(id)) return null;
+  return lang === "zh" ? "标注位置偏" : "marks land roughly";
 }

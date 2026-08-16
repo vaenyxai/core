@@ -8775,15 +8775,23 @@ body {
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
-  /* A 10px dot is not a finger target; the padding box is. */
-  padding: 12px;
-  margin: -12px;
-  background-clip: content-box;
+}
+
+/* The finger target is INVISIBLE and sits around the dot — padding was the
+   wrong tool: the white border draws around the padding box, so a 24px
+   target became a 34px white ring with the red lost inside it, and every
+   leader line ended at the ring's edge instead of the dot (Oskar,
+   2026-08-16). The dot keeps the size and colour it always had. */
+.annotate-dot--draggable::after {
+  content: "";
+  position: absolute;
+  inset: -13px;
+  border-radius: 50%;
 }
 
 .annotate-dot--dragging {
   cursor: grabbing;
-  transform: translate(-50%, -50%) scale(1.35);
+  transform: translate(-50%, -50%) scale(1.3);
 }
 
 /* The marks standing in for the field they fill: same label and framing as a

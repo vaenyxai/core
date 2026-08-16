@@ -298,6 +298,7 @@ import { PROVIDER_DATA_FACTS, dataFactsBadge } from "./data-facts.js";
 import {
   PROVIDER_COST_FACTS,
   capabilityCostNote,
+  visionMarkNote,
   costBadge,
 } from "./provider-facts.js";
 import { CAPABILITIES } from "./capabilities.js";
@@ -12683,6 +12684,9 @@ function CapabilitiesPanel({
       // provider — whether THIS job is the one it charges for.
       const badges = [
         capabilityCostNote(provider.id, slot, lang),
+        // Marking accuracy differs sharply between vision backends; the
+        // picker is where that has to be visible.
+        slot === "vision" ? visionMarkNote(provider.id, lang) : null,
         dataFactsBadge(provider.id, lang),
       ].filter(Boolean);
       const name = provider.isDefault
