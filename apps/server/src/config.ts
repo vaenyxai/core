@@ -51,9 +51,10 @@ function readSecretJson(
   file: string,
 ): Record<string, unknown> | null {
   try {
-    return JSON.parse(
-      readFileSync(resolve(directory, file), "utf8"),
-    ) as Record<string, unknown>;
+    return JSON.parse(readFileSync(resolve(directory, file), "utf8")) as Record<
+      string,
+      unknown
+    >;
   } catch {
     // Absent or unreadable secret -> feature is simply unavailable.
     return null;
@@ -114,9 +115,11 @@ function readPort(value: string | undefined): number {
   return port;
 }
 
-function readCorsOrigins(value: string | undefined, mode: VaenyxMode): string[] {
-  const developmentOrigins =
-    "http://localhost:5173,http://127.0.0.1:5173";
+function readCorsOrigins(
+  value: string | undefined,
+  mode: VaenyxMode,
+): string[] {
+  const developmentOrigins = "http://localhost:5173,http://127.0.0.1:5173";
 
   return (value ?? (mode === "development" ? developmentOrigins : ""))
     .split(",")
@@ -151,10 +154,10 @@ export function loadConfig(): AppConfig {
   const legacyDataDirectory = resolve(repositoryRoot, "data");
   const dataDirectory = process.env.VAENYX_DATA_DIR
     ? resolve(serverRoot, process.env.VAENYX_DATA_DIR)
-    : firstExistingDir(
+    : (firstExistingDir(
         [userdataDataDirectory, privateDataDirectory, legacyDataDirectory],
         "vaenyx.db",
-      ) ?? userdataDataDirectory;
+      ) ?? userdataDataDirectory);
   const mode = readMode(process.env.NODE_ENV);
 
   const secretsDirectory = process.env.VAENYX_SECRETS_DIR
@@ -174,11 +177,11 @@ export function loadConfig(): AppConfig {
     // private/backups -> backups locations; VAENYX_BACKUPS_DIR overrides.
     backupsDirectory: process.env.VAENYX_BACKUPS_DIR
       ? resolve(serverRoot, process.env.VAENYX_BACKUPS_DIR)
-      : firstExistingDir([
+      : (firstExistingDir([
           resolve(repositoryRoot, "userdata", "backups"),
           resolve(repositoryRoot, "private", "backups"),
           resolve(repositoryRoot, "backups"),
-        ]) ?? resolve(repositoryRoot, "userdata", "backups"),
+        ]) ?? resolve(repositoryRoot, "userdata", "backups")),
     // Repo root: used to locate scripts/backup.mjs + scripts/restore.mjs and the
     // library tree when running backup/restore on the owner's behalf.
     repositoryRoot,
@@ -205,7 +208,7 @@ export function loadConfig(): AppConfig {
     ),
     mode,
     port: readPort(process.env.VAENYX_PORT),
-    version: "0.4.9.0",
+    version: "0.4.9.1-dev",
     webDistDirectory: resolve(
       serverRoot,
       process.env.VAENYX_WEB_DIST ?? "../web/dist",

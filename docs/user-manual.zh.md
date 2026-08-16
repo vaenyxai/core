@@ -172,6 +172,12 @@ Vaenyx 能做的每一件事,按你会用到的顺序排。一条一件事:是�
   用着用着会长出额外的按钮(Journal、Gallery)。
 - **怎么做一个** —— 在对话里把步骤说出来。一步就是一个 Method,多步就是一个 Routine。
   Vaenyx 会起草,并在保存前给你试跑一次。
+- **怎么改进一个** —— 在 Library 打开你自己的 Routine,点 **Edit**。说想改善什么,
+  Vaenyx 给出修改提案;审一遍,**试跑草稿**(真的跑一次,但不写进 Journal 和
+  Gallery),再 **保存新版本**。它还是同一个 Routine:同一个对话、同一份历史,
+  旧结果保持当时的样式。版本号由 Vaenyx 自己递增。如果行为变了,授权给这个
+  Routine 的 app key 会停用,要你在 Token 页里重新授权 —— 绝不悄悄进行。
+  社区 Routine 不能原地修改。
 - **放在哪** —— **Library** 页面，四个页签：Routine / Token / Method / Community。
   每个页签第一行写自己是干什么的，列表上方都是同两个按钮：新建，或从社区找。
   Method 页多一个：导入 SKILL.md。

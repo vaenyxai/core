@@ -48,6 +48,16 @@ export interface LoadedRoutine extends LibraryRoutineSummary {
   manifest: unknown;
   exampleCount: number;
   contentHash: string;
+  // The two-hash split (Edit Routine v1, 2026-08-16). contentHash includes the
+  // version, which the server now bumps on EVERY save — so it moves on a pure
+  // rename and is the right signal for "changed since published", but the
+  // wrong one for a Routine Token. executionHash is what a token locks: the
+  // parts that decide what a run DOES — flow, deps, mode, storage, manifest,
+  // annotateFocus, and each dependency Method's actual content hash — and
+  // nothing that merely relabels. packageHash covers everything publishable.
+  executionHash: string;
+  packageHash: string;
+  annotateFocus: string | null;
   resolved: boolean;
   missingDeps: string[];
 }
@@ -162,6 +172,72 @@ function routineContentHashFrom(
     .digest("hex");
 }
 
+// What a Routine Token locks (Edit Routine v1): the real execution behaviour.
+// Includes annotateFocus (it steers the annotate tool's output, which feeds
+// the run) and every dependency Method's content hash (a step's behaviour IS
+// its Method's recipe/schema/manifest) — and deliberately EXCLUDES the
+// version label, so the server's bump-on-every-save cannot break a token
+// over a rename.
+export function routineExecutionHashFrom(
+  meta: Record<string, unknown>,
+  manifestRaw: string | null,
+  depHashes: Record<string, string>,
+): string {
+  const focus =
+    typeof meta.annotateFocus === "string" && meta.annotateFocus.trim()
+      ? meta.annotateFocus.trim().slice(0, 120)
+      : null;
+  const canonical = JSON.stringify({
+    annotateFocus: focus,
+    depHashes: Object.fromEntries(
+      Object.entries(depHashes).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+    deps: readDeps(meta.deps),
+    flow: readFlow(meta.flow),
+    mode: readMode(meta.mode),
+    storage: readStorage(meta.storage),
+  });
+  return createHash("sha256")
+    .update(" routine-execution ")
+    .update(canonical)
+    .update(" manifest ")
+    .update(manifestRaw ?? "")
+    .digest("hex");
+}
+
+// Everything publishable plus every dependency's content — the whole package
+// a Community copy would receive. Display fields included on purpose: this is
+// the hash that answers "is what is published still what is here".
+export function routinePackageHashFrom(
+  meta: Record<string, unknown>,
+  manifestRaw: string | null,
+  depHashes: Record<string, string>,
+): string {
+  const canonical = JSON.stringify({
+    annotateFocus:
+      typeof meta.annotateFocus === "string" ? meta.annotateFocus : null,
+    capabilities: readCapabilities(meta.capabilities),
+    depHashes: Object.fromEntries(
+      Object.entries(depHashes).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+    deps: readDeps(meta.deps),
+    description: typeof meta.description === "string" ? meta.description : "",
+    flow: readFlow(meta.flow),
+    mode: readMode(meta.mode),
+    name: typeof meta.name === "string" ? meta.name : "",
+    storage: readStorage(meta.storage),
+    tags: readStringArray(meta.tags),
+    version: typeof meta.version === "string" ? meta.version : "0.0.0",
+    view: meta.view ?? null,
+  });
+  return createHash("sha256")
+    .update(" routine-package ")
+    .update(canonical)
+    .update(" manifest ")
+    .update(manifestRaw ?? "")
+    .digest("hex");
+}
+
 function countExamples(dir: string): number {
   const examplesDir = join(dir, "examples");
   if (!existsSync(examplesDir)) return 0;
@@ -260,7 +336,9 @@ export function listRoutineSummaries(
     if (!entry.isDirectory()) continue;
     if (!isRoutineFolder(routinesDirectory, entry.name)) continue;
     try {
-      summaries.push(toSummary(entry.name, readRoutineMeta(routinesDirectory, entry.name)));
+      summaries.push(
+        toSummary(entry.name, readRoutineMeta(routinesDirectory, entry.name)),
+      );
     } catch (error) {
       console.warn(`Skipping invalid routine "${entry.name}":`, error);
     }
@@ -274,15 +352,21 @@ export function listRoutineSummaries(
 function resolveDeps(
   libraryDirectory: string,
   deps: RoutineDep[],
-): string[] {
+): { missing: string[]; depHashes: Record<string, string> } {
   const missing: string[] = [];
+  // The dependency Methods' ACTUAL content hashes ride into executionHash: a
+  // step's behaviour is its Method's recipe/schema/manifest, so editing a
+  // Method must move the Routine's execution lock even though routine.json
+  // itself did not change.
+  const depHashes: Record<string, string> = {};
   for (const dep of deps) {
     const method = loadMethod(libraryDirectory, dep.methodId);
     if (!method || method.version !== dep.version) {
       missing.push(dep.methodId);
     }
+    if (method) depHashes[dep.methodId] = method.contentHash;
   }
-  return missing;
+  return { missing, depHashes };
 }
 
 // Full load: declarative model + manifest + example count + content hash +
@@ -309,9 +393,8 @@ export function loadRoutine(
       .filter((step) => !declared.has(step.methodId))
       .map((step) => step.methodId);
 
-    const missingDeps = [
-      ...new Set([...resolveDeps(libraryDirectory, deps), ...undeclared]),
-    ];
+    const resolution = resolveDeps(libraryDirectory, deps);
+    const missingDeps = [...new Set([...resolution.missing, ...undeclared])];
 
     return {
       ...summary,
@@ -324,6 +407,20 @@ export function loadRoutine(
         : {},
       exampleCount: countExamples(dir),
       contentHash: routineContentHashFrom(meta, manifestRaw),
+      executionHash: routineExecutionHashFrom(
+        meta,
+        manifestRaw,
+        resolution.depHashes,
+      ),
+      packageHash: routinePackageHashFrom(
+        meta,
+        manifestRaw,
+        resolution.depHashes,
+      ),
+      annotateFocus:
+        typeof meta.annotateFocus === "string" && meta.annotateFocus.trim()
+          ? meta.annotateFocus.trim().slice(0, 120)
+          : null,
       resolved: missingDeps.length === 0,
       missingDeps,
     };
@@ -350,6 +447,9 @@ export function toLibraryRoutine(routine: LoadedRoutine): LibraryRoutine {
     manifest: routine.manifest,
     exampleCount: routine.exampleCount,
     contentHash: routine.contentHash,
+    executionHash: routine.executionHash,
+    packageHash: routine.packageHash,
+    annotateFocus: routine.annotateFocus,
     resolved: routine.resolved,
     missingDeps: routine.missingDeps,
     capabilities: routine.capabilities,
@@ -386,7 +486,10 @@ export async function planRoutineSpec(
   signal: AbortSignal,
 ): Promise<RoutinePlan> {
   const available = listMethodSummaries(libraryDirectory)
-    .map((m) => `- id: ${m.id} — ${m.name}: ${m.description} [tags: ${m.tags.join(", ")}]`)
+    .map(
+      (m) =>
+        `- id: ${m.id} — ${m.name}: ${m.description} [tags: ${m.tags.join(", ")}]`,
+    )
     .join("\n");
 
   const prompt = [
@@ -418,9 +521,13 @@ export async function planRoutineSpec(
     description.trim(),
   ].join("\n");
 
-  const result = await getDefaultProvider().sendChat([{ content: prompt, role: "owner" }], undefined, {
-    signal,
-  });
+  const result = await getDefaultProvider().sendChat(
+    [{ content: prompt, role: "owner" }],
+    undefined,
+    {
+      signal,
+    },
+  );
 
   const parsed = extractPlanJson(result.answer) as Record<string, unknown>;
   const rawSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
@@ -441,7 +548,9 @@ export async function planRoutineSpec(
             description: typeof m.description === "string" ? m.description : "",
             recipe: typeof m.recipe === "string" ? m.recipe : "",
             inputSchema:
-              m.inputSchema && typeof m.inputSchema === "object" ? m.inputSchema : {},
+              m.inputSchema && typeof m.inputSchema === "object"
+                ? m.inputSchema
+                : {},
             outputSchema:
               m.outputSchema && typeof m.outputSchema === "object"
                 ? m.outputSchema
@@ -457,8 +566,12 @@ export async function planRoutineSpec(
     .filter((step): step is RoutinePlan["steps"][number] => step !== null);
 
   return {
-    name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : "New Routine",
-    description: typeof parsed.description === "string" ? parsed.description.trim() : "",
+    name:
+      typeof parsed.name === "string" && parsed.name.trim()
+        ? parsed.name.trim()
+        : "New Routine",
+    description:
+      typeof parsed.description === "string" ? parsed.description.trim() : "",
     mode: parsed.mode === "one-shot" ? "one-shot" : "accumulate",
     steps,
   };
@@ -531,7 +644,11 @@ export function createRoutineFromPlan(
     deps,
     flow,
   };
-  writeFileSync(join(dir, "routine.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
+  writeFileSync(
+    join(dir, "routine.json"),
+    `${JSON.stringify(meta, null, 2)}\n`,
+    "utf8",
+  );
   writeFileSync(
     join(dir, "manifest.json"),
     `${JSON.stringify({ permissions: { network: false, readFiles: false } }, null, 2)}\n`,

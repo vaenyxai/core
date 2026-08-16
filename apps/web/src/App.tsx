@@ -48,6 +48,7 @@ import type {
   RoutineInputField,
   RoutineJournalEntry,
   RoutinePlan,
+  RoutineEditSaveRequest,
   RoutineView,
   RoutineViewField,
   RunMethodResponse,
@@ -147,6 +148,13 @@ import {
   setChatProvider,
   setChatModel,
   planRoutine,
+  fetchRoutineEditDraft,
+  proposeRoutineEditDraft,
+  testRoutineEdit,
+  saveRoutineEditDraft,
+  type RoutineEditDraft,
+  type RoutineEditProposal,
+  type RoutineEditTestResult,
   fetchMemories,
   fetchSettings,
   fetchSystemStatus,
@@ -8922,9 +8930,17 @@ function AskVaenyxPanel({
                   {routineGallery.map((item) => (
                     <article className="routine-gallery-card" key={item.id}>
                       <small>{formatTime(item.createdAt)}</small>
+                      {/* A result renders with the view it was MADE under
+                          (Edit Routine v1): a later view edit must not
+                          re-dress history. Absent snapshot = made before any
+                          view change, so the current view is the right one. */}
                       <RoutineResultView
                         output={item.output}
-                        view={activeRoutine?.view}
+                        view={
+                          "viewSnapshot" in item
+                            ? item.viewSnapshot
+                            : activeRoutine?.view
+                        }
                       />
                     </article>
                   ))}
@@ -8972,7 +8988,11 @@ function AskVaenyxPanel({
                       </div>
                       <RoutineResultView
                         output={node.item.output}
-                        view={activeRoutine?.view}
+                        view={
+                          "viewSnapshot" in node.item
+                            ? node.item.viewSnapshot
+                            : activeRoutine?.view
+                        }
                       />
                       {/* THE speech element on results too: tap speaks a short
                           digest; a voice-fed run starts it by itself. */}
@@ -17625,17 +17645,21 @@ function RoutineDetail({
   methods,
   notice,
   onStart,
+  onEdit,
   published,
 }: {
   summary: LibraryRoutineSummary;
   methods: LibraryMethodSummary[];
   onStart: () => void;
+  // Edit Routine v1: present only for origin:self Routines — community ones
+  // are not editable in place.
+  onEdit?: () => void;
   // The update offer, which is the one thing here that asks for a decision, so
   // it goes at the top where a decision can still be made.
   notice?: ReactNode;
   published: boolean;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [full, setFull] = useState<LibraryRoutine | null>(null);
 
   useEffect(() => {
@@ -17727,6 +17751,11 @@ function RoutineDetail({
             2026-07-26): sharing a line with the version made it look like a
             caption, and it sat on top of the text on a narrow screen. */}
         <div className="routine-start-row">
+          {onEdit ? (
+            <button className="secondary-button" onClick={onEdit} type="button">
+              {lang === "zh" ? "编辑" : "Edit"}
+            </button>
+          ) : null}
           <button className="primary-button" onClick={onStart} type="button">
             {t("routine.open.start")}
           </button>
@@ -19177,6 +19206,1104 @@ function CreateRoutinePanel({
       )}
     </div>
   );
+}
+
+// ── Edit Routine v1 — upgrade an existing self Routine in place ─────────────
+// Open a full draft, optionally ask Vaenyx for a proposal, review the diffs,
+// try-run the draft (nothing written anywhere), then Save New Version. The
+// Routine's id — and with it its Chat, Journal and Gallery — never changes.
+
+interface EditableRoutineStep {
+  key: number;
+  stepId: string | null;
+  methodId: string;
+  methodName: string;
+  from: "journal" | "previous" | "static";
+  valueText: string;
+  recipe: string;
+  inputSchemaText: string;
+  outputSchemaText: string;
+  baseRecipe: string;
+  baseInputText: string;
+  baseOutputText: string;
+}
+
+interface EditableViewField {
+  key: string;
+  as: "title" | "text" | "bullets" | "table" | "amount" | "note";
+  label: string;
+}
+
+let editStepKeySeq = 0;
+
+function EditRoutinePanel({
+  routineId,
+  methods,
+  onDone,
+  onRoutinesRefresh,
+}: {
+  routineId: string;
+  methods: LibraryMethodSummary[];
+  onDone: () => void;
+  onRoutinesRefresh: () => void;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  const [draft, setDraft] = useState<RoutineEditDraft | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [tagsText, setTagsText] = useState("");
+  const [annotateFocus, setAnnotateFocus] = useState("");
+  const [viewFields, setViewFields] = useState<EditableViewField[]>([]);
+  const [steps, setSteps] = useState<EditableRoutineStep[]>([]);
+  const [addMethodId, setAddMethodId] = useState("");
+  const [addingStep, setAddingStep] = useState(false);
+  // The body as it was when the editor opened — the dirty check and the
+  // save's expectedContentHash both come from here.
+  const [initialBody, setInitialBody] = useState<string>("");
+
+  const [improveRequest, setImproveRequest] = useState("");
+  const [proposing, setProposing] = useState(false);
+  const [proposal, setProposal] = useState<RoutineEditProposal | null>(null);
+
+  const [testInputText, setTestInputText] = useState("{}");
+  const [testImageId, setTestImageId] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<RoutineEditTestResult | null>(
+    null,
+  );
+
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const seedFromDraft = useCallback((next: RoutineEditDraft) => {
+    setDraft(next);
+    setName(next.routine.name);
+    setDescription(next.routine.description);
+    setTagsText(next.routine.tags.join(", "));
+    setAnnotateFocus(next.routine.annotateFocus ?? "");
+    const parsedView = parseRoutineView(next.routine.view);
+    setViewFields(
+      parsedView
+        ? parsedView.fields.map((field) => ({
+            key: field.key,
+            as: field.as,
+            label: field.label ?? "",
+          }))
+        : [],
+    );
+    const seededSteps = next.steps.map((step) => ({
+      key: (editStepKeySeq += 1),
+      stepId: step.stepId,
+      methodId: step.method?.id ?? "",
+      methodName: step.method?.name ?? step.method?.id ?? "?",
+      from: step.from,
+      valueText:
+        step.value !== undefined ? JSON.stringify(step.value, null, 2) : "",
+      recipe: step.method?.recipe ?? "",
+      inputSchemaText: JSON.stringify(step.method?.inputSchema ?? {}, null, 2),
+      outputSchemaText: JSON.stringify(
+        step.method?.outputSchema ?? {},
+        null,
+        2,
+      ),
+      baseRecipe: step.method?.recipe ?? "",
+      baseInputText: JSON.stringify(step.method?.inputSchema ?? {}, null, 2),
+      baseOutputText: JSON.stringify(step.method?.outputSchema ?? {}, null, 2),
+    }));
+    setSteps(seededSteps);
+    setTestInputText(
+      JSON.stringify(
+        buildRoutineInputSkeleton(next.steps[0]?.method?.inputSchema),
+        null,
+        2,
+      ),
+    );
+    setConflict(false);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchRoutineEditDraft(routineId)
+      .then((next) => {
+        if (!active) return;
+        seedFromDraft(next);
+        setLoadError(null);
+      })
+      .catch((caught) => {
+        if (active) {
+          setLoadError(
+            caught instanceof Error
+              ? caught.message
+              : zh
+                ? "读不到这个 Routine。"
+                : "Could not load this Routine.",
+          );
+        }
+      });
+    return () => {
+      active = false;
+    };
+    // seedFromDraft is stable; zh only affects an error string.
+  }, [routineId]);
+
+  // PURE — called during render for the dirty check, so it must never set
+  // state; action handlers surface `problem` themselves.
+  function buildBody(): {
+    body: RoutineEditSaveRequest | null;
+    problem: string | null;
+  } {
+    if (!draft) return { body: null, problem: null };
+    const flow: RoutineEditSaveRequest["flow"] = [];
+    for (const step of steps) {
+      let inputSchema: unknown;
+      let outputSchema: unknown;
+      try {
+        inputSchema = JSON.parse(step.inputSchemaText || "{}");
+        outputSchema = JSON.parse(step.outputSchemaText || "{}");
+      } catch {
+        return {
+          body: null,
+          problem: zh
+            ? `「${step.methodName}」的 schema 不是有效 JSON。`
+            : `The schema for "${step.methodName}" is not valid JSON.`,
+        };
+      }
+      const edited =
+        step.recipe !== step.baseRecipe ||
+        step.inputSchemaText !== step.baseInputText ||
+        step.outputSchemaText !== step.baseOutputText;
+      let value: unknown;
+      if (step.from === "static" && step.valueText.trim()) {
+        try {
+          value = JSON.parse(step.valueText);
+        } catch {
+          value = step.valueText;
+        }
+      }
+      flow.push({
+        stepId: step.stepId,
+        methodId: step.methodId,
+        from: step.from,
+        ...(step.from === "static" ? { value } : {}),
+        ...(edited
+          ? { methodEdit: { recipe: step.recipe, inputSchema, outputSchema } }
+          : {}),
+      });
+    }
+    if (flow.length === 0) {
+      return {
+        body: null,
+        problem: zh ? "至少要有一步。" : "A Routine needs at least one step.",
+      };
+    }
+    // Blank rows are just abandoned "Add A Field" clicks; a view with no real
+    // fields is NO view (auto layout), never a junk `{fields: []}` on disk.
+    const realViewFields = viewFields
+      .filter((field) => field.key.trim())
+      .map((field) => ({
+        key: field.key.trim(),
+        as: field.as,
+        ...(field.label.trim() ? { label: field.label.trim() } : {}),
+      }));
+    return {
+      body: {
+        expectedContentHash: draft.routine.contentHash,
+        name: name.trim() || draft.routine.name,
+        description,
+        tags: tagsText
+          .split(/[,,、]/)
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .slice(0, 20),
+        view: realViewFields.length > 0 ? { fields: realViewFields } : null,
+        annotateFocus: annotateFocus.trim() ? annotateFocus.trim() : null,
+        flow,
+      },
+      problem: null,
+    };
+  }
+
+  // Dirty tracking snapshots the SAME body a save would send; a body that
+  // cannot build (bad JSON mid-typing) counts as dirty.
+  const currentBodyJson = (() => {
+    if (!draft) return "";
+    const { body } = buildBody();
+    return body ? JSON.stringify(body) : "dirty";
+  })();
+  useEffect(() => {
+    if (draft && !initialBody) {
+      setInitialBody(currentBodyJson);
+    }
+  }, [draft]);
+  const dirty = Boolean(initialBody) && currentBodyJson !== initialBody;
+
+  function requestClose() {
+    if (
+      dirty &&
+      !window.confirm(
+        zh
+          ? "还有没保存的修改,确定关闭吗?"
+          : "There are unsaved changes. Close anyway?",
+      )
+    ) {
+      return;
+    }
+    onDone();
+  }
+
+  async function propose() {
+    if (!improveRequest.trim()) return;
+    setProposing(true);
+    setError(null);
+    try {
+      setProposal(
+        await proposeRoutineEditDraft(routineId, improveRequest.trim()),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : zh
+            ? "提案没能生成。"
+            : "Could not draft a proposal.",
+      );
+    } finally {
+      setProposing(false);
+    }
+  }
+
+  function applyProposal() {
+    if (!proposal || !draft) return;
+    // The proposal was drafted from the SAVED routine, not from this editor:
+    // applying it replaces whatever is typed here. With hand edits pending,
+    // that must be a choice, never a surprise.
+    if (
+      dirty &&
+      !window.confirm(
+        zh
+          ? "应用提案会覆盖你在这里没保存的手动修改,继续吗?"
+          : "Applying the proposal replaces your unsaved manual edits here. Continue?",
+      )
+    ) {
+      return;
+    }
+    const proposed = proposal.proposed;
+    setName(proposed.name);
+    setDescription(proposed.description);
+    setTagsText(proposed.tags.join(", "));
+    setAnnotateFocus(proposed.annotateFocus ?? "");
+    const parsedView = parseRoutineView(proposed.view);
+    setViewFields(
+      parsedView
+        ? parsedView.fields.map((field) => ({
+            key: field.key,
+            as: field.as,
+            label: field.label ?? "",
+          }))
+        : [],
+    );
+    const byStepId = new Map(draft.steps.map((step) => [step.stepId, step]));
+    setSteps(
+      proposed.flow.map((step) => {
+        const base = step.stepId ? byStepId.get(step.stepId) : undefined;
+        const method = base?.method;
+        const methodName =
+          method?.name ??
+          methods.find((candidate) => candidate.id === step.methodId)?.name ??
+          step.methodId;
+        return {
+          key: (editStepKeySeq += 1),
+          stepId: step.stepId,
+          methodId: step.methodId,
+          methodName,
+          from: step.from,
+          valueText:
+            step.value !== undefined ? JSON.stringify(step.value, null, 2) : "",
+          recipe: step.methodEdit?.recipe ?? method?.recipe ?? "",
+          inputSchemaText: JSON.stringify(
+            step.methodEdit?.inputSchema ?? method?.inputSchema ?? {},
+            null,
+            2,
+          ),
+          outputSchemaText: JSON.stringify(
+            step.methodEdit?.outputSchema ?? method?.outputSchema ?? {},
+            null,
+            2,
+          ),
+          baseRecipe: method?.recipe ?? "",
+          baseInputText: JSON.stringify(method?.inputSchema ?? {}, null, 2),
+          baseOutputText: JSON.stringify(method?.outputSchema ?? {}, null, 2),
+        };
+      }),
+    );
+    setProposal(null);
+  }
+
+  async function runTest() {
+    const { body, problem } = buildBody();
+    if (!body) {
+      setError(problem);
+      return;
+    }
+    let input: unknown;
+    try {
+      input = JSON.parse(testInputText || "{}");
+    } catch {
+      setError(
+        zh ? "试跑输入不是有效 JSON。" : "The test input is not valid JSON.",
+      );
+      return;
+    }
+    setTesting(true);
+    setError(null);
+    try {
+      setTestResult(
+        await testRoutineEdit(routineId, {
+          draft: body,
+          input,
+          ...(testImageId ? { imageId: testImageId } : {}),
+        }),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : zh
+            ? "试跑失败了。"
+            : "The test run failed.",
+      );
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function save() {
+    const { body, problem } = buildBody();
+    if (!body) {
+      setError(problem);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setSaveMessage(null);
+    try {
+      const result = await saveRoutineEditDraft(routineId, body);
+      if (result.unchanged) {
+        setSaveMessage(
+          zh ? "没有改动 —— 什么都没保存。" : "No changes — nothing was saved.",
+        );
+      } else {
+        const parts: string[] = [
+          zh
+            ? `已保存为 v${result.routine.version}。`
+            : `Saved as v${result.routine.version}.`,
+        ];
+        if (result.staleTokens > 0) {
+          parts.push(
+            zh
+              ? `${result.staleTokens} 个 Routine Token 因为行为变化需要你重新授权(在 Library → Tokens 里)。`
+              : `${result.staleTokens} Routine Token(s) now need re-granting (Library → Tokens) because the behaviour changed.`,
+          );
+        }
+        if (result.publishedStale) {
+          parts.push(
+            zh
+              ? "已发布的版本落后了(不会自动重新发布)。"
+              : "The published copy is now behind (nothing republishes on its own).",
+          );
+        }
+        setSaveMessage(parts.join(" "));
+        const fresh = await fetchRoutineEditDraft(routineId);
+        seedFromDraft(fresh);
+        setInitialBody("");
+        onRoutinesRefresh();
+      }
+    } catch (caught) {
+      if (caught instanceof VaenyxRequestError && caught.status === 409) {
+        setConflict(true);
+      } else {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : zh
+              ? "保存失败,原版本未受影响。"
+              : "The save failed; the old version is untouched.",
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function pickTestPhoto(file: File | null) {
+    if (!file) return;
+    try {
+      const uploaded = await uploadPhoto(file);
+      setTestImageId(uploaded.imageId);
+    } catch {
+      setError(zh ? "照片上传失败。" : "The photo upload failed.");
+    }
+  }
+
+  if (loadError) {
+    return (
+      <div className="library-layout">
+        <button
+          className="text-button library-back"
+          onClick={onDone}
+          type="button"
+        >
+          ← {zh ? "所有 Routine" : "All routines"}
+        </button>
+        <p className="form-error">{loadError}</p>
+      </div>
+    );
+  }
+  if (!draft) {
+    return (
+      <div className="library-layout">
+        <p className="settings-card-copy">{zh ? "正在读取…" : "Loading..."}</p>
+      </div>
+    );
+  }
+  if (!draft.editable) {
+    return (
+      <div className="library-layout">
+        <button
+          className="text-button library-back"
+          onClick={onDone}
+          type="button"
+        >
+          ← {zh ? "所有 Routine" : "All routines"}
+        </button>
+        <p className="settings-card-copy">
+          {zh
+            ? "社区 Routine 不能原地修改(v1)。"
+            : "Community Routines cannot be edited in place (v1)."}
+        </p>
+      </div>
+    );
+  }
+
+  const sampleOutput = testResult?.output ?? {
+    title: zh ? "示例结果" : "Sample result",
+  };
+
+  return (
+    <div className="library-layout">
+      <button
+        className="text-button library-back"
+        onClick={requestClose}
+        type="button"
+      >
+        ← {zh ? "所有 Routine" : "All routines"}
+      </button>
+
+      {conflict ? (
+        <section className="settings-card">
+          <p className="form-error">
+            {zh
+              ? "这个 Routine 在别处被改过了 —— 这里没有覆盖任何东西。重新载入后再改。"
+              : "This Routine was changed somewhere else — nothing here overwrote it. Reload to edit the newer version."}
+          </p>
+          <button
+            className="secondary-button"
+            onClick={() => {
+              fetchRoutineEditDraft(routineId)
+                .then((fresh) => {
+                  seedFromDraft(fresh);
+                  setInitialBody("");
+                  setError(null);
+                })
+                .catch(() => {
+                  setError(
+                    zh
+                      ? "重新载入失败,再试一次。"
+                      : "The reload failed; try again.",
+                  );
+                });
+            }}
+            type="button"
+          >
+            {zh ? "重新载入" : "Reload"}
+          </button>
+        </section>
+      ) : null}
+
+      <section className="settings-card">
+        <p className="eyebrow">{zh ? "编辑 Routine" : "Edit Routine"}</p>
+        <h2>{draft.routine.name}</h2>
+        <label className="library-tryit-label">
+          {zh ? "名称" : "Name"}
+          <input
+            className="text-input"
+            maxLength={120}
+            onChange={(event) => setName(event.target.value)}
+            value={name}
+          />
+        </label>
+        <label className="library-tryit-label">
+          {zh ? "说明" : "Description"}
+          <textarea
+            className="library-tryit-input"
+            maxLength={2000}
+            onChange={(event) => setDescription(event.target.value)}
+            rows={2}
+            value={description}
+          />
+        </label>
+        <label className="library-tryit-label">
+          {zh ? "标签(逗号分隔)" : "Tags (comma-separated)"}
+          <input
+            className="text-input"
+            onChange={(event) => setTagsText(event.target.value)}
+            value={tagsText}
+          />
+        </label>
+        <label className="library-tryit-label">
+          {zh
+            ? "照片标注重点(告诉标注工具只标什么)"
+            : "Photo marks focus (what the annotate tool should mark)"}
+          <input
+            className="text-input"
+            maxLength={120}
+            onChange={(event) => setAnnotateFocus(event.target.value)}
+            placeholder={zh ? "例如:只标食材" : "e.g. only mark food"}
+            value={annotateFocus}
+          />
+        </label>
+      </section>
+
+      <section className="settings-card">
+        <p className="eyebrow">{zh ? "让 Vaenyx 改" : "Ask Vaenyx"}</p>
+        <p className="settings-card-copy">
+          {zh
+            ? "说想改善什么,Vaenyx 提出修改;先审再试,保存前什么都不会变。"
+            : "Say what should improve; Vaenyx proposes changes. Review and try them — nothing changes until you save."}
+        </p>
+        <textarea
+          className="library-tryit-input"
+          maxLength={2000}
+          onChange={(event) => setImproveRequest(event.target.value)}
+          placeholder={
+            zh
+              ? "例如:结果改成三个可选方案,列出看见的食材、假设和缺的东西"
+              : "e.g. give three options, list the ingredients seen, assumptions and what's missing"
+          }
+          rows={3}
+          value={improveRequest}
+        />
+        <button
+          className="secondary-button"
+          disabled={proposing || !improveRequest.trim()}
+          onClick={() => void propose()}
+          type="button"
+        >
+          {proposing
+            ? zh
+              ? "正在起草…"
+              : "Drafting..."
+            : zh
+              ? "生成修改提案"
+              : "Draft The Changes"}
+        </button>
+      </section>
+
+      {steps.map((step, index) => (
+        <section className="settings-card" key={step.key}>
+          <p className="eyebrow">
+            {zh ? "第" : "Step"} {index + 1}
+            {zh ? " 步" : ""} · {step.methodName}
+            {step.recipe !== step.baseRecipe ||
+            step.inputSchemaText !== step.baseInputText ||
+            step.outputSchemaText !== step.baseOutputText ? (
+              <AttentionChip tone="edited">
+                {zh ? "已修改" : "Edited"}
+              </AttentionChip>
+            ) : null}
+          </p>
+          <p className="settings-card-copy">
+            {step.from === "journal"
+              ? zh
+                ? "输入:你喂给它的内容"
+                : "Input: what you feed it"
+              : step.from === "previous"
+                ? zh
+                  ? "输入:上一步的结果"
+                  : "Input: the previous step's result"
+                : zh
+                  ? "输入:固定值"
+                  : "Input: a fixed value"}
+          </p>
+          <label className="library-tryit-label">
+            Recipe
+            <textarea
+              className="library-tryit-input"
+              onChange={(event) =>
+                setSteps((current) =>
+                  current.map((candidate) =>
+                    candidate.key === step.key
+                      ? { ...candidate, recipe: event.target.value }
+                      : candidate,
+                  ),
+                )
+              }
+              rows={6}
+              spellCheck={false}
+              value={step.recipe}
+            />
+          </label>
+          <details className="advanced-details">
+            <summary>
+              {zh ? "输入形状(JSON Schema)" : "Input shape (JSON Schema)"}
+            </summary>
+            <textarea
+              className="library-tryit-input"
+              onChange={(event) =>
+                setSteps((current) =>
+                  current.map((candidate) =>
+                    candidate.key === step.key
+                      ? { ...candidate, inputSchemaText: event.target.value }
+                      : candidate,
+                  ),
+                )
+              }
+              rows={6}
+              spellCheck={false}
+              value={step.inputSchemaText}
+            />
+          </details>
+          <details className="advanced-details">
+            <summary>
+              {zh ? "输出形状(JSON Schema)" : "Output shape (JSON Schema)"}
+            </summary>
+            <textarea
+              className="library-tryit-input"
+              onChange={(event) =>
+                setSteps((current) =>
+                  current.map((candidate) =>
+                    candidate.key === step.key
+                      ? { ...candidate, outputSchemaText: event.target.value }
+                      : candidate,
+                  ),
+                )
+              }
+              rows={6}
+              spellCheck={false}
+              value={step.outputSchemaText}
+            />
+          </details>
+          {steps.length > 1 ? (
+            <button
+              className="text-button danger"
+              onClick={() =>
+                setSteps((current) =>
+                  current.filter((candidate) => candidate.key !== step.key),
+                )
+              }
+              type="button"
+            >
+              {zh ? "删掉这一步" : "Remove This Step"}
+            </button>
+          ) : null}
+        </section>
+      ))}
+
+      <section className="settings-card">
+        <p className="eyebrow">{zh ? "加一步" : "Add A Step"}</p>
+        <div className="model-card-actions">
+          <select
+            className="text-input"
+            onChange={(event) => setAddMethodId(event.target.value)}
+            value={addMethodId}
+          >
+            <option value="">
+              {zh ? "选一个现有 Method…" : "Pick an existing Method..."}
+            </option>
+            {methods.map((method) => (
+              <option key={method.id} value={method.id}>
+                {method.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="secondary-button"
+            disabled={!addMethodId || addingStep}
+            onClick={() => {
+              // The summary list has no recipe/schemas — fetch the REAL
+              // Method first, so the new step's editor starts from what the
+              // Method actually is. Seeding blanks here would turn the
+              // owner's first keystroke into a revision with wiped schemas.
+              const methodId = addMethodId;
+              setAddingStep(true);
+              setError(null);
+              fetchLibraryMethod(methodId)
+                .then((method) => {
+                  setSteps((current) => [
+                    ...current,
+                    {
+                      key: (editStepKeySeq += 1),
+                      stepId: null,
+                      methodId: method.id,
+                      methodName: method.name,
+                      from: current.length === 0 ? "journal" : "previous",
+                      valueText: "",
+                      recipe: method.recipe,
+                      inputSchemaText: JSON.stringify(
+                        method.inputSchema ?? {},
+                        null,
+                        2,
+                      ),
+                      outputSchemaText: JSON.stringify(
+                        method.outputSchema ?? {},
+                        null,
+                        2,
+                      ),
+                      baseRecipe: method.recipe,
+                      baseInputText: JSON.stringify(
+                        method.inputSchema ?? {},
+                        null,
+                        2,
+                      ),
+                      baseOutputText: JSON.stringify(
+                        method.outputSchema ?? {},
+                        null,
+                        2,
+                      ),
+                    },
+                  ]);
+                  setAddMethodId("");
+                })
+                .catch(() => {
+                  setError(
+                    zh
+                      ? "读不到这个 Method,没有加进来。"
+                      : "Could not load that Method; nothing was added.",
+                  );
+                })
+                .finally(() => setAddingStep(false));
+            }}
+            type="button"
+          >
+            {addingStep
+              ? zh
+                ? "正在读取…"
+                : "Loading..."
+              : zh
+                ? "加进来"
+                : "Add"}
+          </button>
+        </div>
+        <p className="settings-card-copy text-faint">
+          {zh
+            ? "新步骤先带着这个 Method 现在的样子;要改它的 Recipe/Schema,加进来之后在这里改 —— 保存时会生成一个新的私有版本,别的 Routine 不受影响。"
+            : "A new step starts as the Method is today; edit its recipe/schemas here after adding — saving creates a new private revision, and no other Routine is touched."}
+        </p>
+      </section>
+
+      <section className="settings-card">
+        <p className="eyebrow">{zh ? "结果长什么样(View)" : "Result View"}</p>
+        {viewFields.map((field, index) => (
+          <div className="model-card-actions" key={index}>
+            <input
+              className="text-input"
+              onChange={(event) =>
+                setViewFields((current) =>
+                  current.map((candidate, i) =>
+                    i === index
+                      ? { ...candidate, key: event.target.value }
+                      : candidate,
+                  ),
+                )
+              }
+              placeholder={zh ? "字段名" : "field key"}
+              value={field.key}
+            />
+            <select
+              className="text-input"
+              onChange={(event) =>
+                setViewFields((current) =>
+                  current.map((candidate, i) =>
+                    i === index
+                      ? {
+                          ...candidate,
+                          as: event.target.value as EditableViewField["as"],
+                        }
+                      : candidate,
+                  ),
+                )
+              }
+              value={field.as}
+            >
+              {(
+                ["title", "text", "bullets", "table", "amount", "note"] as const
+              ).map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <input
+              className="text-input"
+              onChange={(event) =>
+                setViewFields((current) =>
+                  current.map((candidate, i) =>
+                    i === index
+                      ? { ...candidate, label: event.target.value }
+                      : candidate,
+                  ),
+                )
+              }
+              placeholder={zh ? "标签(可选)" : "label (optional)"}
+              value={field.label}
+            />
+            <button
+              className="text-button danger"
+              onClick={() =>
+                setViewFields((current) =>
+                  current.filter((_, i) => i !== index),
+                )
+              }
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          className="secondary-button"
+          onClick={() =>
+            setViewFields((current) => [
+              ...current,
+              { key: "", as: "text", label: "" },
+            ])
+          }
+          type="button"
+        >
+          {zh ? "加一个字段" : "Add A Field"}
+        </button>
+        <p className="settings-card-copy text-faint">
+          {zh
+            ? "没有字段 = 自动版式。下面的预览用的就是当前设置:"
+            : "No fields = the automatic layout. The preview below uses exactly these settings:"}
+        </p>
+        <div className="library-result valid">
+          <RoutineResultView
+            output={sampleOutput}
+            view={
+              viewFields.some((field) => field.key.trim())
+                ? {
+                    fields: viewFields
+                      .filter((field) => field.key.trim())
+                      .map((field) => ({
+                        key: field.key.trim(),
+                        as: field.as,
+                        ...(field.label.trim()
+                          ? { label: field.label.trim() }
+                          : {}),
+                      })),
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </section>
+
+      <section className="settings-card">
+        <p className="eyebrow">{zh ? "试跑草稿" : "Try Changes"}</p>
+        <p className="settings-card-copy">
+          {zh
+            ? "用草稿真的跑一遍 —— 不写 Journal、Gallery,也不留学习样例。"
+            : "Runs the draft for real — nothing lands in the Journal, Gallery or learning examples."}
+        </p>
+        <label className="library-tryit-label">
+          {zh ? "输入(JSON)" : "Input (JSON)"}
+          <textarea
+            className="library-tryit-input"
+            onChange={(event) => setTestInputText(event.target.value)}
+            rows={4}
+            spellCheck={false}
+            value={testInputText}
+          />
+        </label>
+        <div className="model-card-actions">
+          <label className="secondary-button">
+            {testImageId
+              ? zh
+                ? "换一张照片"
+                : "Change Photo"
+              : zh
+                ? "加一张照片试"
+                : "Try With A Photo"}
+            <input
+              accept="image/*"
+              hidden
+              onChange={(event) =>
+                void pickTestPhoto(event.target.files?.[0] ?? null)
+              }
+              type="file"
+            />
+          </label>
+          <button
+            className="primary-button"
+            disabled={testing}
+            onClick={() => void runTest()}
+            type="button"
+          >
+            {testing
+              ? zh
+                ? "试跑中…"
+                : "Running..."
+              : zh
+                ? "试跑"
+                : "Try Changes"}
+          </button>
+        </div>
+        {testImageId ? (
+          <AnnotatedPhoto
+            annotations={testResult?.annotations ?? null}
+            imageId={testImageId}
+          />
+        ) : null}
+        {testResult ? (
+          <div
+            className={`library-result ${testResult.outputValid ? "valid" : "invalid"}`}
+          >
+            <RoutineResultView
+              output={testResult.output}
+              view={
+                viewFields.length > 0
+                  ? {
+                      fields: viewFields
+                        .filter((field) => field.key.trim())
+                        .map((field) => ({
+                          key: field.key.trim(),
+                          as: field.as,
+                          ...(field.label.trim()
+                            ? { label: field.label.trim() }
+                            : {}),
+                        })),
+                    }
+                  : undefined
+              }
+            />
+            <details className="advanced-details">
+              <summary>{zh ? "每一步的原始输出" : "Raw step outputs"}</summary>
+              <pre className="library-result-json">
+                {JSON.stringify(testResult.steps, null, 2)}
+              </pre>
+            </details>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="settings-card">
+        {error ? <p className="form-error">{error}</p> : null}
+        {saveMessage ? (
+          <p className="settings-card-copy">{saveMessage}</p>
+        ) : null}
+        <div className="routine-start-row">
+          <button
+            className="primary-button"
+            disabled={saving || !dirty}
+            onClick={() => void save()}
+            type="button"
+          >
+            {saving
+              ? zh
+                ? "保存中…"
+                : "Saving..."
+              : zh
+                ? "保存新版本"
+                : "Save New Version"}
+          </button>
+        </div>
+        <p className="settings-card-copy text-faint">
+          {zh
+            ? "版本号由 Vaenyx 自己递增;没有改动就不会保存。行为变化会让已授权的 Routine Token 失效,需要你在 Tokens 里重新授权 —— 绝不自动。"
+            : "Vaenyx bumps the version itself; a no-op is not saved. Behaviour changes invalidate granted Routine Tokens until you re-grant them — never automatically."}
+        </p>
+      </section>
+
+      {proposal ? (
+        <Modal
+          onClose={() => setProposal(null)}
+          title={zh ? "修改提案" : "Proposed Changes"}
+          variant="doc"
+        >
+          <p className="settings-card-copy">{proposal.summary}</p>
+          {proposal.unchanged ? (
+            <p className="settings-card-copy">
+              {zh
+                ? "Vaenyx 认为不需要改动。"
+                : "Vaenyx found nothing that needs changing."}
+            </p>
+          ) : null}
+          {proposal.recipeDiffs.map((entry) => (
+            <div key={entry.stepId}>
+              <p className="eyebrow">{entry.methodName}</p>
+              <div className="recipe-diff">
+                {entry.diff.map((line, index) => (
+                  <div className={`recipe-diff-line ${line.kind}`} key={index}>
+                    {line.kind === "added"
+                      ? "+ "
+                      : line.kind === "removed"
+                        ? "− "
+                        : "  "}
+                    {line.text}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="modal-actions">
+            <button
+              className="text-button"
+              onClick={() => setProposal(null)}
+              type="button"
+            >
+              {zh ? "不用" : "Cancel"}
+            </button>
+            <button
+              className="primary-button"
+              disabled={proposal.unchanged}
+              onClick={applyProposal}
+              type="button"
+            >
+              {zh ? "放进编辑器(还没保存)" : "Apply To Editor (Not Saved Yet)"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+    </div>
+  );
+}
+
+// A best-effort input skeleton from a JSON Schema, for the Try box.
+function buildRoutineInputSkeleton(schema: unknown): Record<string, unknown> {
+  const record = schema as
+    | { properties?: Record<string, { type?: string }> }
+    | null
+    | undefined;
+  const skeleton: Record<string, unknown> = {};
+  if (record?.properties && typeof record.properties === "object") {
+    for (const [key, spec] of Object.entries(record.properties)) {
+      skeleton[key] =
+        spec?.type === "number" || spec?.type === "integer"
+          ? 0
+          : spec?.type === "array"
+            ? []
+            : spec?.type === "object"
+              ? {}
+              : "";
+    }
+  }
+  return skeleton;
 }
 
 // Domain of a Method/Routine from its tags, for the B-class context disclaimers
@@ -20686,6 +21813,9 @@ function RoutinesPanel({
   const communityVersions = useCommunityVersions();
   // Which Routine's description is open. Null = the list.
   const [opened, setOpened] = useState<string | null>(null);
+  // Edit Routine v1: which self Routine is in the editor. Like `creating`,
+  // the editor replaces the list.
+  const [editing, setEditing] = useState<string | null>(null);
   const [publishState, setPublishState] = useState<PublishState | null>(null);
 
   useEffect(() => {
@@ -20706,6 +21836,28 @@ function RoutinesPanel({
     fetchPublishState()
       .then(setPublishState)
       .catch(() => setPublishState(null));
+  }
+
+  // "+ New Routine" clicked while the editor is open: drop the request
+  // instead of unmounting the editor (which would silently lose the edit).
+  useEffect(() => {
+    if (creating && editing) onCreatingChange(false);
+  }, [creating, editing]);
+
+  // The editor wins over "+ New Routine": that button lives in the tab header
+  // and stays clickable while the editor is open, and letting it swap the
+  // panel would silently destroy the edit in progress. The click is dropped
+  // (and cleared by the effect above, so closing the editor later does not
+  // surprise-open the create panel).
+  if (editing) {
+    return (
+      <EditRoutinePanel
+        methods={methods}
+        onDone={() => setEditing(null)}
+        onRoutinesRefresh={onRoutinesRefresh}
+        routineId={editing}
+      />
+    );
   }
 
   if (creating) {
@@ -20790,6 +21942,14 @@ function RoutinesPanel({
                   onUpdated={onRoutinesRefresh}
                 />
               ) : null
+            }
+            onEdit={
+              openedRoutine.origin === "community"
+                ? undefined
+                : () => {
+                    setOpened(null);
+                    setEditing(openedRoutine.id);
+                  }
             }
             onStart={() => {
               setOpened(null);

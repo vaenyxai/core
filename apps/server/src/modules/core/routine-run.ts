@@ -184,6 +184,10 @@ export async function runRoutine(
           stepId: last.stepId,
           output,
           outputValid,
+          // Pinned at write (Edit Routine v1): this result renders with the
+          // view it was made under, whatever a later edit does to the view.
+          viewSnapshot: routine.view ?? null,
+          routineHash: routine.executionHash,
         })
       : null;
 
@@ -304,8 +308,7 @@ export function describeRoutineInputFields(
     return {
       key,
       type: typeof prop.type === "string" ? prop.type : "string",
-      description:
-        typeof prop.description === "string" ? prop.description : "",
+      description: typeof prop.description === "string" ? prop.description : "",
       required: required.includes(key),
     };
   });
@@ -325,9 +328,13 @@ export type RoutineInputAsk = (
 ) => Promise<string>;
 
 const defaultAsk: RoutineInputAsk = async (prompt, signal) => {
-  const result = await getDefaultProvider().sendChat([{ content: prompt, role: "owner" }], undefined, {
-    signal,
-  });
+  const result = await getDefaultProvider().sendChat(
+    [{ content: prompt, role: "owner" }],
+    undefined,
+    {
+      signal,
+    },
+  );
   return result.answer;
 };
 

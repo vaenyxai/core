@@ -38,6 +38,11 @@ interface GalleryRow {
   output: string;
   output_valid: 0 | 1;
   created_at: string;
+  // Edit Routine v1: the view this result was made under (NULL = made before
+  // any view change; renders with the current view) and the executionHash of
+  // the routine revision that produced it.
+  view_snapshot: string | null;
+  routine_hash: string | null;
 }
 
 function toJournalEntry(row: JournalRow): RoutineJournalEntry {
@@ -46,8 +51,9 @@ function toJournalEntry(row: JournalRow): RoutineJournalEntry {
     try {
       const parsed = JSON.parse(row.annotation_items) as unknown;
       if (Array.isArray(parsed)) {
-        imageAnnotations =
-          parsed as NonNullable<RoutineJournalEntry["imageAnnotations"]>;
+        imageAnnotations = parsed as NonNullable<
+          RoutineJournalEntry["imageAnnotations"]
+        >;
       }
     } catch {
       // A corrupt row just means no overlay.
@@ -65,6 +71,14 @@ function toJournalEntry(row: JournalRow): RoutineJournalEntry {
 }
 
 function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
+  let viewSnapshot: unknown = undefined;
+  if (row.view_snapshot !== null && row.view_snapshot !== undefined) {
+    try {
+      viewSnapshot = JSON.parse(row.view_snapshot) as unknown;
+    } catch {
+      viewSnapshot = undefined;
+    }
+  }
   return {
     id: row.id,
     routineId: row.routine_id,
@@ -73,6 +87,8 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
     output: JSON.parse(row.output),
     outputValid: row.output_valid === 1,
     createdAt: row.created_at,
+    ...(viewSnapshot !== undefined ? { viewSnapshot } : {}),
+    routineHash: row.routine_hash ?? null,
   };
 }
 
@@ -115,21 +131,19 @@ export function listJournalEntries(
   const select = `SELECT j.*, a.items AS annotation_items
                   FROM routine_journal j
                   LEFT JOIN image_annotations a ON a.image_id = j.image_id`;
-  const rows = (
-    chatId === undefined
-      ? database.sqlite
-          .prepare(
-            `${select} WHERE j.routine_id = ?
+  const rows = (chatId === undefined
+    ? database.sqlite
+        .prepare(
+          `${select} WHERE j.routine_id = ?
              ORDER BY j.created_at DESC, j.id DESC`,
-          )
-          .all(routineId)
-      : database.sqlite
-          .prepare(
-            `${select} WHERE j.routine_id = ? AND j.chat_id IS ?
+        )
+        .all(routineId)
+    : database.sqlite
+        .prepare(
+          `${select} WHERE j.routine_id = ? AND j.chat_id IS ?
              ORDER BY j.created_at DESC, j.id DESC`,
-          )
-          .all(routineId, chatId)
-  ) as unknown as JournalRow[];
+        )
+        .all(routineId, chatId)) as unknown as JournalRow[];
   return rows.map(toJournalEntry);
 }
 
@@ -143,18 +157,26 @@ export interface RoutineParseExample {
 
 export function addParseExample(
   database: DatabaseHandle,
-  input: { routineId: string; message: string; input: unknown },
+  input: {
+    routineId: string;
+    message: string;
+    input: unknown;
+    // The step-1 input-schema revision this correction was made under (Edit
+    // Routine v1); null keeps pre-edit behaviour.
+    inputSchemaRev?: string | null;
+  },
 ): void {
   database.sqlite
     .prepare(
-      `INSERT INTO routine_parse_examples (id, routine_id, message, input)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO routine_parse_examples (id, routine_id, message, input, input_schema_rev)
+       VALUES (?, ?, ?, ?, ?)`,
     )
     .run(
       randomUUID(),
       input.routineId,
       input.message,
       JSON.stringify(input.input ?? null),
+      input.inputSchemaRev ?? null,
     );
 }
 
@@ -162,17 +184,66 @@ export function listParseExamples(
   database: DatabaseHandle,
   routineId: string,
   limit: number,
+  // With a revision, only examples made under the SAME step-1 input schema
+  // are served (plus unstamped NULL rows, which only still exist while the
+  // schema has never changed — the first schema-changing save stamps them).
+  inputSchemaRev?: string | null,
 ): RoutineParseExample[] {
-  const rows = database.sqlite
-    .prepare(
-      `SELECT message, input FROM routine_parse_examples WHERE routine_id = ?
-       ORDER BY created_at DESC, id DESC LIMIT ?`,
-    )
-    .all(routineId, limit) as unknown as { message: string; input: string }[];
+  const rows = (inputSchemaRev === undefined
+    ? database.sqlite
+        .prepare(
+          `SELECT message, input FROM routine_parse_examples WHERE routine_id = ?
+             ORDER BY created_at DESC, id DESC LIMIT ?`,
+        )
+        .all(routineId, limit)
+    : database.sqlite
+        .prepare(
+          `SELECT message, input FROM routine_parse_examples
+             WHERE routine_id = ? AND (input_schema_rev IS ? OR input_schema_rev IS NULL)
+             ORDER BY created_at DESC, id DESC LIMIT ?`,
+        )
+        .all(routineId, inputSchemaRev, limit)) as unknown as {
+    message: string;
+    input: string;
+  }[];
   return rows.map((row) => ({
     message: row.message,
     input: JSON.parse(row.input) as unknown,
   }));
+}
+
+// ── Edit Routine v1: history stamping ──────────────────────────────────────
+
+// A view change is about to land: every gallery row that never recorded its
+// view was made under the OLD one — stamp it so old results keep their look
+// and never borrow the new layout.
+export function stampGalleryViewSnapshots(
+  database: DatabaseHandle,
+  routineId: string,
+  oldView: unknown,
+): void {
+  database.sqlite
+    .prepare(
+      `UPDATE routine_gallery SET view_snapshot = ?
+       WHERE routine_id = ? AND view_snapshot IS NULL`,
+    )
+    .run(JSON.stringify(oldView ?? null), routineId);
+}
+
+// A step-1 input-schema change is about to land: unstamped parse examples
+// were corrections for the OLD field shape — stamp them with the old
+// revision so the new schema's parses never read them as few-shot.
+export function stampParseExampleRevisions(
+  database: DatabaseHandle,
+  routineId: string,
+  oldRev: string,
+): void {
+  database.sqlite
+    .prepare(
+      `UPDATE routine_parse_examples SET input_schema_rev = ?
+       WHERE routine_id = ? AND input_schema_rev IS NULL`,
+    )
+    .run(oldRev, routineId);
 }
 
 export function addGalleryItem(
@@ -183,13 +254,17 @@ export function addGalleryItem(
     stepId?: string | null;
     output: unknown;
     outputValid?: boolean;
+    // Edit Routine v1: pin the view and routine revision this result was
+    // made under, so a later edit cannot re-dress old results.
+    viewSnapshot?: unknown;
+    routineHash?: string | null;
   },
 ): RoutineGalleryItem {
   const id = randomUUID();
   database.sqlite
     .prepare(
-      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid, view_snapshot, routine_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -198,6 +273,10 @@ export function addGalleryItem(
       input.stepId ?? null,
       JSON.stringify(input.output ?? null),
       input.outputValid === false ? 0 : 1,
+      "viewSnapshot" in input
+        ? JSON.stringify(input.viewSnapshot ?? null)
+        : null,
+      input.routineHash ?? null,
     );
 
   const row = database.sqlite
@@ -211,20 +290,18 @@ export function listGalleryItems(
   routineId: string,
   chatId?: string | null,
 ): RoutineGalleryItem[] {
-  const rows = (
-    chatId === undefined
-      ? database.sqlite
-          .prepare(
-            `SELECT * FROM routine_gallery WHERE routine_id = ?
+  const rows = (chatId === undefined
+    ? database.sqlite
+        .prepare(
+          `SELECT * FROM routine_gallery WHERE routine_id = ?
              ORDER BY created_at DESC, id DESC`,
-          )
-          .all(routineId)
-      : database.sqlite
-          .prepare(
-            `SELECT * FROM routine_gallery WHERE routine_id = ? AND chat_id IS ?
+        )
+        .all(routineId)
+    : database.sqlite
+        .prepare(
+          `SELECT * FROM routine_gallery WHERE routine_id = ? AND chat_id IS ?
              ORDER BY created_at DESC, id DESC`,
-          )
-          .all(routineId, chatId)
-  ) as unknown as GalleryRow[];
+        )
+        .all(routineId, chatId)) as unknown as GalleryRow[];
   return rows.map(toGalleryItem);
 }

@@ -94,6 +94,9 @@ import {
   LibraryMethodSummarySchema,
   LibraryRoutineSummarySchema,
   RoutineRunChatRequestSchema,
+  RoutineEditSaveRequestSchema,
+  ProposeRoutineEditRequestSchema,
+  RoutineEditTestRequestSchema,
   type RoutineRunChatRequest,
   PlanRoutineRequestSchema,
   RoutinePlanSchema,
@@ -180,6 +183,9 @@ import {
   type DraftMethodRunRequest,
   type PlanRoutineRequest,
   type RoutinePlan,
+  type RoutineEditSaveRequest,
+  type ProposeRoutineEditRequest,
+  type RoutineEditTestRequest,
   type InstallRoutineRequest,
   type InstallMethodRequest,
   type LegalAcknowledgeRequest,
@@ -404,6 +410,14 @@ import {
   buildChatRoutineInput,
   parseChatRoutineInput,
 } from "../core/routine-run.js";
+import {
+  proposeRoutineEdit,
+  readRoutineEditDraft,
+  RoutineEditError,
+  routineInputSchemaRev,
+  runRoutineEditTest,
+  saveRoutineEdit,
+} from "../core/routine-edit.js";
 import {
   buildProvenance,
   exportMethodAsSkill,
@@ -3033,10 +3047,23 @@ export async function registerGatewayRoutes(
         // local, private few-shot example so future parses of similar messages
         // improve. Never uploaded; rides the local backup.
         if (request.body.learn) {
+          const routineForRev = loadRoutine(
+            context.config.routinesDirectory,
+            context.config.libraryDirectory,
+            thread.routineId,
+          );
           addParseExample(context.database, {
             routineId: thread.routineId,
             message: request.body.content,
             input: request.body.input,
+            // Bound to the step-1 input schema it corrects (Edit Routine v1):
+            // a later schema change stops serving it as few-shot.
+            inputSchemaRev: routineForRev
+              ? routineInputSchemaRev(
+                  context.config.libraryDirectory,
+                  routineForRev,
+                )
+              : null,
           });
         }
       } else {
@@ -3050,6 +3077,11 @@ export async function registerGatewayRoutes(
           journalInput = wrapped.input;
         } else {
           try {
+            const routineForRev = loadRoutine(
+              context.config.routinesDirectory,
+              context.config.libraryDirectory,
+              thread.routineId,
+            );
             const parsed = await parseChatRoutineInput(
               context.config.routinesDirectory,
               context.config.libraryDirectory,
@@ -3057,7 +3089,20 @@ export async function registerGatewayRoutes(
               effectiveContent,
               controller.signal,
               undefined,
-              listParseExamples(context.database, thread.routineId, 3),
+              // Only corrections made under the CURRENT step-1 input schema
+              // (Edit Routine v1) — examples for renamed fields would steer
+              // the parse wrong.
+              listParseExamples(
+                context.database,
+                thread.routineId,
+                3,
+                routineForRev
+                  ? routineInputSchemaRev(
+                      context.config.libraryDirectory,
+                      routineForRev,
+                    )
+                  : null,
+              ),
             );
             if (!parsed) {
               return reply.code(400).send({
@@ -8594,6 +8639,287 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // ── Edit Routine v1 (Owner): draft → proposal → try → atomic save ──────────
+  // No 200 schemas on purpose: the payloads carry author JSON (view, schemas,
+  // manifest) that Fastify's strict serializer would strip.
+
+  // The full editable draft, exactly what is on disk plus every step's Method
+  // in detail. Community Routines come back with editable:false.
+  app.get<{ Params: { id: string } }>(
+    "/v1/routines/:id/edit",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: { 401: ErrorResponseSchema, 404: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return readRoutineEditDraft(
+          context.config.routinesDirectory,
+          context.config.libraryDirectory,
+          request.params.id,
+        );
+      } catch (error) {
+        if (
+          error instanceof RoutineEditError &&
+          error.code === "ROUTINE_NOT_FOUND"
+        ) {
+          return reply.code(404).send({ error: "Routine not found." });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // "What should improve" → a minimal proposed draft + per-step recipe diffs.
+  // Writes nothing; the Owner reviews and try-runs before anything is saved.
+  app.post<{ Params: { id: string }; Body: ProposeRoutineEditRequest }>(
+    "/v1/routines/:id/edit/draft",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: ProposeRoutineEditRequestSchema,
+        response: {
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+      try {
+        return await proposeRoutineEdit(
+          context.config.routinesDirectory,
+          context.config.libraryDirectory,
+          request.params.id,
+          request.body.request,
+          controller.signal,
+        );
+      } catch (error) {
+        if (
+          error instanceof RoutineEditError &&
+          error.code === "ROUTINE_NOT_FOUND"
+        ) {
+          return reply.code(404).send({ error: "Routine not found." });
+        }
+        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+      }
+    },
+  );
+
+  // Try Changes: run the draft in memory. Nothing is written — not the
+  // Routine, not its Methods, not Journal/Gallery, not parse examples. A
+  // photo runs the annotate tool with the DRAFT's annotateFocus, so Photo
+  // Marks changes are testable before saving.
+  app.post<{ Params: { id: string }; Body: RoutineEditTestRequest }>(
+    "/v1/routines/:id/edit/test",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: RoutineEditTestRequestSchema,
+        response: {
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+
+      let input = request.body.input;
+      let annotations: ImageAnnotationItem[] | null = null;
+      // Same ceiling as the chat run: Vision switched off (globally or by the
+      // session's mode) refuses the LOOKING, not the run — the typed input
+      // still goes through and the photo is never sent anywhere. A draft
+      // rehearsal is not an exemption from the capability switch.
+      const testLanguage = /[一-鿿]/.test(request.body.draft.name)
+        ? ("zh" as const)
+        : ("en" as const);
+      const testVisionRefused = Boolean(
+        request.body.imageId &&
+        capabilityRefusal("vision", owner, testLanguage),
+      );
+      if (request.body.imageId && !testVisionRefused) {
+        const found = readImage(
+          context.config.dataDirectory,
+          request.body.imageId,
+        );
+        if (found) {
+          const focus = request.body.draft.annotateFocus ?? null;
+          annotations = await annotateImage(
+            context.config.secretsDirectory,
+            found.image,
+            found.mimeType,
+            testLanguage,
+            focus,
+          ).catch(() => null);
+          try {
+            const extracted = await describeImage(
+              context.config.secretsDirectory,
+              found.image,
+              found.mimeType,
+              testLanguage,
+            );
+            // The photo's words join the FIRST string field of the given
+            // input — the same "photo stays a photo, its words ride along"
+            // deal the chat run makes.
+            if (extracted.trim() && input && typeof input === "object") {
+              const record = { ...(input as Record<string, unknown>) };
+              const stringKey = Object.keys(record).find(
+                (key) => typeof record[key] === "string",
+              );
+              if (stringKey) {
+                const existing = (record[stringKey] as string).trim();
+                record[stringKey] = existing
+                  ? `${existing}\n${extracted.trim()}`
+                  : extracted.trim();
+                input = record;
+              }
+            }
+          } catch {
+            // No vision model: the typed input still runs.
+          }
+        }
+      }
+
+      try {
+        const result = await runRoutineEditTest(
+          context.config.routinesDirectory,
+          context.config.libraryDirectory,
+          request.params.id,
+          request.body.draft,
+          input,
+          controller.signal,
+          (declared) =>
+            decideCapabilities(context.database, declared, owner.modeId ?? null)
+              .allowed,
+        );
+        return { ...result, ...(annotations ? { annotations } : {}) };
+      } catch (error) {
+        if (error instanceof RoutineEditError) {
+          if (error.code === "ROUTINE_NOT_FOUND") {
+            return reply.code(404).send({ error: "Routine not found." });
+          }
+          return reply.code(400).send({ error: error.message });
+        }
+        if (
+          error instanceof Error &&
+          error.message.startsWith("STEP_INPUT_INVALID:")
+        ) {
+          return reply.code(400).send({ error: error.message });
+        }
+        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+      }
+    },
+  );
+
+  // Save New Version: staged, validated, atomic; the id never changes; the
+  // server bumps the version; a no-op is not saved. Behaviour changes leave
+  // every Routine Token 409ing until the Owner explicitly re-grants.
+  app.put<{ Params: { id: string }; Body: RoutineEditSaveRequest }>(
+    "/v1/routines/:id",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: RoutineEditSaveRequestSchema,
+        response: {
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        const before = loadRoutine(
+          context.config.routinesDirectory,
+          context.config.libraryDirectory,
+          request.params.id,
+        );
+        const result = saveRoutineEdit(
+          context.database,
+          context.config.routinesDirectory,
+          context.config.libraryDirectory,
+          request.params.id,
+          request.body,
+        );
+        if (!result.unchanged) {
+          // Routine id, versions, hashes, created Method ids, token count —
+          // and NEVER the recipe text, photos or any household content.
+          recordAudit(context.database, {
+            actorType: "owner",
+            actorId: owner.id,
+            actorName: owner.name,
+            action: "library.routine.edit",
+            decision: "allowed",
+            reason: `Routine edited in place: v${before?.version ?? "?"} (${(before?.contentHash ?? "").slice(0, 12)}) -> v${result.routine.version} (${result.routine.contentHash.slice(0, 12)}); execution ${result.behaviourChanged ? "changed" : "unchanged"}; new methods [${result.createdMethodIds.join(", ")}]; ${result.staleTokens} token(s) now need re-granting.`,
+            resourceType: "routine",
+            resourceId: request.params.id,
+          });
+        }
+        return result;
+      } catch (error) {
+        if (error instanceof RoutineEditError) {
+          switch (error.code) {
+            case "ROUTINE_NOT_FOUND":
+              return reply.code(404).send({ error: "Routine not found." });
+            case "ROUTINE_NOT_SELF":
+              return reply.code(403).send({
+                error:
+                  "Community Routines cannot be edited in place. Install-and-fork is the path for those.",
+              });
+            case "EDIT_CONFLICT":
+              return reply.code(409).send({
+                error:
+                  "This Routine was changed somewhere else after this editor opened. Reopen it to edit the newer version — nothing was overwritten.",
+              });
+            default:
+              return reply.code(400).send({ error: error.message });
+          }
+        }
+        throw error;
+      }
+    },
+  );
+
   // ── Library v2 distribution (④): the community catalogue (read from Cloudflare) ─
   // The browser never calls the CDN directly: the server proxies the read, so the
   // "app reads CF only" rule lives in one place (and there is no CORS surface).
@@ -11914,7 +12240,14 @@ export async function registerGatewayRoutes(
           error: "That routine is no longer available.",
         });
       }
-      if (routine.contentHash !== lockedHash) {
+      // Edit Routine v1: the lock is the EXECUTION hash — what a run actually
+      // does. Locks written before the split were re-encoded once at BOOT
+      // (migrateLegacyRoutineTokenLocks); there is deliberately no run-time
+      // re-encode, because at run time "contentHash still matches" no longer
+      // proves the behaviour is unchanged (a dependency Method may have been
+      // edited in between). A mismatch here is always a real change since the
+      // grant, and only the Owner's explicit token edit ever re-pins it.
+      if (routine.executionHash !== lockedHash) {
         recordAudit(context.database, {
           actorType: "app",
           actorId: profile.id,

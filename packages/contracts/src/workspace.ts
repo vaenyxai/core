@@ -1702,6 +1702,14 @@ export const LibraryRoutineSchema = Type.Object(
     manifest: Type.Unknown(),
     exampleCount: Type.Integer(),
     contentHash: Type.String(),
+    // The two-hash split (Edit Routine v1). executionHash is what a Routine
+    // Token locks: flow, deps, mode, storage, manifest, annotateFocus and
+    // each dependency Method's content hash — never the version label, so a
+    // display-only save (which auto-bumps version) cannot break a token.
+    // packageHash covers everything publishable including display fields.
+    executionHash: Type.Optional(Type.String()),
+    packageHash: Type.Optional(Type.String()),
+    annotateFocus: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     resolved: Type.Boolean(),
     missingDeps: Type.Array(Type.String()),
     capabilities: Type.Optional(Type.Array(Type.String())),
@@ -1738,6 +1746,12 @@ export const RoutineGalleryItemSchema = Type.Object(
     output: Type.Unknown(),
     outputValid: Type.Boolean(),
     createdAt: Type.String(),
+    // Edit Routine v1: the view this result was made under. Absent = made
+    // before any view change — the renderer may use the current view. A
+    // present snapshot (including null = "the automatic template") is what
+    // this result renders with, whatever the routine's view says today.
+    viewSnapshot: Type.Optional(Type.Unknown()),
+    routineHash: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -1775,6 +1789,88 @@ export const RoutinePlanSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+// ── Edit Routine v1 — upgrade an origin:self Routine in place ─────────────────
+// The Owner opens a full editable draft, optionally asks Vaenyx for a
+// proposal, reviews, try-runs the draft (nothing written), then saves. The
+// folder id never changes; the server bumps the version; behaviour changes
+// move executionHash (Routine Tokens 409 until the Owner re-grants), display
+// changes only mark a published Routine stale.
+
+// One step of the edited flow. stepId null = a NEW step (the server assigns a
+// never-reused id); an existing stepId keeps its identity. methodEdit present
+// = revise the step's Method: the server creates a NEW private Method
+// revision from `methodId` and rewires only this Routine to it.
+export const RoutineEditStepSchema = Type.Object(
+  {
+    stepId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    methodId: Type.String({ minLength: 1 }),
+    from: Type.Union([
+      Type.Literal("journal"),
+      Type.Literal("previous"),
+      Type.Literal("static"),
+    ]),
+    value: Type.Optional(Type.Unknown()),
+    methodEdit: Type.Optional(
+      Type.Object(
+        {
+          recipe: Type.String({ minLength: 1 }),
+          inputSchema: Type.Unknown(),
+          outputSchema: Type.Unknown(),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const RoutineEditSaveRequestSchema = Type.Object(
+  {
+    // The contentHash the editor loaded — a mismatch means someone saved in
+    // between, and the server refuses rather than overwrite the newer state.
+    expectedContentHash: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1, maxLength: 120 }),
+    description: Type.String({ maxLength: 2_000 }),
+    tags: Type.Array(Type.String({ maxLength: 40 }), { maxItems: 20 }),
+    // null clears the custom view (back to the automatic template).
+    view: Type.Union([Type.Unknown(), Type.Null()]),
+    annotateFocus: Type.Union([Type.String({ maxLength: 120 }), Type.Null()]),
+    flow: Type.Array(RoutineEditStepSchema, { minItems: 1, maxItems: 12 }),
+  },
+  { additionalProperties: false },
+);
+
+export const ProposeRoutineEditRequestSchema = Type.Object(
+  {
+    request: Type.String({ minLength: 1, maxLength: 2_000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const RoutineEditTestRequestSchema = Type.Object(
+  {
+    // The same draft shape a save would carry, run in memory: nothing is
+    // written to the Routine, its Methods, Journal, Gallery or examples.
+    draft: RoutineEditSaveRequestSchema,
+    input: Type.Unknown(),
+    // A photo to try with (the annotate tool runs with the DRAFT's
+    // annotateFocus, so Photo Marks changes are testable before saving).
+    imageId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+  },
+  { additionalProperties: false },
+);
+
+export type RoutineEditStep = Static<typeof RoutineEditStepSchema>;
+export type RoutineEditSaveRequest = Static<
+  typeof RoutineEditSaveRequestSchema
+>;
+export type ProposeRoutineEditRequest = Static<
+  typeof ProposeRoutineEditRequestSchema
+>;
+export type RoutineEditTestRequest = Static<
+  typeof RoutineEditTestRequestSchema
+>;
 
 // ── Library v2: distribution (④) — the shared catalogue served from the CDN ───
 // The Vaenyx app reads a single index.json from Cloudflare (never GitHub directly),

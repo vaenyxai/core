@@ -34,6 +34,7 @@ import {
   mergePendingCandidates,
 } from "./modules/core/vaenyx-me.js";
 import { sweepOrphanDocuments } from "./modules/core/document-gc.js";
+import { migrateLegacyRoutineTokenLocks } from "./modules/core/app-profiles.js";
 import { runDueModeDigests } from "./modules/core/modes.js";
 import { bindUsageDatabase } from "./modules/core/relay-usage.js";
 import { sweepFlywheel } from "./modules/core/flywheel-send.js";
@@ -121,6 +122,25 @@ export async function buildApp(
   // Any task left "running" from a previous run was interrupted by a restart or
   // crash; mark it failed so it is retriable instead of stuck forever.
   reconcileInterruptedTasks(database);
+
+  // Routine Token locks written before the contentHash/executionHash split
+  // (Edit Routine v1) re-encode ONCE, here — before any edit can move the
+  // content hash out from under them. See migrateLegacyRoutineTokenLocks for
+  // why boot, not run time.
+  try {
+    const relocked = migrateLegacyRoutineTokenLocks(
+      database,
+      config.routinesDirectory,
+      config.libraryDirectory,
+    );
+    if (relocked > 0) {
+      app.log.info(
+        `Re-encoded ${relocked} Routine Token lock(s) to the execution-hash format.`,
+      );
+    }
+  } catch (error) {
+    app.log.error(error, "Routine Token lock migration failed; continuing.");
+  }
 
   // In-process scheduler: once a minute, run any task whose schedule is due,
   // and the automatic backup when its schedule says so.

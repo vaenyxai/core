@@ -237,6 +237,14 @@ Read this inside the app: **Settings → Manual**.
   like a chat that grows extra buttons (Journal, Gallery) as you use it.
 - **Make one** — describe the steps in chat. One step becomes a Method, several
   become a Routine. Vaenyx drafts it and offers a test run before saving.
+- **Improve one** — open your own Routine in the Library and press **Edit**.
+  Say what should improve and Vaenyx proposes the changes; review them, **Try
+  Changes** (a real run that writes nothing into the Journal or Gallery), then
+  **Save New Version**. It stays the SAME Routine: same chat, same history,
+  and old results keep the look they were made with. Vaenyx numbers the
+  versions itself. If the behaviour changed, any app keys granted to this
+  Routine stop working until you re-grant them under Tokens — never silently.
+  Community Routines cannot be edited in place.
 - **Where they live** — the **Library** screen, in four tabs: Routines, Tokens,
   Methods, Community. Each tab says what it is on its own first line, and each
   has the same two buttons above its list: make a new one, or find one in the

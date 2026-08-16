@@ -61,6 +61,9 @@ import type {
   RoutineGalleryItem,
   RoutineJournalEntry,
   RoutinePlan,
+  RoutineEditSaveRequest,
+  RoutineEditTestRequest,
+  ImageAnnotationItem,
   RoutineRunNeedsInput,
   ProjectMemory,
   RejectVaenyxMeCandidateRequest,
@@ -1686,6 +1689,98 @@ export function createRoutine(plan: RoutinePlan): Promise<LibraryRoutine> {
   return requestJson<LibraryRoutine>("/v1/routines", {
     method: "POST",
     body: JSON.stringify(plan),
+  });
+}
+
+// ── Edit Routine v1 ────────────────────────────────────────────────────────
+
+export interface RoutineEditStepDetail {
+  stepId: string;
+  from: "journal" | "previous" | "static";
+  value?: unknown;
+  method: {
+    id: string;
+    name: string;
+    origin: "self" | "community";
+    version: string;
+    recipe: string;
+    inputSchema: unknown;
+    outputSchema: unknown;
+    manifest: unknown;
+    contentHash: string;
+  } | null;
+}
+
+export interface RoutineEditDraft {
+  routine: LibraryRoutine;
+  steps: RoutineEditStepDetail[];
+  editable: boolean;
+}
+
+export interface RoutineEditSaveResult {
+  unchanged: boolean;
+  routine: LibraryRoutine;
+  createdMethodIds: string[];
+  behaviourChanged: boolean;
+  staleTokens: number;
+  publishedStale: boolean;
+}
+
+export interface RoutineEditProposal {
+  proposed: RoutineEditSaveRequest;
+  summary: string;
+  recipeDiffs: {
+    stepId: string;
+    methodName: string;
+    diff: { kind: "same" | "added" | "removed"; text: string }[];
+  }[];
+  unchanged: boolean;
+}
+
+export interface RoutineEditTestResult {
+  steps: {
+    stepId: string;
+    methodId: string;
+    output: unknown;
+    outputValid: boolean;
+  }[];
+  output: unknown;
+  outputValid: boolean;
+  webSearchUsed: boolean;
+  annotations?: ImageAnnotationItem[];
+}
+
+export function fetchRoutineEditDraft(id: string): Promise<RoutineEditDraft> {
+  return requestJson<RoutineEditDraft>(`/v1/routines/${id}/edit`);
+}
+
+export function proposeRoutineEditDraft(
+  id: string,
+  request: string,
+): Promise<RoutineEditProposal> {
+  return requestJson<RoutineEditProposal>(`/v1/routines/${id}/edit/draft`, {
+    method: "POST",
+    body: JSON.stringify({ request }),
+  });
+}
+
+export function testRoutineEdit(
+  id: string,
+  input: RoutineEditTestRequest,
+): Promise<RoutineEditTestResult> {
+  return requestJson<RoutineEditTestResult>(`/v1/routines/${id}/edit/test`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function saveRoutineEditDraft(
+  id: string,
+  body: RoutineEditSaveRequest,
+): Promise<RoutineEditSaveResult> {
+  return requestJson<RoutineEditSaveResult>(`/v1/routines/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
   });
 }
 

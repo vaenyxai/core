@@ -45,7 +45,10 @@ function hashAppToken(token: string): string {
 
 // Reversible display copy (see token-vault.ts): the key never enters backups.
 
-function allowedSkillIds(database: DatabaseHandle, profileId: string): string[] {
+function allowedSkillIds(
+  database: DatabaseHandle,
+  profileId: string,
+): string[] {
   return (
     database.sqlite
       .prepare(
@@ -58,7 +61,10 @@ function allowedSkillIds(database: DatabaseHandle, profileId: string): string[] 
   ).map((row) => row.skill_id);
 }
 
-function allowedMethodIds(database: DatabaseHandle, profileId: string): string[] {
+function allowedMethodIds(
+  database: DatabaseHandle,
+  profileId: string,
+): string[] {
   return (
     database.sqlite
       .prepare(
@@ -150,7 +156,62 @@ export function getAppProfileRoutineLock(
   return row?.routine_content_hash ?? null;
 }
 
-function toAppProfile(database: DatabaseHandle, row: AppProfileRow): AppProfile {
+// One-time upgrade shim for the contentHash → executionHash split (Edit
+// Routine v1, 2026-08-16). Locks written before the split hold the OLD
+// contentHash. Run at BOOT, before any edit can happen: a legacy lock that
+// still matches its routine's current contentHash means the routine is
+// unchanged since the grant (the old format's own definition of unchanged),
+// so re-encoding it to the execution format changes nothing about what the
+// token may run. It must happen at boot and not lazily at run time, because
+// every save now bumps the version — a display-only rename would move
+// contentHash and strand a token that never deserved a 409 — and because a
+// run-time re-encode could silently absorb a Method edit made in between
+// (contentHash does not cover dependency Method content; executionHash
+// does). A lock matching neither hash is left alone: the routine really
+// changed since the grant, and only the Owner's explicit re-grant moves it.
+export function migrateLegacyRoutineTokenLocks(
+  database: DatabaseHandle,
+  routinesDirectory: string,
+  libraryDirectory: string,
+): number {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT id, routine_id, routine_content_hash FROM app_profiles
+       WHERE kind = 'routine' AND routine_id IS NOT NULL
+         AND routine_content_hash IS NOT NULL`,
+    )
+    .all() as unknown as {
+    id: string;
+    routine_id: string;
+    routine_content_hash: string;
+  }[];
+  let migrated = 0;
+  for (const row of rows) {
+    let routine;
+    try {
+      routine = loadRoutine(
+        routinesDirectory,
+        libraryDirectory,
+        row.routine_id,
+      );
+    } catch {
+      continue;
+    }
+    if (!routine) continue;
+    if (row.routine_content_hash === routine.executionHash) continue;
+    if (row.routine_content_hash !== routine.contentHash) continue;
+    database.sqlite
+      .prepare(`UPDATE app_profiles SET routine_content_hash = ? WHERE id = ?`)
+      .run(routine.executionHash, row.id);
+    migrated += 1;
+  }
+  return migrated;
+}
+
+function toAppProfile(
+  database: DatabaseHandle,
+  row: AppProfileRow,
+): AppProfile {
   return {
     id: row.id,
     name: row.name,
@@ -255,7 +316,10 @@ export function createAppProfile(
         tokenPrefix,
         tokenCipher,
         routine.id,
-        routine.contentHash,
+        // Edit Routine v1: tokens lock the EXECUTION hash — the parts that
+        // decide what a run does — never the version label, so a display-only
+        // save (which auto-bumps the version) cannot break a grant.
+        routine.executionHash,
       );
 
     const profile = listAppProfiles(database).find((item) => item.id === id);
@@ -386,7 +450,10 @@ export function updateAppProfile(
       .prepare(
         "UPDATE app_profiles SET routine_id = ?, routine_content_hash = ? WHERE id = ?",
       )
-      .run(routine.id, routine.contentHash, profileId);
+      // The Owner editing a token IS the explicit re-grant: the current
+      // executionHash is re-pinned here and nowhere else (a Routine save
+      // never touches these rows — no silent auto-repin).
+      .run(routine.id, routine.executionHash, profileId);
 
     const profile = listAppProfiles(database).find(
       (item) => item.id === profileId,
@@ -441,7 +508,9 @@ export function updateAppProfile(
     throw error;
   }
 
-  const profile = listAppProfiles(database).find((item) => item.id === profileId);
+  const profile = listAppProfiles(database).find(
+    (item) => item.id === profileId,
+  );
 
   if (!profile) {
     throw new Error("APP_PROFILE_NOT_FOUND");
@@ -485,7 +554,9 @@ export function regenerateAppProfileToken(
     throw new Error("APP_PROFILE_NOT_FOUND");
   }
 
-  const profile = listAppProfiles(database).find((item) => item.id === profileId);
+  const profile = listAppProfiles(database).find(
+    (item) => item.id === profileId,
+  );
 
   if (!profile) {
     throw new Error("APP_PROFILE_NOT_FOUND");
@@ -560,7 +631,9 @@ export function disableAppProfile(
     throw new Error("APP_PROFILE_NOT_FOUND");
   }
 
-  const profile = listAppProfiles(database).find((item) => item.id === profileId);
+  const profile = listAppProfiles(database).find(
+    (item) => item.id === profileId,
+  );
 
   if (!profile) {
     throw new Error("APP_PROFILE_NOT_FOUND");
@@ -583,7 +656,9 @@ export function enableAppProfile(
     throw new Error("APP_PROFILE_NOT_FOUND");
   }
 
-  const profile = listAppProfiles(database).find((item) => item.id === profileId);
+  const profile = listAppProfiles(database).find(
+    (item) => item.id === profileId,
+  );
 
   if (!profile) {
     throw new Error("APP_PROFILE_NOT_FOUND");
