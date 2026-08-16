@@ -1216,26 +1216,27 @@ function CameraButton({
         type="file"
       />
       {/* One tap each, no chooser in between ("一步到位", Oskar 2026-07-28):
-          album first (the common case), camera beside it. */}
-      <button
-        aria-label={t("photo.choose")}
-        className={`mic-button${busy ? " mic-button--busy" : ""}`}
-        disabled={disabled || busy}
-        onClick={() => inputRef.current?.click()}
-        title={error ?? t("photo.choose")}
-        type="button"
-      >
-        {busy ? <IconSpinner /> : <IconAlbum />}
-      </button>
+          camera first, album second (Oskar, 2026-08-16 — the fridge photo is
+          usually taken fresh, not picked). */}
       <button
         aria-label={t("photo.take")}
-        className="mic-button"
+        className={`mic-button${busy ? " mic-button--busy" : ""}`}
         disabled={disabled || busy}
         onClick={() => cameraRef.current?.click()}
         title={error ?? t("photo.take")}
         type="button"
       >
-        <IconCamera />
+        {busy ? <IconSpinner /> : <IconCamera />}
+      </button>
+      <button
+        aria-label={t("photo.choose")}
+        className="mic-button"
+        disabled={disabled || busy}
+        onClick={() => inputRef.current?.click()}
+        title={error ?? t("photo.choose")}
+        type="button"
+      >
+        <IconAlbum />
       </button>
     </>
   );
@@ -1987,6 +1988,20 @@ function ComposerTools({
       document.removeEventListener("pointerdown", closeIfOutside, true);
   }, [open]);
 
+  // A tool that DID something folds the row away (Oskar, 2026-08-16: 选完
+  // 照片就收起来). The system pickers fire no pointerdown on the page, so
+  // the outside-tap close above never sees a chosen photo — this wrapper
+  // closes on the callback itself. The mic stays open while recording (its
+  // UI lives in the row) and closes when the words land.
+  function closeThen<A extends unknown[]>(
+    handler: (...args: A) => void,
+  ): (...args: A) => void {
+    return (...args) => {
+      setOpen(false);
+      handler(...args);
+    };
+  }
+
   return (
     <span
       className="composer-tools"
@@ -2011,14 +2026,18 @@ function ComposerTools({
           <CameraButton
             disabled={disabled}
             lang={lang}
-            onAttach={canAttachPhoto ? onPhoto : undefined}
-            onPreview={canAttachPhoto ? onPhotoPreview : undefined}
-            onText={onTranscribed}
-            onUploadStart={canAttachPhoto ? onUploadStart : undefined}
+            onAttach={canAttachPhoto ? closeThen(onPhoto) : undefined}
+            onPreview={canAttachPhoto ? closeThen(onPhotoPreview) : undefined}
+            onText={closeThen(onTranscribed)}
+            onUploadStart={
+              canAttachPhoto ? closeThen(onUploadStart) : undefined
+            }
           />
         ) : null}
-        <DocumentButton disabled={disabled} onPicked={onDocument} />
-        {showMic ? <MicButton disabled={disabled} onText={onSpoken} /> : null}
+        <DocumentButton disabled={disabled} onPicked={closeThen(onDocument)} />
+        {showMic ? (
+          <MicButton disabled={disabled} onText={closeThen(onSpoken)} />
+        ) : null}
       </span>
     </span>
   );
