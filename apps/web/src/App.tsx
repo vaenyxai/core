@@ -7406,17 +7406,45 @@ function AskVaenyxPanel({
       ) {
         // Stop must bite during this judgment too, exactly like the
         // main-chat judge: register the controller, and a Stop pressed
-        // mid-classify means NOTHING fires afterwards.
+        // mid-classify means NOTHING fires afterwards. A hung judgment must
+        // not wedge the chat either — after 20s the timer aborts it and the
+        // chooser takes over (ask, never guess).
         const chatIntentController = new AbortController();
         streamControllerRef.current = chatIntentController;
+        let intentTimedOut = false;
+        const intentTimer = window.setTimeout(() => {
+          intentTimedOut = true;
+          chatIntentController.abort();
+        }, 20_000);
         setSending(true);
         setPrompt("");
         setStreamStatus("classifying");
+        // The Owner must SEE what they said while the judgment runs — the
+        // same optimistic row a run shows (the 2026-08-16 screenshot was a
+        // wait with the input invisible). Whatever happens next replaces it.
+        const intentTempId = `pending-journal-${crypto.randomUUID()}`;
+        const intentConversationId = activeConversationId;
+        const intentRoutineId = activeThread.routineId;
+        setRoutineJournal((current) => [
+          {
+            id: intentTempId,
+            routineId: intentRoutineId,
+            chatId: intentConversationId,
+            content,
+            createdAt: new Date().toISOString(),
+            imageId: null,
+          },
+          ...current,
+        ]);
+        const removeIntentTemp = () =>
+          setRoutineJournal((current) =>
+            current.filter((entry) => entry.id !== intentTempId),
+          );
         let decision: "feed" | "edit" | "unsure" = "unsure";
         try {
           decision = (
             await classifyRoutineChatIntent(
-              activeConversationId,
+              intentConversationId,
               content,
               chatIntentController.signal,
             )
@@ -7424,9 +7452,12 @@ function AskVaenyxPanel({
         } catch {
           // No verdict is still a verdict: ask, never guess.
         }
+        window.clearTimeout(intentTimer);
         setStreamStatus(null);
         setSending(false);
-        if (chatIntentController.signal.aborted) {
+        removeIntentTemp();
+        if (chatIntentController.signal.aborted && !intentTimedOut) {
+          // The Owner pressed Stop: nothing fires.
           return;
         }
         if (decision === "edit") {
@@ -8688,6 +8719,18 @@ function AskVaenyxPanel({
         id: item.id,
         item,
       })),
+      // The conversation's own MESSAGES belong here too: the discussion that
+      // created the routine (owner model 2026-08-16: that chat IS the
+      // routine's first chat) and every receipt note an edit leaves behind —
+      // a note that only exists in the DB is a silent decision.
+      ...messages
+        .filter((message) => message.content)
+        .map((message) => ({
+          kind: "message" as const,
+          at: message.createdAt,
+          id: `message-${message.id}`,
+          message,
+        })),
     ].sort((a, b) => a.at.localeCompare(b.at));
 
     // Friendly-input confirm card: required fields still blank (booleans always
@@ -9439,7 +9482,24 @@ function AskVaenyxPanel({
             ) : (
               <>
                 {timeline.map((node) =>
-                  node.kind === "journal" ? (
+                  node.kind === "message" ? (
+                    <article
+                      className={`ask-vaenyx-message ${node.message.role} ${node.message.status}`}
+                      key={node.id}
+                    >
+                      <div className="ask-vaenyx-message-head">
+                        <strong>
+                          {node.message.role === "owner" ? "You" : agentName}
+                        </strong>
+                        <small>{formatTime(node.at)}</small>
+                      </div>
+                      {node.message.role === "owner" ? (
+                        <p>{node.message.content}</p>
+                      ) : (
+                        <MarkdownMessage content={node.message.content} />
+                      )}
+                    </article>
+                  ) : node.kind === "journal" ? (
                     <article
                       className="ask-vaenyx-message owner completed"
                       key={node.id}
@@ -9635,7 +9695,11 @@ function AskVaenyxPanel({
               The moment the empty assistant message lands, ITS orb takes over
               and this stand-in leaves. The model's own thinking stream still
               prints underneath. */}
+          {/* A routine chat's timeline carries its own indicator row above —
+              without this gate BOTH rendered and the wait showed twice
+              (Oskar, 2026-08-16 screenshot). */}
           {sending &&
+          !isRoutine &&
           !messages.some(
             (message) => message.role !== "owner" && !message.content,
           ) ? (
