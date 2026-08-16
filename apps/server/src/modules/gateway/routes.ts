@@ -411,6 +411,7 @@ import {
 import {
   runRoutine,
   buildChatRoutineInput,
+  describeRoutineInputFields,
   parseChatRoutineInput,
 } from "../core/routine-run.js";
 import {
@@ -3708,7 +3709,19 @@ export async function registerGatewayRoutes(
       });
       return {
         decision: await classifyRoutineChatMessage(
-          { name: routine.name, description: routine.description },
+          {
+            name: routine.name,
+            description: routine.description,
+            // What it eats, so a message ABOUT the result cannot read as
+            // something to put in (multi-field routines only; single-field
+            // ones have nothing useful to list).
+            inputFields:
+              describeRoutineInputFields(
+                context.config.routinesDirectory,
+                context.config.libraryDirectory,
+                thread.routineId,
+              )?.fields.map((field) => field.key) ?? [],
+          },
           request.body.content,
           controller.signal,
         ),

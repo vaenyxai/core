@@ -6087,6 +6087,10 @@ function AskVaenyxPanel({
     content: string;
     imageId?: string;
     speakResult: boolean;
+    // Set when the chooser was opened because the PARSE came back empty: the
+    // "feed it" answer then opens the (blank) confirm card to fill by hand
+    // rather than re-running into the same emptiness.
+    fillByHand?: RoutineInputConfirmState;
   } | null>(null);
   const [routineEditChat, setRoutineEditChat] = useState<{
     conversationId: string;
@@ -6209,30 +6213,8 @@ function AskVaenyxPanel({
   // Friendly input (Library v2 ③): a multi-field routine returns a
   // needs-confirmation payload instead of running; this holds the editable
   // confirm card (AI-parsed values as strings, booleans as checks).
-  const [routineInputConfirm, setRoutineInputConfirm] = useState<{
-    conversationId: string;
-    routineId: string;
-    content: string;
-    // The words the Owner actually TYPED (content above may carry the vision
-    // extraction too) — closing the card restores THESE, never the dump.
-    typedContent: string;
-    imageId: string | null;
-    // Spoken in → the eventual result is spoken out, even across the card.
-    speakResult: boolean;
-    // Photo mode (visual first): the marks ARE the primary field's value —
-    // edited on the picture, never in a text blob. primaryKey names the field
-    // they feed; initialMarks (JSON) detects real corrections for learning.
-    marks: ImageAnnotationItem[] | null;
-    initialMarks: string;
-    // A failed photo read, said out loud on the card (owner, 2026-08-16).
-    photoError: string | null;
-    primaryKey: string | null;
-    fields: RoutineInputField[];
-    values: Record<string, string>;
-    checks: Record<string, boolean>;
-    initialValues: Record<string, string>;
-    initialChecks: Record<string, boolean>;
-  } | null>(null);
+  const [routineInputConfirm, setRoutineInputConfirm] =
+    useState<RoutineInputConfirmState | null>(null);
   // Load a routine chat's Journal + Gallery whenever the open chat (or its
   // routine binding) changes; clear them for an ordinary chat.
   useEffect(() => {
@@ -6917,7 +6899,7 @@ function AskVaenyxPanel({
           result.annotations.length > 0
             ? result.annotations
             : null;
-        setRoutineInputConfirm({
+        const confirmPayload = {
           conversationId,
           routineId,
           // What the parser actually read (typed words + a photo's extracted
@@ -6944,7 +6926,27 @@ function AskVaenyxPanel({
           // whether the Owner actually edited anything.
           initialValues: { ...values },
           initialChecks: { ...checks },
-        });
+        };
+        // NOTHING could be read out of the message, and no photo carried it:
+        // an empty card is the app pretending it understood (Oskar,
+        // 2026-08-16 — "给结果配一张照片" landed here as ingredients). That
+        // is the moment to ask, not to present blanks.
+        const parsedNothing =
+          !marks &&
+          Object.values(values).every((value) => value.trim() === "") &&
+          Object.values(checks).every((checked) => !checked);
+        if (parsedNothing) {
+          setRoutineFeedOrEdit({
+            conversationId,
+            routineId,
+            content,
+            ...(imageId ? { imageId } : {}),
+            speakResult: speakResult ?? false,
+            fillByHand: confirmPayload,
+          });
+          return;
+        }
+        setRoutineInputConfirm(confirmPayload);
         return;
       }
       const data = await fetchChatRoutineData(conversationId);
@@ -7487,18 +7489,15 @@ function AskVaenyxPanel({
     if (activeThread?.routineId && activeConversationId) {
       // A photo always means content for a run, and a COMMUNITY routine's
       // chat only ever feeds (not editable in place — the server gate says
-      // the same). Words alone that SOUND like a change request get one
-      // cheap judgment; a clear edit request opens the proposal card
-      // instead of being cooked as input, and "unsure" opens the big
-      // chooser (owner rule: never decide silently).
+      // the same). EVERY other message is judged by the model, not by a
+      // keyword list: "给结果配一张做好的这道菜的照片" carries no word like
+      // 改 or 修改, and the list silently fed it to the routine as
+      // ingredients (Oskar, 2026-08-16). One small call is the price of
+      // never guessing.
       const chatRoutineOrigin = libraryRoutines.find(
         (routine) => routine.id === activeThread.routineId,
       )?.origin;
-      if (
-        !imageId &&
-        chatRoutineOrigin !== "community" &&
-        maybeRoutineEditIntent(content)
-      ) {
+      if (!imageId && chatRoutineOrigin !== "community") {
         // Stop must bite during this judgment too, exactly like the
         // main-chat judge: register the controller, and a Stop pressed
         // mid-classify means NOTHING fires afterwards. A hung judgment must
@@ -9230,14 +9229,29 @@ function AskVaenyxPanel({
             }}
             options={[
               {
-                label: lang === "zh" ? "喂给它,照常运行" : "Run it on this",
-                description:
-                  lang === "zh"
+                label: routineFeedOrEdit.fillByHand
+                  ? lang === "zh"
+                    ? "是内容 —— 我自己填"
+                    : "It's content — I'll fill it in"
+                  : lang === "zh"
+                    ? "喂给它,照常运行"
+                    : "Run it on this",
+                description: routineFeedOrEdit.fillByHand
+                  ? lang === "zh"
+                    ? "这句读不出可用的内容,打开表格自己填"
+                    : "Nothing usable could be read from it — open the form and fill it in"
+                  : lang === "zh"
                     ? "这句话是这一次的内容,交给它处理"
                     : "This message is content for this run",
                 onPick: () => {
                   const pending = routineFeedOrEdit;
                   setRoutineFeedOrEdit(null);
+                  // An empty parse already came back: re-running would land
+                  // in the same blank, so the form opens instead.
+                  if (pending.fillByHand) {
+                    setRoutineInputConfirm(pending.fillByHand);
+                    return;
+                  }
                   void runRoutineMessage(
                     pending.conversationId,
                     pending.routineId,
@@ -19912,6 +19926,35 @@ function CreateRoutinePanel({
   );
 }
 
+// What the confirm card holds while it is open. Named because the
+// feed-or-edit chooser can carry one: when a parse comes back empty the
+// Owner is asked first, and "feed it" then opens exactly this card to fill
+// by hand instead of re-running into the same emptiness.
+interface RoutineInputConfirmState {
+  conversationId: string;
+  routineId: string;
+  content: string;
+  // The words the Owner actually TYPED (content above may carry the vision
+  // extraction too) — closing the card restores THESE, never the dump.
+  typedContent: string;
+  imageId: string | null;
+  // Spoken in → the eventual result is spoken out, even across the card.
+  speakResult: boolean;
+  // Photo mode (visual first): the marks ARE the primary field's value —
+  // edited on the picture, never in a text blob. primaryKey names the field
+  // they feed; initialMarks (JSON) detects real corrections for learning.
+  marks: ImageAnnotationItem[] | null;
+  initialMarks: string;
+  // A failed photo read, said out loud on the card (owner, 2026-08-16).
+  photoError: string | null;
+  primaryKey: string | null;
+  fields: RoutineInputField[];
+  values: Record<string, string>;
+  checks: Record<string, boolean>;
+  initialValues: Record<string, string>;
+  initialChecks: Record<string, boolean>;
+}
+
 // ── The ONE edit-proposal card ──────────────────────────────────────────────
 // Owner rule (2026-08-16): Routine and Method edits are the SAME interaction,
 // never two look-alike flows. Wherever a change is asked for — the main chat,
@@ -21489,16 +21532,6 @@ function messageIsCreationAsk(content: string): boolean {
     /(建|新建|创建|創建|做一?个|做一?個|帮我做|幫我做|create|build|make)/i.test(
       content,
     ) && /(method|routine|方法|流程|工具)/i.test(content)
-  );
-}
-
-// Words that MIGHT mean "change the routine" rather than content for it,
-// inside a routine's own chat. A hit only spends one cheap judgment; a miss
-// runs as usual — so the list leans broad on verbs, and a false positive
-// costs a moment, never a wrong action.
-function maybeRoutineEditIntent(content: string): boolean {
-  return /(修改|改成|改一下|改进|改善|优化|調整|调整|升级|换成|變成|变成|别再|別再|不要再|不再|以后都|以後都|加一步|加个步骤|删掉|刪掉|去掉|edit|change|modify|adjust|improve|instead of|from now on|stop (showing|giving|recommending)|add a step|no longer|make it)/i.test(
-    content,
   );
 }
 

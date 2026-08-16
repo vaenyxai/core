@@ -562,19 +562,37 @@ export function parseRoutineChatDecision(raw: string): RoutineChatDecision {
 }
 
 export async function classifyRoutineChatMessage(
-  routine: { name: string; description: string },
+  routine: {
+    name: string;
+    description: string;
+    // What this Routine actually EATS. Without it the judge has no way to
+    // tell "配一张做好的菜的照片" (a change to the result) from an
+    // ingredient list — the field names make the difference obvious.
+    inputFields?: string[];
+  },
   content: string,
   signal: AbortSignal,
 ): Promise<RoutineChatDecision> {
+  const fieldLine =
+    routine.inputFields && routine.inputFields.length > 0
+      ? `It takes: ${routine.inputFields.join(", ")}. CONTENT is something that fits those fields.`
+      : "";
   const prompt = [
     `The Owner is inside the chat of their saved Routine "${routine.name}"`,
     `(${routine.description}). Every normal message here is CONTENT the`,
     "routine runs on. Decide what the latest message is:",
+    ...(fieldLine ? [fieldLine] : []),
     '- "feed": content, data or a request FOR THIS RUN (ingredients, a note,',
     "  a question the routine should process). This is the default.",
     '- "edit": the Owner wants to CHANGE how the routine itself works from now',
     '  on — its steps, output shape, look, or standing rules ("以后给三个选择",',
     '  "把结果做成表格", "add the shopping list to the result").',
+    "  ANY instruction about what the RESULT should contain, look like or",
+    "  include — adding or removing a section, a picture, a column, a",
+    '  wording rule — is an edit, however it is phrased ("给结果配一张做好的',
+    '  这道菜的照片", "结果里不要那两段说明", "多写一句提示"). It is an edit',
+    "  even without a word like change/改: what matters is that it describes",
+    "  the OUTPUT rather than supplying input.",
     '- "unsure": genuinely ambiguous between the two ("不要猪肉" could be',
     "  tonight's preference or a permanent rule).",
     "",
