@@ -13,7 +13,16 @@ import type { Buffer } from "node:buffer";
 
 import type { DatabaseHandle } from "../../db/database.js";
 import { readProviderConnections } from "../models/connections.js";
-import { fillEngineDefaults, writeConnections } from "../models/provider-settings.js";
+import {
+  readEnginePair,
+  runWithBackup,
+  type EngineChoice,
+  type EngineRunNote,
+} from "../models/engine-slots.js";
+import {
+  fillEngineDefaults,
+  writeConnections,
+} from "../models/provider-settings.js";
 
 import { capabilityRefusedBy } from "./capabilities.js";
 import { saveImage } from "./vision.js";
@@ -99,9 +108,13 @@ async function generateWithCloudflare(
   connection: CloudflareConnection,
   dataDirectory: string,
   prompt: string,
+  // The drawing slot's own model wins; the connection's stored picture model
+  // is what a Cloudflare account was set to before slots existed.
+  slotModel?: string,
 ): Promise<string> {
+  const model = slotModel?.trim() || connection.imageModel || CLOUDFLARE_MODEL;
   const response = await fetch(
-    `${CLOUDFLARE_API}/accounts/${connection.accountId}/ai/run/${connection.imageModel ?? CLOUDFLARE_MODEL}`,
+    `${CLOUDFLARE_API}/accounts/${connection.accountId}/ai/run/${model}`,
     {
       method: "POST",
       headers: {
@@ -316,7 +329,8 @@ export async function buildImagePrompt(
 // message gets an ordinary reply.
 const DRAW_EN =
   /\b(draw|generate|create|make|paint|render|design)\b[^.?!]{0,40}\b(image|picture|photo|illustration|logo|icon|poster|drawing|artwork)\b/i;
-const DRAW_ZH = /(生成|画|做|设计|渲染)[^。?!]{0,20}(图|照片|图片|插画|海报|logo|图标)/;
+const DRAW_ZH =
+  /(生成|画|做|设计|渲染)[^。?!]{0,20}(图|照片|图片|插画|海报|logo|图标)/;
 
 export function looksLikeImageRequest(text: string): boolean {
   return DRAW_EN.test(text) || DRAW_ZH.test(text);
@@ -330,7 +344,8 @@ export function looksLikeImageRequest(text: string): boolean {
 // that, because this module cannot see the conversation.
 const REDO_EN =
   /\b(another one|one more|try again|redo|regenerate|new one|do it again)\b/i;
-const REDO_ZH = /再来一?[张幅个]?|再画|再生成|重画|重新画|重新生成|换一?[张幅个]/;
+const REDO_ZH =
+  /再来一?[张幅个]?|再画|再生成|重画|重新画|重新生成|换一?[张幅个]/;
 
 export function isImageFollowUp(text: string): boolean {
   return REDO_EN.test(text) || REDO_ZH.test(text);
@@ -353,35 +368,73 @@ export async function generateImage(
   dataDirectory: string,
   prompt: string,
   modeId: string | null,
+  lang?: string,
 ): Promise<string> {
   if (capabilityRefusedBy(database, "drawing", modeId)) {
     throw new Error("IMAGE_CAPABILITY_OFF");
   }
+  const pair = readEnginePair(secretsDirectory, "imageOutput");
+  if (!pair.primary) throw new Error("IMAGE_NOT_CONNECTED");
+  const drawn = await runWithBackup(
+    pair,
+    (choice) => drawWith(choice, secretsDirectory, dataDirectory, prompt),
+    lang ?? "en",
+  );
+  lastDrawNote = drawn.note;
+  return drawn.value;
+}
+
+/** Which engine actually drew the last picture, and — when it was the backup —
+ *  why the main one could not. Read straight after `generateImage`, by the
+ *  caller that has somewhere to say it. */
+let lastDrawNote: EngineRunNote | null = null;
+
+export function takeLastDrawNote(): EngineRunNote | null {
+  const note = lastDrawNote;
+  lastDrawNote = null;
+  return note;
+}
+
+async function drawWith(
+  choice: EngineChoice,
+  secretsDirectory: string,
+  dataDirectory: string,
+  prompt: string,
+): Promise<string> {
   const connections = readProviderConnections(secretsDirectory);
 
-  if (connections.imageOutput?.provider === "workersai") {
+  if (choice.provider === "workersai") {
     if (!cloudflareReady(connections)) throw new Error("IMAGE_NOT_CONNECTED");
     return generateWithCloudflare(
       connections.workersai as CloudflareConnection,
       dataDirectory,
       prompt,
+      choice.model,
     );
   }
 
-  const candidate = pickCandidate(connections);
+  const candidate = IMAGE_CANDIDATES.find(
+    (entry) => entry.id === choice.provider,
+  );
   if (!candidate) throw new Error("IMAGE_NOT_CONNECTED");
   const connection = connections[candidate.id];
+  if (!connection?.apiKey) throw new Error("IMAGE_NOT_CONNECTED");
 
+  // 🔴 THE DRAWING MODEL IS THIS SLOT'S OWN, never `connection.model`. That
+  // field is the account's CHAT model, and using it here is how a household
+  // that set Gemini to gemini-3.7-flash for conversation ended up asking a
+  // chat model to draw. The slot's own choice, or this backend's pinned
+  // picture default — those are the only two answers.
   const response = await fetch(
-    `${connection?.baseUrl ?? candidate.baseUrl}/images/generations`,
+    `${connection.baseUrl ?? candidate.baseUrl}/images/generations`,
     {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${connection?.apiKey ?? ""}`,
+        authorization: `Bearer ${connection.apiKey}`,
       },
       body: JSON.stringify({
-        model: connection?.model ?? candidate.model,
+        model: choice.model?.trim() || candidate.model,
         prompt,
         n: 1,
       }),

@@ -11,6 +11,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { readProviderConnections } from "../models/connections.js";
+import {
+  readEnginePair,
+  runWithBackup,
+  type EngineChoice,
+} from "../models/engine-slots.js";
 import { writeConnections } from "../models/provider-settings.js";
 import {
   getLocalTtsStatus,
@@ -22,7 +27,18 @@ import {
 } from "./voice-local.js";
 
 // The STT-capable backends and how to call them.
-export const STT_ENGINES: Record<string, { baseUrl: string; model: string }> = {
+//
+// Cloudflare joined on 2026-08-16, and only after being asked with the Owner's
+// own token: it does NOT answer on its OpenAI-compatible URL ("no route for
+// that URI" — verified), but its native /ai/run route transcribes a real clip
+// on the first try when the audio arrives as base64 in a JSON body. That
+// second shape is why `kind` exists here. It matters because Hearing had no
+// free stand-in at all otherwise, and a household that cannot be heard cannot
+// use the app by voice.
+export const STT_ENGINES: Record<
+  string,
+  { baseUrl: string; model: string; kind?: "cloudflare" }
+> = {
   groq: {
     baseUrl: "https://api.groq.com/openai/v1",
     model: "whisper-large-v3-turbo",
@@ -31,21 +47,55 @@ export const STT_ENGINES: Record<string, { baseUrl: string; model: string }> = {
     baseUrl: "https://api.openai.com/v1",
     model: "whisper-1",
   },
+  workersai: {
+    baseUrl: "https://api.cloudflare.com/client/v4",
+    model: "@cf/openai/whisper-large-v3-turbo",
+    kind: "cloudflare",
+  },
 };
 
-function resolveVoiceConnection(secretsDirectory: string): {
+interface VoiceConnection {
   provider: string;
   apiKey: string;
   model: string;
   baseUrl: string;
-} | null {
+  kind?: "cloudflare";
+  /** Cloudflare's URL carries the account, so it travels with the connection. */
+  accountId?: string;
+}
+
+/** Turn one side of the hearing slot into something callable. The MODEL is the
+ *  Owner's own choice when they made one — an account's pinned whisper is only
+ *  the answer for someone who never picked. */
+function resolveVoiceChoice(
+  secretsDirectory: string,
+  choice: EngineChoice | null,
+): VoiceConnection | null {
+  if (!choice) return null;
   const connections = readProviderConnections(secretsDirectory);
-  const provider = connections.voice?.provider;
-  if (!provider) return null;
-  const engine = STT_ENGINES[provider];
-  const apiKey = connections[provider]?.apiKey;
-  if (!engine || !apiKey) return null;
-  return { provider, apiKey, model: engine.model, baseUrl: engine.baseUrl };
+  const engine = STT_ENGINES[choice.provider];
+  const connection = connections[choice.provider];
+  if (!engine || !connection?.apiKey) return null;
+  // Cloudflare's URL carries the account id, so a token without one cannot be
+  // called at all — that is not connected, whatever the key says.
+  if (engine.kind === "cloudflare" && !connection.accountId) return null;
+  return {
+    provider: choice.provider,
+    apiKey: connection.apiKey,
+    model: choice.model?.trim() || engine.model,
+    baseUrl: engine.baseUrl,
+    ...(engine.kind ? { kind: engine.kind } : {}),
+    ...(connection.accountId ? { accountId: connection.accountId } : {}),
+  };
+}
+
+function resolveVoiceConnection(
+  secretsDirectory: string,
+): VoiceConnection | null {
+  return resolveVoiceChoice(
+    secretsDirectory,
+    readEnginePair(secretsDirectory, "voice").primary,
+  );
 }
 
 export function getVoiceStatus(secretsDirectory: string): {
@@ -123,47 +173,64 @@ async function retryAfterSeconds(response: Response): Promise<number | null> {
     )?.retryDelay;
     const fromDetail = detail ? Number.parseFloat(detail) : Number.NaN;
     if (Number.isFinite(fromDetail)) return Math.max(1, Math.ceil(fromDetail));
-    const fromMessage = body.error?.message?.match(
-      /retry in ([\d.]+)s/i,
-    )?.[1];
-    if (fromMessage) return Math.max(1, Math.ceil(Number.parseFloat(fromMessage)));
+    const fromMessage = body.error?.message?.match(/retry in ([\d.]+)s/i)?.[1];
+    if (fromMessage)
+      return Math.max(1, Math.ceil(Number.parseFloat(fromMessage)));
     return null;
   } catch {
     return null;
   }
 }
 
-function resolveVoiceOutput(
-  secretsDirectory: string,
-  dataDirectory: string,
-): {
+interface ResolvedVoiceOutput {
   engine: VoiceOutputEngine;
   apiKey: string | null;
   voice: string;
-} {
+}
+
+/** Resolve ONE chosen speaking engine — the main one or the stand-in. The
+ *  Owner's chosen voice belongs to the slot entry, so it rides along for
+ *  whichever side is being resolved. */
+function resolveVoiceOutputFor(
+  secretsDirectory: string,
+  dataDirectory: string,
+  choice: EngineChoice | null,
+): ResolvedVoiceOutput {
   const connections = readProviderConnections(secretsDirectory);
   const output = connections.voiceOutput;
-  if (output?.engine === "local" && isLocalTtsInstalled(dataDirectory)) {
+  const engine = choice?.provider;
+  if (engine === "local" && isLocalTtsInstalled(dataDirectory)) {
     return { engine: "local", apiKey: null, voice: "auto" };
   }
-  if (output?.engine === "gemini" && connections.gemini?.apiKey) {
+  if (engine === "gemini" && connections.gemini?.apiKey) {
     return {
       engine: "gemini",
       apiKey: connections.gemini.apiKey,
-      voice: output.voice ?? DEFAULT_GEMINI_VOICE,
+      voice: output?.voice ?? DEFAULT_GEMINI_VOICE,
     };
   }
-  if (output?.engine === "workersai" && connections.workersai?.apiKey) {
+  if (engine === "workersai" && connections.workersai?.apiKey) {
     return {
       engine: "workersai",
       apiKey: connections.workersai.apiKey,
       voice: "aura",
     };
   }
-  if (output?.engine === "browser") {
+  if (engine === "browser") {
     return { engine: "browser", apiKey: null, voice: DEFAULT_GEMINI_VOICE };
   }
   return { engine: "none", apiKey: null, voice: DEFAULT_GEMINI_VOICE };
+}
+
+function resolveVoiceOutput(
+  secretsDirectory: string,
+  dataDirectory: string,
+): ResolvedVoiceOutput {
+  return resolveVoiceOutputFor(
+    secretsDirectory,
+    dataDirectory,
+    readEnginePair(secretsDirectory, "voiceOutput").primary,
+  );
 }
 
 export function getVoiceOutput(
@@ -292,7 +359,30 @@ export async function synthesizeSpeech(
   dataDirectory: string,
   text: string,
 ): Promise<string> {
-  const resolved = resolveVoiceOutput(secretsDirectory, dataDirectory);
+  const pair = readEnginePair(secretsDirectory, "voiceOutput");
+  if (!pair.primary) throw new Error("VOICE_OUTPUT_NOT_CONNECTED");
+  // Speaking is where a stand-in pays for itself fastest: Gemini's free tier
+  // allows THREE speech requests a minute (measured 2026-08-07), so a family
+  // reading a few replies aloud hits the wall in ordinary use.
+  const spoken = await runWithBackup(
+    pair,
+    (choice) => speakWith(secretsDirectory, dataDirectory, text, choice),
+    "en",
+  );
+  return spoken.value;
+}
+
+async function speakWith(
+  secretsDirectory: string,
+  dataDirectory: string,
+  text: string,
+  choice: EngineChoice,
+): Promise<string> {
+  const resolved = resolveVoiceOutputFor(
+    secretsDirectory,
+    dataDirectory,
+    choice,
+  );
   if (resolved.engine === "local") {
     const output = readProviderConnections(secretsDirectory).voiceOutput;
     return synthesizeLocalSpeech(dataDirectory, text, {
@@ -471,11 +561,53 @@ export async function transcribeVoice(
   audio: Buffer,
   mimeType: string,
 ): Promise<string> {
-  const voice = resolveVoiceConnection(secretsDirectory);
-  if (!voice) {
+  const pair = readEnginePair(secretsDirectory, "voice");
+  if (!resolveVoiceChoice(secretsDirectory, pair.primary)) {
     throw new Error("VOICE_NOT_CONNECTED");
   }
-  const transcribeBaseUrl = voice.baseUrl;
+  // The Owner's own stand-in, for the same reason as everywhere else: a
+  // household that cannot be heard cannot use the app by voice at all, and a
+  // free STT bucket is exactly the kind of thing that runs out mid-sentence.
+  const heard = await runWithBackup(
+    pair,
+    (choice) => {
+      const voice = resolveVoiceChoice(secretsDirectory, choice);
+      if (!voice) throw new Error("VOICE_NOT_CONNECTED");
+      return transcribeWith(voice, audio, mimeType);
+    },
+    "en",
+  );
+  return heard.value;
+}
+
+async function transcribeWith(
+  voice: VoiceConnection,
+  audio: Buffer,
+  mimeType: string,
+): Promise<string> {
+  if (voice.kind === "cloudflare") {
+    // Its own shape: base64 audio in a JSON body, on the native run URL. The
+    // OpenAI-compatible URL on the same account answers "no route for that URI"
+    // for transcription (verified with the Owner's token, 2026-08-16).
+    const response = await fetch(
+      `${voice.baseUrl}/accounts/${voice.accountId}/ai/run/${voice.model}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${voice.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ audio: audio.toString("base64") }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`VOICE_TRANSCRIBE_FAILED:${response.status}`);
+    }
+    const parsed = (await response.json()) as { result?: { text?: unknown } };
+    return typeof parsed.result?.text === "string"
+      ? parsed.result.text.trim()
+      : "";
+  }
   const form = new FormData();
   const extension = mimeType.includes("mp4")
     ? "m4a"
@@ -490,7 +622,7 @@ export async function transcribeVoice(
   form.append("model", voice.model);
   form.append("response_format", "json");
 
-  const response = await fetch(`${transcribeBaseUrl}/audio/transcriptions`, {
+  const response = await fetch(`${voice.baseUrl}/audio/transcriptions`, {
     method: "POST",
     headers: { authorization: `Bearer ${voice.apiKey}` },
     body: form,

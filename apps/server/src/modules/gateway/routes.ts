@@ -307,6 +307,7 @@ import {
 } from "../core/voice.js";
 import {
   getLocalTtsStatus,
+  isLocalTtsInstalled,
   removeLocalTts,
   startLocalTtsInstall,
 } from "../core/voice-local.js";
@@ -6598,21 +6599,33 @@ export async function registerGatewayRoutes(
       }
       const choice = request.body.choice;
       if (choice) {
-        // A backend with no key cannot be anybody's engine — say so here
-        // rather than at the first photo.
-        const connections = readProviderConnections(
-          context.config.secretsDirectory,
-        );
-        const hasKey =
-          Boolean(connections[choice.provider]?.apiKey) ||
-          choice.provider === "codex" ||
-          (choice.provider === "claude-sub" &&
-            Boolean(connections["claude-sub"]?.apiKey));
-        if (!hasKey) {
-          return reply.code(400).send({
-            error:
-              "That backend has no key yet — connect it under Models first, then pick it here.",
-          });
+        // Speaking has two answers that are not accounts at all: this browser's
+        // own voice, and the one downloaded onto this machine. Neither has a
+        // key to check — the downloaded one is checked for being THERE.
+        if (choice.provider === "local") {
+          if (!isLocalTtsInstalled(context.config.dataDirectory)) {
+            return reply.code(400).send({
+              error:
+                "The voice on this machine is not installed yet — install it under Models first.",
+            });
+          }
+        } else if (choice.provider !== "browser") {
+          // A backend with no key cannot be anybody's engine — say so here
+          // rather than at the first photo.
+          const connections = readProviderConnections(
+            context.config.secretsDirectory,
+          );
+          const hasKey =
+            Boolean(connections[choice.provider]?.apiKey) ||
+            choice.provider === "codex" ||
+            (choice.provider === "claude-sub" &&
+              Boolean(connections["claude-sub"]?.apiKey));
+          if (!hasKey) {
+            return reply.code(400).send({
+              error:
+                "That backend has no key yet — connect it under Models first, then pick it here.",
+            });
+          }
         }
       }
       const pair = writeEngineChoice(

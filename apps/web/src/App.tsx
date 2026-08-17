@@ -12222,7 +12222,7 @@ const SETUP_ROWS = new Set([
 // backup). Their row shows a read-only summary instead of a second picker, so
 // there is exactly one place that decides who does the job. This grows as each
 // slot is wired to the pair runtime.
-const PAIR_ROWS = new Set(["vision"]);
+const PAIR_ROWS = new Set(["hearing", "speaking", "vision", "drawing"]);
 
 // WHAT ONE PRESS REALLY DOES, said in front of the button instead of after it.
 // Two of these spend the Owner's own money on their own account, and finding
@@ -12983,6 +12983,15 @@ function CapabilitiesPanel({
       ),
       who: (
         <>
+          <EnginePairPicker
+            onChanged={(next) =>
+              setHearingEngine(next.primary?.provider ?? "none")
+            }
+            providerOptions={slotOptions("voice-in").filter(
+              (option) => !option.disabled,
+            )}
+            slot="voice"
+          />
           <p className="settings-card-copy">
             {lang === "zh"
               ? "转写在这一行选的那个服务上做,录音发过去,回来的是文字。它的 key 在下面的 Models 里粘。"
@@ -13106,6 +13115,29 @@ function CapabilitiesPanel({
       ) : null,
       who: (
         <>
+          {/* Speaking's two non-account answers ride the same picker: the
+              voice on this machine and this browser's own are engines, not
+              logins, and they belong in the same list as the accounts — one
+              question, "who speaks", with every real answer in it. */}
+          <EnginePairPicker
+            onChanged={(next) => {
+              setSpeakingEngine(next.primary?.provider ?? "none");
+              void fetchVoiceOutput()
+                .then(setOutput)
+                .catch(() => undefined);
+            }}
+            providerOptions={slotOptions("voice-out", [
+              {
+                label: lang === "zh" ? "本机浏览器" : "This device",
+                value: "browser",
+              },
+              {
+                label: lang === "zh" ? "本机语音" : "On this machine",
+                value: "local",
+              },
+            ]).filter((option) => !option.disabled)}
+            slot="voiceOutput"
+          />
           <p className="settings-card-copy">
             {lang === "zh"
               ? "跟这一行选的引擎走。本机语音在这台电脑上生成,什么都不出去、也没有每次的费用,中英文都能念;Gemini 是发出去合成的,声音更自然,中英文都行。⚠️ Cloudflare(Workers AI)那个声音只会英文 —— 遇到中文它会明说,不会瞎念。本机语音在下面的 Models 里装。"
@@ -13191,6 +13223,15 @@ function CapabilitiesPanel({
       ),
       who: (
         <>
+          <EnginePairPicker
+            onChanged={(next) =>
+              setDrawingEngine(next.primary?.provider ?? "none")
+            }
+            providerOptions={slotOptions("image").filter(
+              (option) => !option.disabled,
+            )}
+            slot="imageOutput"
+          />
           <p className="settings-card-copy">
             {lang === "zh"
               ? "跟这一行选的引擎走,跟看图的那个是两回事 —— 会看图的模型不一定会画。Cloudflare Workers AI 和智谱都是免费的,在下面的 Models 里连。"

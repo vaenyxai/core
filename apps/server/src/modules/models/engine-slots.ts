@@ -56,9 +56,21 @@ function backupKey(slot: EngineSlot): string {
   return `${slot}Backup`;
 }
 
-function toChoice(entry: ProviderConnection | undefined): EngineChoice | null {
-  const provider = entry?.provider?.trim();
-  if (!provider) return null;
+// Speaking stores its pick under `engine`, not `provider`, because two of its
+// answers are not model accounts at all — this browser's own voice, and the
+// voice downloaded onto this machine. That field name is load-bearing (voice.ts
+// reads it, and both non-account answers live in it), so the slot layer bends
+// to it rather than the other way round.
+function slotField(slot: EngineSlot): "provider" | "engine" {
+  return slot === "voiceOutput" ? "engine" : "provider";
+}
+
+function toChoice(
+  entry: ProviderConnection | undefined,
+  field: "provider" | "engine" = "provider",
+): EngineChoice | null {
+  const provider = entry?.[field]?.trim();
+  if (!provider || provider === "none") return null;
   const model = entry?.model?.trim();
   return model ? { provider, model } : { provider };
 }
@@ -84,12 +96,13 @@ export function readEnginePair(
   slot: EngineSlot,
 ): EnginePair {
   const connections = readProviderConnections(secretsDirectory);
+  const field = slotField(slot);
   return {
     primary:
       slot === "chat"
         ? chatPrimary(secretsDirectory, connections)
-        : toChoice(connections[slot]),
-    backup: toChoice(connections[backupKey(slot)]),
+        : toChoice(connections[slot], field),
+    backup: toChoice(connections[backupKey(slot)], field),
   };
 }
 
@@ -122,14 +135,13 @@ export function writeEngineChoice(
     delete connections[key];
     if (which === "primary") delete connections[backupKey(slot)];
   } else {
-    // The slot entry keeps whatever else lived on it (voice picks, engine
-    // names) — only the pointer and model are replaced.
-    connections[key] = {
-      ...connections[key],
-      provider: choice.provider,
-      ...(choice.model ? { model: choice.model } : { model: undefined }),
-    };
-    if (!choice.model) delete connections[key].model;
+    // The slot entry keeps whatever else lived on it (the Owner's chosen
+    // voices, above all) — only the pointer and the model are replaced.
+    const next: ProviderConnection = { ...connections[key] };
+    next[slotField(slot)] = choice.provider;
+    if (choice.model) next.model = choice.model;
+    else delete next.model;
+    connections[key] = next;
   }
   writeProviderConnections(secretsDirectory, connections);
   return readEnginePair(secretsDirectory, slot);
@@ -212,6 +224,10 @@ export function deservesBackup(raw: unknown): boolean {
   return (
     /:(4\d\d|5\d\d)(?::|$)/.test(message) ||
     /fetch failed|ENOTFOUND|ECONNREFUSED|timeout|aborted/i.test(message) ||
+    // Speaking's throttle carries the seconds to wait rather than the status,
+    // so it needs naming: "three requests a minute, wait eight seconds" is a
+    // could-not-answer if anything ever was.
+    /RATE_LIMITED/i.test(message) ||
     /NOT_CONNECTED|NO_KEY|EMPTY_RESPONSE/i.test(message)
   );
 }

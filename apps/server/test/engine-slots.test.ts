@@ -75,14 +75,36 @@ describe("reading and writing a slot", () => {
     });
   });
 
-  it("keeps the rest of a slot entry (voice picks) when the pointer changes", () => {
-    const dir = secrets({ voiceOutput: { provider: "gemini", voice: "Kore" } });
+  // Speaking's pick has always lived under `engine`, because two of its
+  // answers are not accounts at all (this browser's voice, and the downloaded
+  // one). The slot layer writes THAT field for this slot — writing `provider`
+  // instead would leave voice.ts reading the old engine forever.
+  it("writes Speaking's pick where Speaking reads it, keeping the voice", () => {
+    const dir = secrets({ voiceOutput: { engine: "gemini", voice: "Kore" } });
     writeEngineChoice(dir, "voiceOutput", "primary", { provider: "workersai" });
     const raw = JSON.parse(
       readFileSync(join(dir, "model-providers.json"), "utf8"),
-    ) as Record<string, { voice?: string; provider?: string }>;
+    ) as Record<string, { voice?: string; engine?: string }>;
     expect(raw.voiceOutput?.voice).toBe("Kore");
-    expect(raw.voiceOutput?.provider).toBe("workersai");
+    expect(raw.voiceOutput?.engine).toBe("workersai");
+    expect(readEnginePair(dir, "voiceOutput").primary).toEqual({
+      provider: "workersai",
+    });
+  });
+
+  it("reads Speaking's own engine names, and 'none' as nothing chosen", () => {
+    expect(
+      readEnginePair(
+        secrets({ voiceOutput: { engine: "local" } }),
+        "voiceOutput",
+      ).primary,
+    ).toEqual({ provider: "local" });
+    expect(
+      readEnginePair(
+        secrets({ voiceOutput: { engine: "none" } }),
+        "voiceOutput",
+      ).primary,
+    ).toBeNull();
   });
 });
 

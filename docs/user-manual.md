@@ -380,13 +380,26 @@ Read this inside the app: **Settings → Manual**.
   connected. Every provider API key is pasted in Models, without exception. (An
   app's **Model Key** is a different thing: it opens the Subscription Door, and
   it is made, and replaced, on that card — see *Subscription Door* below.)
-- **Which model, not just which provider** — connect a provider, then open it
-  in Models and press **List available models**. Vaenyx asks that provider,
-  with your own key, what it will accept, and offers the answer as a list — so
-  you pick the current name instead of guessing between the versions. Nothing
-  is stored: the list is asked for again whenever you want it. Backends with
-  no list to ask (ChatGPT via Codex, the Claude subscription, a local server)
-  say so and keep the typed box.
+- **Models connects the account; Capabilities picks the model** — the Models
+  card asks for the key and nothing else. Which model does which job is asked
+  once per job, on the capability row, because the answers differ: the model
+  you want for conversation is rarely the one you want reading photos, and one
+  shared answer is how a chat model chosen for quality ends up putting every
+  photo on its tightest free bucket.
+- **Every job has a main model and a backup** — open a capability row and you
+  see two lines. Pick the account, then a model from that account's own live
+  list (Vaenyx asks the provider with your key; a backend with no list to ask
+  keeps the default). The **backup** line is empty until you fill it, and
+  Vaenyx never fills it for you.
+- **The backup only stands in when the main model could not answer at all** —
+  out of free quota, key rejected, model retired, provider down, unreachable.
+  A poor answer is not that, and standing in there would only hide it. When
+  the backup does answer, the reply ends with one plain sentence saying which
+  model stood in, why the main one could not, and the error code — never a
+  quiet swap you meet later as "why does this answer look different".
+- **The main model has a row too** — the first row of Capabilities. It is the
+  same setting as the switcher under the chat box: change either and the other
+  follows.
 - **Free or paid, marked per job** — every provider carries a badge, and the
   engine lists mark the job that costs money even when the provider is
   otherwise free. Gemini is the one to know: its free tier covers text,
@@ -733,5 +746,5 @@ Read this inside the app: **Settings → Manual**.
 
 ---
 
-Manual for **v0.4.9** · last updated 2026-08-16.
+Manual for **v0.4.9** · last updated 2026-08-17.
 Keep this file up to date whenever a feature changes.

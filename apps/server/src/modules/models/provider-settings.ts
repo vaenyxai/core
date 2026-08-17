@@ -193,7 +193,10 @@ export const CAPABILITY_LISTS_FOR_TESTS = {
   },
 };
 
-const STT_CAPABLE_PROVIDERS = ["groq", "openai"];
+// Cloudflare added 2026-08-16 after being asked with a real token: it hears on
+// its own native route (see STT_ENGINES). It is here so Hearing has a free
+// stand-in — the only one there is.
+const STT_CAPABLE_PROVIDERS = ["groq", "openai", "workersai"];
 const TTS_CAPABLE_PROVIDERS = ["gemini", "workersai"];
 const VISION_CAPABLE_PROVIDERS = [
   "gemini",
