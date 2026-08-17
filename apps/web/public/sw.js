@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v9";
+const CACHE_NAME = "vaenyx-shell-v10";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -92,24 +92,49 @@ function bootWaitPage() {
     "正在启动…这个页面会自己打开。</p>",
     // Dot points, not a paragraph — the Owner is reading this while something
     // is broken, and the causes are ordered by how often they are the answer.
+    //
+    // 🔴 EVERY LINE HERE NEEDS ITS OWN TRAILING SPACE. These are joined with
+    // no separator, so a line ending in a word and the next starting with one
+    // becomes "may beperfectly fine" — which shipped, and which the Owner read
+    // before I did (2026-08-17).
     '<div id="hint" style="display:none">',
-    "<p>This device cannot reach Vaenyx's computer. Vaenyx itself may be",
+    "<p>This device cannot reach Vaenyx's computer. Vaenyx itself may be ",
     "perfectly fine — the usual causes, in order:</p><ul>",
     "<li>That computer is off, asleep, or still booting.</li>",
-    "<li><b>This device's DNS is broken.</b> If the address bar says",
-    "<code>ERR_NAME_NOT_RESOLVED</code>, it is this. Set this device's DNS to",
-    "<code>8.8.8.8</code> — a home router that hands out an IPv6 DNS server on",
-    "a network without working IPv6 breaks every lookup.</li>",
+    // The cause below is the MEASURED one. An earlier version of this page
+    // blamed the home router for handing out an IPv6 DNS server; that was
+    // wrong, and it was wrong in the Owner's face for a day. What actually
+    // happens: the address is correct at its source (all four authoritative
+    // nameservers answer it), while ONE of the big public resolvers is holding
+    // a cached "no such name". Which resolver is the broken one changes — it
+    // was Google one morning and Cloudflare the same evening — so the advice
+    // is "use a different one", never a fixed address.
+    "<li><b>A public DNS service has this address cached as “does not ",
+    "exist”.</b> If the address bar says <code>ERR_NAME_NOT_RESOLVED</code> or ",
+    "<code>DNS_PROBE_FINISHED_NXDOMAIN</code>, it is this, and nothing on your ",
+    "side is broken. It clears by itself, usually within a few hours. To get ",
+    "in now, point this device — or this browser's secure DNS — at a different ",
+    "provider (<code>8.8.8.8</code> and <code>1.1.1.1</code> are the two big ",
+    "ones, and they fail at different times).</li>",
     "<li>This device is on a different network from the one Vaenyx expects.</li>",
     "</ul>",
-    "<p>这台设备连不上 Vaenyx 所在的电脑。Vaenyx 本身可能完全正常 ——",
+    "<p>这台设备连不上 Vaenyx 所在的电脑。Vaenyx 本身可能完全正常 —— ",
     "按可能性排序:</p><ul>",
     "<li>那台电脑关机了、睡着了,或者还在开机。</li>",
-    "<li><b>这台设备的 DNS 坏了。</b>如果报的是 <code>ERR_NAME_NOT_RESOLVED</code>,",
-    "就是这个。把这台设备的 DNS 改成 <code>8.8.8.8</code> —— 路由器在没有 IPv6 的网络里",
-    "发一个 IPv6 的 DNS 地址,会让所有域名都解析不了。</li>",
+    "<li><b>某家公共 DNS 把这个地址记成了「不存在」。</b>如果报的是 ",
+    "<code>ERR_NAME_NOT_RESOLVED</code> 或 ",
+    "<code>DNS_PROBE_FINISHED_NXDOMAIN</code>,就是这个 —— 你这边什么都没坏。",
+    "它会自己过期,通常几个小时。想现在就进去,把这台设备(或这个浏览器的 ",
+    "secure DNS)换一家:<code>8.8.8.8</code> 和 <code>1.1.1.1</code> 是两家大的,",
+    "而且它们不会同时坏。</li>",
     "<li>这台设备连的网络,跟 Vaenyx 所在的网络对不上。</li>",
-    "</ul></div>",
+    "</ul>",
+    // The one address that never needs DNS at all.
+    "<p>On the computer Vaenyx runs on, <code>http://127.0.0.1:3000</code> ",
+    "always works — it never looks anything up.<br>",
+    "在跑 Vaenyx 的那台电脑上,<code>http://127.0.0.1:3000</code> 永远能开 —— ",
+    "它根本不查 DNS。</p>",
+    "</div>",
     // The clock must survive a reopen. A device that can NEVER connect used to
     // restart the countdown on every visit, so the honest text was the one
     // thing it could never reach. The marker is cleared the moment the server
