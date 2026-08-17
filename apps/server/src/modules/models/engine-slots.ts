@@ -23,7 +23,9 @@
 // something it cannot. A poor or empty ANSWER is not a failure — falling back
 // there would hide a quality problem and pay twice for it.
 import {
+  readDefaultProviderId,
   readProviderConnections,
+  writeDefaultProviderId,
   writeProviderConnections,
   type ProviderConnection,
 } from "./connections.js";
@@ -61,13 +63,32 @@ function toChoice(entry: ProviderConnection | undefined): EngineChoice | null {
   return model ? { provider, model } : { provider };
 }
 
+// 🔴 CHAT IS A VIEW, NOT A COPY. Chat's main engine has been stored as
+// "default provider id + that provider's own model" since long before slots
+// existed, and the composer's switcher writes it directly. Giving chat its own
+// slot entry would make TWO answers to "which model does chat use" that drift
+// apart the moment either one is touched — the thing Oskar asked to be one
+// live value (2026-08-16). So chat's primary READS AND WRITES the old storage;
+// only its backup, which nothing else knows about, is a slot entry of its own.
+function chatPrimary(
+  secretsDirectory: string,
+  connections: Record<string, ProviderConnection>,
+): EngineChoice | null {
+  const provider = readDefaultProviderId(secretsDirectory) ?? "codex";
+  const model = connections[provider]?.model?.trim();
+  return model ? { provider, model } : { provider };
+}
+
 export function readEnginePair(
   secretsDirectory: string,
   slot: EngineSlot,
 ): EnginePair {
   const connections = readProviderConnections(secretsDirectory);
   return {
-    primary: toChoice(connections[slot]),
+    primary:
+      slot === "chat"
+        ? chatPrimary(secretsDirectory, connections)
+        : toChoice(connections[slot]),
     backup: toChoice(connections[backupKey(slot)]),
   };
 }
@@ -81,6 +102,21 @@ export function writeEngineChoice(
   choice: EngineChoice | null,
 ): EnginePair {
   const connections = readProviderConnections(secretsDirectory);
+  // Chat's main engine goes back where it came from (see chatPrimary): the
+  // default-provider file, and the model on that provider's own connection.
+  // Chat cannot be turned off, so a null here is ignored rather than obeyed —
+  // there is no such thing as an app with no model to talk to.
+  if (slot === "chat" && which === "primary") {
+    if (choice) {
+      writeDefaultProviderId(secretsDirectory, choice.provider);
+      const next: ProviderConnection = { ...connections[choice.provider] };
+      if (choice.model) next.model = choice.model;
+      else delete next.model;
+      connections[choice.provider] = next;
+      writeProviderConnections(secretsDirectory, connections);
+    }
+    return readEnginePair(secretsDirectory, slot);
+  }
   const key = which === "primary" ? slot : backupKey(slot);
   if (!choice) {
     delete connections[key];

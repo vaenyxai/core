@@ -6615,15 +6615,16 @@ export async function registerGatewayRoutes(
           });
         }
       }
-      return {
+      const pair = writeEngineChoice(
+        context.config.secretsDirectory,
         slot,
-        ...writeEngineChoice(
-          context.config.secretsDirectory,
-          slot,
-          request.body.which,
-          choice,
-        ),
-      };
+        request.body.which,
+        choice,
+      );
+      // Chat's main engine IS the default backend (engine-slots.ts), so it has
+      // to take effect on the next message, not the next restart.
+      if (slot === "chat") initModelRegistry(context.config);
+      return { slot, ...pair };
     },
   );
 

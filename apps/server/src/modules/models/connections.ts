@@ -68,3 +68,18 @@ export function readDefaultProviderId(secretsDirectory: string): string | null {
     return null;
   }
 }
+
+/** The unchecked writer. `setDefaultModelProvider` is the door most callers
+ *  want — it refuses an id the registry does not know. This one exists so the
+ *  chat engine slot can write the SAME file rather than keep a second copy of
+ *  "which model does chat use" that could drift from the composer's switcher. */
+export function writeDefaultProviderId(
+  secretsDirectory: string,
+  id: string,
+): void {
+  mkdirSync(secretsDirectory, { recursive: true });
+  writeFileSync(
+    resolve(secretsDirectory, "model-default.json"),
+    `${JSON.stringify({ id }, null, 2)}\n`,
+  );
+}

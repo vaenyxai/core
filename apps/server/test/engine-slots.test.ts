@@ -195,3 +195,69 @@ describe("running with a backup", () => {
     ).rejects.toThrow("Y:500");
   });
 });
+
+// Chat is the one slot with pre-existing storage: the default-provider file
+// plus that provider's own model, which the composer's switcher writes
+// directly. The slot has to be a VIEW over that, or the app ends up with two
+// answers to "which model does chat use" (Oskar, 2026-08-16: 实时统一).
+describe("the chat slot is a view over the default backend", () => {
+  it("reads the default provider and that provider's model", () => {
+    const dir = secrets({ gemini: { apiKey: "k", model: "gemini-3.7-flash" } });
+    writeFileSync(
+      join(dir, "model-default.json"),
+      JSON.stringify({ id: "gemini" }),
+      "utf8",
+    );
+    expect(readEnginePair(dir, "chat").primary).toEqual({
+      provider: "gemini",
+      model: "gemini-3.7-flash",
+    });
+  });
+
+  it("writes back to the same two places, so the switcher sees it", () => {
+    const dir = secrets({ gemini: { apiKey: "k" }, groq: { apiKey: "k" } });
+    writeEngineChoice(dir, "chat", "primary", {
+      provider: "groq",
+      model: "openai/gpt-oss-120b",
+    });
+    const chosen = JSON.parse(
+      readFileSync(join(dir, "model-default.json"), "utf8"),
+    ) as { id: string };
+    const connections = JSON.parse(
+      readFileSync(join(dir, "model-providers.json"), "utf8"),
+    ) as Record<string, { apiKey?: string; model?: string }>;
+    expect(chosen.id).toBe("groq");
+    expect(connections.groq.model).toBe("openai/gpt-oss-120b");
+    // And the key it was connected with is still there.
+    expect(connections.groq.apiKey).toBe("k");
+    // No second copy of the answer.
+    expect(connections.chat).toBeUndefined();
+  });
+
+  it("falls back to Codex when nothing has been chosen", () => {
+    expect(readEnginePair(secrets(), "chat").primary).toEqual({
+      provider: "codex",
+    });
+  });
+
+  it("keeps chat's backup in its own entry, clearable on its own", () => {
+    const dir = secrets({ groq: { apiKey: "k" } });
+    writeEngineChoice(dir, "chat", "backup", {
+      provider: "groq",
+      model: "openai/gpt-oss-120b",
+    });
+    expect(readEnginePair(dir, "chat").backup).toEqual({
+      provider: "groq",
+      model: "openai/gpt-oss-120b",
+    });
+    writeEngineChoice(dir, "chat", "backup", null);
+    expect(readEnginePair(dir, "chat").backup).toBeNull();
+  });
+
+  it("refuses to turn chat off — there is no app without a model", () => {
+    const dir = secrets({ gemini: { apiKey: "k", model: "gemini-3.7-flash" } });
+    writeEngineChoice(dir, "chat", "primary", { provider: "gemini" });
+    writeEngineChoice(dir, "chat", "primary", null);
+    expect(readEnginePair(dir, "chat").primary?.provider).toBe("gemini");
+  });
+});

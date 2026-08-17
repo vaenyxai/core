@@ -15,6 +15,13 @@ import type { DatabaseHandle } from "../../db/database.js";
 import { isProtectedThread } from "./inbox-thread.js";
 import type { ModelProvider } from "../models/provider.js";
 import { getModelRegistry, resolveProvider } from "../models/registry.js";
+import {
+  backupNoteSentence,
+  deservesBackup,
+  explainEngineFailure,
+  readEnginePair,
+} from "../models/engine-slots.js";
+import { providerDisplayName } from "../models/provider-settings.js";
 import { recordAudit } from "../guard/audit.js";
 import { getOwner } from "../guard/auth.js";
 import {
@@ -1776,9 +1783,9 @@ export async function createAskVaenyxMessage(
     }
 
     options?.onStatus?.("answering");
-    const result = await provider.sendChat(history, contextWithPhoto, {
+    const sendOptions = {
       onDelta: options?.onDelta
-        ? (delta) => {
+        ? (delta: string) => {
             streamed += delta;
             options.onDelta?.(delta);
           }
@@ -1786,15 +1793,69 @@ export async function createAskVaenyxMessage(
       onThinking: options?.onThinking,
       signal: options?.signal,
       reasoningEffort: settingsRow?.reasoning_effort ?? "medium",
-      ...(settingsRow?.model_name ? { model: settingsRow.model_name } : {}),
       ...(imageAttachment ? { imageDataUrl: imageAttachment } : {}),
       ...(imageAttachmentPath ? { imagePath: imageAttachmentPath } : {}),
       ...(documentBase64 ? { documentBase64 } : {}),
       ...(options?.documentName ? { documentName: options.documentName } : {}),
       ...(hasToolLoop && fetchAccess ? { fetchAccess } : {}),
       ...(documentSpillAccess ? { documentSpill: documentSpillAccess } : {}),
-    });
-    assistantContent = result.answer;
+    };
+    let backupNote: string | null = null;
+    let result;
+    try {
+      result = await provider.sendChat(history, contextWithPhoto, {
+        ...sendOptions,
+        ...(settingsRow?.model_name ? { model: settingsRow.model_name } : {}),
+      });
+    } catch (error) {
+      // THE OWNER'S OWN STAND-IN, and only when the main model could not
+      // answer AT ALL (throttled, down, unreachable, refused). Three guards,
+      // all hard:
+      //   • nothing has been streamed yet — a second answer appended to half
+      //     of a first one is worse than the failure it was hiding;
+      //   • the conversation is not in a local-only mode — that mode's promise
+      //     is that nothing leaves this machine, and a cloud stand-in would
+      //     break it silently, the one thing a backup must never do;
+      //   • the backup is not the model that just failed.
+      const chatBackup =
+        !streamed.trim() &&
+        modeRow?.local_only !== 1 &&
+        options?.secretsDirectory &&
+        deservesBackup(error)
+          ? readEnginePair(options.secretsDirectory, "chat").backup
+          : null;
+      const standIn =
+        chatBackup && chatBackup.provider !== provider.id
+          ? getModelRegistry().get(chatBackup.provider)
+          : null;
+      if (!standIn || !chatBackup) throw error;
+      // If the stand-in fails too, ITS error is what surfaces: that is the one
+      // still standing in the Owner's way.
+      result = await standIn.sendChat(history, contextWithPhoto, {
+        ...sendOptions,
+        ...(chatBackup.model ? { model: chatBackup.model } : {}),
+      });
+      // Said out loud, every time, in the Owner's own language: which model
+      // stood in, and what the code that took the main one out actually means.
+      // A quiet swap is what this replaced. Same language test as the photo
+      // lane: what the Owner just wrote.
+      const noteLang = /[一-鿿]/.test(trimmedContent) ? "zh" : "en";
+      backupNote = backupNoteSentence(
+        {
+          provider: chatBackup.provider,
+          model: chatBackup.model ?? null,
+          fellBackFrom: {
+            provider: provider.id,
+            ...explainEngineFailure(error, noteLang),
+          },
+        },
+        providerDisplayName,
+        noteLang,
+      );
+    }
+    assistantContent = backupNote
+      ? `${result.answer}\n\n_${backupNote}_`
+      : result.answer;
     assistantStatus = "completed";
     webSearchUsed = result.webSearchUsed;
   } catch (error) {

@@ -24,6 +24,11 @@ import { showErrorToast } from "./toast";
 const NONE = "__none__";
 const DEFAULT_MODEL = "__default__";
 
+/** Fired when the MAIN model changes, so the switcher under the chat box —
+ *  which shows the same value from a different window — updates with it
+ *  instead of showing the model that was chosen before. */
+export const MODEL_DEFAULT_CHANGED = "vaenyx:model-default-changed";
+
 export function EnginePairPicker({
   slot,
   providerOptions,
@@ -88,6 +93,9 @@ export function EnginePairPicker({
       );
       setPair(next);
       onChanged?.(next);
+      if (slot === "chat" && which === "primary") {
+        window.dispatchEvent(new Event(MODEL_DEFAULT_CHANGED));
+      }
       if (provider !== NONE && !(provider in models)) {
         void fetchProviderModels(provider)
           .then((result) =>
@@ -165,17 +173,23 @@ export function EnginePairPicker({
               disabled={busy !== null}
               onChange={(next) => void save(row.which, next, DEFAULT_MODEL)}
               options={[
-                {
-                  label:
-                    row.which === "backup"
-                      ? zh
-                        ? "不设备用"
-                        : "No backup"
-                      : zh
-                        ? "关闭"
-                        : "Off",
-                  value: NONE,
-                },
+                // "Off" is a real choice for a capability, but not for the
+                // main model: an app with nothing to talk to is not a setting.
+                ...(row.which === "primary" && slot === "chat"
+                  ? []
+                  : [
+                      {
+                        label:
+                          row.which === "backup"
+                            ? zh
+                              ? "不设备用"
+                              : "No backup"
+                            : zh
+                              ? "关闭"
+                              : "Off",
+                        value: NONE,
+                      },
+                    ]),
                 ...providerOptions,
               ]}
               value={providerValue}

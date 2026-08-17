@@ -138,7 +138,6 @@ import {
   searchFacts,
   type FactRow,
   fetchModelProviders,
-  fetchProviderModels,
   connectModelProvider,
   disconnectModelProvider,
   startCodexLogin,
@@ -293,7 +292,7 @@ import {
   CapabilityChips,
   capabilityMeta,
 } from "./capability-chips.js";
-import { EnginePairPicker } from "./engine-pair.js";
+import { EnginePairPicker, MODEL_DEFAULT_CHANGED } from "./engine-pair.js";
 import { Picker, type PickerOption } from "./picker.js";
 import { PROVIDER_DATA_FACTS, dataFactsBadge } from "./data-facts.js";
 import {
@@ -6267,22 +6266,31 @@ function AskVaenyxPanel({
   const [hasUsableModel, setHasUsableModel] = useState(true);
   useEffect(() => {
     let active = true;
-    void fetchModelProviders()
-      .then((result) => {
-        if (active) {
-          setChatProviders(
-            result.providers.filter((provider) => provider.connected),
-          );
-          setHasUsableModel(
-            result.providers.some((provider) => provider.healthy),
-          );
-        }
-      })
-      .catch(() => {
-        // Best-effort; no picker if providers can't be listed.
-      });
+    function reload() {
+      void fetchModelProviders()
+        .then((result) => {
+          if (active) {
+            setChatProviders(
+              result.providers.filter((provider) => provider.connected),
+            );
+            setHasUsableModel(
+              result.providers.some((provider) => provider.healthy),
+            );
+          }
+        })
+        .catch(() => {
+          // Best-effort; no picker if providers can't be listed.
+        });
+    }
+    reload();
+    // The switcher under the chat box and the main-model row in Settings are
+    // two windows onto ONE value (Oskar, 2026-08-16: 实时统一). Settings writes
+    // it and announces it; this listens, so coming back to the chat never
+    // shows the model that was chosen before.
+    window.addEventListener(MODEL_DEFAULT_CHANGED, reload);
     return () => {
       active = false;
+      window.removeEventListener(MODEL_DEFAULT_CHANGED, reload);
     };
   }, []);
   const [taskMessages, setTaskMessages] = useState<AskVaenyxMessage[]>([]);
@@ -13627,6 +13635,35 @@ function CapabilitiesPanel({
             : "The switches could not be read, so they cannot be changed right now. The setup on each row still works."}
         </p>
       ) : null}
+      {/* The main model, first and on its own — it is not one capability among
+          eight, it is the one that answers when nothing more specialised is
+          asked for, and Reading, Fetching and Web ride on it. Setting it here
+          sets the very same thing the switcher under the chat box sets: one
+          value, two windows onto it (Oskar, 2026-08-16: 实时统一). */}
+      <div className="capability-block">
+        <div className="capability-row open">
+          <span className="capability-row-icon">✦</span>
+          <span className="capability-row-name">
+            {lang === "zh" ? "主模型" : "Main model"}
+            <em>
+              ({lang === "zh" ? "聊天、读文档、上网" : "chat, reading, web"})
+            </em>
+          </span>
+        </div>
+        <div className="capability-setup open">
+          <EnginePairPicker
+            providerOptions={slotOptions("chat").filter(
+              (option) => !option.disabled,
+            )}
+            slot="chat"
+          />
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "这一行跟聊天框下面的切换器是同一个设置 —— 在哪边改,另一边跟着变。"
+              : "This row and the switcher under the chat box are the same setting — change either and the other follows."}
+          </p>
+        </div>
+      </div>
       <div className="capability-rows">
         {CAPABILITY_META.map((meta) => {
           const built = implemented[meta.id] !== false;
@@ -13794,13 +13831,6 @@ function ModelsPanel({
   // A Workers AI-template token cannot name its own account (verified
   // 2026-07-27), so the id has its own always-visible field.
   const [cfAccountId, setCfAccountId] = useState("");
-  // Model lists, per provider, fetched on request and kept for this visit
-  // only: they come from the provider and go stale the moment it changes.
-  const [catalogues, setCatalogues] = useState<Record<string, string[]>>({});
-  const [catalogueBusy, setCatalogueBusy] = useState<string | null>(null);
-  const [catalogueError, setCatalogueError] = useState<Record<string, string>>(
-    {},
-  );
   // Deleting the local voice throws away a 150 MB download — ask first.
   const [confirmRemoveLocal, setConfirmRemoveLocal] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
@@ -13874,38 +13904,6 @@ function ModelsPanel({
       .getElementById(`model-card-${connectTarget}`)
       ?.scrollIntoView({ block: "center" });
   }, [connectTarget, providers]);
-
-  async function loadCatalogue(id: string) {
-    setCatalogueBusy(id);
-    setCatalogueError((current) => ({ ...current, [id]: "" }));
-    try {
-      const { models } = await fetchProviderModels(id);
-      setCatalogues((current) => ({ ...current, [id]: models }));
-      if (models.length === 0) {
-        setCatalogueError((current) => ({
-          ...current,
-          [id]:
-            lang === "zh"
-              ? "这家没有返回任何模型名 —— 保持默认即可。"
-              : "This provider returned no model names — leaving it on the default is fine.",
-        }));
-      }
-    } catch (caught) {
-      // The key has to be saved before the provider will answer; say that
-      // rather than the raw failure.
-      setCatalogueError((current) => ({
-        ...current,
-        [id]:
-          caught instanceof Error && caught.message
-            ? caught.message
-            : lang === "zh"
-              ? "问不到型号列表。先把 key 连上再试。"
-              : "Could not ask for the list. Connect the key first, then try again.",
-      }));
-    } finally {
-      setCatalogueBusy(null);
-    }
-  }
 
   function reload() {
     fetchModelProviders()
@@ -14388,60 +14386,20 @@ function ModelsPanel({
             }
           />
         ) : null}
-        {/* Which model, asked of the provider rather than typed from memory
-            (Oskar, 2026-08-07: "里面有好多 3.5、3.6 什么的"). The list arrives
-            only when it is asked for — one button, one request — because it
-            costs a round trip with the Owner's own key. A provider that
-            cannot be asked keeps the box, and says why. */}
-        <div className="model-choice">
-          <Picker
-            ariaLabel={lang === "zh" ? "选择模型" : "Choose a model"}
-            onChange={(value) => patchDraft(provider.id, { model: value })}
-            options={[
-              {
-                label:
-                  lang === "zh"
-                    ? `默认${provider.model ? `(现在:${provider.model})` : ""}`
-                    : `Default${provider.model ? ` (now: ${provider.model})` : ""}`,
-                value: "",
-              },
-              ...(catalogues[provider.id] ?? []).map((id) => ({
-                label: id,
-                value: id,
-              })),
-              // A model that is set but not in the fetched list stays
-              // selectable, so opening this form never silently changes it.
-              ...(draftFor(provider.id).model &&
-              !(catalogues[provider.id] ?? []).includes(
-                draftFor(provider.id).model,
-              )
-                ? [
-                    {
-                      label: draftFor(provider.id).model,
-                      value: draftFor(provider.id).model,
-                    },
-                  ]
-                : []),
-            ]}
-            value={draftFor(provider.id).model}
-          />
-          <button
-            className="text-button"
-            disabled={catalogueBusy === provider.id}
-            onClick={() => void loadCatalogue(provider.id)}
-            type="button"
-          >
-            {catalogueBusy === provider.id
-              ? lang === "zh"
-                ? "读取中…"
-                : "Asking…"
-              : lang === "zh"
-                ? "列出可用模型"
-                : "List available models"}
-          </button>
-        </div>
-        {catalogueError[provider.id] ? (
-          <small className="text-faint">{catalogueError[provider.id]}</small>
+        {/* 🔴 NO MODEL PICKER HERE (Oskar, 2026-08-16: "model地方就不要做型号
+            的选择了"). This card is the ACCOUNT: the key, and nothing else.
+            Which model does which job is asked once per job in Capabilities,
+            where the answer can differ — the reason the single model on this
+            card was wrong is that it made one choice serve chat, photos and
+            drawing at once, and a chat model chosen for quality then put every
+            photo on its tightest free bucket. The current model still shows,
+            because "connected to what" is worth seeing. */}
+        {provider.model ? (
+          <small className="text-faint">
+            {lang === "zh"
+              ? `现在用:${provider.model} —— 在“能力”里改`
+              : `Now using ${provider.model} — change it under Capabilities`}
+          </small>
         ) : null}
         <p className="context-disclaimer">
           {provider.kind === "openai-compatible"
