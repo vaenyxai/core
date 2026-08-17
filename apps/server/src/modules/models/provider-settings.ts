@@ -19,6 +19,12 @@ interface KnownProvider {
   kind: "cli-login" | "api-key" | "openai-compatible" | "anthropic";
   needsKey: boolean;
   needsBaseUrl: boolean;
+  /** A backend that does ONE job and cannot hold a conversation (a dedicated
+   *  OCR service). Everything else here can chat, so the flag marks the
+   *  exception rather than making every entry declare the obvious. Such a
+   *  backend never registers as a chat provider, so "connected" is decided by
+   *  whether its key is there rather than by the chat registry. */
+  nonChat?: boolean;
 }
 
 export const KNOWN_PROVIDERS: KnownProvider[] = [
@@ -107,6 +113,18 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     needsKey: true,
     needsBaseUrl: false,
   },
+  // Together added 2026-08-16 for one reason: Drawing had no free stand-in
+  // that a household outside China can actually sign up for. Cloudflare is the
+  // free main engine, Gemini's free image quota is ZERO, OpenAI is paid, and
+  // Zhipu wants a Chinese phone number. Together's FLUX.1-schnell free
+  // endpoint takes an email address and no card.
+  {
+    id: "together",
+    name: "Together AI",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: false,
+  },
   // Workers AI: key-based cloud, but its endpoint embeds the account id.
   {
     id: "workersai",
@@ -121,6 +139,21 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     kind: "openai-compatible",
     needsKey: false,
     needsBaseUrl: true,
+  },
+  // 🔴 A SECOND DEDICATED OCR ENGINE, and dedicated is the whole point. OCR
+  // is the one capability whose stand-in may NOT be a chat model: where the
+  // ink is unclear a chat model writes a plausible character instead of
+  // failing, which on a quote is a fluent wrong number nobody can see. So the
+  // backup here is another purpose-built reader. Free key by email, no card.
+  // Its free plan caps a file at 1 MB, and its Chinese comes from engine 1 —
+  // both said out loud on the row rather than discovered on a bad read.
+  {
+    id: "ocrspace",
+    name: "OCR.space",
+    kind: "api-key",
+    needsKey: true,
+    needsBaseUrl: false,
+    nonChat: true,
   },
 ];
 
@@ -140,15 +173,23 @@ export function listModelProviders(
   return KNOWN_PROVIDERS.map((known) => {
     const provider = registry.get(known.id);
     const health = provider?.healthCheck();
+    // A one-job backend never joins the chat registry, so its key IS its
+    // connection — asking the registry would report it missing forever.
+    const keyed = Boolean(connections[known.id]?.apiKey?.trim());
+    const connected = known.nonChat ? keyed : Boolean(provider);
     return {
       id: known.id,
       name: known.name,
       kind: known.kind,
       needsKey: known.needsKey,
       needsBaseUrl: known.needsBaseUrl,
-      connected: Boolean(provider),
-      healthy: health?.ok ?? false,
-      detail: health?.detail ?? "Not connected.",
+      connected,
+      healthy: known.nonChat ? keyed : (health?.ok ?? false),
+      detail: known.nonChat
+        ? keyed
+          ? "Key saved."
+          : "Not connected."
+        : (health?.detail ?? "Not connected."),
       isDefault: known.id === defaultId,
       capabilities: providerCapabilities(known.id),
       ...(connections[known.id]?.model
@@ -206,7 +247,16 @@ const VISION_CAPABLE_PROVIDERS = [
   "groq",
   "claude-sub",
 ];
-const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
+// OCR's list is short and stays short on purpose: only engines built to READ
+// pictures of words belong here (see core/ocr.ts).
+const OCR_CAPABLE_PROVIDERS = ["mistral", "ocrspace"];
+const IMAGE_CAPABLE_PROVIDERS = [
+  "workersai",
+  "gemini",
+  "zhipu",
+  "openai",
+  "together",
+];
 
 /** What each backend can be used FOR, so the engine pickers can offer the
  *  Owner what they have actually signed in to instead of a fixed menu where
@@ -215,8 +265,13 @@ const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
  *  from the same accumulated set. */
 export function providerCapabilities(id: string): string[] {
   const capabilities: string[] = [];
-  // Anything registered as a chat backend can be the main agent.
-  capabilities.push("chat");
+  // Anything registered as a chat backend can be the main agent — everything
+  // except the one-job backends, which would otherwise offer themselves as a
+  // model to talk to and fail at the first message.
+  if (!KNOWN_PROVIDERS.find((known) => known.id === id)?.nonChat) {
+    capabilities.push("chat");
+  }
+  if (OCR_CAPABLE_PROVIDERS.includes(id)) capabilities.push("ocr");
   if (STT_CAPABLE_PROVIDERS.includes(id)) capabilities.push("voice-in");
   if (TTS_CAPABLE_PROVIDERS.includes(id)) capabilities.push("voice-out");
   if (VISION_CAPABLE_PROVIDERS.includes(id)) capabilities.push("vision");

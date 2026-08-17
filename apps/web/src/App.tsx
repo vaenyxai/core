@@ -293,6 +293,11 @@ import {
   capabilityMeta,
 } from "./capability-chips.js";
 import { EnginePairPicker, MODEL_DEFAULT_CHANGED } from "./engine-pair.js";
+import {
+  clampThinkingLevel,
+  thinkingLevelOptions,
+  thinkingLevelShape,
+} from "./thinking-level.js";
 import { Picker, type PickerOption } from "./picker.js";
 import { PROVIDER_DATA_FACTS, dataFactsBadge } from "./data-facts.js";
 import {
@@ -416,12 +421,9 @@ const SCHEDULE_OPTIONS: {
 // How often a restricted mode reports its activity to User Mode. Written
 // once because the same three appear when a mode is made and when it is
 // edited, and the two must never drift apart.
-// Fast / Balanced / Deep, shown on the home composer and the open chat.
-const EFFORT_OPTIONS = [
-  { label: "Fast", value: "low" },
-  { label: "Balanced", value: "medium" },
-  { label: "Deep", value: "high" },
-];
+// Fast / Balanced / Deep moved to thinking-level.ts, because the list is not
+// fixed: it depends on whether the chosen model has three levels, two, or no
+// such setting at all.
 
 const DIGEST_OPTIONS = [
   { label: "Off", value: "off" },
@@ -8721,16 +8723,31 @@ function AskVaenyxPanel({
                   />
                 </>
               ) : null}
-              <span aria-hidden="true" className="composer-sep">
-                ·
-              </span>
-              <Picker
-                ariaLabel="Reasoning level"
-                className="composer-level-select"
-                onChange={(next) => setNewChatEffort(next as ReasoningEffort)}
-                options={EFFORT_OPTIONS}
-                value={newChatEffort ?? "medium"}
-              />
+              {(() => {
+                // Same rule as the open chat: the level appears only where the
+                // model actually has one.
+                const shape = thinkingLevelShape(
+                  newChatEffective?.id,
+                  newChatModelName ?? newChatEffective?.model,
+                );
+                if (shape === "none") return null;
+                return (
+                  <>
+                    <span aria-hidden="true" className="composer-sep">
+                      ·
+                    </span>
+                    <Picker
+                      ariaLabel="Reasoning level"
+                      className="composer-level-select"
+                      onChange={(next) =>
+                        setNewChatEffort(next as ReasoningEffort)
+                      }
+                      options={thinkingLevelOptions(shape, lang)}
+                      value={clampThinkingLevel(shape, newChatEffort)}
+                    />
+                  </>
+                );
+              })()}
             </div>
           ) : null}
 
@@ -10120,28 +10137,55 @@ function AskVaenyxPanel({
                   </>
                 );
               })()}
-              <span aria-hidden="true" className="composer-sep">
-                ·
-              </span>
-              <Picker
-                ariaLabel="Reasoning level"
-                className="composer-level-select"
-                disabled={!activeConversationId}
-                onChange={(chosen) => {
-                  const next = chosen as ReasoningEffort;
-                  if (!activeConversationId) return;
-                  onConversationsChange(
-                    conversations.map((conversation) =>
-                      conversation.id === activeConversationId
-                        ? { ...conversation, reasoningEffort: next }
-                        : conversation,
-                    ),
-                  );
-                  void setReasoningEffort(activeConversationId, next);
-                }}
-                options={EFFORT_OPTIONS}
-                value={activeConversation?.reasoningEffort ?? "medium"}
-              />
+              {(() => {
+                // HOW HARD IT THINKS — shown only where the model in front of
+                // the Owner actually has the setting. Three states, decided by
+                // the exact (provider, model): a slider of three, a two-way
+                // fast/deep, or nothing at all. A picker that changes nothing
+                // teaches the Owner to distrust the ones that work.
+                const effective =
+                  chatProviders.find(
+                    (provider) =>
+                      provider.id === activeConversation?.modelProviderId,
+                  ) ??
+                  chatProviders.find((provider) => provider.isDefault) ??
+                  null;
+                const shape = thinkingLevelShape(
+                  effective?.id,
+                  activeConversation?.modelName ?? effective?.model,
+                );
+                if (shape === "none") return null;
+                const level = clampThinkingLevel(
+                  shape,
+                  activeConversation?.reasoningEffort,
+                );
+                return (
+                  <>
+                    <span aria-hidden="true" className="composer-sep">
+                      ·
+                    </span>
+                    <Picker
+                      ariaLabel="Reasoning level"
+                      className="composer-level-select"
+                      disabled={!activeConversationId}
+                      onChange={(chosen) => {
+                        const next = chosen as ReasoningEffort;
+                        if (!activeConversationId) return;
+                        onConversationsChange(
+                          conversations.map((conversation) =>
+                            conversation.id === activeConversationId
+                              ? { ...conversation, reasoningEffort: next }
+                              : conversation,
+                          ),
+                        );
+                        void setReasoningEffort(activeConversationId, next);
+                      }}
+                      options={thinkingLevelOptions(shape, lang)}
+                      value={level}
+                    />
+                  </>
+                );
+              })()}
               <span aria-hidden="true" className="composer-sep">
                 ·
               </span>
@@ -12222,7 +12266,7 @@ const SETUP_ROWS = new Set([
 // backup). Their row shows a read-only summary instead of a second picker, so
 // there is exactly one place that decides who does the job. This grows as each
 // slot is wired to the pair runtime.
-const PAIR_ROWS = new Set(["hearing", "speaking", "vision", "drawing"]);
+const PAIR_ROWS = new Set(["hearing", "speaking", "vision", "drawing", "ocr"]);
 
 // WHAT ONE PRESS REALLY DOES, said in front of the button instead of after it.
 // Two of these spend the Owner's own money on their own account, and finding
@@ -12318,6 +12362,8 @@ function CapabilitiesPanel({
   const [speakingEngine, setSpeakingEngine] = useState("none");
   const [visionEngine, setVisionEngineState] = useState("none");
   const [drawingEngine, setDrawingEngine] = useState("none");
+  // OCR's row shows its chosen reader; the pair below the row is what sets it.
+  const [ocrEngine, setOcrEngine] = useState("mistral");
   // Which row has its setup showing. One at a time: four drawers open at once
   // is a wall of forms with the switches lost somewhere inside it.
   const [openSetup, setOpenSetup] = useState<string | null>(null);
@@ -12825,20 +12871,9 @@ function CapabilitiesPanel({
     // fluent wrong numbers on a quote. A dedicated engine fails as visible
     // garbage. (Measured no-invention rates: dedicated ~93%, GPT-5.5 78%.)
     ocr: {
-      options: [
-        providers.find((entry) => entry.id === "mistral" && entry.connected)
-          ? { label: "Mistral OCR", value: "mistral" }
-          : {
-              disabled: true,
-              label:
-                lang === "zh"
-                  ? "Mistral OCR —— key 在 Models 里贴"
-                  : "Mistral OCR — key goes under Models",
-              value: "mistral",
-            },
-      ],
+      options: slotOptions("ocr"),
       set: async () => undefined,
-      value: "mistral",
+      value: ocrEngine,
     },
     web: { options: mainOnly, set: async () => undefined, value: "" },
   };
@@ -13396,11 +13431,30 @@ function CapabilitiesPanel({
         </button>
       ),
       who: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "专用 OCR 引擎(Mistral OCR),故意不用主模型:聊天模型看不清一个字时会编一个「看着合理」的 —— 报价单上的数字是要进钱的。专用引擎读不出就吐乱码,错得看得见。近乎免费(约每千页 $2–4)。备选 Google Cloud Vision(每月一千页免费但要绑卡)还没接。"
-            : "A dedicated OCR engine (Mistral OCR), deliberately never the main model: a chat model that cannot make out a character writes a plausible one instead — and numbers on a quote turn into money. A dedicated engine fails as visible garbage. Near-free (about $2-4 per thousand pages). Google Cloud Vision (1000 free pages a month, card required) is the documented alternative, not yet wired."}
-        </p>
+        <>
+          {/* Both sides of this pair are DEDICATED readers, and the list holds
+              nothing else on purpose — a chat model as the stand-in would put
+              a plausible invented digit on a quote the one time it mattered. */}
+          <EnginePairPicker
+            onChanged={(next) =>
+              setOcrEngine(next.primary?.provider ?? "mistral")
+            }
+            providerOptions={slotOptions("ocr").filter(
+              (option) => !option.disabled,
+            )}
+            slot="ocr"
+          />
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "专用 OCR 引擎,故意不用主模型:聊天模型看不清一个字时会编一个「看着合理」的 —— 报价单上的数字是要进钱的。专用引擎读不出就吐乱码,错得看得见。所以这一行的两个下拉里只有专用引擎,没有聊天模型。"
+              : "Dedicated OCR engines, deliberately never the main model: a chat model that cannot make out a character writes a plausible one instead — and numbers on a quote turn into money. A dedicated engine fails as visible garbage. That is why both drop-downs here offer only dedicated readers."}
+          </p>
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "⚠️ OCR.space 是免费备用(邮箱注册即可,不用绑卡),但免费档单个文件最大 1 MB,中文走它的 1 号引擎。Mistral OCR 近乎免费(约每千页 $2–4),中文更好 —— 建议 Mistral 主用、OCR.space 备用。"
+              : "⚠️ OCR.space is the free stand-in (email sign-up, no card), but its free plan caps a file at 1 MB and its Chinese comes from its engine 1. Mistral OCR is near-free (about $2-4 per thousand pages) and reads Chinese better — so Mistral as the main one, OCR.space behind it."}
+          </p>
+        </>
       ),
     });
   }

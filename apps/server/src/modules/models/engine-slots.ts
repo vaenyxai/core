@@ -37,6 +37,7 @@ export const ENGINE_SLOTS = [
   "imageOutput",
   "voice",
   "voiceOutput",
+  "ocr",
 ] as const;
 
 export type EngineSlot = (typeof ENGINE_SLOTS)[number];

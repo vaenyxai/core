@@ -172,6 +172,14 @@ const IMAGE_CANDIDATES = [
     model: "gpt-image-1",
   },
   {
+    // FLUX.1-schnell on Together's free endpoint. The "-Free" suffix is the
+    // whole point: it is a distinct model id, not a tier flag, and asking for
+    // the plain name bills the account instead.
+    id: "together",
+    baseUrl: "https://api.together.xyz/v1",
+    model: "black-forest-labs/FLUX.1-schnell-Free",
+  },
+  {
     id: "zhipu",
     // CogView-3-Flash rather than the paid CogView-4: this is the default for
     // someone who picked Zhipu and typed nothing else, and the default should be

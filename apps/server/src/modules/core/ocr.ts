@@ -11,8 +11,14 @@
 // onnxruntime, and Windows' built-in OCR) are verified feasible on this very
 // machine and recorded in docs/local-engines.md for a later round.
 import { readProviderConnections } from "../models/connections.js";
+import {
+  readEnginePair,
+  runWithBackup,
+  type EngineChoice,
+  type EngineRunNote,
+} from "../models/engine-slots.js";
 
-export const OCR_ENGINES = ["mistral"] as const;
+export const OCR_ENGINES = ["mistral", "ocrspace"] as const;
 export type OcrEngine = (typeof OCR_ENGINES)[number];
 
 // Mistral OCR: already a connected provider (one key, the shared pool), a
@@ -24,10 +30,14 @@ export type OcrEngine = (typeof OCR_ENGINES)[number];
 // own pipeline; not built this round.
 const MISTRAL_OCR_URL = "https://api.mistral.ai/v1/ocr";
 const MISTRAL_OCR_MODEL = "mistral-ocr-latest";
+const OCRSPACE_URL = "https://api.ocr.space/parse/image";
 
 export interface OcrResult {
   text: string;
-  engine: "mistral";
+  engine: OcrEngine;
+  /** Which reader answered, and — when the stand-in did — why the main one
+   *  could not. The caller says it out loud; it is never a quiet swap. */
+  note?: EngineRunNote;
 }
 
 export class OcrNotConnectedError extends Error {
@@ -37,14 +47,23 @@ export class OcrNotConnectedError extends Error {
   }
 }
 
-function mistralKey(secretsDirectory: string): string | null {
+function keyFor(secretsDirectory: string, provider: string): string | null {
   return (
-    readProviderConnections(secretsDirectory)["mistral"]?.apiKey?.trim() || null
+    readProviderConnections(secretsDirectory)[provider]?.apiKey?.trim() || null
   );
 }
 
+/** The reader this instance would use. Falls back to Mistral for an install
+ *  set up before OCR had a slot of its own — that is what it was doing. */
+function ocrPrimary(secretsDirectory: string): EngineChoice | null {
+  const chosen = readEnginePair(secretsDirectory, "ocr").primary;
+  if (chosen) return chosen;
+  return keyFor(secretsDirectory, "mistral") ? { provider: "mistral" } : null;
+}
+
 export function ocrEngineConnected(secretsDirectory: string): boolean {
-  return mistralKey(secretsDirectory) !== null;
+  const primary = ocrPrimary(secretsDirectory);
+  return Boolean(primary && keyFor(secretsDirectory, primary.provider));
 }
 
 // One call, either kind of input: a whole PDF (Mistral OCR takes the document
@@ -55,9 +74,37 @@ export async function runOcr(
   secretsDirectory: string,
   input: { base64: string; mediaType: string },
 ): Promise<OcrResult> {
-  const key = mistralKey(secretsDirectory);
-  if (!key) throw new OcrNotConnectedError();
+  const primary = ocrPrimary(secretsDirectory);
+  if (!primary) throw new OcrNotConnectedError();
+  const pair = {
+    primary,
+    backup: readEnginePair(secretsDirectory, "ocr").backup,
+  };
+  const read = await runWithBackup(
+    pair,
+    (choice) => readWith(secretsDirectory, choice, input),
+    "en",
+  );
+  return { ...read.value, note: read.note };
+}
 
+function readWith(
+  secretsDirectory: string,
+  choice: EngineChoice,
+  input: { base64: string; mediaType: string },
+): Promise<OcrResult> {
+  const key = keyFor(secretsDirectory, choice.provider);
+  if (!key) throw new OcrNotConnectedError();
+  return choice.provider === "ocrspace"
+    ? readWithOcrSpace(key, input)
+    : readWithMistral(key, choice.model, input);
+}
+
+async function readWithMistral(
+  key: string,
+  model: string | undefined,
+  input: { base64: string; mediaType: string },
+): Promise<OcrResult> {
   const isPdf = input.mediaType === "application/pdf";
   const dataUrl = `data:${input.mediaType};base64,${input.base64}`;
   const response = await fetch(MISTRAL_OCR_URL, {
@@ -67,7 +114,7 @@ export async function runOcr(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: MISTRAL_OCR_MODEL,
+      model: model?.trim() || MISTRAL_OCR_MODEL,
       document: isPdf
         ? { type: "document_url", document_url: dataUrl }
         : { type: "image_url", image_url: dataUrl },
@@ -90,4 +137,57 @@ export async function runOcr(
     })
     .filter(Boolean);
   return { text: pages.join("\n\n"), engine: "mistral" };
+}
+
+// OCR.space: form-encoded, key in a header, one page's text per parsed result.
+// Its own failures come back inside a 200 — `IsErroredOnProcessing` with a
+// message — so the status alone is not enough to know it worked.
+async function readWithOcrSpace(
+  key: string,
+  input: { base64: string; mediaType: string },
+): Promise<OcrResult> {
+  const body = new URLSearchParams({
+    base64Image: `data:${input.mediaType};base64,${input.base64}`,
+    // Engine 1 is the one that reads Chinese; `cht`/`chs` select which script.
+    // Latin text reads fine on it too, so one setting covers a household.
+    OCREngine: "1",
+    language: "cht",
+    isOverlayRequired: "false",
+    scale: "true",
+  });
+  const response = await fetch(OCRSPACE_URL, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body,
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!response.ok) {
+    throw new Error(`OCR_ENGINE_FAILED:ocrspace:${response.status}`);
+  }
+  const parsed = (await response.json()) as {
+    IsErroredOnProcessing?: boolean;
+    OCRExitCode?: number;
+    ErrorMessage?: string | string[];
+    ParsedResults?: { ParsedText?: string }[];
+  };
+  if (parsed.IsErroredOnProcessing || (parsed.OCRExitCode ?? 1) > 2) {
+    const detail = Array.isArray(parsed.ErrorMessage)
+      ? parsed.ErrorMessage[0]
+      : parsed.ErrorMessage;
+    // A refusal wearing a 200 is still a refusal, and it has to look like one
+    // to the stand-in logic — so it is thrown, with the vendor's own words.
+    throw new Error(
+      `OCR_ENGINE_FAILED:ocrspace:${(detail ?? "refused").slice(0, 200)}`,
+    );
+  }
+  const pages = (parsed.ParsedResults ?? [])
+    .map((page, at) => {
+      const text = (page.ParsedText ?? "").trim();
+      return text ? `[page ${at + 1}]\n${text}` : "";
+    })
+    .filter(Boolean);
+  return { text: pages.join("\n\n"), engine: "ocrspace" };
 }

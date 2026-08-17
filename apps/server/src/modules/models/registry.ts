@@ -70,6 +70,12 @@ export const OPENAI_COMPATIBLE_PRESETS = [
     baseUrl: "https://api.mistral.ai/v1",
     model: "mistral-small-latest",
   },
+  {
+    id: "together",
+    name: "Together AI",
+    baseUrl: "https://api.together.xyz/v1",
+    model: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+  },
 ] as const;
 
 class ModelRegistry {
