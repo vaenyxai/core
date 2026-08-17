@@ -148,10 +148,18 @@ async function readWithOcrSpace(
 ): Promise<OcrResult> {
   const body = new URLSearchParams({
     base64Image: `data:${input.mediaType};base64,${input.base64}`,
-    // Engine 1 is the one that reads Chinese; `cht`/`chs` select which script.
-    // Latin text reads fine on it too, so one setting covers a household.
-    OCREngine: "1",
-    language: "cht",
+    // 🔴 ENGINE 2, AND MEASURED RATHER THAN CHOSEN FROM THE DOCS. This shipped
+    // as engine 1 with `language: cht`, because engine 1 is the one documented
+    // to read Chinese. Asked with the Owner's own key, engine 1 answers HTTP
+    // 502 for chs, cht AND eng alike (60s, 25s, 9s — 2026-08-17): it is simply
+    // not available on the free plan. Engine 2 answered a drawn "12345"
+    // correctly, twice, in under a second.
+    //
+    // The cost of that is real and is said on the row: engine 2 is Latin-only,
+    // so a Chinese scan belongs on the primary (Mistral OCR reads it well).
+    // This is the STAND-IN, and a stand-in that handles the Latin case is
+    // worth more than one that is documented for both and answers neither.
+    OCREngine: "2",
     isOverlayRequired: "false",
     scale: "true",
   });

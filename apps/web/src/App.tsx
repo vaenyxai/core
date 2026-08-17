@@ -307,6 +307,7 @@ import {
   costBadge,
 } from "./provider-facts.js";
 import { CAPABILITIES } from "./capabilities.js";
+import { Hint } from "./hint.js";
 import { getCodexAuthCopy } from "./status-copy.js";
 
 type Screen =
@@ -12361,6 +12362,31 @@ function CapabilitiesPanel({
   // Which row has its setup showing. One at a time: four drawers open at once
   // is a wall of forms with the switches lost somewhere inside it.
   const [openSetup, setOpenSetup] = useState<string | null>(null);
+
+  // 🔴 OPENING A DRAWER MUST NOT MOVE THE PAGE. Only one is open at a time, so
+  // opening a lower row CLOSES a higher one — and height vanishing ABOVE the
+  // viewport drags everything up, which reads as "the screen jumped to the top"
+  // (Oskar, 2026-08-17). The row that was clicked is therefore pinned: its
+  // distance from the top of the window is measured before and after the
+  // layout changes, and the scroll is corrected by the difference. The drawer
+  // then simply grows downward and shrinks back, which is what a disclosure is
+  // supposed to look like.
+  function toggleSetup(id: string): void {
+    const anchor = () =>
+      document.getElementById(`capability-block-${id}`)?.getBoundingClientRect()
+        .top ?? null;
+    const before = anchor();
+    setOpenSetup((current) => (current === id ? null : id));
+    if (before === null) return;
+    // After paint, not after state: the height is only real once it is drawn.
+    requestAnimationFrame(() => {
+      const after = anchor();
+      if (after === null) return;
+      const drift = after - before;
+      if (Math.abs(drift) > 1)
+        window.scrollBy({ top: drift, behavior: "auto" });
+    });
+  }
   // Everything below belongs to the setup drawers — what used to be a separate
   // card of its own.
   const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
@@ -13004,8 +13030,15 @@ function CapabilitiesPanel({
           />
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "转写在这一行选的那个服务上做,录音发过去,回来的是文字。它的 key 在下面的 Models 里粘。"
-              : "The transcribing happens at whichever service this row is set to: the recording goes there, words come back. Its key is pasted below, in Models."}
+              ? "key 在 Models 里粘。"
+              : "Its key is pasted in Models."}
+            <Hint
+              text={
+                lang === "zh"
+                  ? "录音发到这一行选的服务,回来的是文字。"
+                  : "The recording goes to whichever service this row is set to; words come back."
+              }
+            />
           </p>
           <FreePick
             href="https://console.groq.com"
@@ -13158,8 +13191,15 @@ function CapabilitiesPanel({
           />
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "跟这一行选的引擎走。本机语音在这台电脑上生成,什么都不出去、也没有每次的费用,中英文都能念;Gemini 是发出去合成的,声音更自然,中英文都行。⚠️ Cloudflare(Workers AI)那个声音只会英文 —— 遇到中文它会明说,不会瞎念。本机语音在下面的 Models 里装。"
-              : "Whichever engine this row is set to. The voice on this machine is generated here — nothing leaves, there is no per-use cost, and it speaks both English and Chinese; Gemini synthesises away from here, sounds more natural, and also does both. ⚠️ The Cloudflare (Workers AI) voice speaks English only — given Chinese it says so rather than mispronouncing it. The voice on this machine is installed below, in Models."}
+              ? "本机语音在 Models 里安装。"
+              : "The on-machine voice is installed in Models."}
+            <Hint
+              text={
+                lang === "zh"
+                  ? "本机语音:什么都不出这台电脑,没有每次的费用,中英文都念。Gemini:发出去合成,更自然,中英文都行。Cloudflare:只会英文。"
+                  : "On this machine: nothing leaves, no per-use cost, speaks English and Chinese. Gemini: synthesised away from here, more natural, does both. Cloudflare: English only."
+              }
+            />
           </p>
           {outputEngine === "browser" ? (
             <p className="settings-card-copy">
@@ -13205,8 +13245,15 @@ function CapabilitiesPanel({
           />
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "照片直接发给这一行选的模型。有的模型自己就会看图,有的得靠别人先描述一遍 —— 这一行选的就是真正看图的那个。它的 key 在下面的 Models 里粘。"
-              : "The photo goes to the model this row is set to. Some models look at a picture first-hand; this row is the one that actually does the looking. Its key is pasted below, in Models."}
+              ? "key 在 Models 里粘。"
+              : "Its key is pasted in Models."}
+            <Hint
+              text={
+                lang === "zh"
+                  ? "照片直接发给这一行选的模型 —— 它就是真正看图的那个,不是先让别人描述一遍。"
+                  : "The photo goes straight to the model this row is set to — it is the one that actually looks, not one being handed somebody else's description."
+              }
+            />
           </p>
           <FreePick
             href="https://aistudio.google.com/apikey"
@@ -13252,8 +13299,15 @@ function CapabilitiesPanel({
           />
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "跟这一行选的引擎走,跟看图的那个是两回事 —— 会看图的模型不一定会画。Cloudflare Workers AI 和智谱都是免费的,在下面的 Models 里连。"
-              : "Whichever engine this row is set to, which is a different thing from the one that looks at pictures — a model that can see one cannot necessarily make one. Cloudflare Workers AI and Zhipu are both free, and both are connected below, in Models."}
+              ? "Cloudflare 和智谱都免费。"
+              : "Cloudflare and Zhipu are both free."}
+            <Hint
+              text={
+                lang === "zh"
+                  ? "画图跟看图是两回事 —— 会看图的模型不一定会画。"
+                  : "Drawing is not seeing — a model that can look at a picture cannot necessarily make one."
+              }
+            />
           </p>
           <FreePick
             href="https://dash.cloudflare.com/profile/api-tokens"
@@ -13429,13 +13483,20 @@ function CapabilitiesPanel({
           />
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "专用 OCR 引擎,故意不用主模型:聊天模型看不清一个字时会编一个「看着合理」的 —— 报价单上的数字是要进钱的。专用引擎读不出就吐乱码,错得看得见。所以这一行的两个下拉里只有专用引擎,没有聊天模型。"
-              : "Dedicated OCR engines, deliberately never the main model: a chat model that cannot make out a character writes a plausible one instead — and numbers on a quote turn into money. A dedicated engine fails as visible garbage. That is why both drop-downs here offer only dedicated readers."}
+              ? "只有专用引擎,没有聊天模型。"
+              : "Dedicated readers only — never a chat model."}
+            <Hint
+              text={
+                lang === "zh"
+                  ? "聊天模型看不清一个字时会编一个看着合理的 —— 报价单上的数字是要进钱的。专用引擎读不出就吐乱码,错得看得见。"
+                  : "A chat model that cannot make out a character writes a plausible one instead, and numbers on a quote turn into money. A dedicated engine fails as visible garbage."
+              }
+            />
           </p>
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "⚠️ OCR.space 是免费备用(邮箱注册即可,不用绑卡),但免费档单个文件最大 1 MB,中文走它的 1 号引擎。Mistral OCR 近乎免费(约每千页 $2–4),中文更好 —— 建议 Mistral 主用、OCR.space 备用。"
-              : "⚠️ OCR.space is the free stand-in (email sign-up, no card), but its free plan caps a file at 1 MB and its Chinese comes from its engine 1. Mistral OCR is near-free (about $2-4 per thousand pages) and reads Chinese better — so Mistral as the main one, OCR.space behind it."}
+              ? "⚠️ OCR.space 只认拉丁字母,不认中文(实测:它那个支持中文的引擎在免费档一直 502)。中文扫描件请让 Mistral 主用。"
+              : "⚠️ OCR.space reads Latin script only, not Chinese (measured: its Chinese engine answers 502 on the free plan). Keep Mistral as the primary for Chinese scans."}
           </p>
         </>
       ),
@@ -13756,7 +13817,11 @@ function CapabilitiesPanel({
             // (Oskar, 2026-08-07: "✓ gemini: It spoke" appearing under
             // Speaking's divider, against Vision). Row, its answer and its
             // drawer are one thing now, and the line closes them.
-            <div className="capability-block" key={meta.id}>
+            <div
+              className="capability-block"
+              id={`capability-block-${meta.id}`}
+              key={meta.id}
+            >
               <div className={open ? "capability-row open" : "capability-row"}>
                 <span className="capability-row-icon">{meta.icon}</span>
                 <span className="capability-row-name">
@@ -13812,7 +13877,7 @@ function CapabilitiesPanel({
                     className={
                       open ? "capability-row-more open" : "capability-row-more"
                     }
-                    onClick={() => setOpenSetup(open ? null : meta.id)}
+                    onClick={() => toggleSetup(meta.id)}
                     type="button"
                   >
                     <LineIcon>

@@ -17,6 +17,7 @@ import {
   setEngineChoice,
   type EnginePairValue,
 } from "./api";
+import { Hint } from "./hint";
 import { useI18n } from "./i18n";
 import { Picker, type PickerOption } from "./picker";
 import { showErrorToast } from "./toast";
@@ -152,20 +153,20 @@ export function EnginePairPicker({
 
   if (!pair) return null;
 
-  const rows: { which: "primary" | "backup"; label: string; hint: string }[] = [
-    {
-      which: "primary",
-      label: zh ? "主用" : "Primary",
-      hint: zh ? "平时就用它" : "used for this job",
-    },
-    {
-      which: "backup",
-      label: zh ? "备用" : "Backup",
-      hint: zh
-        ? "主用完全答不了时才用,用了会在结果里说明"
-        : "used only when the primary cannot answer at all — and said so when it is",
-    },
-  ];
+  // "Primary" and "Backup" need no gloss — the words are the explanation
+  // (Oskar, 2026-08-17). What is NOT obvious is when the backup fires, so that
+  // one sentence lives behind a "?" instead of under every row forever.
+  const rows: { which: "primary" | "backup"; label: string; hint?: string }[] =
+    [
+      { which: "primary", label: zh ? "主用" : "Primary" },
+      {
+        which: "backup",
+        label: zh ? "备用" : "Backup",
+        hint: zh
+          ? "只有主用完全答不上来时才会用它(额度用完、钥匙失效、对方挂了)。用了会在回复里说明。答得不好不算。"
+          : "Used only when the primary cannot answer at all — out of quota, key rejected, provider down. The reply says so when it happens. A poor answer does not count.",
+      },
+    ];
 
   return (
     <div className="engine-pair">
@@ -179,7 +180,7 @@ export function EnginePairPicker({
             <div className="engine-pair-row">
               <span className="engine-pair-label">
                 {row.label}
-                <em>{row.hint}</em>
+                {row.hint ? <Hint text={row.hint} /> : null}
               </span>
               <Picker
                 ariaLabel={`${slot} ${row.which} provider`}

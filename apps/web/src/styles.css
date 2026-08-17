@@ -8856,6 +8856,67 @@ body {
   min-width: 0;
 }
 
+/* The "?" that holds an explanation instead of printing it. See hint.tsx. */
+.hint {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.hint-button {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 0.5px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  color: var(--text-faint);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1;
+  cursor: help;
+}
+
+.hint-button:hover,
+.hint-button:focus-visible {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.hint-bubble {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 30;
+  width: max-content;
+  max-width: 260px;
+  padding: 7px 9px;
+  transform: translateX(-50%);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 35%);
+  color: var(--text);
+  font-size: var(--fs-label);
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  text-align: left;
+}
+
+/* Near the left edge the bubble would hang off the page; on a narrow screen it
+   anchors to the left instead of centring on a 15px dot. */
+@media (max-width: 560px) {
+  .hint-bubble {
+    left: 0;
+    max-width: 70vw;
+    transform: none;
+  }
+}
+
 /* One side of the pair, and anything that belongs to THAT side under it —
    Speaking's voice list, which is a property of the engine above it. */
 .engine-pair-side {
