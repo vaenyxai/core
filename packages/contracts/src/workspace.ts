@@ -1376,6 +1376,35 @@ export const VisionStatusSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// A capability's pair: which backend + exact model does this job, and which
+// stand-in the OWNER picked for when it cannot answer at all. Model empty =
+// that backend's own pinned default. Backup null = no stand-in; the app
+// never invents one (owner rule, 2026-08-16).
+export const EngineChoiceSchema = Type.Object(
+  {
+    provider: Type.String({ minLength: 1, maxLength: 60 }),
+    model: Type.Optional(Type.String({ maxLength: 120 })),
+  },
+  { additionalProperties: false },
+);
+
+export const EnginePairSchema = Type.Object(
+  {
+    slot: Type.String({ minLength: 1, maxLength: 40 }),
+    primary: Type.Union([EngineChoiceSchema, Type.Null()]),
+    backup: Type.Union([EngineChoiceSchema, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const SetEngineChoiceRequestSchema = Type.Object(
+  {
+    which: Type.Union([Type.Literal("primary"), Type.Literal("backup")]),
+    choice: Type.Union([EngineChoiceSchema, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 export const ConnectVisionRequestSchema = Type.Object(
   {
     provider: Type.Union([
@@ -1386,6 +1415,7 @@ export const ConnectVisionRequestSchema = Type.Object(
       // Pixtral, on a key the Owner may already have for chat — a second
       // free tier that throttles independently of Google's.
       Type.Literal("mistral"),
+      Type.Literal("groq"),
       // The Owner's Claude subscription can power the vision engine too
       // (reads photos through the locked-down Agent SDK path).
       Type.Literal("claude-sub"),
@@ -2760,6 +2790,11 @@ export type ExitModeRequest = Static<typeof ExitModeRequestSchema>;
 export type PushPrefs = Static<typeof PushPrefsSchema>;
 export type UpdateStatus = Static<typeof UpdateStatusSchema>;
 export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
+export type EngineChoice = Static<typeof EngineChoiceSchema>;
+export type EnginePair = Static<typeof EnginePairSchema>;
+export type SetEngineChoiceRequest = Static<
+  typeof SetEngineChoiceRequestSchema
+>;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
 export type ImageAnnotationItem = Static<typeof ImageAnnotationItemSchema>;

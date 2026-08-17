@@ -1552,7 +1552,7 @@ export async function createAskVaenyxMessage(
       try {
         const found = readImage(options.dataDirectory, options.imageId);
         if (found) {
-          const described = await describeImage(
+          const { value: described } = await describeImage(
             options.secretsDirectory,
             found.image,
             found.mimeType,
@@ -1617,7 +1617,7 @@ export async function createAskVaenyxMessage(
           found.mimeType,
           /[一-鿿]/.test(content) ? "zh" : "en",
         )
-          .then((items) => {
+          .then(({ value: items }) => {
             database.sqlite
               .prepare(
                 `INSERT INTO image_annotations (image_id, items, created_at)
@@ -1663,7 +1663,7 @@ export async function createAskVaenyxMessage(
         try {
           const found = readImage(options.dataDirectory, latestPhoto.image_id);
           if (found) {
-            const items = await annotateImage(
+            const { value: items } = await annotateImage(
               options.secretsDirectory,
               found.image,
               found.mimeType,

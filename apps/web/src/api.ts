@@ -1490,7 +1490,14 @@ export function exitMode(secret?: string): Promise<{ ok: boolean }> {
 }
 
 export function setVisionEngine(
-  provider: "none" | "gemini" | "zhipu" | "openai" | "mistral" | "claude-sub",
+  provider:
+    | "none"
+    | "gemini"
+    | "zhipu"
+    | "openai"
+    | "mistral"
+    | "groq"
+    | "claude-sub",
 ): Promise<VisionStatus> {
   return requestJson<VisionStatus>("/v1/vision/engine", {
     method: "POST",
@@ -2403,4 +2410,34 @@ export function testChatConnection(
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+// A capability's pair: who does this job, and the stand-in the Owner picked
+// for when that one cannot answer at all. One shape for every capability.
+export interface EngineChoiceValue {
+  provider: string;
+  model?: string;
+}
+
+export interface EnginePairValue {
+  slot: string;
+  primary: EngineChoiceValue | null;
+  backup: EngineChoiceValue | null;
+}
+
+export function fetchEnginePair(slot: string): Promise<EnginePairValue> {
+  return requestJson<EnginePairValue>(
+    `/v1/engines/${encodeURIComponent(slot)}`,
+  );
+}
+
+export function setEngineChoice(
+  slot: string,
+  which: "primary" | "backup",
+  choice: EngineChoiceValue | null,
+): Promise<EnginePairValue> {
+  return requestJson<EnginePairValue>(
+    `/v1/engines/${encodeURIComponent(slot)}`,
+    { method: "POST", body: JSON.stringify({ which, choice }) },
+  );
 }

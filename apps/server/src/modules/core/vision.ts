@@ -10,6 +10,12 @@ import { resolve } from "node:path";
 import { claudeMachineLogin } from "../models/claude-login.js";
 import { claudeSubscriptionVision } from "../models/claude-subscription-provider.js";
 import { readProviderConnections } from "../models/connections.js";
+import {
+  readEnginePair,
+  runWithBackup,
+  type EngineChoice,
+  type EngineRunNote,
+} from "../models/engine-slots.js";
 import { writeConnections } from "../models/provider-settings.js";
 
 // Stored conversation photos (Phase B): originals kept under
@@ -87,6 +93,7 @@ export const VISION_DIRECT_PROVIDER_IDS = [
   "zhipu",
   "openai",
   "mistral",
+  "groq",
   "codex",
   "anthropic",
   "claude-sub",
@@ -127,6 +134,15 @@ export const VISION_CANDIDATES = [
     model: "pixtral-12b-2409",
   },
   {
+    // Groq's ONLY vision model (their Llama-4 vision was retired 2026-07-17),
+    // but the free tier is 30/minute against Gemini's 20 and the inference
+    // sits in Sydney — which makes it the useful kind of stand-in: a
+    // genuinely separate queue, close by. Marked Preview by Groq.
+    id: "groq",
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "qwen/qwen3.6-27b",
+  },
+  {
     id: "claude-sub",
     baseUrl: "",
     model: "",
@@ -143,6 +159,7 @@ export type VisionEngineChoice =
   | "zhipu"
   | "openai"
   | "mistral"
+  | "groq"
   | "claude-sub";
 
 function pickCandidate(
@@ -164,6 +181,18 @@ function pickCandidate(
 
 // Machine-login presence (in-app sign-in credentials in the Vaenyx
 // claude-home, or a personal Claude Code login) — same rule as the provider.
+// Does this backend have what it needs to be asked? claude-sub authenticates
+// by setup token OR machine sign-in; the key-based ones need their key.
+function hasVisionAuth(
+  connections: ReturnType<typeof readProviderConnections>,
+  id: string,
+): boolean {
+  if (id === "claude-sub") {
+    return Boolean(connections["claude-sub"]?.apiKey) || claudeSubAuthProbe();
+  }
+  return Boolean(connections[id]?.apiKey);
+}
+
 function claudeSubAuthProbe(): boolean {
   return claudeMachineLogin();
 }
@@ -212,6 +241,14 @@ export interface VisionAnswer {
   text: string;
 }
 
+/** An answer plus WHO gave it — including, when the Owner's backup stood in,
+ *  what stopped the primary. Every surface that shows the answer can then say
+ *  so in plain words instead of the Owner meeting a silent substitution. */
+export interface VisionOutcome<T> {
+  value: T;
+  note: EngineRunNote;
+}
+
 // One question about one picture — the shared body of describeImage,
 // annotateImage and the Capabilities row's own Test. Each caller brings its own
 // prompt and its own failure code, because the routes above split those codes
@@ -221,71 +258,70 @@ export async function askVisionModel(
   prompt: string,
   image: Buffer,
   mimeType: string,
-  options: { failureCode: string; temperature?: number },
-): Promise<VisionAnswer> {
-  // Vision providers flake, and free tiers throttle. MEASURED on this owner's
-  // own key, 2026-08-16, which is why the handling is shaped like this:
-  //   gemini-3.7-flash   429 "limit: 20, model: gemini-3.7-flash"
-  //   gemini-flash-latest same 429, naming 3.7 — the alias IS that model
-  //   gemini-3.5-flash-lite  OK in 1.7s, correct list
-  // The newest flagship is the most contended free bucket, and per-model
-  // limits mean a LIGHTER model of the same provider is a different queue —
-  // so a rate limit is answered by stepping down, not only by waiting. The
-  // step-down stays inside the provider the Owner chose: same account, same
-  // terms, same privacy, just a smaller model doing the looking.
-  const attempts = [1_200, 4_000, 10_000];
+  options: { failureCode: string; temperature?: number; lang?: string },
+): Promise<VisionOutcome<VisionAnswer>> {
+  // The Owner's pair: their primary, and — only if it cannot answer at all —
+  // the stand-in THEY chose. The app never picks one (owner rule,
+  // 2026-08-16), and whichever answered is carried out in the note so the
+  // surface can say so in plain words.
+  //
+  // Waiting is what you do when there is nobody else to ask. With a backup
+  // set, a throttled primary hands over immediately instead of making the
+  // Owner watch a backoff ladder; with no backup, the ladder is all there
+  // is, so it still climbs into the seconds a per-minute quota needs.
+  const pair = readEnginePair(secretsDirectory, "vision");
+  // Named for THIS capability, not "some engine": a refusal has to tell the
+  // Owner which thing is not connected (held by capability-gate.test.ts).
+  if (!pair.primary) throw new Error("VISION_NOT_CONNECTED");
+  return runWithBackup(
+    pair,
+    (choice) =>
+      pair.backup
+        ? askVisionModelOnce(
+            secretsDirectory,
+            prompt,
+            image,
+            mimeType,
+            options,
+            choice,
+          )
+        : waitAndRetry(() =>
+            askVisionModelOnce(
+              secretsDirectory,
+              prompt,
+              image,
+              mimeType,
+              options,
+              choice,
+            ),
+          ),
+    options.lang ?? "en",
+  );
+}
+
+// No stand-in available: a throttle is a queue, so wait in it. A 429 gets the
+// whole ladder (a free tier counts per MINUTE); a server blip gets one quick
+// retry; anything else fails fast with the provider's own words.
+async function waitAndRetry<T>(attempt: () => Promise<T>): Promise<T> {
+  const waits = [1_200, 4_000, 10_000];
   let lastError: unknown;
-  let modelOverride: string | undefined;
-  for (let attempt = 0; attempt <= attempts.length; attempt += 1) {
+  for (let index = 0; index <= waits.length; index += 1) {
     try {
-      return await askVisionModelOnce(
-        secretsDirectory,
-        prompt,
-        image,
-        mimeType,
-        options,
-        modelOverride,
-      );
+      return await attempt();
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : "";
       const rateLimited = /:429(?::|$)/.test(message);
       const serverFlake =
         /:5\d\d(?::|$)/.test(message) || message.includes("fetch failed");
-      const wait = attempts[attempt];
-      // A 429 gets the whole ladder; a server blip gets one quick retry.
+      const wait = waits[index];
       if (wait === undefined) break;
-      if (!rateLimited && !(serverFlake && attempt === 0)) break;
-      if (rateLimited && !modelOverride) {
-        const lighter = lighterVisionModel(secretsDirectory);
-        if (lighter) modelOverride = lighter;
-      }
+      if (!rateLimited && !(serverFlake && index === 0)) break;
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
   throw lastError;
 }
-
-// The smaller vision model of the SAME provider, used only after that
-// provider has said "too many". Null when there is nothing lighter to step
-// down to, or when the Owner is already on it.
-function lighterVisionModel(secretsDirectory: string): string | null {
-  const connections = readProviderConnections(secretsDirectory);
-  const candidate = pickCandidate(connections);
-  if (!candidate) return null;
-  const lighter = LIGHTER_VISION_MODELS[candidate.id];
-  if (!lighter) return null;
-  const current = connections[candidate.id]?.model?.trim() || candidate.model;
-  return current === lighter ? null : lighter;
-}
-
-// Probed on a real key (2026-08-16): 2.5-flash-lite answers 404 "no longer
-// available to new users" — the very trap the candidate table documents — so
-// the step-down names a CURRENT lite model, and gets re-probed whenever this
-// list is touched.
-const LIGHTER_VISION_MODELS: Record<string, string> = {
-  gemini: "gemini-3.5-flash-lite",
-};
 
 async function askVisionModelOnce(
   secretsDirectory: string,
@@ -293,12 +329,15 @@ async function askVisionModelOnce(
   image: Buffer,
   mimeType: string,
   options: { failureCode: string; temperature?: number },
-  // Set only by the rate-limit step-down above.
-  modelOverride?: string,
+  choice: EngineChoice,
 ): Promise<VisionAnswer> {
   const connections = readProviderConnections(secretsDirectory);
-  const candidate = pickCandidate(connections);
-  if (!candidate) {
+  // The choice names the backend; the candidate table supplies its endpoint
+  // and its pinned default model.
+  const candidate = VISION_CANDIDATES.find(
+    (entry) => entry.id === choice.provider,
+  );
+  if (!candidate || !hasVisionAuth(connections, candidate.id)) {
     throw new Error("VISION_NOT_CONNECTED");
   }
   const connection = connections[candidate.id];
@@ -312,7 +351,11 @@ async function askVisionModelOnce(
       image.toString("base64"),
       mimeType,
     );
-    return { engine: candidate.id, model: candidate.model, text: text.trim() };
+    return {
+      engine: candidate.id,
+      model: choice.model ?? candidate.model,
+      text: text.trim(),
+    };
   }
 
   // The Owner's chosen model for this backend drives its capabilities too
@@ -322,7 +365,10 @@ async function askVisionModelOnce(
   // was the thing 503ing. No chosen model = the pinned default; a chosen
   // model that cannot see fails with the provider's own words, said out
   // loud, never silently.
-  const model = modelOverride ?? connection?.model?.trim() ?? candidate.model;
+  // The model the Owner picked FOR THIS JOB — never the chat model of the
+  // same account, which is how photos ended up on a flagship's 20-per-minute
+  // bucket. No pick = this backend's pinned default.
+  const model = choice.model?.trim() || candidate.model;
   const response = await fetch(
     `${connection?.baseUrl ?? candidate.baseUrl}/chat/completions`,
     {
@@ -384,7 +430,7 @@ export async function describeImage(
   image: Buffer,
   mimeType: string,
   lang: string,
-): Promise<string> {
+): Promise<VisionOutcome<string>> {
   // Dot points, never prose (app-wide rule, Oskar 2026-07-28): this text lands
   // in front of the Owner (routine confirm cards, composer surfaces), so it
   // must read as short scannable lines, not a markdown essay.
@@ -393,11 +439,14 @@ export async function describeImage(
       ? "把这张照片的内容写成清单:一行一项,格式如「牛肉 ×1」。食材/冰箱/购物照片就逐项列出能辨认的食物和数量;文档或票据就一行一条列关键信息;其它内容一行一个要点。禁止 markdown、星号、标题、分区、段落——只要干净的行。只输出清单本身,不要客套话。"
       : "Write this photo's contents as a list: one item per line, like 'beef steak x1'. For food/fridge/grocery photos list every identifiable item with a rough quantity; for documents or receipts one key fact per line; otherwise one short point per line. NO markdown, NO asterisks, NO headings, NO sections, NO paragraphs — clean lines only. Output the list itself, no preamble.";
 
-  return (
-    await askVisionModel(secretsDirectory, prompt, image, mimeType, {
-      failureCode: "VISION_DESCRIBE_FAILED",
-    })
-  ).text;
+  const outcome = await askVisionModel(
+    secretsDirectory,
+    prompt,
+    image,
+    mimeType,
+    { failureCode: "VISION_DESCRIBE_FAILED", lang },
+  );
+  return { value: outcome.value.text, note: outcome.note };
 }
 
 // One marked item on a photo: a dot at (x, y) — percent of the image, 0-100 —
@@ -418,7 +467,7 @@ export async function annotateImage(
   mimeType: string,
   lang: string,
   focus?: string | null,
-): Promise<ImageAnnotationItem[]> {
+): Promise<VisionOutcome<ImageAnnotationItem[]>> {
   const prompt = [
     "Detect the most prominent distinct objects in this photo (at most 10).",
     // A Routine's declared focus ("food and drink items"): the tool narrows
@@ -438,15 +487,16 @@ export async function annotateImage(
 
   // Temperature 0: the same photo has to produce the same marks twice, or the
   // Owner cannot tell a moved dot from a changed picture.
-  const { text } = await askVisionModel(
+  const outcome = await askVisionModel(
     secretsDirectory,
     prompt,
     image,
     mimeType,
-    { failureCode: "VISION_ANNOTATE_FAILED", temperature: 0 },
+    { failureCode: "VISION_ANNOTATE_FAILED", temperature: 0, lang },
   );
+  const text = outcome.value.text;
   if (!text) throw new Error("VISION_ANNOTATE_EMPTY");
-  return parseAnnotations(text);
+  return { value: parseAnnotations(text), note: outcome.note };
 }
 
 // Turn the model's answer into marks. Exported so the rule below can be tested

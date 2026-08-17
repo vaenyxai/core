@@ -200,6 +200,7 @@ const VISION_CAPABLE_PROVIDERS = [
   "zhipu",
   "openai",
   "mistral",
+  "groq",
   "claude-sub",
 ];
 const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];

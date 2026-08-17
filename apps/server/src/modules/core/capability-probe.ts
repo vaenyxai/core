@@ -73,7 +73,10 @@ const MAX_PROBE_OPENS = 10;
 
 class ProbeTimeout extends Error {}
 
-function withDeadline<T>(work: Promise<T>, lang: CapabilityLanguage): Promise<T> {
+function withDeadline<T>(
+  work: Promise<T>,
+  lang: CapabilityLanguage,
+): Promise<T> {
   return Promise.race([
     work,
     new Promise<never>((_, reject) => {
@@ -236,9 +239,9 @@ export function pictureSize(
 ): { width: number; height: number } | null {
   if (
     bytes.length > 24 &&
-    bytes.subarray(0, 8).equals(
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    ) &&
+    bytes
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) &&
     bytes.subarray(12, 16).toString("ascii") === "IHDR"
   ) {
     return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
@@ -252,7 +255,9 @@ export function pictureSize(
       const marker = bytes[at + 1] ?? 0;
       const length = bytes.readUInt16BE(at + 2);
       const isFrame =
-        marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        ![0xc4, 0xc8, 0xcc].includes(marker);
       if (isFrame) {
         return {
           width: bytes.readUInt16BE(at + 7),
@@ -310,9 +315,9 @@ async function probeVision(
   }
   const prompt =
     "This picture is a plain white background with one solid coloured square in the middle. Answer with ONE English word: the colour of that square.";
-  let answer;
+  let outcome;
   try {
-    answer = await withDeadline(
+    outcome = await withDeadline(
       askVisionModel(
         context.secretsDirectory,
         prompt,
@@ -332,6 +337,8 @@ async function probeVision(
           : `refused the test picture: ${failureWords(error, lang)}`,
     };
   }
+  // The probe reports the engine that actually answered, backup included.
+  const answer = outcome.value;
   const engine = answer.model
     ? `${providerDisplayName(answer.engine)} (${answer.model})`
     : providerDisplayName(answer.engine);
@@ -685,7 +692,9 @@ async function probeFetching(
       // A picture or a spreadsheet in the folder is not a failure of the
       // capability — try the next thing before giving up.
       lastRefusal =
-        error instanceof FetchRefusedError ? error.message : failureWords(error, lang);
+        error instanceof FetchRefusedError
+          ? error.message
+          : failureWords(error, lang);
     }
   }
   // Three different disappointments with three different fixes, so three

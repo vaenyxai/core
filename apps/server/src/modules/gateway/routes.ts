@@ -63,6 +63,9 @@ import {
   type RecordFactRequest,
   VisionStatusSchema,
   ConnectVisionRequestSchema,
+  EnginePairSchema,
+  SetEngineChoiceRequestSchema,
+  type SetEngineChoiceRequest,
   type ConnectVisionRequest,
   VisionDescribeResponseSchema,
   VisionUploadResponseSchema,
@@ -473,6 +476,12 @@ import {
   readStoredAnnotations,
 } from "../core/routine-storage.js";
 import {
+  backupNoteSentence,
+  ENGINE_SLOTS,
+  readEnginePair,
+  writeEngineChoice,
+} from "../models/engine-slots.js";
+import {
   listProviderModels,
   ModelCatalogueUnavailableError,
 } from "../models/catalogue.js";
@@ -481,6 +490,7 @@ import {
   connectModelProvider,
   disconnectModelProvider,
   listModelProviders,
+  providerDisplayName,
   setDefaultModelProvider,
 } from "../models/provider-settings.js";
 import {
@@ -863,6 +873,9 @@ export async function registerGatewayRoutes(
     "/v1/voice/output",
     "/v1/voice/local",
     "/v1/vision/engine",
+    // Same ceiling for the unified slot editor: a locked mode must not be
+    // able to re-point a capability (or its stand-in) at another backend.
+    "/v1/engines/",
     // Which model draws, beside the sibling slots it belongs with. It was the
     // one engine pointer missing from this floor, so a locked mode could
     // re-point Drawing at another backend — and, until the Cloudflare token
@@ -2987,6 +3000,8 @@ export async function registerGatewayRoutes(
       // A failed photo read is said out loud on the confirm card, never
       // swallowed into "it recognises nothing" (owner, 2026-08-16).
       let photoError: string | null = null;
+      // Said out loud when the Owner's BACKUP engine answered instead.
+      let photoBackupNote: string | null = null;
       // Vision switched off refuses the LOOKING, not the run: the typed words
       // still go through, exactly as they do when no vision model is
       // connected. The photo is never sent anywhere.
@@ -3018,7 +3033,16 @@ export async function registerGatewayRoutes(
               thread.routineId,
             ),
           ).catch(() => null);
-          photoAnnotations = await marksPromise;
+          const marksOutcome = await marksPromise;
+          photoAnnotations = marksOutcome?.value ?? null;
+          // Whoever answered gets said out loud when it was the BACKUP.
+          if (marksOutcome?.note.fellBackFrom) {
+            photoBackupNote = backupNoteSentence(
+              marksOutcome.note,
+              providerDisplayName,
+              runLanguage,
+            );
+          }
           const joinWithTyped = (extracted: string) => {
             const typed = request.body.content.trim();
             effectiveContent =
@@ -3041,13 +3065,20 @@ export async function registerGatewayRoutes(
             if (markList) joinWithTyped(markList);
           } else {
             try {
-              const extracted = await describeImage(
+              const described = await describeImage(
                 context.config.secretsDirectory,
                 found.image,
                 found.mimeType,
                 runLanguage,
               );
-              if (extracted.trim()) joinWithTyped(extracted.trim());
+              if (described.note.fellBackFrom) {
+                photoBackupNote = backupNoteSentence(
+                  described.note,
+                  providerDisplayName,
+                  runLanguage,
+                );
+              }
+              if (described.value.trim()) joinWithTyped(described.value.trim());
             } catch (visionError) {
               // The typed words still run — but a failed photo read must SAY
               // SO (owner, 2026-08-16: a flaky vision backend looked like "it
@@ -3120,6 +3151,18 @@ export async function registerGatewayRoutes(
           // Single-field routines get no confirm card, so a failed photo
           // read must speak HERE — a note in the chat — or the owner sees
           // the silent "it recognises nothing" this exists to end.
+          if (photoBackupNote) {
+            try {
+              appendAssistantNote(
+                context.database,
+                request.params.id,
+                owner.id,
+                photoBackupNote,
+              );
+            } catch {
+              // The run itself still proceeds.
+            }
+          }
           if (photoError) {
             try {
               appendAssistantNote(
@@ -3178,6 +3221,7 @@ export async function registerGatewayRoutes(
               content: effectiveContent,
               ...(photoAnnotations ? { annotations: photoAnnotations } : {}),
               ...(photoError ? { photoError } : {}),
+              ...(photoBackupNote ? { engineNote: photoBackupNote } : {}),
             };
           } catch (error) {
             return reply
@@ -6497,6 +6541,92 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // A capability's PAIR: who does this job, and the stand-in the Owner
+  // picked for when that one cannot answer at all. One shape for every
+  // capability — the two-level picker (backend, then that backend's own
+  // models) reads and writes through here.
+  app.get<{ Params: { slot: string } }>(
+    "/v1/engines/:slot",
+    {
+      schema: {
+        params: Type.Object(
+          { slot: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: EnginePairSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const slot = ENGINE_SLOTS.find((entry) => entry === request.params.slot);
+      if (!slot) {
+        return reply.code(400).send({ error: "No such capability." });
+      }
+      return { slot, ...readEnginePair(context.config.secretsDirectory, slot) };
+    },
+  );
+
+  app.post<{ Params: { slot: string }; Body: SetEngineChoiceRequest }>(
+    "/v1/engines/:slot",
+    {
+      schema: {
+        params: Type.Object(
+          { slot: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: SetEngineChoiceRequestSchema,
+        response: {
+          200: EnginePairSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const slot = ENGINE_SLOTS.find((entry) => entry === request.params.slot);
+      if (!slot) {
+        return reply.code(400).send({ error: "No such capability." });
+      }
+      const choice = request.body.choice;
+      if (choice) {
+        // A backend with no key cannot be anybody's engine — say so here
+        // rather than at the first photo.
+        const connections = readProviderConnections(
+          context.config.secretsDirectory,
+        );
+        const hasKey =
+          Boolean(connections[choice.provider]?.apiKey) ||
+          choice.provider === "codex" ||
+          (choice.provider === "claude-sub" &&
+            Boolean(connections["claude-sub"]?.apiKey));
+        if (!hasKey) {
+          return reply.code(400).send({
+            error:
+              "That backend has no key yet — connect it under Models first, then pick it here.",
+          });
+        }
+      }
+      return {
+        slot,
+        ...writeEngineChoice(
+          context.config.secretsDirectory,
+          slot,
+          request.body.which,
+          choice,
+        ),
+      };
+    },
+  );
+
   // ── Custom Modes: CRUD over mode definitions, Owner/User-Mode only ──
   // Spec §6: all mode settings live in User Mode — a session inside a
   // Custom Mode cannot see or change mode definitions (the exit gate is
@@ -7154,13 +7284,13 @@ export async function registerGatewayRoutes(
         return reply.code(400).send({ error: "No image received." });
       }
       try {
-        const text = await describeImage(
+        const described = await describeImage(
           context.config.secretsDirectory,
           image,
           request.headers["content-type"] ?? "image/jpeg",
           language,
         );
-        return { text };
+        return { text: described.value };
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         if (message === "VISION_NOT_CONNECTED") {
@@ -7739,7 +7869,7 @@ export async function registerGatewayRoutes(
         return reply.code(404).send({ error: "Image not found." });
       }
       try {
-        const items = await annotateImage(
+        const { value: items } = await annotateImage(
           context.config.secretsDirectory,
           found.image,
           found.mimeType,
@@ -8965,15 +9095,18 @@ export async function registerGatewayRoutes(
         );
         if (found) {
           const focus = request.body.draft.annotateFocus ?? null;
-          annotations = await annotateImage(
-            context.config.secretsDirectory,
-            found.image,
-            found.mimeType,
-            testLanguage,
-            focus,
-          ).catch(() => null);
+          annotations =
+            (
+              await annotateImage(
+                context.config.secretsDirectory,
+                found.image,
+                found.mimeType,
+                testLanguage,
+                focus,
+              ).catch(() => null)
+            )?.value ?? null;
           try {
-            const extracted = await describeImage(
+            const described = await describeImage(
               context.config.secretsDirectory,
               found.image,
               found.mimeType,
@@ -8982,6 +9115,7 @@ export async function registerGatewayRoutes(
             // The photo's words join the FIRST string field of the given
             // input — the same "photo stays a photo, its words ride along"
             // deal the chat run makes.
+            const extracted = described.value;
             if (extracted.trim() && input && typeof input === "object") {
               const record = { ...(input as Record<string, unknown>) };
               const stringKey = Object.keys(record).find(

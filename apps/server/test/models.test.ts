@@ -4,7 +4,10 @@ import { resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { STT_ENGINES, TTS_PROVIDER_ENGINES } from "../src/modules/core/voice.js";
+import {
+  STT_ENGINES,
+  TTS_PROVIDER_ENGINES,
+} from "../src/modules/core/voice.js";
 import { VISION_CANDIDATES } from "../src/modules/core/vision.js";
 import { AnthropicProvider } from "../src/modules/models/anthropic-provider.js";
 import { OpenAICompatibleProvider } from "../src/modules/models/openai-compatible-provider.js";
@@ -172,7 +175,12 @@ describe("initModelRegistry", () => {
 
     const registry = initModelRegistry({ secretsDirectory: dir });
     expect(registry.default().id).toBe("codex");
-    expect(registry.list().map((provider) => provider.id).sort()).toEqual([
+    expect(
+      registry
+        .list()
+        .map((provider) => provider.id)
+        .sort(),
+    ).toEqual([
       "anthropic",
       "claude-sub",
       "codex",
@@ -308,18 +316,24 @@ describe("provider-settings", () => {
     const dir = mkdtempSync(resolve(tmpdir(), "vaenyx-models-"));
     temporaryDirectories.push(dir);
     const stored = () =>
-      JSON.parse(readFileSync(resolve(dir, "model-providers.json"), "utf8")) as {
+      JSON.parse(
+        readFileSync(resolve(dir, "model-providers.json"), "utf8"),
+      ) as {
         imageOutput?: { provider?: string };
         vision?: { provider?: string };
       };
 
-    connectModelProvider({ secretsDirectory: dir }, "zhipu", { apiKey: "sk-z" });
+    connectModelProvider({ secretsDirectory: dir }, "zhipu", {
+      apiKey: "sk-z",
+    });
     expect(stored().imageOutput?.provider).toBe("zhipu");
     expect(stored().vision?.provider).toBe("zhipu");
 
     // A second capable backend arrives. Both slots are answered already, so
     // both stay where the Owner left them.
-    connectModelProvider({ secretsDirectory: dir }, "openai", { apiKey: "sk-o" });
+    connectModelProvider({ secretsDirectory: dir }, "openai", {
+      apiKey: "sk-o",
+    });
     expect(stored().imageOutput?.provider).toBe("zhipu");
     expect(stored().vision?.provider).toBe("zhipu");
   });
@@ -358,7 +372,9 @@ describe("connectModelProvider keeps what it was not given", () => {
     );
     return dir;
   }
-  function read(dir: string): Record<string, { apiKey?: string; model?: string; baseUrl?: string }> {
+  function read(
+    dir: string,
+  ): Record<string, { apiKey?: string; model?: string; baseUrl?: string }> {
     return JSON.parse(
       readFileSync(resolve(dir, "model-providers.json"), "utf8"),
     ) as Record<string, { apiKey?: string; model?: string; baseUrl?: string }>;
@@ -414,7 +430,9 @@ describe("an engine slot survives losing its provider", () => {
     );
     return dir;
   }
-  function read(dir: string): Record<string, { engine?: string; provider?: string }> {
+  function read(
+    dir: string,
+  ): Record<string, { engine?: string; provider?: string }> {
     return JSON.parse(
       readFileSync(resolve(dir, "model-providers.json"), "utf8"),
     ) as Record<string, { engine?: string; provider?: string }>;
@@ -446,12 +464,18 @@ describe("an engine slot survives losing its provider", () => {
 
   it("repairs a picture-reading slot aimed at a backend that cannot see", () => {
     // The same shape as the Workers AI speaking case, and it really happened:
-    // an instance was left with vision pointing at Groq, which has a key and
-    // cannot be asked to read a picture by this build.
+    // an instance was left with vision pointing at a backend that has a key
+    // and cannot be asked to read a picture by this build.
+    //
+    // The fixture used to be Groq, which gained a vision model here on
+    // 2026-08-16 — so it moved to one that still cannot see today. The rule
+    // being held is unchanged: a key is not the same as being able to do
+    // this job, and a slot aimed at the wrong backend is repaired, not left
+    // to fail at the first photo.
     const dir = secretsWith({
-      groq: { apiKey: "gsk-real" },
+      cerebras: { apiKey: "csk-real" },
       gemini: { apiKey: "AIza-real" },
-      vision: { provider: "groq" },
+      vision: { provider: "cerebras" },
     });
     connectModelProvider({ secretsDirectory: dir }, "mistral", {
       apiKey: "any-connect-runs-the-repair",

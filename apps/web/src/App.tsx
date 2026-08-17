@@ -293,6 +293,7 @@ import {
   CapabilityChips,
   capabilityMeta,
 } from "./capability-chips.js";
+import { EnginePairPicker } from "./engine-pair.js";
 import { Picker, type PickerOption } from "./picker.js";
 import { PROVIDER_DATA_FACTS, dataFactsBadge } from "./data-facts.js";
 import {
@@ -12796,6 +12797,7 @@ function CapabilitiesPanel({
             | "zhipu"
             | "openai"
             | "mistral"
+            | "groq"
             | "claude-sub",
         );
         setVisionEngineState(status.provider ?? "none");
@@ -13124,6 +13126,19 @@ function CapabilitiesPanel({
       ),
       who: (
         <>
+          {/* Who does this job, and who stands in. Two levels: the account,
+              then that account's own models — because a capability picking
+              its own model is what stops a chat model chosen for quality
+              from putting every photo on its tightest free bucket. */}
+          <EnginePairPicker
+            onChanged={(next) =>
+              setVisionEngineState(next.primary?.provider ?? "none")
+            }
+            providerOptions={slotOptions("vision").filter(
+              (option) => !option.disabled,
+            )}
+            slot="vision"
+          />
           <p className="settings-card-copy">
             {lang === "zh"
               ? "照片直接发给这一行选的模型。有的模型自己就会看图,有的得靠别人先描述一遍 —— 这一行选的就是真正看图的那个。它的 key 在下面的 Models 里粘。"
@@ -21447,6 +21462,7 @@ const VISION_DIRECT_IDS = [
   "zhipu",
   "openai",
   "mistral",
+  "groq",
   "codex",
   "anthropic",
   "claude-sub",
