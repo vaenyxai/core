@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v8";
+const CACHE_NAME = "vaenyx-shell-v9";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -30,10 +30,39 @@ self.addEventListener("activate", (event) => {
 });
 
 // The page shown when the server cannot be reached — a computer that is
-// still booting, mid-restart, or briefly off the tailnet. It retries by
-// itself every two seconds and reloads into the real app the moment the
-// server answers, so nobody is left staring at a dead page wondering
+// still booting, mid-restart, or a device whose network cannot get to it. It
+// retries by itself every two seconds and reloads into the real app the moment
+// the server answers, so nobody is left staring at a dead page wondering
 // whether to refresh (Oskar, 2026-08-15, and his "页面自愈" pick).
+//
+// 🔴 IT MUST STOP SAYING "STARTING UP" WHEN THAT IS NO LONGER TRUE. A restart
+// takes about ten seconds. Past that, "starting up… this page will open by
+// itself" is a promise the page cannot keep, and the Owner sits watching it
+// instead of fixing the one thing that is actually wrong. Twice now (see the
+// two incidents below) it cost real time. So after SIX seconds the first line
+// is REPLACED — not annotated underneath — with what is actually wrong and
+// what to do about it.
+//
+// THE TWO INCIDENTS THIS WORDING IS PAID FOR BY, both diagnosed the long way:
+//
+//   2026-08-04 — Vaenyx's own "install Tailscale" button re-ran the MSI over a
+//   working Tailscale with `/quiet /norestart`. The `/norestart` was ours. It
+//   left Windows on PendingFileRename with the tunnel driver half-replaced, so
+//   tailscaled stayed at BackendState=NoState forever: the tunnel was gone and
+//   restarting the SERVICE could never fix it. Only rebooting Windows did.
+//   Symptom here was this page, forever.
+//
+//   2026-08-16/17 — the home router advertised a DNS server at an IPv6 address
+//   on a network with NO working IPv6, so that resolver answered nothing at
+//   all (it failed on www.google.com too, not just on us). Any device relying
+//   on it could not resolve the Vaenyx address; the browser said
+//   ERR_NAME_NOT_RESOLVED and the service worker showed this page. Vaenyx, the
+//   funnel and the tailnet were all healthy throughout — verified by reaching
+//   the funnel's public IPv4 directly. The fix was naming an IPv4 DNS server
+//   (8.8.8.8) on the device or the router; nothing about Vaenyx was wrong.
+//
+// The common shape: this page appears for problems that are NOT Vaenyx
+// starting up, and both times the honest sentence would have saved the day.
 function bootWaitPage() {
   const html = [
     '<!doctype html><html><head><meta charset="utf-8">',
@@ -41,25 +70,51 @@ function bootWaitPage() {
     "<title>Vaenyx</title>",
     "<style>body{margin:0;display:grid;place-items:center;min-height:100dvh;",
     "background:#262624;color:#ece9e0;font-family:system-ui,sans-serif}",
-    "div{text-align:center}p{color:#8f8c83;font-size:14px}",
+    "div{text-align:center;max-width:36em;padding:24px}",
+    "p{color:#8f8c83;font-size:14px;line-height:1.55}",
+    "ul{color:#8f8c83;font-size:14px;line-height:1.6;text-align:left;",
+    "margin:10px auto 0;padding-left:1.1em}li{margin:4px 0}",
+    "code{color:#ece9e0;font-size:13px}",
     "b{font-size:18px;font-weight:600}</style></head><body><div>",
     "<b>Vaenyx</b>",
-    "<p>Starting up… this page will open by itself.<br>",
+    '<p id="wait">Starting up… this page will open by itself.<br>',
     "正在启动…这个页面会自己打开。</p>",
-    // After 30 seconds of failed probes this is no longer a restart window —
-    // say the honest likely cause instead of waiting forever in silence
-    // (2026-08-16: a router that answered IPv6-only stranded a laptop here
-    // while the phone on mobile data worked fine).
-    '<p id="hint" style="display:none;max-width:34em">',
-    "Still here after a while? Then this device cannot reach Vaenyx's computer.",
-    "If a phone on mobile data CAN open Vaenyx, the problem is this device's",
-    "network or the home router — restarting the router usually fixes it.<br>",
-    "一直停在这里?说明这台设备连不上 Vaenyx 所在的电脑。如果手机用流量能打开,",
-    "问题就在这台设备的网络或家里的路由器 —— 重启路由器通常能解决。</p>",
-    "</div><script>var n=0;setInterval(function(){n+=1;",
-    "if(n>=15)document.getElementById('hint').style.display='block';",
+    // Dot points, not a paragraph — the Owner is reading this while something
+    // is broken, and the causes are ordered by how often they are the answer.
+    '<div id="hint" style="display:none">',
+    "<p>This device cannot reach Vaenyx's computer. Vaenyx itself may be",
+    "perfectly fine — the usual causes, in order:</p><ul>",
+    "<li>That computer is off, asleep, or still booting.</li>",
+    "<li><b>This device's DNS is broken.</b> If the address bar says",
+    "<code>ERR_NAME_NOT_RESOLVED</code>, it is this. Set this device's DNS to",
+    "<code>8.8.8.8</code> — a home router that hands out an IPv6 DNS server on",
+    "a network without working IPv6 breaks every lookup.</li>",
+    "<li>This device is on a different network from the one Vaenyx expects.</li>",
+    "</ul>",
+    "<p>这台设备连不上 Vaenyx 所在的电脑。Vaenyx 本身可能完全正常 ——",
+    "按可能性排序:</p><ul>",
+    "<li>那台电脑关机了、睡着了,或者还在开机。</li>",
+    "<li><b>这台设备的 DNS 坏了。</b>如果报的是 <code>ERR_NAME_NOT_RESOLVED</code>,",
+    "就是这个。把这台设备的 DNS 改成 <code>8.8.8.8</code> —— 路由器在没有 IPv6 的网络里",
+    "发一个 IPv6 的 DNS 地址,会让所有域名都解析不了。</li>",
+    "<li>这台设备连的网络,跟 Vaenyx 所在的网络对不上。</li>",
+    "</ul></div>",
+    // The clock must survive a reopen. A device that can NEVER connect used to
+    // restart the countdown on every visit, so the honest text was the one
+    // thing it could never reach. The marker is cleared the moment the server
+    // answers, so an ordinary restart still reads as "starting up".
+    "</div><script>(function(){",
+    'var K="vaenyx.waitSince",t=0;',
+    "try{t=parseInt(localStorage.getItem(K)||\"0\",10)||0}catch(e){}",
+    "if(!t){t=Date.now();try{localStorage.setItem(K,String(t))}catch(e){}}",
+    "function honest(){",
+    'document.getElementById("wait").style.display="none";',
+    'document.getElementById("hint").style.display="block"}',
+    "if(Date.now()-t>=6000)honest();",
+    "setInterval(function(){if(Date.now()-t>=6000)honest();",
     'fetch("/v1/system/status",{cache:"no-store"}).then(function(r){',
-    "if(r.ok)location.reload()}).catch(function(){})},2000)",
+    "if(r.ok){try{localStorage.removeItem(K)}catch(e){}location.reload()}",
+    "}).catch(function(){})},2000)})()",
     "</scr" + "ipt></body></html>",
   ].join("");
   return new Response(html, {

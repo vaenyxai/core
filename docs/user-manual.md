@@ -728,7 +728,9 @@ Read this inside the app: **Settings → Manual**.
 |---|---|
 | Nothing loads at all | The computer is off or asleep. Wake it. |
 | Phone cannot reach it, computer can | A freshly opened channel needs a minute — wait and retry. Still nothing: Settings → Phone Access, check the three lights. |
-| A computer cannot open it, a phone on mobile data can | The problem is that computer's network or the home router (a common one: the router answers with addresses that do not work). Restart the router; the waiting page says this too after 30 seconds. |
+| A computer cannot open it, a phone on mobile data can | That computer's DNS, almost always. See *When it is the network, not Vaenyx* below. |
+| Stuck on "Starting up… this page will open by itself" | Only true for about ten seconds. After six the page replaces that line with what is actually wrong — read it. |
+| The browser console says `ERR_NAME_NOT_RESOLVED` | This device could not look the address up. It is DNS, not Vaenyx. Set this device's DNS to `8.8.8.8` — see below. |
 | "Not signed in" on a subscription | Settings → AI Settings → sign in to that one again. |
 | An engine fails and nothing else happens | By design. Read which one failed, then pick another engine on that row. |
 | Voice button does nothing | The Hearing row has no engine, or Hearing is switched off. Settings → AI Settings → Capabilities → Hearing. |
@@ -743,6 +745,55 @@ Read this inside the app: **Settings → Manual**.
 | Your app gets `RELAY_CAPABILITY_NOT_GRANTED` | That capability is not ticked on the app's Model Key. Settings → AI Settings → Subscription Door → that app's row, and tick it. |
 | A scheduled run failed overnight | The computer slept. The failure and its reason stay on the run. |
 | An update banner will not go away | Press it, then Restart. |
+
+## When it is the network, not Vaenyx
+
+Vaenyx has been blamed twice for a fault somewhere else. Both times the app,
+the tunnel and the models were all healthy, and both times the same page —
+"Starting up…" — was the only thing anyone could see. Here is how to tell them
+apart in under a minute, and what each one was.
+
+**First, prove where the fault is.** On the computer Vaenyx runs on, open
+`http://127.0.0.1:3000`. If that works, **Vaenyx is fine** and the problem is
+between your other device and this computer — everything below is about that
+gap, and nothing is wrong with the app.
+
+- **The router handed out a DNS server that does not answer** (17 August 2026).
+  A home router advertised its DNS at an IPv6 address on a network with no
+  working IPv6, so that server answered nothing at all — not just Vaenyx, it
+  failed on ordinary websites too. Devices with a second, working DNS carried
+  on; the one that relied on the router could not look up anything new, and the
+  browser said `ERR_NAME_NOT_RESOLVED`.
+  - **The tell:** `ERR_NAME_NOT_RESOLVED` in the browser console, and a phone
+    on mobile data opens Vaenyx fine.
+  - **The fix, on the device:** Settings → Network → your adapter → IPv4 →
+    use `8.8.8.8` and `1.1.1.1`. Do the same on the IPv6 entry, or switch IPv6
+    off on that adapter.
+  - **The fix, on the router** (better — it repairs every device at once): set
+    the router's DNS to `8.8.8.8` / `1.1.1.1`, and stop it advertising an IPv6
+    DNS server if the connection has no real IPv6.
+  - **This one comes back.** A router that does it once will do it again in a
+    few days. Fix it at the router or it stays a recurring afternoon.
+
+- **A half-finished Tailscale upgrade** (4 August 2026). Vaenyx's own install
+  button re-ran the Tailscale installer over a working copy and told Windows
+  not to reboot. Windows then sat waiting to swap the network driver, so
+  Tailscale's background service could never finish starting and the remote
+  address stopped working. Restarting the *service* could not fix it.
+  - **The tell:** the address stops resolving right after anything installed or
+    updated Tailscale, and the computer has not been restarted since.
+  - **The fix:** restart Windows. Then, if the address still does not open,
+    double-click `Vaenyx-Repair-Phone-Access.cmd` — it checks for exactly this
+    before touching anything.
+  - The cause was ours and is fixed; this entry stays because the same symptom
+    follows any interrupted Tailscale update.
+
+**What to expect from the waiting page now.** For the first six seconds it says
+Vaenyx is starting up, because a restart really does take about ten. After
+that it replaces that line with the real causes, in order, including the DNS
+one and the address to type. It remembers across reopens, so a device that can
+never connect shows the honest text immediately instead of restarting the
+countdown every visit.
 
 ---
 
