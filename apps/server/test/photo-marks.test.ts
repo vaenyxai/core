@@ -55,3 +55,36 @@ describe("parseAnnotations", () => {
     );
   });
 });
+
+// Real answers from a real key, 2026-08-16. Both shapes below came back from
+// gemini-3.5-flash-lite on the same fridge photo within a minute of each
+// other — which is the point: the reply is a hint, not a contract.
+describe("parseAnnotations survives what the model actually sends", () => {
+  it("reads Google's own `label` field, not only the `name` we asked for", () => {
+    const answer = `[
+      {"box_2d": [180, 194, 260, 467], "label": "酸奶", "point_2d": [215, 349]},
+      {"box_2d": [253, 187, 390, 619], "label": "紫米粥", "point_2d": [337, 417]}
+    ]`;
+    const marks = parseAnnotations(answer);
+    expect(marks.map((mark) => mark.name)).toEqual(["酸奶", "紫米粥"]);
+  });
+
+  it("salvages the good marks when the model garbles its own JSON", () => {
+    // The measured failure: a closed object followed by a stray fragment.
+    // Strict parsing loses all three; salvage keeps the two that are whole.
+    const answer = `[
+      {"box_2d": [180, 194, 260, 467], "label": "酸奶", "point_2d": [215, 349]},
+      {"box_2d": [253, 187, 390, 619], "label": "面包", "point_2d": [337, 417]},
+      {"box_2d": [611, 576, 703, 856], "label": "牛奶", "point": [655, 686]}, "point_2d": [139, 874]}
+    ]`;
+    const marks = parseAnnotations(answer);
+    expect(marks.length).toBeGreaterThanOrEqual(2);
+    expect(marks.map((mark) => mark.name)).toContain("酸奶");
+    expect(marks.map((mark) => mark.name)).toContain("面包");
+  });
+
+  it("does not let a brace inside a name end an object early", () => {
+    const answer = `[{"label": "a {weird} name", "box_2d": [10, 10, 20, 20], "point_2d": [15, 15]}] oops`;
+    expect(parseAnnotations(answer)[0]?.name).toBe("a {weird} name");
+  });
+});

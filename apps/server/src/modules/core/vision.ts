@@ -313,7 +313,12 @@ async function waitAndRetry<T>(attempt: () => Promise<T>): Promise<T> {
       const message = error instanceof Error ? error.message : "";
       const rateLimited = /:429(?::|$)/.test(message);
       const serverFlake =
-        /:5\d\d(?::|$)/.test(message) || message.includes("fetch failed");
+        /:5\d\d(?::|$)/.test(message) ||
+        message.includes("fetch failed") ||
+        // A 200 carrying no content — the provider under load. Nothing came
+        // back, so asking again is the right move, not surfacing "it
+        // recognises nothing".
+        message.includes("EMPTY_RESPONSE");
       const wait = waits[index];
       if (wait === undefined) break;
       if (!rateLimited && !(serverFlake && index === 0)) break;
@@ -418,11 +423,13 @@ async function askVisionModelOnce(
     choices?: { message?: { content?: unknown } }[];
   };
   const text = parsed.choices?.[0]?.message?.content;
-  return {
-    engine: candidate.id,
-    model,
-    text: typeof text === "string" ? text.trim() : "",
-  };
+  const answer = typeof text === "string" ? text.trim() : "";
+  // A 200 with NOTHING in it is not an answer — measured on Gemini under
+  // load, 2026-08-16: the request succeeds, the content is empty, and the
+  // photo silently "recognises nothing". Treated as could-not-answer, so it
+  // retries and, if the Owner set one, reaches the backup.
+  if (!answer) throw new Error(`${options.failureCode}:EMPTY_RESPONSE`);
+  return { engine: candidate.id, model, text: answer };
 }
 
 export async function describeImage(
@@ -502,6 +509,48 @@ export async function annotateImage(
 // Turn the model's answer into marks. Exported so the rule below can be tested
 // against real answers without a network call.
 //
+// Every balanced {...} in a broken answer, parsed on its own. Depth-aware and
+// string-aware, so a brace inside a name cannot end an object early. Whatever
+// does not parse is dropped; whatever does is a mark.
+function salvageObjects(text: string): unknown[] {
+  const found: unknown[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+    if (character === "{") {
+      if (depth === 0) start = index;
+      depth += 1;
+      continue;
+    }
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        try {
+          found.push(JSON.parse(text.slice(start, index + 1)));
+        } catch {
+          // That one object was garbled; the rest still stand.
+        }
+        start = -1;
+      }
+      if (depth < 0) depth = 0;
+    }
+  }
+  return found;
+}
+
 // The prompt asks for 0-1000 and the model does not always oblige: the same
 // build that placed dots perfectly one hour answered in 0-100 the next, and
 // every dot collapsed into the top-left tenth of the photo (Oskar, 2026-07-29
@@ -518,7 +567,18 @@ export function parseAnnotations(text: string): ImageAnnotationItem[] {
   try {
     raw = JSON.parse(cleaned);
   } catch {
-    throw new Error("VISION_ANNOTATE_UNPARSEABLE");
+    // The answer is not always valid JSON — measured on a real fridge photo,
+    // 2026-08-16: one reply in three closed an object and then trailed a
+    // stray `"point_2d": [...]}` after it, which sinks JSON.parse and, with
+    // it, NINE perfectly good marks. So a broken whole is salvaged object by
+    // object: each {...} is parsed on its own and the garbled one is simply
+    // the one that does not survive.
+    const salvaged = salvageObjects(cleaned);
+    // Nothing readable at all is a different thing from "read it, no marks
+    // in it" — and the Owner is told which, so a garbled model and an empty
+    // shelf never look the same.
+    if (salvaged.length === 0) throw new Error("VISION_ANNOTATE_UNPARSEABLE");
+    raw = salvaged;
   }
   if (!Array.isArray(raw)) throw new Error("VISION_ANNOTATE_UNPARSEABLE");
 
@@ -535,7 +595,17 @@ export function parseAnnotations(text: string): ImageAnnotationItem[] {
   for (const entry of raw.slice(0, 10)) {
     if (typeof entry !== "object" || entry === null) continue;
     const record = entry as Record<string, unknown>;
-    const name = typeof record.name === "string" ? record.name.trim() : "";
+    // "label" is Google's OWN documented field for a detected box, and the
+    // model uses it interchangeably with the "name" this prompt asks for —
+    // measured on one photo, 2026-08-16, where half the entries came back
+    // labelled and were silently dropped, leaving no marks at all. Read
+    // both; the prompt's wording is a request, never a promise.
+    const name =
+      typeof record.name === "string" && record.name.trim()
+        ? record.name.trim()
+        : typeof record.label === "string"
+          ? record.label.trim()
+          : "";
     // The live model answers box_2d or box interchangeably — accept both.
     const box = Array.isArray(record.box_2d)
       ? record.box_2d
