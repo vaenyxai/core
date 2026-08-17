@@ -758,22 +758,25 @@ apart in under a minute, and what each one was.
 between your other device and this computer — everything below is about that
 gap, and nothing is wrong with the app.
 
-- **The router handed out a DNS server that does not answer** (17 August 2026).
-  A home router advertised its DNS at an IPv6 address on a network with no
-  working IPv6, so that server answered nothing at all — not just Vaenyx, it
-  failed on ordinary websites too. Devices with a second, working DNS carried
-  on; the one that relied on the router could not look up anything new, and the
-  browser said `ERR_NAME_NOT_RESOLVED`.
-  - **The tell:** `ERR_NAME_NOT_RESOLVED` in the browser console, and a phone
-    on mobile data opens Vaenyx fine.
-  - **The fix, on the device:** Settings → Network → your adapter → IPv4 →
-    use `8.8.8.8` and `1.1.1.1`. Do the same on the IPv6 entry, or switch IPv6
-    off on that adapter.
-  - **The fix, on the router** (better — it repairs every device at once): set
-    the router's DNS to `8.8.8.8` / `1.1.1.1`, and stop it advertising an IPv6
-    DNS server if the connection has no real IPv6.
-  - **This one comes back.** A router that does it once will do it again in a
-    few days. Fix it at the router or it stays a recurring afternoon.
+- **The internet's address books briefly said the address did not exist**
+  (17 August 2026). Your Vaenyx address lives in a public address book. For a
+  few hours the big public lookup services had "no such address" remembered for
+  it, while the master copy was correct the whole time. About one lookup in
+  three failed, and a browser that hears "no such address" remembers it for
+  minutes — so it felt completely dead rather than intermittent.
+  - **The tell:** `ERR_NAME_NOT_RESOLVED` or `DNS_PROBE_FINISHED_NXDOMAIN` in
+    the browser, while the computer running Vaenyx is plainly fine.
+  - **The fix: none needed, and none possible.** Nothing on your side is
+    broken, and nothing you change will speed it up — those remembered answers
+    expire by themselves, usually within a few hours. Re-publishing the address
+    was tried and did not help.
+  - **Meanwhile:** on the computer Vaenyx runs on, use `http://127.0.0.1:3000`.
+    That never touches the address book at all.
+  - **How it was proved**, if it ever needs proving again: ask a name you know
+    is good, a name you know is fake, and the address in question — a dozen
+    times each. Good name failing 0/12, fake name failing 12/12 and yours
+    failing 5/12 is the signature of this, and it rules out your router, your
+    network and the app in one pass.
 
 - **A half-finished Tailscale upgrade** (4 August 2026). Vaenyx's own install
   button re-ran the Tailscale installer over a working copy and told Windows

@@ -12262,12 +12262,6 @@ const SETUP_ROWS = new Set([
   "web",
 ]);
 
-// Rows whose engine is chosen as a PAIR inside the drawer (main + the Owner's
-// backup). Their row shows a read-only summary instead of a second picker, so
-// there is exactly one place that decides who does the job. This grows as each
-// slot is wired to the pair runtime.
-const PAIR_ROWS = new Set(["hearing", "speaking", "vision", "drawing", "ocr"]);
-
 // WHAT ONE PRESS REALLY DOES, said in front of the button instead of after it.
 // Two of these spend the Owner's own money on their own account, and finding
 // that out afterwards is how a Test button becomes one nobody dares press.
@@ -12881,25 +12875,6 @@ function CapabilitiesPanel({
     // Nothing chosen yet reads as the main model, not as a blank.
     if (entry && (entry.value === "" || entry.value === "none")) {
       entry.value = firstUsable(entry.options);
-    }
-  }
-
-  async function pickEngine(id: string, next: string) {
-    const engine = engines[id];
-    if (!engine) return;
-    setBusy(id);
-    try {
-      await engine.set(next);
-    } catch (error) {
-      showErrorToast(
-        error instanceof Error
-          ? error.message
-          : lang === "zh"
-            ? "改不了。"
-            : "Could not change that.",
-      );
-    } finally {
-      setBusy(null);
     }
   }
 
@@ -13796,17 +13771,18 @@ function CapabilitiesPanel({
                     set inside its own drawer — one place, not two. The row then
                     shows a plain read-only summary instead of a second control
                     that could disagree with the pair below it. */}
-                {engine && !PAIR_ROWS.has(meta.id) ? (
-                  <div className="capability-row-engine">
-                    <Picker
-                      ariaLabel={`${meta.name.en} model`}
-                      disabled={busy === meta.id}
-                      onChange={(next) => void pickEngine(meta.id, next)}
-                      options={engine.options}
-                      value={engine.value}
-                    />
-                  </div>
-                ) : engine ? (
+                {/* 🔴 NO ROW EVER CARRIES A PICKER. Every row now falls into
+                    one of two kinds and neither has anything to choose HERE:
+                    a row with its own engine is set as a pair inside its
+                    drawer, and a row that rides the main model (Reading,
+                    Fetching, Web) has exactly one possible answer. Those three
+                    used to show a drop-down holding a single option whose
+                    handler did nothing — a control that opens, offers one
+                    thing, and changes nothing, sitting next to rows that had
+                    no control at all. Oskar spotted the mismatch on sight
+                    (2026-08-17: 為什麼有一些可以直接選擇,有一些不能). One
+                    capability, one control, one place. */}
+                {engine ? (
                   <span className="capability-row-engine capability-row-summary">
                     {engine.options.find(
                       (option) => option.value === engine.value,

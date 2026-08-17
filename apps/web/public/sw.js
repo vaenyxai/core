@@ -52,14 +52,25 @@ self.addEventListener("activate", (event) => {
 //   restarting the SERVICE could never fix it. Only rebooting Windows did.
 //   Symptom here was this page, forever.
 //
-//   2026-08-16/17 — the home router advertised a DNS server at an IPv6 address
-//   on a network with NO working IPv6, so that resolver answered nothing at
-//   all (it failed on www.google.com too, not just on us). Any device relying
-//   on it could not resolve the Vaenyx address; the browser said
-//   ERR_NAME_NOT_RESOLVED and the service worker showed this page. Vaenyx, the
-//   funnel and the tailnet were all healthy throughout — verified by reaching
-//   the funnel's public IPv4 directly. The fix was naming an IPv4 DNS server
-//   (8.8.8.8) on the device or the router; nothing about Vaenyx was wrong.
+//   2026-08-17 — public DNS caches held a NEGATIVE answer for the Funnel
+//   hostname. Measured, because three earlier guesses were all wrong: the four
+//   authoritative ts.net nameservers each answered correctly 8/8 when asked
+//   directly, the tailnet's own zone was 0/12 NXDOMAIN, a deliberately fake
+//   name was 12/12 — and the Owner's address was 5/12. So the record was right
+//   at the source and "no such name" was cached in the recursive resolvers in
+//   between. Roughly one lookup in three failed, and a browser that hears
+//   NXDOMAIN remembers it for minutes, which is why it felt totally dead.
+//   Re-publishing the funnel did NOT help (5/12 -> 4/15 -> 3/20); the caches
+//   simply expired and it returned to 0/15 on its own. Vaenyx, the funnel and
+//   the tailnet were healthy throughout — verified by reaching the funnel's
+//   public IPv4 directly and getting real JSON back.
+//
+//   The lesson worth more than the incident: FOUR causes were announced before
+//   being verified (IPv6-only DNS, a lying status field, a pending Windows
+//   reboot, inconsistent Tailscale nameservers) and all four were wrong. What
+//   actually worked was a controlled comparison — a known-good name, a
+//   known-bad name, and the suspect name, sampled a dozen times each. Start
+//   there.
 //
 // The common shape: this page appears for problems that are NOT Vaenyx
 // starting up, and both times the honest sentence would have saved the day.

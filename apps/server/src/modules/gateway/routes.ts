@@ -6610,20 +6610,21 @@ export async function registerGatewayRoutes(
             });
           }
         } else if (choice.provider !== "browser") {
-          // A backend with no key cannot be anybody's engine — say so here
-          // rather than at the first photo.
-          const connections = readProviderConnections(
+          // 🔴 ASK THE ONE PLACE THAT ALREADY KNOWS. This used to re-derive
+          // "is it connected" from `apiKey`, plus a hand-written exception for
+          // Codex — and it got the Claude subscription wrong, because that one
+          // signs in on the MACHINE and may have no key stored at all. The
+          // Owner had it connected, saw it in the list, picked it as a backup,
+          // and was told to go and connect it (Oskar, 2026-08-17). A second
+          // copy of a rule is a second chance to disagree with it; this is the
+          // same list the picker itself was filled from.
+          const known = listModelProviders(
             context.config.secretsDirectory,
-          );
-          const hasKey =
-            Boolean(connections[choice.provider]?.apiKey) ||
-            choice.provider === "codex" ||
-            (choice.provider === "claude-sub" &&
-              Boolean(connections["claude-sub"]?.apiKey));
-          if (!hasKey) {
+          ).find((provider) => provider.id === choice.provider);
+          if (!known?.connected) {
             return reply.code(400).send({
               error:
-                "That backend has no key yet — connect it under Models first, then pick it here.",
+                "That backend is not connected yet — connect it under Models first, then pick it here.",
             });
           }
         }
