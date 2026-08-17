@@ -12210,6 +12210,12 @@ const SETUP_ROWS = new Set([
   "web",
 ]);
 
+// Rows whose engine is chosen as a PAIR inside the drawer (main + the Owner's
+// backup). Their row shows a read-only summary instead of a second picker, so
+// there is exactly one place that decides who does the job. This grows as each
+// slot is wired to the pair runtime.
+const PAIR_ROWS = new Set(["vision"]);
+
 // WHAT ONE PRESS REALLY DOES, said in front of the button instead of after it.
 // Two of these spend the Owner's own money on their own account, and finding
 // that out afterwards is how a Test button becomes one nobody dares press.
@@ -13654,7 +13660,11 @@ function CapabilitiesPanel({
                     </em>
                   ) : null}
                 </span>
-                {engine ? (
+                {/* A row whose engine is a PAIR (main + the Owner's backup) is
+                    set inside its own drawer — one place, not two. The row then
+                    shows a plain read-only summary instead of a second control
+                    that could disagree with the pair below it. */}
+                {engine && !PAIR_ROWS.has(meta.id) ? (
                   <div className="capability-row-engine">
                     <Picker
                       ariaLabel={`${meta.name.en} model`}
@@ -13664,6 +13674,12 @@ function CapabilitiesPanel({
                       value={engine.value}
                     />
                   </div>
+                ) : engine ? (
+                  <span className="capability-row-engine capability-row-summary">
+                    {engine.options.find(
+                      (option) => option.value === engine.value,
+                    )?.label ?? engine.value}
+                  </span>
                 ) : (
                   <span className="capability-row-engine" />
                 )}

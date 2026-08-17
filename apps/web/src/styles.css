@@ -1365,6 +1365,17 @@ textarea::placeholder {
   width: 132px;
 }
 
+/* A row whose engine is set as a pair below shows the name, not a control.
+   Same width as the picker it replaces, so nothing shifts sideways. */
+.capability-row-summary {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Our own drop-down, because the browser's own popup ignores the theme and
    opens white on a dark screen. See picker.tsx. */
 .picker {
@@ -8815,16 +8826,19 @@ body {
   margin: var(--space-2) 0 var(--space-3);
 }
 
+/* One grid for BOTH rows, so the two dropdowns line up instead of moving
+   with the length of whichever backend is chosen (Oskar, 2026-08-16). The
+   columns are fixed: label, account, model. */
 .engine-pair-row {
   display: grid;
-  gap: var(--space-1);
+  grid-template-columns: 108px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .engine-pair-label {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-2);
+  display: grid;
+  gap: 2px;
   font-size: var(--fs-md);
   font-weight: 600;
 }
@@ -8836,8 +8850,18 @@ body {
   color: var(--text-muted);
 }
 
-.engine-pair-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+/* A slot with no model chosen (no account yet) still holds its column, so
+   the row below does not slide sideways. */
+.engine-pair-model-empty {
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .engine-pair-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .engine-pair-label {
+    grid-column: 1 / -1;
+  }
 }

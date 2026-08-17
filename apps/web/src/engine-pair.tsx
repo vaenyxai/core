@@ -160,39 +160,38 @@ export function EnginePairPicker({
               {row.label}
               <em>{row.hint}</em>
             </span>
-            <div className="engine-pair-controls">
+            <Picker
+              ariaLabel={`${slot} ${row.which} provider`}
+              disabled={busy !== null}
+              onChange={(next) => void save(row.which, next, DEFAULT_MODEL)}
+              options={[
+                {
+                  label:
+                    row.which === "backup"
+                      ? zh
+                        ? "不设备用"
+                        : "No backup"
+                      : zh
+                        ? "关闭"
+                        : "Off",
+                  value: NONE,
+                },
+                ...providerOptions,
+              ]}
+              value={providerValue}
+            />
+            {choice ? (
               <Picker
-                ariaLabel={`${slot} ${row.which} provider`}
+                ariaLabel={`${slot} ${row.which} model`}
                 disabled={busy !== null}
-                onChange={(next) => void save(row.which, next, DEFAULT_MODEL)}
-                options={[
-                  {
-                    label:
-                      row.which === "backup"
-                        ? zh
-                          ? "不设备用"
-                          : "No backup"
-                        : zh
-                          ? "关闭"
-                          : "Off",
-                    value: NONE,
-                  },
-                  ...providerOptions,
-                ]}
-                value={providerValue}
+                onChange={(next) => void save(row.which, choice.provider, next)}
+                options={modelOptions(choice.provider, choice.model)}
+                value={modelValue}
               />
-              {choice ? (
-                <Picker
-                  ariaLabel={`${slot} ${row.which} model`}
-                  disabled={busy !== null}
-                  onChange={(next) =>
-                    void save(row.which, choice.provider, next)
-                  }
-                  options={modelOptions(choice.provider, choice.model)}
-                  value={modelValue}
-                />
-              ) : null}
-            </div>
+            ) : (
+              // Holds its column so the two rows stay aligned.
+              <span className="engine-pair-model-empty" />
+            )}
           </div>
         );
       })}
