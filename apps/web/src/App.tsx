@@ -13045,8 +13045,12 @@ function CapabilitiesPanel({
     // this engine at all until the download is there — so an uninstalled
     // "local" is only ever the half-second before the answer lands, and half a
     // second of the wrong sentence is worse than half a second of nothing.
-    const voiceChoice =
-      outputEngine === "local" && localTts?.installed ? (
+    // The voice list belongs to ONE side, because it is a property of the
+    // engine that side is set to. Gemini's voices mean nothing to Cloudflare,
+    // and the machine's own voices mean nothing to either. Rendered under the
+    // row it describes rather than floating above both.
+    const voiceFor = (engineId: string | null) =>
+      engineId === "local" && localTts?.installed ? (
         <>
           <p className="settings-card-copy">
             {lang === "zh"
@@ -13094,7 +13098,7 @@ function CapabilitiesPanel({
             </>
           ) : null}
         </>
-      ) : outputEngine === "gemini" ? (
+      ) : engineId === "gemini" ? (
         <div className="chat-font-field">
           <span>{lang === "zh" ? "音色" : "Voice"}</span>
           <Picker
@@ -13108,6 +13112,12 @@ function CapabilitiesPanel({
             value={outputVoice}
           />
         </div>
+      ) : engineId === "workersai" ? (
+        <p className="settings-card-copy">
+          {lang === "zh"
+            ? "这个引擎只有一个声音(Aura),没有可选项 —— 而且只会英文。"
+            : "This engine has one voice (Aura) and nothing to choose — and it speaks English only."}
+        </p>
       ) : null;
     return drawer({
       what: (
@@ -13115,13 +13125,10 @@ function CapabilitiesPanel({
           {lang === "zh" ? "回复念出来。" : "Replies read aloud."}
         </p>
       ),
-      // An engine with no voice to choose from leaves this part out entirely,
-      // rather than printing a heading with nothing under it.
-      settings: voiceChoice ? (
-        <>
-          {voiceChoice}
-          {outputError ? <p className="form-error">{outputError}</p> : null}
-        </>
+      // The voice used to live here, above both rows — see voiceFor. All that
+      // is left at drawer level is an error, which belongs to neither side.
+      settings: outputError ? (
+        <p className="form-error">{outputError}</p>
       ) : null,
       who: (
         <>
@@ -13146,6 +13153,7 @@ function CapabilitiesPanel({
                 value: "local",
               },
             ]).filter((option) => !option.disabled)}
+            renderUnder={(_which, providerId) => voiceFor(providerId)}
             slot="voiceOutput"
           />
           <p className="settings-card-copy">

@@ -34,6 +34,7 @@ import {
 import {
   FETCHING_TOOL_LOOP_PROVIDER_IDS,
   grantFetchAccess,
+  matchFetchName,
 } from "./fetching.js";
 import { ocrEngineConnected, runOcr } from "./ocr.js";
 import { recordEngineUsage } from "./relay-usage.js";
@@ -1211,13 +1212,10 @@ export async function createAskVaenyxMessage(
     if (fetchAccess && !hasToolLoop) {
       const entries = fetchAccess.list().slice(0, 200);
       const names = entries.map((entry) => entry.name);
-      // Longest first: "notes.txt" must not win over "notes.txt.bak" when the
-      // Owner named the second one.
-      const asked = [...names]
-        .sort((left, right) => right.length - left.length)
-        .find((name) =>
-          trimmedContent.toLowerCase().includes(name.toLowerCase()),
-        );
+      // Which file did they mean, matched the way a person says it rather than
+      // the way it is spelled on disk (see matchFetchName).
+      const match = matchFetchName(trimmedContent, names);
+      const asked = match.best;
       let opened: string | null = null;
       if (asked) {
         try {
@@ -1228,6 +1226,10 @@ export async function createAskVaenyxMessage(
           // and why beats a model inventing an answer about it.
           opened = `The Owner named ${asked}, but it could not be opened: ${error instanceof Error ? error.message : "refused"}. Say so plainly rather than guessing what it contains.`;
         }
+      } else if (match.tied.length > 1) {
+        // Never decide silently (Owner rule): several files fit equally well,
+        // so the reply asks which one instead of opening one and sounding sure.
+        opened = `More than one file fits what the Owner asked for: ${match.tied.join(", ")}. None has been opened. Ask them which one they mean — name the candidates back to them — and do not guess at any of their contents.`;
       }
       const listing =
         names.length > 0

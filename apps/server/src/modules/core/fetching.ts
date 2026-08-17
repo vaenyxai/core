@@ -56,6 +56,78 @@ const MAX_FETCH_ENTRIES = 200;
 // names Claude as the only one — is describing a design that is gone.
 export const FETCHING_TOOL_LOOP_PROVIDER_IDS = ["claude-sub"];
 
+// 🔴 WHICH FILE DID THEY MEAN. Every backend without a tool loop gets one file
+// opened up front, and the rule for choosing it used to be: the message must
+// contain the filename, character for character, extension and all. Nobody
+// talks like that. "读一下三月的报价单" never matched `quote-march.txt`, so the
+// capability was switched on, folders were named, and it still answered from
+// nothing (Oskar, 2026-08-17: 把 fetching 這個功能給它做好了).
+//
+// This matches the way the name is SAID instead: the extension comes off,
+// separators become spaces, and a name wins when every one of its own words is
+// somewhere in the message. `quote march` therefore matches "the March quote"
+// and "quote-march.txt" alike, while `notes` no longer matches a message that
+// merely contains the word "notes" as ordinary prose — a one-word name must
+// appear as a whole word, not as a fragment of another.
+//
+// A TIE IS NOT A GUESS. Two files matching equally well is exactly the case
+// the Owner said must never be decided silently: the caller is handed both and
+// asks, rather than opening the first one and sounding certain.
+export interface FetchNameMatch {
+  /** The single best file, when one is clearly ahead. */
+  best: string | null;
+  /** Every name that scored as well as the best — length > 1 means ask. */
+  tied: string[];
+}
+
+function nameWords(fileName: string): string[] {
+  const withoutExtension = fileName.replace(/\.[^.]+$/, "");
+  return withoutExtension
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 0);
+}
+
+/** Does `message` contain `word` as a whole word? CJK has no spaces, so a
+ *  plain substring is the only honest test there; Latin words must not match
+ *  inside a longer one ("note" must not match "notebook"). */
+function mentions(message: string, word: string): boolean {
+  if (!/[\p{Script=Latin}\p{Script=Cyrillic}]/u.test(word)) {
+    return message.includes(word);
+  }
+  return new RegExp(`(?<![\\p{L}\\p{N}])${word}(?![\\p{L}\\p{N}])`, "u").test(
+    message,
+  );
+}
+
+export function matchFetchName(
+  message: string,
+  fileNames: string[],
+): FetchNameMatch {
+  const haystack = message.toLowerCase();
+  let bestScore = 0;
+  let tied: string[] = [];
+
+  for (const fileName of fileNames) {
+    const words = nameWords(fileName);
+    if (words.length === 0) continue;
+    // Every word of the name has to be there. Partial matches are how
+    // "budget-2025.txt" would open when someone said "2025".
+    if (!words.every((word) => mentions(haystack, word))) continue;
+    // A longer, more specific name beats a shorter one it contains: asking for
+    // "quote march final" should not open `quote.txt`.
+    const score = words.join("").length;
+    if (score > bestScore) {
+      bestScore = score;
+      tied = [fileName];
+    } else if (score === bestScore) {
+      tied.push(fileName);
+    }
+  }
+
+  return { best: tied.length === 1 ? tied[0]! : null, tied };
+}
+
 export type FetchFolderRefusal =
   | "not-absolute"
   | "missing"
@@ -119,7 +191,10 @@ function comparable(path: string): string {
 // C:\Users\oskar\DocsSecret, so a prefix test hands over a folder the Owner
 // never named. `relative` answers the question that was actually asked: how do
 // you get from the folder to the target, and does that involve leaving it.
-function containment(folder: string, target: string): "same" | "inside" | "outside" {
+function containment(
+  folder: string,
+  target: string,
+): "same" | "inside" | "outside" {
   const step = relative(comparable(folder), comparable(target));
   if (step === "") return "same";
   if (step === ".." || step.startsWith(`..${sep}`) || isAbsolute(step)) {
@@ -399,7 +474,10 @@ export function grantFetchAccess(
       }
       if (!stats.isFile()) {
         note("fetching.open", "denied", "Not a file.", real);
-        throw new FetchRefusedError("not-a-file", "That is a folder, not a file.");
+        throw new FetchRefusedError(
+          "not-a-file",
+          "That is a folder, not a file.",
+        );
       }
       // The size is checked BEFORE the read, the way the document page gate is,
       // so a refusal costs nothing and names the number.
@@ -421,7 +499,12 @@ export function grantFetchAccess(
       // megabytes of gibberish to a model that will confidently invent
       // something about it.
       if (!looksLikeText(buffer)) {
-        note("fetching.open", "denied", "Refused a file that is not text.", real);
+        note(
+          "fetching.open",
+          "denied",
+          "Refused a file that is not text.",
+          real,
+        );
         throw new FetchRefusedError(
           "binary",
           "That file is not text, so Vaenyx cannot open it this way. A PDF or a scan goes through the chat's own attach button instead.",

@@ -34,11 +34,22 @@ export function EnginePairPicker({
   providerOptions,
   /** Called after a save so the row above can refresh whatever it shows. */
   onChanged,
+  renderUnder,
 }: {
   slot: string;
   /** The accounts that can do THIS job, already labelled by the caller. */
   providerOptions: PickerOption[];
   onChanged?: (pair: EnginePairValue) => void;
+  /** Settings that belong to ONE side because they depend on which engine that
+   *  side is set to — Speaking's voice list, above all. It has to sit under
+   *  the engine it belongs to: a voice picker floating above both rows is a
+   *  list of Gemini voices that silently means nothing the moment the row is
+   *  switched to Cloudflare (Oskar, 2026-08-17: voice 的选项是根据不同的模型
+   *  才出现的,所以它不应该在最上面). */
+  renderUnder?: (
+    which: "primary" | "backup",
+    providerId: string | null,
+  ) => React.ReactNode;
 }) {
   const { lang } = useI18n();
   const zh = lang === "zh";
@@ -162,50 +173,56 @@ export function EnginePairPicker({
         const choice = row.which === "primary" ? pair.primary : pair.backup;
         const providerValue = choice?.provider ?? NONE;
         const modelValue = choice?.model ?? DEFAULT_MODEL;
+        const under = renderUnder?.(row.which, choice?.provider ?? null);
         return (
-          <div className="engine-pair-row" key={row.which}>
-            <span className="engine-pair-label">
-              {row.label}
-              <em>{row.hint}</em>
-            </span>
-            <Picker
-              ariaLabel={`${slot} ${row.which} provider`}
-              disabled={busy !== null}
-              onChange={(next) => void save(row.which, next, DEFAULT_MODEL)}
-              options={[
-                // "Off" is a real choice for a capability, but not for the
-                // main model: an app with nothing to talk to is not a setting.
-                ...(row.which === "primary" && slot === "chat"
-                  ? []
-                  : [
-                      {
-                        label:
-                          row.which === "backup"
-                            ? zh
-                              ? "不设备用"
-                              : "No backup"
-                            : zh
-                              ? "关闭"
-                              : "Off",
-                        value: NONE,
-                      },
-                    ]),
-                ...providerOptions,
-              ]}
-              value={providerValue}
-            />
-            {choice ? (
+          <div className="engine-pair-side" key={row.which}>
+            <div className="engine-pair-row">
+              <span className="engine-pair-label">
+                {row.label}
+                <em>{row.hint}</em>
+              </span>
               <Picker
-                ariaLabel={`${slot} ${row.which} model`}
+                ariaLabel={`${slot} ${row.which} provider`}
                 disabled={busy !== null}
-                onChange={(next) => void save(row.which, choice.provider, next)}
-                options={modelOptions(choice.provider, choice.model)}
-                value={modelValue}
+                onChange={(next) => void save(row.which, next, DEFAULT_MODEL)}
+                options={[
+                  // "Off" is a real choice for a capability, but not for the
+                  // main model: an app with nothing to talk to is not a setting.
+                  ...(row.which === "primary" && slot === "chat"
+                    ? []
+                    : [
+                        {
+                          label:
+                            row.which === "backup"
+                              ? zh
+                                ? "不设备用"
+                                : "No backup"
+                              : zh
+                                ? "关闭"
+                                : "Off",
+                          value: NONE,
+                        },
+                      ]),
+                  ...providerOptions,
+                ]}
+                value={providerValue}
               />
-            ) : (
-              // Holds its column so the two rows stay aligned.
-              <span className="engine-pair-model-empty" />
-            )}
+              {choice ? (
+                <Picker
+                  ariaLabel={`${slot} ${row.which} model`}
+                  disabled={busy !== null}
+                  onChange={(next) =>
+                    void save(row.which, choice.provider, next)
+                  }
+                  options={modelOptions(choice.provider, choice.model)}
+                  value={modelValue}
+                />
+              ) : (
+                // Holds its column so the two rows stay aligned.
+                <span className="engine-pair-model-empty" />
+              )}
+            </div>
+            {under ? <div className="engine-pair-under">{under}</div> : null}
           </div>
         );
       })}

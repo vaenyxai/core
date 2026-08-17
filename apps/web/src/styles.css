@@ -8856,6 +8856,27 @@ body {
   min-width: 0;
 }
 
+/* One side of the pair, and anything that belongs to THAT side under it —
+   Speaking's voice list, which is a property of the engine above it. */
+.engine-pair-side {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.engine-pair-under {
+  display: grid;
+  gap: var(--space-2);
+  /* Indented to the engine columns so it reads as belonging to the row above
+     rather than as a new setting of its own. */
+  padding-left: calc(108px + var(--space-2));
+}
+
+@media (max-width: 560px) {
+  .engine-pair-under {
+    padding-left: 0;
+  }
+}
+
 @media (max-width: 560px) {
   .engine-pair-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
