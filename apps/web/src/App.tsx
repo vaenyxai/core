@@ -9003,10 +9003,16 @@ function AskVaenyxPanel({
                   type="button"
                 >
                   {tab === "chat"
-                    ? "Chat"
+                    ? lang === "zh"
+                      ? "对话"
+                      : "Chat"
                     : tab === "journal"
-                      ? "Journal"
-                      : "Gallery"}
+                      ? lang === "zh"
+                        ? "记录"
+                        : "Journal"
+                      : lang === "zh"
+                        ? "图集"
+                        : "Gallery"}
                 </button>
               ))}
             </div>
@@ -9648,8 +9654,14 @@ function AskVaenyxPanel({
             capabilityTab === "journal" ? (
               routineJournal.length === 0 ? (
                 <div className="empty-state">
-                  <strong>Nothing fed in yet</strong>
-                  <p>What you send to this routine shows up here.</p>
+                  <strong>
+                    {lang === "zh" ? "还没有喂过东西" : "Nothing fed in yet"}
+                  </strong>
+                  <p>
+                    {lang === "zh"
+                      ? "你发给这个 Routine 的内容会出现在这里。"
+                      : "What you send to this routine shows up here."}
+                  </p>
                 </div>
               ) : (
                 routineJournal.map((entry) => (
@@ -9670,8 +9682,14 @@ function AskVaenyxPanel({
             ) : capabilityTab === "gallery" ? (
               routineGallery.length === 0 ? (
                 <div className="empty-state">
-                  <strong>No results yet</strong>
-                  <p>Run the routine and its results collect here.</p>
+                  <strong>
+                    {lang === "zh" ? "还没有结果" : "No results yet"}
+                  </strong>
+                  <p>
+                    {lang === "zh"
+                      ? "跑一次,结果就会收集到这里。"
+                      : "Run the routine and its results collect here."}
+                  </p>
                 </div>
               ) : (
                 <div className="routine-gallery-grid">
@@ -9711,10 +9729,13 @@ function AskVaenyxPanel({
               )
             ) : timeline.length === 0 && !sending ? (
               <div className="empty-state">
-                <strong>Feed this routine</strong>
+                <strong>
+                  {lang === "zh" ? "喂点东西给它" : "Feed this routine"}
+                </strong>
                 <p>
-                  Type a note below — the result appears here and in the
-                  Gallery.
+                  {lang === "zh"
+                    ? "在下面写一句 —— 结果会出现在这里,也会进图集。"
+                    : "Type a note below — the result appears here and in the Gallery."}
                 </p>
               </div>
             ) : (
