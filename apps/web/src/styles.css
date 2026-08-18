@@ -8947,3 +8947,11 @@ body {
     grid-column: 1 / -1;
   }
 }
+
+/* One button per folder this machine really has, so naming one is a click. */
+.folder-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}

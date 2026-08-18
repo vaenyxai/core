@@ -2441,3 +2441,13 @@ export function setEngineChoice(
     { method: "POST", body: JSON.stringify({ which, choice }) },
   );
 }
+
+/** The folders this machine really has, offered by name so the Owner does not
+ *  have to type an absolute path from memory. */
+export function fetchFolderSuggestions(
+  lang: string,
+): Promise<{ folders: { label: string; path: string }[] }> {
+  return requestJson<{ folders: { label: string; path: string }[] }>(
+    `/v1/capabilities/folders/suggestions?lang=${encodeURIComponent(lang)}`,
+  );
+}

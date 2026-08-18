@@ -534,3 +534,59 @@ function looksLikeText(buffer: Buffer): boolean {
     return false;
   }
 }
+
+// 🔴 NOBODY SHOULD HAVE TO TYPE A WINDOWS PATH FROM MEMORY. The whitelist was
+// a text box, so naming a folder meant knowing its exact absolute path — and
+// the Owner's first attempt was `C:\Setup`, a folder that does not exist
+// (2026-08-18). Vaenyx answered honestly and was still useless: the household
+// member who most needs this capability is the least able to spell its input.
+//
+// So the common folders are offered by name, resolved HERE, where the real
+// paths are knowable. Redirection is the whole reason this cannot be a
+// hardcoded list: this machine's Desktop lives inside OneDrive under a
+// Chinese name, so `%USERPROFILE%\Desktop` is not where the desktop is. Every
+// candidate is checked for existing before it is offered, and one that has
+// been moved somewhere unguessable simply is not on the list — an offer that
+// fails when clicked is worse than no offer.
+export interface FolderSuggestion {
+  /** What the Owner calls it: "Documents", "Desktop". */
+  label: string;
+  path: string;
+}
+
+const SUGGESTED_FOLDERS: { key: string; label: string; zh: string }[] = [
+  { key: "Documents", label: "Documents", zh: "文档" },
+  { key: "Desktop", label: "Desktop", zh: "桌面" },
+  { key: "Downloads", label: "Downloads", zh: "下载" },
+  { key: "Pictures", label: "Pictures", zh: "图片" },
+];
+
+export function suggestFetchFolders(lang: string): FolderSuggestion[] {
+  const home = process.env.USERPROFILE || process.env.HOME || "";
+  if (!home) return [];
+  const oneDrive = process.env.OneDrive || process.env.OneDriveConsumer || "";
+  const found: FolderSuggestion[] = [];
+
+  for (const entry of SUGGESTED_FOLDERS) {
+    // Plain, then inside OneDrive, then OneDrive with the localised name —
+    // in that order, and the first one that EXISTS wins.
+    const candidates = [
+      join(home, entry.key),
+      ...(oneDrive ? [join(oneDrive, entry.key), join(oneDrive, entry.zh)] : []),
+    ];
+    const hit = candidates.find((candidate) => {
+      try {
+        return statSync(candidate).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+    if (hit) {
+      found.push({
+        label: lang === "zh" ? entry.zh : entry.label,
+        path: canonical(hit) ?? hit,
+      });
+    }
+  }
+  return found;
+}

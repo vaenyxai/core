@@ -675,7 +675,11 @@ import {
   writeProfileCapabilities,
 } from "../core/capabilities.js";
 import { runCapabilityProbe } from "../core/capability-probe.js";
-import { readFetchFolders, writeFetchFolders } from "../core/fetching.js";
+import {
+  readFetchFolders,
+  suggestFetchFolders,
+  writeFetchFolders,
+} from "../core/fetching.js";
 import {
   listRelayCalls,
   readRelayConfig,
@@ -5964,6 +5968,19 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       return { folders: readFetchFolders(context.database) };
+    },
+  );
+
+  // The folders this machine actually has, by name, so naming one is a click
+  // rather than a spelling test (see suggestFetchFolders). Owner-only: it
+  // reveals real paths from the Owner's home directory.
+  app.get<{ Querystring: { lang?: string } }>(
+    "/v1/capabilities/folders/suggestions",
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return { folders: suggestFetchFolders(request.query.lang ?? "en") };
     },
   );
 

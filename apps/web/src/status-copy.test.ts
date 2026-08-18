@@ -26,14 +26,6 @@ describe("getStatusCopy", () => {
           engine: "sqlite",
           status: "ready",
         },
-        remoteAccess: {
-          recommendedProvider: "cloudflare-tunnel-access",
-          internetExposure: "disabled",
-          cloudflaredInstalled: false,
-          cloudflaredServiceStatus: "missing",
-          cloudflaredVersion: null,
-          accessPolicyRequired: true,
-        },
         timestamp: "2026-06-05T00:00:00.000Z",
       }),
     ).toBe("Your private Vaenyx Instance is ready");

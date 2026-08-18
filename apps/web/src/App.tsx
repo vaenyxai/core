@@ -199,6 +199,7 @@ import {
   type CapabilityCeiling,
   updateCapabilities,
   fetchCapabilityFolders,
+  fetchFolderSuggestions,
   updateCapabilityFolders,
   recordCapabilityWanted,
   runCapabilityTest,
@@ -12418,6 +12419,11 @@ function CapabilitiesPanel({
   // The folders "Files on this machine" may look in, and the one being typed.
   const [folders, setFolders] = useState<string[]>([]);
   const [folderDraft, setFolderDraft] = useState("");
+  // The folders this machine really has, resolved server-side (redirection
+  // means they are not guessable from the home directory alone).
+  const [folderPicks, setFolderPicks] = useState<
+    { label: string; path: string }[]
+  >([]);
   // A list, not one string: each refused folder gets its own line, because
   // three reasons run together on one line is three reasons nobody reads.
   const [folderErrors, setFolderErrors] = useState<string[]>([]);
@@ -12471,6 +12477,9 @@ function CapabilitiesPanel({
       .catch(() => undefined);
     void fetchCapabilityFolders()
       .then((result) => setFolders(result.folders))
+      .catch(() => undefined);
+    void fetchFolderSuggestions(lang)
+      .then((result) => setFolderPicks(result.folders))
       .catch(() => undefined);
   }, []);
 
@@ -13377,6 +13386,26 @@ function CapabilitiesPanel({
       ),
       settings: (
         <>
+          {/* One click per folder this machine really has. Typing an absolute
+              path from memory is the step a household member cannot do — the
+              Owner's own first try was a folder that did not exist. */}
+          {folderPicks.length > 0 ? (
+            <div className="folder-suggestions">
+              {folderPicks
+                .filter((pick) => !folders.includes(pick.path))
+                .map((pick) => (
+                  <button
+                    className="secondary-button"
+                    key={pick.path}
+                    onClick={() => void saveFolders([...folders, pick.path])}
+                    title={pick.path}
+                    type="button"
+                  >
+                    + {pick.label}
+                  </button>
+                ))}
+            </div>
+          ) : null}
           <DoorList
             addLabel={lang === "zh" ? "加上" : "Add"}
             draft={folderDraft}
