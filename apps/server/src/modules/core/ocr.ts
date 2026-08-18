@@ -18,7 +18,14 @@ import {
   type EngineRunNote,
 } from "../models/engine-slots.js";
 
-export const OCR_ENGINES = ["mistral", "ocrspace"] as const;
+// One engine, and that is a deliberate state rather than a gap. OCR.space was
+// added on 2026-08-16 as the free stand-in and removed on 2026-08-18: measured
+// against the Owner's own key, engine 1 answered HTTP 502 in every language
+// (60s, 25s, 9s), and engine 2 — which did read a drawn "12345" correctly
+// twice — then returned 502/503 for everything under light use. A stand-in
+// that works occasionally is worse than a named gap, because it gets trusted.
+// OCR's stand-in may still never be a chat model (see the note above).
+export const OCR_ENGINES = ["mistral"] as const;
 export type OcrEngine = (typeof OCR_ENGINES)[number];
 
 // Mistral OCR: already a connected provider (one key, the shared pool), a
@@ -30,7 +37,6 @@ export type OcrEngine = (typeof OCR_ENGINES)[number];
 // own pipeline; not built this round.
 const MISTRAL_OCR_URL = "https://api.mistral.ai/v1/ocr";
 const MISTRAL_OCR_MODEL = "mistral-ocr-latest";
-const OCRSPACE_URL = "https://api.ocr.space/parse/image";
 
 export interface OcrResult {
   text: string;
@@ -95,9 +101,7 @@ function readWith(
 ): Promise<OcrResult> {
   const key = keyFor(secretsDirectory, choice.provider);
   if (!key) throw new OcrNotConnectedError();
-  return choice.provider === "ocrspace"
-    ? readWithOcrSpace(key, input)
-    : readWithMistral(key, choice.model, input);
+  return readWithMistral(key, choice.model, input);
 }
 
 async function readWithMistral(
@@ -137,65 +141,4 @@ async function readWithMistral(
     })
     .filter(Boolean);
   return { text: pages.join("\n\n"), engine: "mistral" };
-}
-
-// OCR.space: form-encoded, key in a header, one page's text per parsed result.
-// Its own failures come back inside a 200 — `IsErroredOnProcessing` with a
-// message — so the status alone is not enough to know it worked.
-async function readWithOcrSpace(
-  key: string,
-  input: { base64: string; mediaType: string },
-): Promise<OcrResult> {
-  const body = new URLSearchParams({
-    base64Image: `data:${input.mediaType};base64,${input.base64}`,
-    // 🔴 ENGINE 2, AND MEASURED RATHER THAN CHOSEN FROM THE DOCS. This shipped
-    // as engine 1 with `language: cht`, because engine 1 is the one documented
-    // to read Chinese. Asked with the Owner's own key, engine 1 answers HTTP
-    // 502 for chs, cht AND eng alike (60s, 25s, 9s — 2026-08-17): it is simply
-    // not available on the free plan. Engine 2 answered a drawn "12345"
-    // correctly, twice, in under a second.
-    //
-    // The cost of that is real and is said on the row: engine 2 is Latin-only,
-    // so a Chinese scan belongs on the primary (Mistral OCR reads it well).
-    // This is the STAND-IN, and a stand-in that handles the Latin case is
-    // worth more than one that is documented for both and answers neither.
-    OCREngine: "2",
-    isOverlayRequired: "false",
-    scale: "true",
-  });
-  const response = await fetch(OCRSPACE_URL, {
-    method: "POST",
-    headers: {
-      apikey: key,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body,
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!response.ok) {
-    throw new Error(`OCR_ENGINE_FAILED:ocrspace:${response.status}`);
-  }
-  const parsed = (await response.json()) as {
-    IsErroredOnProcessing?: boolean;
-    OCRExitCode?: number;
-    ErrorMessage?: string | string[];
-    ParsedResults?: { ParsedText?: string }[];
-  };
-  if (parsed.IsErroredOnProcessing || (parsed.OCRExitCode ?? 1) > 2) {
-    const detail = Array.isArray(parsed.ErrorMessage)
-      ? parsed.ErrorMessage[0]
-      : parsed.ErrorMessage;
-    // A refusal wearing a 200 is still a refusal, and it has to look like one
-    // to the stand-in logic — so it is thrown, with the vendor's own words.
-    throw new Error(
-      `OCR_ENGINE_FAILED:ocrspace:${(detail ?? "refused").slice(0, 200)}`,
-    );
-  }
-  const pages = (parsed.ParsedResults ?? [])
-    .map((page, at) => {
-      const text = (page.ParsedText ?? "").trim();
-      return text ? `[page ${at + 1}]\n${text}` : "";
-    })
-    .filter(Boolean);
-  return { text: pages.join("\n\n"), engine: "ocrspace" };
 }

@@ -232,10 +232,8 @@ describe("provider-settings", () => {
       "groq",
       "local",
       "mistral",
-      "ocrspace",
       "openai",
       "openrouter",
-      "together",
       "workersai",
       "zhipu",
     ]);
@@ -245,32 +243,6 @@ describe("provider-settings", () => {
     expect(list.find((provider) => provider.id === "openai")?.connected).toBe(
       false,
     );
-  });
-
-  // A one-job backend must never offer itself as a model to talk to: it would
-  // be picked as the main model and fail at the first message.
-  it("keeps a one-job backend out of the chat list, and connects it by key", () => {
-    const dir = mkdtempSync(resolve(tmpdir(), "vaenyx-models-"));
-    temporaryDirectories.push(dir);
-    initModelRegistry({ secretsDirectory: dir });
-    const before = listModelProviders(dir).find(
-      (provider) => provider.id === "ocrspace",
-    );
-    expect(before?.capabilities).toEqual(["ocr"]);
-    expect(before?.connected).toBe(false);
-
-    writeFileSync(
-      resolve(dir, "model-providers.json"),
-      JSON.stringify({ ocrspace: { apiKey: "k" } }),
-      "utf8",
-    );
-    initModelRegistry({ secretsDirectory: dir });
-    // Its key IS its connection — it never joins the chat registry, so asking
-    // the registry would report it missing forever.
-    expect(
-      listModelProviders(dir).find((provider) => provider.id === "ocrspace")
-        ?.connected,
-    ).toBe(true);
   });
 
   it("connects a provider: persists it and re-registers it", () => {

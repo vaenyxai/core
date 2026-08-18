@@ -70,12 +70,6 @@ export const OPENAI_COMPATIBLE_PRESETS = [
     baseUrl: "https://api.mistral.ai/v1",
     model: "mistral-small-latest",
   },
-  {
-    id: "together",
-    name: "Together AI",
-    baseUrl: "https://api.together.xyz/v1",
-    model: "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-  },
 ] as const;
 
 class ModelRegistry {
@@ -104,9 +98,7 @@ class ModelRegistry {
   }
 
   default(): ModelProvider {
-    const provider = this.defaultId
-      ? this.providers.get(this.defaultId)
-      : null;
+    const provider = this.defaultId ? this.providers.get(this.defaultId) : null;
     if (!provider) {
       throw new Error("No model provider is registered.");
     }

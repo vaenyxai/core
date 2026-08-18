@@ -113,18 +113,6 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     needsKey: true,
     needsBaseUrl: false,
   },
-  // Together added 2026-08-16 for one reason: Drawing had no free stand-in
-  // that a household outside China can actually sign up for. Cloudflare is the
-  // free main engine, Gemini's free image quota is ZERO, OpenAI is paid, and
-  // Zhipu wants a Chinese phone number. Together's FLUX.1-schnell free
-  // endpoint takes an email address and no card.
-  {
-    id: "together",
-    name: "Together AI",
-    kind: "api-key",
-    needsKey: true,
-    needsBaseUrl: false,
-  },
   // Workers AI: key-based cloud, but its endpoint embeds the account id.
   {
     id: "workersai",
@@ -139,21 +127,6 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     kind: "openai-compatible",
     needsKey: false,
     needsBaseUrl: true,
-  },
-  // 🔴 A SECOND DEDICATED OCR ENGINE, and dedicated is the whole point. OCR
-  // is the one capability whose stand-in may NOT be a chat model: where the
-  // ink is unclear a chat model writes a plausible character instead of
-  // failing, which on a quote is a fluent wrong number nobody can see. So the
-  // backup here is another purpose-built reader. Free key by email, no card.
-  // Its free plan caps a file at 1 MB, and its Chinese comes from engine 1 —
-  // both said out loud on the row rather than discovered on a bad read.
-  {
-    id: "ocrspace",
-    name: "OCR.space",
-    kind: "api-key",
-    needsKey: true,
-    needsBaseUrl: false,
-    nonChat: true,
   },
 ];
 
@@ -248,15 +221,12 @@ const VISION_CAPABLE_PROVIDERS = [
   "claude-sub",
 ];
 // OCR's list is short and stays short on purpose: only engines built to READ
-// pictures of words belong here (see core/ocr.ts).
-const OCR_CAPABLE_PROVIDERS = ["mistral", "ocrspace"];
-const IMAGE_CAPABLE_PROVIDERS = [
-  "workersai",
-  "gemini",
-  "zhipu",
-  "openai",
-  "together",
-];
+// pictures of words belong here (see core/ocr.ts). One entry is not an
+// oversight — a chat model may never be on it, and the only free dedicated
+// reader tried so far (OCR.space) was removed on 2026-08-18 for answering
+// HTTP 502/503 to nearly everything.
+const OCR_CAPABLE_PROVIDERS = ["mistral"];
+const IMAGE_CAPABLE_PROVIDERS = ["workersai", "gemini", "zhipu", "openai"];
 
 /** What each backend can be used FOR, so the engine pickers can offer the
  *  Owner what they have actually signed in to instead of a fixed menu where

@@ -12361,30 +12361,24 @@ function CapabilitiesPanel({
   const [ocrEngine, setOcrEngine] = useState("mistral");
   // Which row has its setup showing. One at a time: four drawers open at once
   // is a wall of forms with the switches lost somewhere inside it.
-  const [openSetup, setOpenSetup] = useState<string | null>(null);
+  // 🔴 EACH DRAWER IS INDEPENDENT, AND NOTHING ABOVE ONE EVER MOVES. This was a
+  // single "which row is open", so opening a lower row CLOSED a higher one —
+  // and height vanishing above the viewport drags the whole page up, which
+  // reads as "the screen jumped to the top". A scroll-compensating hack was
+  // tried first and was the wrong fix: the Owner does not want the page
+  // corrected after it moves, he wants it not to move (2026-08-18: 不要去移动
+  // 任何屏幕上的现有的东西…而且不要去关闭其他已经打开的). A SET of open rows
+  // has no such problem — opening one only ever adds height BELOW it, so every
+  // pixel above stays exactly where it was and no compensation is needed.
+  const [openSetups, setOpenSetups] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
 
-  // 🔴 OPENING A DRAWER MUST NOT MOVE THE PAGE. Only one is open at a time, so
-  // opening a lower row CLOSES a higher one — and height vanishing ABOVE the
-  // viewport drags everything up, which reads as "the screen jumped to the top"
-  // (Oskar, 2026-08-17). The row that was clicked is therefore pinned: its
-  // distance from the top of the window is measured before and after the
-  // layout changes, and the scroll is corrected by the difference. The drawer
-  // then simply grows downward and shrinks back, which is what a disclosure is
-  // supposed to look like.
   function toggleSetup(id: string): void {
-    const anchor = () =>
-      document.getElementById(`capability-block-${id}`)?.getBoundingClientRect()
-        .top ?? null;
-    const before = anchor();
-    setOpenSetup((current) => (current === id ? null : id));
-    if (before === null) return;
-    // After paint, not after state: the height is only real once it is drawn.
-    requestAnimationFrame(() => {
-      const after = anchor();
-      if (after === null) return;
-      const drift = after - before;
-      if (Math.abs(drift) > 1)
-        window.scrollBy({ top: drift, behavior: "auto" });
+    setOpenSetups((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
     });
   }
   // Everything below belongs to the setup drawers — what used to be a separate
@@ -13495,8 +13489,15 @@ function CapabilitiesPanel({
           </p>
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "⚠️ OCR.space 只认拉丁字母,不认中文(实测:它那个支持中文的引擎在免费档一直 502)。中文扫描件请让 Mistral 主用。"
-              : "⚠️ OCR.space reads Latin script only, not Chinese (measured: its Chinese engine answers 502 on the free plan). Keep Mistral as the primary for Chinese scans."}
+              ? "目前只有 Mistral OCR 一个引擎,所以备用是空的。"
+              : "Mistral OCR is the only engine today, so there is no backup to set."}
+            <Hint
+              text={
+                lang === "zh"
+                  ? "试过 OCR.space 当免费备用,实测它大部分请求返回 502/503,已经拿掉了。宁可明说没有备用,也不放一个偶尔才灵的。"
+                  : "OCR.space was tried as the free stand-in and removed: measured, it answered 502/503 to most requests. A named gap beats a stand-in that only works sometimes."
+              }
+            />
           </p>
         </>
       ),
@@ -13808,7 +13809,7 @@ function CapabilitiesPanel({
           const built = implemented[meta.id] !== false;
           const engine = engines[meta.id];
           const hasSetup = SETUP_ROWS.has(meta.id);
-          const open = openSetup === meta.id;
+          const open = openSetups.has(meta.id);
           return (
             // One block per capability, and the dividing line belongs to the
             // BLOCK. It used to sit on the row itself, which put the test
