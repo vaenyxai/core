@@ -9695,11 +9695,13 @@ function AskVaenyxPanel({
                 <div className="routine-gallery-grid">
                   {routineGallery.map((item) => (
                     <article className="routine-gallery-card" key={item.id}>
-                      <small>{formatTime(item.createdAt)}</small>
                       {/* Visual first: the generated picture of the outcome
                           leads; without one, the photo the run was fed does
                           (a Gallery card stands alone, so it keeps its
-                          picture either way). */}
+                          picture either way). The timestamp used to sit above
+                          this and is now at the foot of the card — a card
+                          whose first line is a time is a log entry, not a
+                          result. */}
                       {item.resultImageId ? (
                         <AnnotatedPhoto
                           annotations={null}
@@ -9723,6 +9725,9 @@ function AskVaenyxPanel({
                             : activeRoutine?.view
                         }
                       />
+                      <small className="routine-gallery-time">
+                        {formatTime(item.createdAt)}
+                      </small>
                     </article>
                   ))}
                 </div>
@@ -9785,14 +9790,15 @@ function AskVaenyxPanel({
                       className="ask-vaenyx-message assistant completed"
                       key={node.id}
                     >
-                      <div className="ask-vaenyx-message-head">
-                        <strong>Vaenyx</strong>
-                        <small>{formatTime(node.at)}</small>
-                      </div>
-                      {/* Visual first, part two: the GENERATED picture of
-                          the outcome leads the result. The fed photo is not
-                          repeated — the journal row right above already
-                          shows it (Oskar, 2026-08-16). */}
+                      {/* 🔴 THE PICTURE IS THE FIRST THING. A result used to
+                          open with a "Vaenyx" byline and a timestamp, so the
+                          first thing the eye met was two pieces of metadata —
+                          and the timestamp was a DUPLICATE of the one in the
+                          footer four lines below. Both are gone: whose result
+                          it is, is obvious, and the time is already stamped
+                          under it. The fed photo is not repeated either — the
+                          journal row right above already shows it (Oskar,
+                          2026-08-16, and 视觉输出优先于文字输出). */}
                       {node.item.resultImageId ? (
                         <AnnotatedPhoto
                           annotations={null}
