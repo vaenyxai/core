@@ -13428,8 +13428,15 @@ function CapabilitiesPanel({
       who: (
         <p className="settings-card-copy">
           {lang === "zh"
-            ? "开文件的是 Vaenyx 自己,不是模型 —— 模型拿到的只是文字,它没有任何能碰到硬盘的工具。所以主模型是哪个都行。文档和扫描件走聊天里的附件按钮,那是「读文档」。"
-            : "Vaenyx opens the file, not the model — the model is handed words and never gets a tool that can touch a disk. So it works with whichever main model you use. Documents and scans go through the chat's attach button instead — that is Reading."}
+            ? "开文件的是 Vaenyx,不是模型。"
+            : "Vaenyx opens the file, not the model."}
+          <Hint
+            text={
+              lang === "zh"
+                ? "模型只拿到文字,它没有任何能碰硬盘的工具 —— 所以主模型是哪个都行。文档和扫描件走聊天里的附件按钮,那是「读文档」。"
+                : "The model is handed words and never gets a tool that can touch a disk, so any main model works. Documents and scans go through the chat's attach button — that is Reading."
+            }
+          />
         </p>
       ),
     });
@@ -13450,8 +13457,15 @@ function CapabilitiesPanel({
       who: (
         <p className="settings-card-copy">
           {lang === "zh"
-            ? "跟主模型走,但怎么读不一样:Claude 把每一页当图片和文字一起读;别的模型只拿到本机抠出来的文字,图和表格它看不见。超过十页会先问你,因为那是真花钱的。"
-            : "It rides the main model, but how it reads differs: Claude takes every page as picture and text; every other model is handed words pulled out of the file here, so drawings and tables never reach it. Over ten pages you are asked first, because that costs real money."}
+            ? "跟主模型走,没得选。"
+            : "It rides the main model — nothing to choose."}
+          <Hint
+            text={
+              lang === "zh"
+                ? "读法因模型而异:Claude 把每页当图片看,所以图和表格看得见;别的模型只拿到本机抠出来的文字。超过十页会先问你,因为那是真花钱的。"
+                : "How it reads differs: Claude takes each page as a picture, so drawings and tables reach it; every other model gets only the words pulled out here. Over ten pages you are asked first, because that costs real money."
+            }
+          />
         </p>
       ),
     });
@@ -13465,8 +13479,15 @@ function CapabilitiesPanel({
       what: (
         <p className="settings-card-copy">
           {lang === "zh"
-            ? "把图里的字变成文字:扫描件、照片上的字都是它认。读一份扫描 PDF = 图转文 + 读文档两个能力搭在一起 —— 所以可以只开这一个:扫描件在本机变成文字给你自己看,不送任何模型。"
-            : "Turns the words in a picture into text: scans, and text in photos. Reading a scanned PDF is OCR plus Reading working together — which is why they are separate switches: with only this one on, a scan becomes text on this machine for your own eyes, and no model sees it."}
+            ? "把图里的字变成文字。"
+            : "Turns the words in a picture into text."}
+          <Hint
+            text={
+              lang === "zh"
+                ? "扫描件、照片上的字都是它认。只开这一个的话,扫描件在本机变成文字给你自己看,不送给任何模型。"
+                : "Scans, and text in photos. With only this one on, a scan becomes text on this machine for your own eyes and no model sees it."
+            }
+          />
         </p>
       ),
       // "Its key goes under Models" is true and was not enough: the entry
@@ -13545,8 +13566,15 @@ function CapabilitiesPanel({
       who: (
         <p className="settings-card-copy">
           {lang === "zh"
-            ? "跟主模型走。今天只有 Codex CLI (ChatGPT) 和 Claude(订阅)真的会去搜;别的模型只能用训练时记住的东西回答,而且答错的时候一样自信 —— 所以这一项默认是开的。"
-            : "It rides the main model. Only the Codex CLI (ChatGPT) and Claude (Subscription) backends really search today; every other model answers from what it memorised when it was trained, and sounds just as certain when that is out of date — which is why this one ships on."}
+            ? "跟主模型走,没得选。"
+            : "It rides the main model — nothing to choose."}
+          <Hint
+            text={
+              lang === "zh"
+                ? "只有 ChatGPT(Codex)和 Claude 订阅会真的去搜。别的模型是凭训练时记住的东西回答,过时了也一样自信。"
+                : "Only the ChatGPT (Codex) and Claude subscriptions really search. Every other model answers from what it memorised when trained, and sounds just as certain when that is out of date."
+            }
+          />
         </p>
       ),
     });
