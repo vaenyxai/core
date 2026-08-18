@@ -4,8 +4,6 @@ import {
   getCodexAuthCopy,
   getProviderConnectionCopy,
   getProviderConnectionDetail,
-  getRemoteAccessCopy,
-  getRemoteAccessDetail,
   getStatusCopy,
 } from "./status-copy.js";
 
@@ -39,52 +37,6 @@ describe("getStatusCopy", () => {
         timestamp: "2026-06-05T00:00:00.000Z",
       }),
     ).toBe("Your private Vaenyx Instance is ready");
-  });
-
-  it("keeps remote access conservative by default", () => {
-    const remoteAccess = {
-      recommendedProvider: "cloudflare-tunnel-access" as const,
-      internetExposure: "disabled" as const,
-      cloudflaredInstalled: false,
-      cloudflaredServiceStatus: "missing" as const,
-      cloudflaredVersion: null,
-      accessPolicyRequired: true as const,
-    };
-
-    expect(getRemoteAccessCopy(remoteAccess)).toBe("Local only");
-    expect(getRemoteAccessDetail(remoteAccess)).toContain("not exposed");
-  });
-
-  it("shows cloudflared readiness without implying internet exposure", () => {
-    const remoteAccess = {
-      recommendedProvider: "cloudflare-tunnel-access" as const,
-      internetExposure: "disabled" as const,
-      cloudflaredInstalled: true,
-      cloudflaredServiceStatus: "installed" as const,
-      cloudflaredVersion: "cloudflared version 2026.6.0",
-      accessPolicyRequired: true as const,
-    };
-
-    expect(getRemoteAccessCopy(remoteAccess)).toBe("Cloudflare ready");
-    expect(getRemoteAccessDetail(remoteAccess)).toContain(
-      "Access policy",
-    );
-  });
-
-  it("shows when the Cloudflare Tunnel service is running", () => {
-    const remoteAccess = {
-      recommendedProvider: "cloudflare-tunnel-access" as const,
-      internetExposure: "disabled" as const,
-      cloudflaredInstalled: true,
-      cloudflaredServiceStatus: "running" as const,
-      cloudflaredVersion: "cloudflared version 2026.6.0",
-      accessPolicyRequired: true as const,
-    };
-
-    expect(getRemoteAccessCopy(remoteAccess)).toBe("Tunnel service running");
-    expect(getRemoteAccessDetail(remoteAccess)).toContain(
-      "Windows service",
-    );
   });
 
   it("describes the confirmed ChatGPT/Codex Auth route clearly", () => {

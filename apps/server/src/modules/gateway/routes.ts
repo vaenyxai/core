@@ -1214,9 +1214,14 @@ export async function registerGatewayRoutes(
   // said the next screen would finish the job, and installing Tailscale is
   // not the same as being connected to it.
   //
-  // Unauthenticated on purpose, like /v1/system/status: it is answered on
-  // 127.0.0.1 only, it names components and nothing about the person, and the
+  // Unauthenticated on purpose — but NOT because it is loopback-only. That was
+  // the stated reason here until 2026-08-17, and Tailscale Funnel had already
+  // falsified it: the funnel proxies / to 127.0.0.1:3000, so this answers the
+  // open internet whenever remote access is on. The real reason it may stay
+  // open is that it names COMPONENTS and nothing about the person, and the
   // first-run screen needs it before any Owner exists to authenticate as.
+  // Anything person-shaped added here needs the Owner gate, funnel or no
+  // funnel.
   app.get("/v1/system/components", async () => componentProgress());
 
   // ---- What Vaenyx knows (the facts table) ----

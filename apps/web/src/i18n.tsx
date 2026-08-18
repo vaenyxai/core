@@ -100,15 +100,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.lastAutoOk": "succeeded",
     "settings.backup.lastAutoFail": "FAILED — check the destination drive",
     "settings.backup.password": "Backup password (optional encryption)",
-    "settings.backup.passwordHintOn": "Encryption is ON. Leave empty to keep the current password; type a new one to replace it.",
-    "settings.backup.passwordHintOff": "Empty = no encryption. Set a password and new backups become encrypted files.",
-    "settings.backup.passwordWarn": "If you lose this password, encrypted backups CANNOT be opened. Write it down somewhere safe.",
+    "settings.backup.passwordHintOn":
+      "Encryption is ON. Leave empty to keep the current password; type a new one to replace it.",
+    "settings.backup.passwordHintOff":
+      "Empty = no encryption. Set a password and new backups become encrypted files.",
+    "settings.backup.passwordWarn":
+      "If you lose this password, encrypted backups CANNOT be opened. Write it down somewhere safe.",
     "settings.backup.passwordClear": "Turn encryption off",
     "settings.backup.destination": "Backup folder",
     "settings.backup.destinationHint":
       "Full path. Leave empty for the default folder on this machine; set another disk, USB drive or NAS to keep copies off this machine.",
     "settings.backup.keep": "Keep most recent",
-    "settings.backup.keepHint": "Older backups are removed automatically after each new backup. Empty = keep all.",
+    "settings.backup.keepHint":
+      "Older backups are removed automatically after each new backup. Empty = keep all.",
     "settings.backup.saveConfig": "Save backup settings",
     "settings.backup.configSaved": "Backup settings saved.",
     "legal.notice.backup.cloudSync":
@@ -208,6 +212,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "You're connecting a third-party AI provider. Your messages — plus any context Vaenyx adds, like saved memories, your profile, project summaries and attached files — will be sent to the provider you choose, under its terms, privacy policy and any fees it charges. Vaenyx doesn't control that provider.",
     "legal.notice.remoteAccess.enable":
       "Remote access uses Tailscale, a third-party service. You sign in with your own Tailscale account and its terms apply. Once enabled, your Vaenyx instance gets an internet-reachable address — anyone with that address can reach the sign-in screen, and your Vaenyx login is what protects access. Traffic is encrypted in transit; Tailscale states its relays cannot read it.",
+    "legal.notice.remoteAccess.status":
+      "This Vaenyx has an internet-reachable address. Anyone who knows it reaches the sign-in screen, and your Vaenyx password is what protects everything behind it.",
     "legal.notice.methodToken.feedback":
       "This allows the app holding this token to send corrections into My Library on this device. Corrections stay on this device; a correction can only become a shared community example after it is de-identified and you explicitly approve it — corrections from apps are never shared automatically, whatever your Sharing setting.",
     "legal.notice.publish":
@@ -252,8 +258,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "method.fork.notice":
       "This Method came from the community, so your change is saved as your own copy. Theirs stays exactly as it is and keeps receiving their updates. Your copy carries their name permanently, and from now on its corrections stay here instead of going back to them.",
     "method.fork.name": "Name your copy",
-    "method.fork.credit": "Adapted from \"{id}\" by {author}",
-    "method.fork.credit.unknown": "Adapted from \"{id}\"",
+    "method.fork.credit": 'Adapted from "{id}" by {author}',
+    "method.fork.credit.unknown": 'Adapted from "{id}"',
     // Part L surfaces. "Import the instructions from a Skill" — never
     // "Skill compatible" or "runs Skills" (L4).
     "threads.bulk.count": "{n} selected",
@@ -386,8 +392,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     // structural, and is what the Owner actually needs to know.
     "legal.notice.capability.web":
       "With this on, your main model can look things up while it answers. What leaves this machine is the words it searches for: they go out through that model's own backend, and a search company on the far end receives them. Vaenyx does not choose that company and never contacts it itself. The model writes those words, so they can say things you did not type. Only the Codex CLI (ChatGPT) and Claude (Subscription) backends really search today; the rest answer from memory whether this is on or off.",
-    "legal.notice.capability.fetching.title":
-      "Before Vaenyx opens your files",
+    "legal.notice.capability.fetching.title": "Before Vaenyx opens your files",
     "legal.notice.capability.fetching":
       "Vaenyx can open text files from folders you name here, and nowhere else. Vaenyx opens them, not the model — the model is never given a tool that can touch a disk.\n\nBut what it reads is handed to whichever model is answering. The words in that file go to that model exactly like anything you type into a chat, and if that model is a cloud one they leave this machine.\n\nIt reads nothing until you name a folder. And no app key can ever be given this, whatever it asks for.",
     // One pair of buttons for both notices: the decline really switches the
@@ -440,7 +445,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.help.open": "打开帮助与术语",
     "settings.manual.eyebrow": "帮助",
     "settings.manual.title": "使用手册",
-    "settings.manual.copy": "Vaenyx 能做的每一件事:是什么、在哪点、点完会怎样。",
+    "settings.manual.copy":
+      "Vaenyx 能做的每一件事:是什么、在哪点、点完会怎样。",
     "disclaimer.ai": "AI 可能出错,重要的事请自行核对。",
     "disclaimer.health":
       "这不是医疗建议;用药、剂量、诊断请遵医嘱。别用它定剂量或替代医生。",
@@ -473,15 +479,19 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.lastAutoOk": "成功",
     "settings.backup.lastAutoFail": "失败——请检查目的地磁盘",
     "settings.backup.password": "备份密码(可选加密)",
-    "settings.backup.passwordHintOn": "加密已开启。留空 = 保持当前密码;输入新密码即替换。",
-    "settings.backup.passwordHintOff": "留空 = 不加密。设了密码后,新备份会打包成加密文件。",
-    "settings.backup.passwordWarn": "密码丢失 = 加密备份永远打不开。请把它写在安全的地方。",
+    "settings.backup.passwordHintOn":
+      "加密已开启。留空 = 保持当前密码;输入新密码即替换。",
+    "settings.backup.passwordHintOff":
+      "留空 = 不加密。设了密码后,新备份会打包成加密文件。",
+    "settings.backup.passwordWarn":
+      "密码丢失 = 加密备份永远打不开。请把它写在安全的地方。",
     "settings.backup.passwordClear": "关闭加密",
     "settings.backup.destination": "备份文件夹",
     "settings.backup.destinationHint":
       "完整路径。留空 = 本机默认文件夹;填另一块盘 / U 盘 / NAS 可把副本存到本机之外。",
     "settings.backup.keep": "保留最近",
-    "settings.backup.keepHint": "每次备份成功后自动清理更旧的备份。留空 = 全部保留。",
+    "settings.backup.keepHint":
+      "每次备份成功后自动清理更旧的备份。留空 = 全部保留。",
     "settings.backup.saveConfig": "保存备份设置",
     "settings.backup.configSaved": "备份设置已保存。",
     "legal.notice.backup.cloudSync":
@@ -498,7 +508,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "settings.backup.routinesLabel": "个 Routine",
     "settings.backup.dbOnly": "仅数据库",
     "settings.backup.restoreTitle": "还原这个备份?",
-    "settings.backup.restoring": "还原中… Vaenyx 正在重启。约 30 秒后刷新本页。",
+    "settings.backup.restoring":
+      "还原中… Vaenyx 正在重启。约 30 秒后刷新本页。",
     "settings.backup.cancel": "取消",
     "settings.backup.error": "出了点问题,请重试。",
     "apps.token.externalNote":
@@ -540,8 +551,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "这不是财务建议。重大金钱决定请咨询合格的专业人士。",
     "legal.disclaimer.tax":
       "这不是税务建议。重要数字请与注册税务代理或会计师核对。",
-    "legal.disclaimer.legal":
-      "这不是法律意见。合同与法律事务请咨询合格律师。",
+    "legal.disclaimer.legal": "这不是法律意见。合同与法律事务请咨询合格律师。",
     "legal.disclaimer.health.reminderReliability":
       "提醒可能失败或延迟。关键用药切勿只依赖 Vaenyx 提醒。",
     "legal.disclaimer.health.gateTitle": "谈及健康话题前",
@@ -570,6 +580,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "你正在连接第三方 AI 服务商。你的消息,连同 Vaenyx 添加的上下文(如已保存的记忆、你的档案、项目摘要与附件),将发送给你所选的服务商,受其条款、隐私政策及其收费约束。Vaenyx 无法控制该服务商。",
     "legal.notice.remoteAccess.enable":
       "远程访问使用第三方服务 Tailscale。你需用自己的 Tailscale 账号登录,并受其条款约束。开启后,你的 Vaenyx 实例将获得一个互联网可达的地址——任何知道该地址的人都能打开登录页,真正保护访问的是你的 Vaenyx 登录。传输过程加密;Tailscale 表示其中继无法读取内容。",
+    "legal.notice.remoteAccess.status":
+      "这台 Vaenyx 有一个互联网可达的地址。任何知道它的人都能打开登录页,后面的一切由你的 Vaenyx 密码保护。",
     "legal.notice.methodToken.feedback":
       "开启后,持有此 Token 的应用可以把修正写入本设备上的 My Library。修正只保留在本设备;任何修正要成为社区共享示例,都必须先经脱敏处理并获得你的明确批准——来自应用的修正绝不会自动分享,无论你的 Sharing 设置如何。",
     "legal.notice.publish":

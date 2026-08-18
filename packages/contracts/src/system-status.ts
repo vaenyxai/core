@@ -19,27 +19,8 @@ export const SystemStatusSchema = Type.Object(
     ]),
     database: Type.Object({
       engine: Type.Literal("sqlite"),
-      status: Type.Union([
-        Type.Literal("ready"),
-        Type.Literal("unavailable"),
-      ]),
+      status: Type.Union([Type.Literal("ready"), Type.Literal("unavailable")]),
     }),
-    remoteAccess: Type.Object(
-      {
-        recommendedProvider: Type.Literal("cloudflare-tunnel-access"),
-        internetExposure: Type.Literal("disabled"),
-        cloudflaredInstalled: Type.Boolean(),
-        cloudflaredServiceStatus: Type.Union([
-          Type.Literal("missing"),
-          Type.Literal("installed"),
-          Type.Literal("running"),
-          Type.Literal("unknown"),
-        ]),
-        cloudflaredVersion: Type.Union([Type.String(), Type.Null()]),
-        accessPolicyRequired: Type.Literal(true),
-      },
-      { additionalProperties: false },
-    ),
     timestamp: Type.String(),
   },
   {

@@ -44,14 +44,6 @@ export function getSystemStatus(
       engine: "sqlite",
       status: databaseReady ? "ready" : "unavailable",
     },
-    remoteAccess: {
-      recommendedProvider: "cloudflare-tunnel-access",
-      internetExposure: "disabled",
-      cloudflaredInstalled: false,
-      cloudflaredServiceStatus: "missing",
-      cloudflaredVersion: null,
-      accessPolicyRequired: true,
-    },
     timestamp: new Date().toISOString(),
   };
 }

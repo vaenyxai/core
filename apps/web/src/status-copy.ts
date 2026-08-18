@@ -46,35 +46,3 @@ export function getCodexAuthCopy(
   if (authMethod === "unknown") return "Signed in, unknown method";
   return "Not signed in";
 }
-
-export function getRemoteAccessCopy(
-  remoteAccess: SystemStatus["remoteAccess"] | null | undefined,
-): string {
-  if (!remoteAccess) return "Local only";
-
-  if (remoteAccess.cloudflaredServiceStatus === "running") {
-    return "Tunnel service running";
-  }
-
-  return remoteAccess.cloudflaredInstalled
-    ? "Cloudflare ready"
-    : "Local only";
-}
-
-export function getRemoteAccessDetail(
-  remoteAccess: SystemStatus["remoteAccess"] | null | undefined,
-): string {
-  if (!remoteAccess) {
-    return "Remote access readiness has not been checked yet.";
-  }
-
-  if (remoteAccess.cloudflaredServiceStatus === "running") {
-    return "cloudflared is running as a Windows service. Use only behind the Owner-approved Cloudflare Access policy.";
-  }
-
-  if (remoteAccess.cloudflaredInstalled) {
-    return "cloudflared is installed. Install the Cloudflare Tunnel service after the Owner-approved Access policy is ready.";
-  }
-
-  return "Recommended path: Cloudflare Tunnel with Access. Vaenyx is not exposed to the internet.";
-}

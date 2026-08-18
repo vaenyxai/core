@@ -15637,11 +15637,15 @@ function PhoneInstructions({ url }: { url: string }) {
 }
 
 function PhoneAccessPanel() {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const zh = lang === "zh";
   const [status, setStatus] = useState<PhoneAccessStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"install" | "login" | "tunnel" | null>(null);
+  // The remote-access notice has to be READ before the tunnel can be turned
+  // on (copy pack: gated, one-time). Session state, not stored: the gate is
+  // about this act, and the acknowledgement itself is recorded server-side.
+  const [tunnelNoticeRead, setTunnelNoticeRead] = useState(false);
   const [loginUrl, setLoginUrl] = useState<string | null>(null);
   // Poll while something settles OUTSIDE this page — the winget download or
   // the browser sign-in. Stops by itself once every light is green (or the
@@ -15745,6 +15749,15 @@ function PhoneAccessPanel() {
   }
 
   async function doTunnel() {
+    // Recorded the same way as every other acknowledgement, so the Owner's
+    // consent to an internet-reachable address is evidenced rather than
+    // assumed (copy pack clause 2.3).
+    await recordLegalAck({
+      keyName: "legal.notice.remoteAccess.enable",
+      copyVersion: LEGAL_COPY_VERSION,
+      language: lang,
+      choice: "enabled",
+    }).catch(() => undefined);
     setBusy("tunnel");
     setError(null);
     try {
@@ -15785,8 +15798,8 @@ function PhoneAccessPanel() {
     <>
       <p className="settings-card-copy">
         {zh
-          ? "Vaenyx 只监听这台电脑的 127.0.0.1,从不向网络开放端口 —— 手机(哪怕同一个 WiFi)要走你自己的 Tailscale 账号建立的加密通道。Tailscale 是免费服务,下面三步都在这里完成。"
-          : "Vaenyx listens only on this computer's 127.0.0.1 and never opens a port to the network — so a phone (even on the same WiFi) connects through an encrypted channel run by your own Tailscale account. Tailscale is a free service, and all three steps happen right here."}
+          ? "手机要用 Vaenyx,得先给它一个能从外面连进来的地址 —— 这三步用你自己的免费 Tailscale 账号建立它。开启之后,这台电脑就是互联网可达的了。"
+          : "To use Vaenyx from a phone it needs an address reachable from outside. These three steps create one with your own free Tailscale account. Once it is on, this computer is reachable from the internet."}
       </p>
 
       <div className="engine-row">
@@ -15908,9 +15921,25 @@ function PhoneAccessPanel() {
         ) : (
           <>
             {notYet}
+            {/* 🔴 THE ONE SENTENCE THAT HAS TO BE READ BEFORE THIS BUTTON, not
+                after it. The copy pack requires a gated one-time notice before
+                remote access is enabled; it existed in both languages and was
+                rendered on NO screen, so this instance was published to the
+                internet without the Owner ever being shown it (audit,
+                2026-08-17). The tick is the gate: the button stays disabled
+                until it is ticked, and the acknowledgement is recorded the
+                same way every other one is. */}
+            <label className="remote-access-gate">
+              <input
+                checked={tunnelNoticeRead}
+                onChange={(event) => setTunnelNoticeRead(event.target.checked)}
+                type="checkbox"
+              />
+              <span>{t("legal.notice.remoteAccess.enable")}</span>
+            </label>
             <button
               className="secondary-button"
-              disabled={busy !== null || !status.signedIn}
+              disabled={busy !== null || !status.signedIn || !tunnelNoticeRead}
               onClick={() => void doTunnel()}
               type="button"
             >
@@ -15925,6 +15954,15 @@ function PhoneAccessPanel() {
           </>
         )}
       </div>
+
+      {/* And once it IS on, the standing line — so the fact that this machine
+          is reachable from the internet is visible whenever the panel is,
+          not only in the moment it was switched on. */}
+      {status.tunnelUp ? (
+        <p className="context-disclaimer">
+          {t("legal.notice.remoteAccess.status")}
+        </p>
+      ) : null}
 
       {error ? (
         <p className="form-error">
@@ -26306,8 +26344,8 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
           <h2>{zh ? "在手机上用 Vaenyx" : "Use Vaenyx from your phone"}</h2>
           <p className="settings-card-copy">
             {zh
-              ? "Vaenyx 只监听这台电脑本机,从不向网络开放端口。想在手机上用,就要一条你自己的加密通道 —— Tailscale 是免费的,登录一次就好。"
-              : "Vaenyx listens only on this computer and never opens a port to the network. To reach it from your phone you need an encrypted channel of your own — Tailscale is free, and it is one sign-in."}
+              ? "想在手机上用,就要给 Vaenyx 一个从外面连得到的地址。Tailscale 是免费的,登录一次就好 —— 开启后这台电脑互联网可达,由你的 Vaenyx 密码把关。"
+              : "To reach Vaenyx from your phone it needs an address reachable from outside. Tailscale is free and it is one sign-in — once it is on, this computer is reachable from the internet, with your Vaenyx password as the gate."}
           </p>
           <p className="settings-card-copy text-faint">
             {zh
