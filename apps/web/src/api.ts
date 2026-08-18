@@ -2451,3 +2451,16 @@ export function fetchFolderSuggestions(
     `/v1/capabilities/folders/suggestions?lang=${encodeURIComponent(lang)}`,
   );
 }
+
+export interface FolderBrowse {
+  path: string;
+  parent: string | null;
+  entries: { name: string; path: string }[];
+}
+
+/** Walk this machine's folders to choose one. Directories only. */
+export function browseFolders(path: string): Promise<FolderBrowse> {
+  return requestJson<FolderBrowse>(
+    `/v1/capabilities/folders/browse?path=${encodeURIComponent(path)}`,
+  );
+}

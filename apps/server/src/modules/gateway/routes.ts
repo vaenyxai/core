@@ -676,6 +676,7 @@ import {
 } from "../core/capabilities.js";
 import { runCapabilityProbe } from "../core/capability-probe.js";
 import {
+  browseFolders,
   readFetchFolders,
   suggestFetchFolders,
   writeFetchFolders,
@@ -5981,6 +5982,25 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       return { folders: suggestFetchFolders(request.query.lang ?? "en") };
+    },
+  );
+
+  // Walk the machine's folders to pick one. Directories only, Owner-only, and
+  // it opens nothing — see browseFolders for why this exists rather than a
+  // native dialog.
+  app.get<{ Querystring: { path?: string } }>(
+    "/v1/capabilities/folders/browse",
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return browseFolders(request.query.path ?? "");
+      } catch {
+        return reply
+          .code(400)
+          .send({ error: "That folder could not be opened." });
+      }
     },
   );
 

@@ -572,7 +572,9 @@ export function suggestFetchFolders(lang: string): FolderSuggestion[] {
     // in that order, and the first one that EXISTS wins.
     const candidates = [
       join(home, entry.key),
-      ...(oneDrive ? [join(oneDrive, entry.key), join(oneDrive, entry.zh)] : []),
+      ...(oneDrive
+        ? [join(oneDrive, entry.key), join(oneDrive, entry.zh)]
+        : []),
     ];
     const hit = candidates.find((candidate) => {
       try {
@@ -589,4 +591,73 @@ export function suggestFetchFolders(lang: string): FolderSuggestion[] {
     }
   }
   return found;
+}
+
+// 🔴 A FOLDER IS CHOSEN BY LOOKING, NOT BY SPELLING. The Owner asked for the
+// "+" to open Explorer (2026-08-18). It cannot: this server runs in Windows
+// session 0, so a dialog it opened would appear on an invisible desktop and
+// hang forever waiting for a click nobody can give. The browser's own
+// directory picker is no help either — it hands back a handle and a NAME, and
+// the whitelist needs a real absolute path.
+//
+// So Vaenyx browses for itself. This lists only DIRECTORIES, never files: it
+// exists to choose a folder, and a listing of somebody's documents is not
+// needed for that. It is Owner-only and reads nothing — the whitelist still
+// decides what may ever be OPENED, and browsing to a folder is not naming it.
+export interface FolderBrowseEntry {
+  name: string;
+  path: string;
+}
+
+export interface FolderBrowseResult {
+  /** Empty string = the top level, which lists the drives. */
+  path: string;
+  parent: string | null;
+  entries: FolderBrowseEntry[];
+}
+
+export function browseFolders(request: string): FolderBrowseResult {
+  const asked = request.trim();
+
+  // Top level: the drives this machine has. Checked by trying to read each,
+  // so an empty card reader or a disconnected network drive is not offered.
+  if (!asked) {
+    const drives: FolderBrowseEntry[] = [];
+    for (let code = 65; code <= 90; code += 1) {
+      const root = String.fromCharCode(code) + ":" + String.fromCharCode(92);
+      try {
+        readdirSync(root);
+        drives.push({ name: root, path: root });
+      } catch {
+        // Not present, or not readable — either way, not offerable.
+      }
+    }
+    return { path: "", parent: null, entries: drives };
+  }
+
+  const here = canonical(asked) ?? resolve(asked);
+  const entries: FolderBrowseEntry[] = [];
+  for (const entry of readdirSync(here, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    // Hidden and system folders are noise for someone looking for Documents.
+    if (entry.name.startsWith(".") || entry.name.startsWith("$")) continue;
+    const full = join(here, entry.name);
+    try {
+      // A junction that cannot be read would break the list on click.
+      readdirSync(full);
+      entries.push({ name: entry.name, path: full });
+    } catch {
+      // Unreadable (permissions, a broken link): leave it out.
+    }
+    if (entries.length >= MAX_FETCH_ENTRIES) break;
+  }
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+
+  const up = resolve(here, "..");
+  return {
+    path: here,
+    // At a drive root, "up" goes to the drive list rather than to itself.
+    parent: up === here ? "" : up,
+    entries,
+  };
 }

@@ -200,6 +200,8 @@ import {
   updateCapabilities,
   fetchCapabilityFolders,
   fetchFolderSuggestions,
+  browseFolders,
+  type FolderBrowse,
   updateCapabilityFolders,
   recordCapabilityWanted,
   runCapabilityTest,
@@ -10813,6 +10815,97 @@ let selfInflictedPops = 0;
 
 // Lightweight modal: centered dialog, top-right ×, closes on × or Esc, never on
 // outside click (per the app's modal rules). Tap targets stay ≥44px.
+// PICK A FOLDER BY LOOKING AT IT (Oskar, 2026-08-18: 能不能点加号打开 explorer,
+// 然后选择一个 folder).
+//
+// It cannot be Explorer. This server runs in Windows session 0, so a dialog it
+// opened would land on an invisible desktop and hang waiting for a click
+// nobody can give; and the browser's own directory picker hands back a handle
+// and a NAME, never the absolute path the whitelist needs. So Vaenyx browses
+// for itself — which also makes this work from the phone, where there is no
+// Explorer at all.
+//
+// Directories only, and browsing OPENS nothing: naming a folder stays a
+// separate deliberate act, and the whitelist still decides what may be read.
+function FolderPicker({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (path: string) => void;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  const [at, setAt] = useState<FolderBrowse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function go(path: string): void {
+    setBusy(true);
+    setError(null);
+    browseFolders(path)
+      .then(setAt)
+      .catch(() =>
+        setError(
+          zh ? "这个文件夹打不开。" : "That folder could not be opened.",
+        ),
+      )
+      .finally(() => setBusy(false));
+  }
+
+  useEffect(() => go(""), []);
+
+  return (
+    <Modal onClose={onClose} title={zh ? "选一个文件夹" : "Choose a folder"}>
+      {/* Where you are, and the way back up — the two things a person needs
+          in order not to feel lost in a file tree. */}
+      <div className="folder-picker-head">
+        <button
+          className="text-button"
+          disabled={busy || at?.parent === null}
+          onClick={() => go(at?.parent ?? "")}
+          type="button"
+        >
+          ↑ {zh ? "上一层" : "Up"}
+        </button>
+        <code>{at?.path || (zh ? "这台电脑" : "This computer")}</code>
+      </div>
+      {error ? <p className="form-error">{error}</p> : null}
+      <div className="folder-picker-list">
+        {at && at.entries.length === 0 ? (
+          <p className="settings-card-copy">
+            {zh ? "这里面没有子文件夹。" : "No folders inside this one."}
+          </p>
+        ) : (
+          at?.entries.map((entry) => (
+            <button
+              className="folder-picker-entry"
+              disabled={busy}
+              key={entry.path}
+              onClick={() => go(entry.path)}
+              type="button"
+            >
+              {entry.name}
+            </button>
+          ))
+        )}
+      </div>
+      <div className="modal-actions">
+        <button className="text-button" onClick={onClose} type="button">
+          {zh ? "取消" : "Cancel"}
+        </button>
+        <button
+          className="secondary-button"
+          disabled={!at?.path}
+          onClick={() => at?.path && onPick(at.path)}
+          type="button"
+        >
+          {zh ? "就用这个文件夹" : "Use this folder"}
+        </button>
+      </div>
+    </Modal>
+  );
+}
 function Modal({
   title,
   onClose,
@@ -12419,6 +12512,7 @@ function CapabilitiesPanel({
   // The folders "Files on this machine" may look in, and the one being typed.
   const [folders, setFolders] = useState<string[]>([]);
   const [folderDraft, setFolderDraft] = useState("");
+  const [pickingFolder, setPickingFolder] = useState(false);
   // The folders this machine really has, resolved server-side (redirection
   // means they are not guessable from the home directory alone).
   const [folderPicks, setFolderPicks] = useState<
@@ -13389,6 +13483,25 @@ function CapabilitiesPanel({
           {/* One click per folder this machine really has. Typing an absolute
               path from memory is the step a household member cannot do — the
               Owner's own first try was a folder that did not exist. */}
+          <div className="folder-suggestions">
+            <button
+              className="secondary-button"
+              onClick={() => setPickingFolder(true)}
+              type="button"
+            >
+              {lang === "zh" ? "浏览…" : "Browse…"}
+            </button>
+          </div>
+          {pickingFolder ? (
+            <FolderPicker
+              onClose={() => setPickingFolder(false)}
+              onPick={(path) => {
+                setPickingFolder(false);
+                if (!folders.includes(path))
+                  void saveFolders([...folders, path]);
+              }}
+            />
+          ) : null}
           {folderPicks.length > 0 ? (
             <div className="folder-suggestions">
               {folderPicks

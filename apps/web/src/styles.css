@@ -8955,3 +8955,43 @@ body {
   gap: var(--space-1);
   margin-bottom: var(--space-2);
 }
+
+/* Walking the machine's folders to choose one. See FolderPicker. */
+.folder-picker-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.folder-picker-head code {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-picker-list {
+  display: grid;
+  gap: 2px;
+  max-height: 46vh;
+  margin-bottom: var(--space-3);
+  overflow-y: auto;
+}
+
+.folder-picker-entry {
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+}
+
+.folder-picker-entry:hover {
+  background: var(--bg-raised);
+}
