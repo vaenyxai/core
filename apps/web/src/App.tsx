@@ -6780,6 +6780,38 @@ function AskVaenyxPanel({
     view,
   ]);
 
+  // 🔴 A MESSAGE THAT ARRIVES IN THE OPEN CONVERSATION IS SHOWN, not left
+  // below the fold. The build-completion note ("✔ Routine built") landed
+  // off-screen and the Owner only found it by scrolling (2026-08-21: 任何时候
+  // 只要有任何提示,都要把窗口拉到最下面看到这个提示). Streaming replies are
+  // already followed by the effect above; this covers the ASYNC arrivals —
+  // notes, build results, anything appended while the view sits still. A
+  // conversation SWITCH is deliberately excluded: landing on open belongs to
+  // the effect above (bottom, or first unread).
+  const messageArrivalRef = useRef<{ key: string; count: number }>({
+    key: "",
+    count: 0,
+  });
+  useEffect(() => {
+    if (view !== "chat") return;
+    const key = activeConversationId ?? "";
+    const previous = messageArrivalRef.current;
+    messageArrivalRef.current = { key, count: messages.length };
+    if (previous.key !== key) return;
+    if (loadingMessages || messages.length <= previous.count) return;
+    if (sending || streamStatus || streamThinking) return;
+    lastAnchorAtRef.current = Date.now();
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [
+    activeConversationId,
+    loadingMessages,
+    messages.length,
+    sending,
+    streamStatus,
+    streamThinking,
+    view,
+  ]);
+
   // streamStatus/streamThinking are in here on purpose: the working line ("Joining
   // the dots…") appears AFTER the send flips, so anchoring only on the send left
   // it jammed against the composer and the Owner had to scroll to see it (Oskar,
@@ -7461,6 +7493,7 @@ function AskVaenyxPanel({
     try {
       let builtName: string;
       let boundHere = false;
+      let openedHome = false;
       if (kind === "method") {
         const draft = await draftMethod(description);
         const created = await createMethod(draft);
@@ -7484,14 +7517,64 @@ function AskVaenyxPanel({
             // Binding is a convenience; the build itself succeeded.
           }
         }
+        // The conversation IS the routine (Owner model). Built from somewhere
+        // that cannot become its home — the permanent conversation, or a chat
+        // already bound to another routine — it used to land in the Library
+        // only, and the Owner had to go and dig it out (2026-08-21: 不是存在
+        // Library 后面,我还要手动去打开). So its own conversation opens NOW,
+        // greeted with what it does and an invitation to feed it — and the
+        // view jumps there, but only if the Owner is still sitting in the
+        // conversation that asked for the build.
+        if (!boundHere) {
+          try {
+            const home = await createAskVaenyxConversation({
+              routineId: created.id,
+              title: created.name,
+            });
+            const about = (created.description ?? "").trim();
+            const greeting =
+              lang === "zh"
+                ? `Routine「${created.name}」建好了。${
+                    about
+                      ? `
+${about}`
+                      : ""
+                  }
+这里就是它的对话 —— 喂点内容进来试试;以后要改它,也直接在这里说。`
+                : `The Routine "${created.name}" is ready.${
+                    about
+                      ? `
+${about}`
+                      : ""
+                  }
+This conversation is its home — feed it something to try it, and ask for changes here too.`;
+            await appendConversationNote(home.id, greeting).catch(
+              () => undefined,
+            );
+            onConversationsChange([
+              home,
+              ...conversations.filter((item) => item.id !== home.id),
+            ]);
+            openedHome = true;
+            if (activeConversationId === conversationId) {
+              onDraftConversationStarted(home.id);
+            }
+          } catch {
+            // Fall back to the Library wording below.
+          }
+        }
       }
       note = boundHere
         ? lang === "zh"
           ? `✔ Routine「${builtName}」已建好。这个对话现在就是它的对话 —— 直接在这里喂内容用它;想细调,去 Settings → Library 打开它。`
           : `✔ The Routine "${builtName}" is built. This conversation is now its conversation — feed it here to use it; to fine-tune, open it under Settings → Library.`
-        : lang === "zh"
-          ? `✔ ${kind === "method" ? "Method" : "Routine"}「${builtName}」已建好,已存入你的资源库。直接说"用它"就可以开始用;想细调,去 Settings → Library 打开它。`
-          : `✔ The ${kind === "method" ? "Method" : "Routine"} "${builtName}" is built and saved to your Library. Just ask to use it; to fine-tune it, open it under Settings → Library.`;
+        : openedHome
+          ? lang === "zh"
+            ? `✔ Routine「${builtName}」已建好,它自己的对话已经开好 —— 在那里喂内容用它,要改它也在那里说。`
+            : `✔ The Routine "${builtName}" is ready — its own conversation is open. Feed it there, and ask for changes there too.`
+          : lang === "zh"
+            ? `✔ ${kind === "method" ? "Method" : "Routine"}「${builtName}」已建好,已存入你的资源库。直接说"用它"就可以开始用;想细调,去 Settings → Library 打开它。`
+            : `✔ The ${kind === "method" ? "Method" : "Routine"} "${builtName}" is built and saved to your Library. Just ask to use it; to fine-tune it, open it under Settings → Library.`;
     } catch (buildError) {
       const reason =
         buildError instanceof Error ? buildError.message : "unknown error";
@@ -25717,7 +25800,9 @@ function VaenyxWorkspace({
           onClick={() => void hardRefresh()}
           type="button"
         >
-          New version available — tap to refresh
+          {lang === "zh"
+            ? "有新版本 —— 点一下刷新"
+            : "New version available — tap to refresh"}
         </button>
       ) : null}
       <aside className={`sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`}>
