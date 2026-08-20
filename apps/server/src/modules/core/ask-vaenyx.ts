@@ -1066,10 +1066,12 @@ export async function createAskVaenyxMessage(
       documentPages,
     );
 
-  if (
+  const firstExchange =
     conversation.message_count === 0 &&
-    [DEFAULT_CHAT_TITLE, LEGACY_DEFAULT_CHAT_TITLE].includes(conversation.title)
-  ) {
+    [DEFAULT_CHAT_TITLE, LEGACY_DEFAULT_CHAT_TITLE].includes(
+      conversation.title,
+    );
+  if (firstExchange) {
     const nextTitle = titleFromMessage(trimmedContent);
     database.sqlite
       .prepare(
@@ -1918,6 +1920,51 @@ export async function createAskVaenyxMessage(
     )
     .run(completedAt, conversationId);
   touchChatThread(database, conversationId, completedAt);
+
+  // 🔴 TITLES ARE THE FEWEST WORDS THAT NAME THE TOPIC (Oskar, 2026-08-21:
+  // 起标题一定要最简练…最简洁的几个字). The first message, truncated at 64
+  // characters, was the whole prompt wearing a title's clothes. After the
+  // FIRST completed reply the model is asked for the shortest honest name,
+  // fire-and-forget: a failed ask leaves the derived title standing, and the
+  // UPDATE only lands while the title is still the derived one — an Owner
+  // rename, or a routine-named chat, is never overwritten. Low effort on
+  // purpose: this is a label, not an answer.
+  if (firstExchange && assistantStatus === "completed") {
+    const derivedTitle = titleFromMessage(trimmedContent);
+    void (async () => {
+      try {
+        // The main provider scope closed with the reply; the default backend
+        // is the right author for a label anyway.
+        const asked = await resolveProvider(null).sendChat(
+          [{ role: "owner", content: trimmedContent.slice(0, 600) }],
+          "Name this conversation. Reply with ONLY the title: the fewest words that identify the topic - at most 4 words in English, or at most 8 characters in Chinese. Use the language the message is written in. No quotes, no punctuation, no explanation.",
+          { reasoningEffort: "low" },
+        );
+        const short = asked.answer
+          .replace(/["'‘’“”《》「」『』()（).。,,!!??::;;\r\n]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 30)
+          .trim();
+        if (!short) return;
+        const changed = database.sqlite
+          .prepare(
+            `UPDATE ask_vaenyx_conversations SET title = ? WHERE id = ? AND title = ?`,
+          )
+          .run(short, conversationId, derivedTitle);
+        if (Number(changed.changes) > 0) {
+          updateChatThreadTitle(
+            database,
+            conversationId,
+            short,
+            new Date().toISOString(),
+          );
+        }
+      } catch {
+        // The derived title stands; a label is never worth a visible failure.
+      }
+    })();
+  }
 
   // A finished reply nobody sees within ~30s pushes the phone (Owner rule
   // 2026-07-23) — the same presence gate as scheduled runs, so watching the

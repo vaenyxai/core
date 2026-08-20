@@ -696,12 +696,16 @@ function SidebarDetails({
   count,
   initiallyOpen = true,
   label,
+  action,
 }: {
   children: ReactNode;
   className?: string;
   count: number;
   initiallyOpen?: boolean;
   label: string;
+  /** One small control at the far right of the header — the + that starts a
+   *  chat inside this Project (Oskar, 2026-08-21, after Codex/Claude Code). */
+  action?: ReactNode;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
 
@@ -714,6 +718,7 @@ function SidebarDetails({
       <summary>
         <span>{label}</span>
         <small>{count}</small>
+        {action}
       </summary>
       {children}
     </details>
@@ -7489,6 +7494,26 @@ function AskVaenyxPanel({
     description: string,
   ): Promise<void> {
     setBuilding({ conversationId, kind });
+    // The "building in the background" line used to be a banner OUTSIDE the
+    // message list — the one thing on screen the scroll-to-new-message rule
+    // could not reach, and it vanished when the build ended (Oskar,
+    // 2026-08-21: 完全可以是对话里面的一句话). As a message it scrolls into
+    // view, and the ✔/⚠ that follows completes the story in place.
+    try {
+      const started = await appendConversationNote(
+        conversationId,
+        lang === "zh"
+          ? `⏳ 正在后台创建这个 ${kind === "method" ? "Method" : "Routine"} —— 建好我会在这里说一声。`
+          : `⏳ Building the ${kind === "method" ? "Method" : "Routine"} in the background — I will say here when it is ready.`,
+      );
+      setMessages((current) =>
+        activeConversationId === conversationId
+          ? [...current, started]
+          : current,
+      );
+    } catch {
+      // The header chip still shows Building…; the note is a nicety.
+    }
     let note: string;
     try {
       let builtName: string;
@@ -10119,16 +10144,6 @@ This conversation is its home — feed it something to try it, and ask for chang
           resetKey={activeConversationId ?? ""}
           targetRef={chatEndRef}
         />
-
-        {building && building.conversationId === activeConversationId ? (
-          <div className="chat-create-offer">
-            <span>
-              {building.kind === "method"
-                ? "⏳ Building the Method in the background — the confirmation will appear here."
-                : "⏳ Building the Routine in the background — the confirmation will appear here."}
-            </span>
-          </div>
-        ) : null}
 
         <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
           <Composer
@@ -24836,6 +24851,7 @@ function SidebarThreadTree({
   onSetThreadStatus,
   onBulkArchive,
   onBulkDelete,
+  onNewChatInProject,
 }: {
   inbox: InboxSummary | null;
   inboxTitle: string | null;
@@ -24851,6 +24867,7 @@ function SidebarThreadTree({
   ) => void;
   onBulkArchive: (threads: VaenyxThread[]) => void;
   onBulkDelete: (threads: VaenyxThread[]) => void;
+  onNewChatInProject: (projectId: string) => void;
 }) {
   const { t } = useI18n();
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -24970,6 +24987,23 @@ function SidebarThreadTree({
 
             return (
               <SidebarDetails
+                action={
+                  <button
+                    aria-label={t("threads.newInProject")}
+                    className="sidebar-project-new"
+                    onClick={(event) => {
+                      // A click on the summary toggles the folder; this one
+                      // means "new chat here", nothing else.
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onNewChatInProject(project.id);
+                    }}
+                    title={t("threads.newInProject")}
+                    type="button"
+                  >
+                    +
+                  </button>
+                }
                 className="project-thread-folder"
                 count={projectThreads.length}
                 initiallyOpen={projectThreads.length > 0}
@@ -25838,6 +25872,7 @@ function VaenyxWorkspace({
               New and the permanent conversation, pushing both down for a list
               that lives on the Scheduled screen anyway. */}
           <SidebarThreadTree
+            onNewChatInProject={startNewChatInProject}
             inbox={inbox}
             inboxTitle={
               workspace.mode?.agentName?.trim() ||

@@ -9006,3 +9006,33 @@ body {
 .folder-picker-entry:hover {
   background: var(--bg-raised);
 }
+
+/* The + at the far right of a Project row: a new chat born into that Project.
+   Small on screen, but the ::after pad keeps the touch target honest. */
+.sidebar-project-new {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0.5px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-project-new::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.sidebar-project-new:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
