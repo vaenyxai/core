@@ -6338,7 +6338,9 @@ function AskVaenyxPanel({
     setError(null);
 
     try {
-      setMessages(await fetchAskVaenyxMessages(conversationId));
+      const loaded = await fetchAskVaenyxMessages(conversationId);
+      chatMessagesForRef.current = conversationId;
+      setMessages(loaded);
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -6460,6 +6462,7 @@ function AskVaenyxPanel({
     fetchTaskMessages(focusedTaskId)
       .then((nextMessages) => {
         if (!cancelled) {
+          taskMessagesForRef.current = focusedTaskId;
           setTaskMessages(nextMessages);
         }
       })
@@ -6652,6 +6655,11 @@ function AskVaenyxPanel({
   // pinned where the opening meant it to be while the page builds out. The
   // Owner's own first touch (wheel, finger, key, click) cancels it at once:
   // the moment they start reading, the page is theirs, not the intent's.
+  // Which thread the message lists currently in state belong to. Stamped when
+  // a load actually lands, read by the landing effects above consuming the
+  // unread cutoff — never land against another thread's messages.
+  const chatMessagesForRef = useRef<string | null>(null);
+  const taskMessagesForRef = useRef<string | null>(null);
   const pendingLandingRef = useRef<{ key: string } | null>(null);
   const landingFrameRef = useRef(0);
   const LANDING_HOLD_MS = 5000;
@@ -6714,8 +6722,15 @@ function AskVaenyxPanel({
 
   useEffect(() => {
     if (view !== "chat") return;
-    if (!loadingMessages && messages.length > 0) {
-      const cutoff = consumeUnreadCutoff();
+    if (
+      !loadingMessages &&
+      messages.length > 0 &&
+      // The list on screen must BELONG to the open conversation: switching
+      // chat-to-chat, this effect runs one commit before the loader flips
+      // loadingMessages on, with the previous chat's messages still in state.
+      chatMessagesForRef.current === activeConversationId
+    ) {
+      const cutoff = consumeUnreadCutoff(`chat:${activeConversationId ?? ""}`);
       if (cutoff !== null) {
         // "" = never opened anywhere, so everything counts as unread and the
         // first message is the earliest unread one.
@@ -6788,8 +6803,14 @@ function AskVaenyxPanel({
 
   useEffect(() => {
     if (view !== "task") return;
-    if (!loadingTaskMessages && taskMessages.length > 0) {
-      const cutoff = consumeUnreadCutoff();
+    if (
+      !loadingTaskMessages &&
+      taskMessages.length > 0 &&
+      // Same stale-list guard as the chat effect — this is where the incident
+      // actually happened, because tasks load in an EFFECT, one commit late.
+      taskMessagesForRef.current === focusedTaskId
+    ) {
+      const cutoff = consumeUnreadCutoff(`task:${focusedTaskId ?? ""}`);
       if (cutoff !== null) {
         const first = taskMessages.find(
           (message) => message.createdAt > cutoff,
@@ -24387,10 +24408,15 @@ const THREAD_LIST_STEP = 10;
 // Freshness-scoped rather than id-matched: the note is written in the same
 // breath as the open, and a stale one (nothing consumed it within a few
 // seconds) is dropped rather than yanking some later conversation around.
-let pendingUnreadCutoff: { cutoff: string; at: number } | null = null;
+// Keyed by the thread it was noted FOR: with two unread news chats, opening
+// the second consumed a cutoff while the FIRST chat's messages were still the
+// ones on screen, targeted a message about to be unmounted, and never scrolled
+// — the second conversation always opened at the very top (Oskar, 2026-08-18).
+let pendingUnreadCutoff: { key: string; cutoff: string; at: number } | null =
+  null;
 
-export function noteUnreadOpen(cutoff: string): void {
-  pendingUnreadCutoff = { cutoff, at: Date.now() };
+export function noteUnreadOpen(key: string, cutoff: string): void {
+  pendingUnreadCutoff = { key, cutoff, at: Date.now() };
 }
 
 // EXACTLY ONE ChatGPT window, wherever the pieces run (sweep, 2026-08-16).
@@ -24418,8 +24444,11 @@ function codexRemoteViewerNote(zh: boolean): string {
     : "The ChatGPT sign-in has to happen on the computer running Vaenyx (its sign-in page finishes by returning to that machine). Press this button in a browser on that computer; from this device, the Claude subscription or an API key connects fine.";
 }
 
-function consumeUnreadCutoff(): string | null {
+function consumeUnreadCutoff(key: string): string | null {
   if (!pendingUnreadCutoff) return null;
+  // Not this thread's note: leave it for its owner. A read thread opened in
+  // between must not eat the unread one's landing.
+  if (pendingUnreadCutoff.key !== key) return null;
   const { cutoff, at } = pendingUnreadCutoff;
   pendingUnreadCutoff = null;
   return Date.now() - at < 8000 ? cutoff : null;
@@ -24754,7 +24783,13 @@ function SidebarThreadTree({
     // landing such a thread on message #1 would read as "jumped to the top",
     // so it lands at the bottom like a read one. New threads are born with
     // seen_at seeded, so this is a backstop, not the normal path.
-    if (seen) noteUnreadOpen(seen);
+    if (seen) {
+      const key =
+        thread.kind === "task"
+          ? `task:${thread.taskId ?? ""}`
+          : `chat:${thread.conversationId ?? ""}`;
+      noteUnreadOpen(key, seen);
+    }
     setJustSeen((current) => ({ ...current, [thread.id]: thread.updatedAt }));
     void markVaenyxThreadSeen(thread.id).catch(() => {
       // A failed mark leaves the instance's watermark where it was, so the

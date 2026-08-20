@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v10";
+const CACHE_NAME = "vaenyx-shell-v11";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -141,7 +141,7 @@ function bootWaitPage() {
     // answers, so an ordinary restart still reads as "starting up".
     "</div><script>(function(){",
     'var K="vaenyx.waitSince",t=0;',
-    "try{t=parseInt(localStorage.getItem(K)||\"0\",10)||0}catch(e){}",
+    'try{t=parseInt(localStorage.getItem(K)||"0",10)||0}catch(e){}',
     "if(!t){t=Date.now();try{localStorage.setItem(K,String(t))}catch(e){}}",
     "function honest(){",
     'document.getElementById("wait").style.display="none";',
@@ -315,10 +315,29 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  // A digest folds several results and its own url is "/" — which used to
+  // mean the tap landed on the HOME screen with the news still two taps away
+  // (Oskar, 2026-08-18). The tap now opens the FIRST folded item's own
+  // conversation (reading order); the sidebar dots carry you to the rest.
+  // Resolved at click time, so a digest already sitting in the tray from an
+  // older service worker gets the same behaviour.
+  const data = event.notification.data || {};
+  let url = data.url || "/";
+  if (url === "/" && Array.isArray(data.items)) {
+    const first = data.items.find(
+      (item) => item && item.url && item.url !== "/",
+    );
+    if (first) url = first.url;
+  }
   event.waitUntil(
     (async () => {
-      const url =
-        (event.notification.data && event.notification.data.url) || "/";
+      // Tapping the tray means the tray is dealt with: every Vaenyx
+      // notification goes, not just the one under the finger — a digest
+      // that navigated away but left itself sitting in the tray read as
+      // 'nothing happened' (Oskar, 2026-08-18).
+      for (const shown of await self.registration.getNotifications()) {
+        shown.close();
+      }
       const windows = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
