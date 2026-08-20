@@ -381,15 +381,28 @@ export function describeRoutineInputFields(
       )
     : [];
 
-  const fields = keys.map((key) => {
-    const prop = (props[key] ?? {}) as Record<string, unknown>;
-    return {
-      key,
-      type: typeof prop.type === "string" ? prop.type : "string",
-      description: typeof prop.description === "string" ? prop.description : "",
-      required: required.includes(key),
-    };
-  });
+  // 🔴 A FIELD VAENYX FILLS IS NOT A FIELD TO ASK ABOUT. Every property used
+  // to become a box on the confirm card, including the ones the run fills
+  // itself from the photo — so the Dinner Planner opened with an empty
+  // "Photo Analysis" box above the ingredients it had just read out of the
+  // picture, and there was no honest answer to "what do I type here?"
+  // (Oskar, 2026-08-18). JSON Schema already has the word for this, so
+  // methods declare readOnly: true and the card leaves those out.
+  const fields = keys
+    .filter((key) => {
+      const prop = props[key] as Record<string, unknown> | undefined;
+      return prop?.readOnly !== true;
+    })
+    .map((key) => {
+      const prop = (props[key] ?? {}) as Record<string, unknown>;
+      return {
+        key,
+        type: typeof prop.type === "string" ? prop.type : "string",
+        description:
+          typeof prop.description === "string" ? prop.description : "",
+        required: required.includes(key),
+      };
+    });
   return { method, fields };
 }
 

@@ -6878,6 +6878,18 @@ function AskVaenyxPanel({
     setError(null);
     setPrompt("");
     setCapabilityTab("chat");
+    // 🔴 LAND ON THE BOTTOM, AND KEEP LANDING. Confirming closes a modal (the
+    // page loses its height), then the pending row appears, then the thinking
+    // line — three layout changes on three different clocks. A single scroll
+    // fired here hits the first of them and finishes slightly above the
+    // bottom, which is exactly where the Owner found it (2026-08-18: 我想要
+    // 显示的是最下面,Vaenyx 在思考的那个地方). requestLanding re-lands while
+    // the page grows, and the Owner's first touch cancels it.
+    requestLanding(
+      `routine-run:${conversationId}`,
+      () => chatEndRef.current,
+      "end",
+    );
     const tempId = `pending-journal-${crypto.randomUUID()}`;
     const startedAt = new Date().toISOString();
     setRoutineJournal((current) => [

@@ -160,11 +160,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "help.empty": "No help content yet.",
     "help.error": "Vaenyx could not load the help page.",
     "routine.confirm.title": "Check the details",
-    "routine.confirm.copy":
-      "Vaenyx read your message and filled these in. Fix anything that's wrong, fill anything missing, then run.",
+    // The card IS the fields; a sentence explaining that they are fields was
+    // the longest thing on it (Oskar, 2026-08-18: 提示语言有点长了).
+    "routine.confirm.copy": "Fix anything wrong, then run.",
     "routine.confirm.missing": "Still needed:",
     "routine.confirm.onePerLine": "One per line",
-    "routine.confirm.run": "Looks right — run",
+    "routine.confirm.run": "Run",
     "routine.confirm.cancel": "Cancel",
     // The editorial version of the copy pack (clause 6.4). It had drifted to
     // 2.6 here while the app recorded 3.0 against every acknowledgement, so a
@@ -535,11 +536,10 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "help.empty": "暂无帮助内容。",
     "help.error": "Vaenyx 无法加载帮助页面。",
     "routine.confirm.title": "确认信息",
-    "routine.confirm.copy":
-      "Vaenyx 从你的话里读出了这些。不对的改一改、缺的补一补,然后运行。",
+    "routine.confirm.copy": "不对的改一改,然后运行。",
     "routine.confirm.missing": "还缺:",
     "routine.confirm.onePerLine": "一行一个",
-    "routine.confirm.run": "没问题,运行",
+    "routine.confirm.run": "运行",
     "routine.confirm.cancel": "取消",
     "legal.copyVersion": "3.1",
     "legal.disclaimer.aiGeneral.composer": "AI 可能出错,重要信息请自行核对。",
