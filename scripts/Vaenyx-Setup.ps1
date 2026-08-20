@@ -56,6 +56,13 @@ $Messages = @{
   "tailscale.done"       = @{ en = "Tailscale installed. The sign-in happens in Vaenyx, on the phone step."; zh = "Tailscale 装好了。登录在 Vaenyx 首次运行的手机一步里完成。" }
   "tailscale.failed"     = @{ en = "Tailscale could not be installed here - Vaenyx will offer it again on its phone step."; zh = "这里没装上 Tailscale —— Vaenyx 首次运行的手机一步会再装一次。" }
   "tailscale.retry"      = @{ en = "The download did not finish - trying again..."; zh = "下载没有完成 —— 正在重试..." }
+  # The outcome that had no words for it. MSI 3010 means INSTALLED, and
+  # Windows wants a restart to swap files that were in use - a network
+  # driver, here. Until that restart tailscaled cannot reach a working
+  # state, so the phone address stays down and restarting the SERVICE
+  # never helps. This went undiagnosed for days (2026-08-04) because the
+  # installer said nothing and read the exit code as a failure.
+  "tailscale.reboot"     = @{ en = "Tailscale is installed, but Windows needs a RESTART to finish it. Phone access will not work until you restart this computer."; zh = "Tailscale 装好了,但 Windows 需要重启一次才能装完。重启之前,手机访问用不了。" }
   "components.header"    = @{ en = "The components you ticked:"; zh = "你勾选的组件:" }
   "components.ts.ok"     = @{ en = "Tailscale - installed."; zh = "Tailscale —— 已装好。" }
   "components.ts.was"    = @{ en = "Tailscale - was already installed."; zh = "Tailscale —— 本来就装好了。" }
@@ -542,13 +549,26 @@ if ((@($Components.Split(",") | ForEach-Object { $_.Trim().ToLowerInvariant() })
       }
       $tailscaleRun = Start-Elevated -FilePath "msiexec.exe" `
         -Arguments "/i `"$tailscaleMsi`" /quiet /norestart"
-      if ($tailscaleRun.ExitCode -eq 0 -and (Test-Path $tailscaleExe)) {
+      # 3010 = installed, reboot required. 1641 = installed, reboot started.
+      # Both are SUCCESS in msiexec vocabulary; reading them as failure told
+      # a household its install had broken when it had in fact worked.
+      $installedOk = ($tailscaleRun.ExitCode -in 0, 3010, 1641) -and (Test-Path $tailscaleExe)
+      if ($installedOk) {
         # The silent MSI reliably copies Tailscale but does not reliably leave
         # its service running (the whole "restart the computer" folklore) -
         # start it now so the phone step's sign-in works immediately.
         try { Start-Process -FilePath "sc.exe" -ArgumentList "start", "Tailscale" -WindowStyle Hidden -Wait } catch { }
-        Write-Good (Say "tailscale.done")
-        $Script:TailscaleOutcome = "installed"
+        # Did Windows queue a file swap for the next boot? If so the daemon
+        # cannot work yet, whatever the service reports, and the person has
+        # to hear it HERE rather than meet it later as a dead address.
+        $pendingSwap = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" -Name PendingFileRenameOperations -ErrorAction SilentlyContinue
+        if ($pendingSwap -or $tailscaleRun.ExitCode -in 3010, 1641) {
+          Write-Warn (Say "tailscale.reboot")
+          $Script:TailscaleOutcome = "needs-restart"
+        } else {
+          Write-Good (Say "tailscale.done")
+          $Script:TailscaleOutcome = "installed"
+        }
       } else {
         Write-Warn (Say "tailscale.failed")
         $Script:TailscaleOutcome = "failed"
