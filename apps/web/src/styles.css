@@ -8848,8 +8848,11 @@ body {
 }
 
 .engine-pair-label {
-  display: grid;
-  gap: 2px;
+  /* One line, always: this was display:grid, which stacked the ? UNDER the
+     word (Oskar, 2026-08-21, screenshot). */
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: var(--fs-md);
   font-weight: 600;
 }
@@ -9041,4 +9044,38 @@ body {
 .sidebar nav button.sidebar-project-new:hover {
   border-color: var(--text-muted);
   color: var(--text);
+}
+
+/* 🔴 A LOW-RESOLUTION PHONE GETS ONE LINE PER ROW TOO. On a small CSS
+   viewport the row's fixed pieces (summary 132px + Test + chevron + toggle)
+   left the name ~60px, so 'Hearing (Voice in)' wrapped inside itself and
+   every row read as two lines (Oskar, 2026-08-21). The gloss and the
+   Methods-count are the secondary halves — on a screen this narrow the name
+   IS the row, and the summary yields width instead of holding a column. */
+@media (max-width: 520px) {
+  .capability-row {
+    gap: 6px;
+  }
+
+  .capability-row-name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .capability-row-name em,
+  .capability-row-users {
+    display: none;
+  }
+
+  .capability-row-engine {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: 108px;
+  }
+
+  .capability-row-test {
+    padding: 5px 7px;
+  }
 }

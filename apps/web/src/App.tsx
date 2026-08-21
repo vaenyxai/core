@@ -25002,7 +25002,22 @@ function SidebarThreadTree({
                     title={t("threads.newInProject")}
                     type="button"
                   >
-                    +
+                    {/* Drawn, not typed: the + glyph sat off-centre because
+                        text metrics centre the em box, not the ink. */}
+                    <svg
+                      aria-hidden="true"
+                      fill="none"
+                      height="11"
+                      viewBox="0 0 12 12"
+                      width="11"
+                    >
+                      <path
+                        d="M6 1.5v9M1.5 6h9"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeWidth="1.4"
+                      />
+                    </svg>
                   </button>
                 }
                 className="project-thread-folder"
