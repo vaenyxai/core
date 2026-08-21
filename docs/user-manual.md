@@ -110,9 +110,9 @@ Read this inside the app: **Settings → Manual**.
 ## 3. Chatting
 
 - **Ask anything** — type in the box at the bottom and press **Send**.
-- **Enter makes a new line; Shift+Enter sends** — the reverse of most chat
-  apps, on purpose: long messages stopped firing off half-typed. On a phone,
-  the Send button is the send.
+- **Enter sends; Shift+Enter makes a new line** — the usual chat convention.
+  While typing Chinese, Enter picks the candidate word and never fires the
+  message. On a phone, the Send button is the send.
 - **Speak instead of typing** — the microphone button. Needs the **Hearing** row
   switched on with an engine (Settings → AI Settings → Capabilities).
 - **Hear the answer** — the ▶ button at the bottom-right of any reply. It reads

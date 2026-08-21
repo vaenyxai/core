@@ -2159,15 +2159,16 @@ function Composer({
         <textarea
           maxLength={10_000}
           onChange={(event) => onValueChange(event.target.value)}
-          // Enter makes a new line; Shift+Enter sends (Oskar, 2026-08-12 —
-          // deliberately the reverse of the common convention: he writes
-          // multi-line messages and Enter kept firing them off half-typed).
-          // IME composition (Chinese/Japanese input) is still ignored:
-          // mid-composition Enter only picks a candidate word.
+          // Enter sends; Shift+Enter makes a new line — the common chat
+          // convention (Oskar, 2026-08-21, reversing his 2026-08-12 call:
+          // 我们是回车发送,Shift 回车换行,这是全局的). One Composer serves
+          // every conversation, so this IS global. IME composition (Chinese
+          // input) is still ignored: mid-composition Enter only picks a
+          // candidate word, never fires the message.
           onKeyDown={(event) => {
             if (
               event.key === "Enter" &&
-              event.shiftKey &&
+              !event.shiftKey &&
               !event.nativeEvent.isComposing
             ) {
               event.preventDefault();
@@ -25362,6 +25363,26 @@ function VaenyxWorkspace({
     };
   }, [resizingSidebar]);
 
+  // The project + makes a conversation THAT EXISTS, immediately: it appears
+  // under the project as an empty New Chat even if nothing is ever typed, and
+  // removing it is a deliberate delete (Oskar, 2026-08-21: 就算没做任何事情,
+  // 这个空对话就保持一个 New Chat…要删除,手动删除). Every press makes
+  // another. The composer flow below stays for the sidebar-wide New button.
+  async function newChatInProject(projectId: string) {
+    try {
+      const conversation = await createAskVaenyxConversation({ projectId });
+      setAskVaenyxConversations((current) => [
+        conversation,
+        ...current.filter((item) => item.id !== conversation.id),
+      ]);
+      await refreshWorkspace();
+      openDraftConversation(conversation.id);
+    } catch {
+      // Nothing was created; the sidebar is unchanged and the press can be
+      // repeated.
+    }
+  }
+
   function startNewChatInProject(projectId: string | null) {
     setSelectedThreadId(null);
     setRequestedConversationId(null);
@@ -25872,7 +25893,7 @@ function VaenyxWorkspace({
               New and the permanent conversation, pushing both down for a list
               that lives on the Scheduled screen anyway. */}
           <SidebarThreadTree
-            onNewChatInProject={startNewChatInProject}
+            onNewChatInProject={(projectId) => void newChatInProject(projectId)}
             inbox={inbox}
             inboxTitle={
               workspace.mode?.agentName?.trim() ||
