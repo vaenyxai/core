@@ -15,7 +15,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { fetchSystemStatus } from "./api.js";
+import { fetchSystemStatus, setAppLanguage } from "./api.js";
 import { isKeyRenderable } from "./capabilities.js";
 
 export type Lang = "en" | "zh";
@@ -55,7 +55,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "common.back": "← Back",
     "settings.language.title": "Language",
     "settings.language.copy":
-      "Choose the app language. Switches instantly and is saved on this device.",
+      "Choose the app language. Switches instantly; notifications follow it too.",
     "settings.language.english": "English",
     "settings.language.chinese": "中文",
     "settings.help.eyebrow": "Help",
@@ -438,7 +438,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "title.help": "帮助与术语",
     "common.back": "← 返回",
     "settings.language.title": "语言",
-    "settings.language.copy": "选择应用语言。即时切换,保存在本设备。",
+    "settings.language.copy": "选择应用语言。即时切换,通知也跟着走。",
     "settings.language.english": "English",
     "settings.language.chinese": "中文",
     "settings.help.eyebrow": "帮助",
@@ -801,6 +801,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     } catch {
       // Persisting is best-effort; the choice still applies this session.
     }
+    // And the instance learns it, so a phone notification is written in the
+    // same language as the app that shows it (Oskar, 2026-08-22).
+    void setAppLanguage(next).catch(() => undefined);
   }, []);
 
   // A gated key returns nothing at all until its capability is on. Enforced

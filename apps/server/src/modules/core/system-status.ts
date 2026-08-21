@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readAppLanguage } from "./app-language.js";
 
 import type { SystemStatus } from "@vaenyx/contracts";
 
@@ -10,18 +9,8 @@ import type { DatabaseHandle } from "../../db/database.js";
 // has never chosen one opens in the same language instead of snapping back to
 // English. Absent or unreadable simply means "no preference".
 function readInstallLanguage(config: AppConfig): "en" | "zh" | null {
-  try {
-    const raw = readFileSync(
-      resolve(config.dataDirectory, "..", "config", "language.json"),
-      "utf8",
-    );
-    const parsed = JSON.parse(raw) as { language?: unknown };
-    return parsed.language === "zh" || parsed.language === "en"
-      ? parsed.language
-      : null;
-  } catch {
-    return null;
-  }
+  // The same file the Settings switch now writes — see app-language.ts.
+  return readAppLanguage(config.dataDirectory);
 }
 
 // Remote access moved to Tailscale Funnel; the old Cloudflare Tunnel

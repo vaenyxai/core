@@ -289,6 +289,7 @@ import {
   readPushPrefs,
   removePushSubscription,
   savePushSubscription,
+  pushLanguage,
   sendPushToAllDevices,
   writePushPrefs,
   type PushPrefs,
@@ -487,6 +488,7 @@ import {
   ModelCatalogueUnavailableError,
 } from "../models/catalogue.js";
 import { readProviderConnections } from "../models/connections.js";
+import { writeAppLanguage } from "../core/app-language.js";
 import {
   connectModelProvider,
   disconnectModelProvider,
@@ -911,7 +913,9 @@ export async function registerGatewayRoutes(
     if (!mode?.lockSettings) return;
     notifyModeBlocked(
       mode.name,
-      `A settings change was blocked in mode "${mode.name}" (${request.method} ${path}).`,
+      pushLanguage() === "zh"
+        ? `模式「${mode.name}」里有一次设置改动被拦下了(${request.method} ${path})。`
+        : `A settings change was blocked in mode "${mode.name}" (${request.method} ${path}).`,
     );
     recordAudit(context.database, {
       actorType: "owner",
@@ -1031,7 +1035,10 @@ export async function registerGatewayRoutes(
     void sendPushToAllDevices(
       context.database,
       {
-        title: `Mode "${modeName}" hit a restriction`,
+        title:
+          pushLanguage() === "zh"
+            ? `模式「${modeName}」碰到了限制`
+            : `Mode "${modeName}" hit a restriction`,
         body,
         url: "/",
       },
@@ -1082,7 +1089,9 @@ export async function registerGatewayRoutes(
       const mode = findMode(context.database, sessionMode);
       notifyModeBlocked(
         mode?.name ?? sessionMode,
-        `Mode "${mode?.name ?? sessionMode}" tried to open content outside its sandbox and was blocked.`,
+        pushLanguage() === "zh"
+          ? `模式「${mode?.name ?? sessionMode}」试图打开它沙盒之外的内容,被拦下了。`
+          : `Mode "${mode?.name ?? sessionMode}" tried to open content outside its sandbox and was blocked.`,
       );
       recordAudit(context.database, {
         actorType: "owner",
@@ -6615,6 +6624,30 @@ export async function registerGatewayRoutes(
     },
   );
 
+  // The Settings language switch lands here, so the server composes its own
+  // sentences — push bodies above all — in the language the Owner reads.
+  // Owner-only and deliberately not on the locked-mode floor: a language is
+  // not a capability.
+  app.post<{ Body: { language: "en" | "zh" } }>(
+    "/v1/system/language",
+    {
+      schema: {
+        body: Type.Object(
+          { language: Type.Union([Type.Literal("en"), Type.Literal("zh")]) },
+          { additionalProperties: false },
+        ),
+        response: { 200: Type.Object({ ok: Type.Boolean() }) },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      writeAppLanguage(context.config.dataDirectory, request.body.language);
+      return { ok: true };
+    },
+  );
+
   app.post<{ Params: { slot: string }; Body: SetEngineChoiceRequest }>(
     "/v1/engines/:slot",
     {
@@ -7853,7 +7886,10 @@ export async function registerGatewayRoutes(
       }
       await sendPushToAllDevices(context.database, {
         title: "Vaenyx",
-        body: "Test notification — pushes are working.",
+        body:
+          pushLanguage() === "zh"
+            ? "测试通知 —— 推送是通的。"
+            : "Test notification — pushes are working.",
         url: "/",
       });
       return getPushDiagnostics(context.database);

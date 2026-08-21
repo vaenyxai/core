@@ -5,6 +5,7 @@
 // relays encrypted end-to-end (RFC 8291); the relay sees no content.
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { readAppLanguage, type AppLanguage } from "./app-language.js";
 
 import webpush from "web-push";
 
@@ -58,6 +59,12 @@ export function writePushPrefs(next: PushPrefs): PushPrefs {
 
 let secretsDirectory: string | null = null;
 let dataDirectory: string | null = null;
+
+/** The language a notification is written in: the app's, as the Owner last
+ *  set it (app-language.ts). English only when nothing was ever chosen. */
+export function pushLanguage(): AppLanguage {
+  return (dataDirectory && readAppLanguage(dataDirectory)) || "en";
+}
 
 // Presence (Owner request 2026-07-22): pages heartbeat while visible, and a
 // scheduled run skips the phone push when someone is actively looking at the
@@ -231,7 +238,9 @@ export async function sendPushToAllDevices(
     return lastSendResult ?? "";
   }
   if (rows.length === 0) {
-    recordLastSend(`${new Date().toISOString()} — nothing sent: no devices subscribed.`);
+    recordLastSend(
+      `${new Date().toISOString()} — nothing sent: no devices subscribed.`,
+    );
     return lastSendResult ?? "";
   }
 
@@ -277,7 +286,9 @@ export async function sendPushToAllDevices(
   );
   recordLastSend(
     `${new Date().toISOString()} — sent ${sent}/${rows.length}${
-      pruned ? `, removed ${pruned} expired (device must re-enable or self-heal)` : ""
+      pruned
+        ? `, removed ${pruned} expired (device must re-enable or self-heal)`
+        : ""
     }${failures.length ? `, failed: ${failures.join("; ").slice(0, 200)}` : ""}`,
   );
   return lastSendResult ?? "";

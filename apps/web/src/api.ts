@@ -2444,6 +2444,17 @@ export function setEngineChoice(
 
 /** The folders this machine really has, offered by name so the Owner does not
  *  have to type an absolute path from memory. */
+/** The Settings language switch, told to the server so its own sentences
+ *  (push notifications above all) follow the Owner's language. */
+export function setAppLanguage(
+  language: "en" | "zh",
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>("/v1/system/language", {
+    method: "POST",
+    body: JSON.stringify({ language }),
+  });
+}
+
 export function fetchFolderSuggestions(
   lang: string,
 ): Promise<{ folders: { label: string; path: string }[] }> {

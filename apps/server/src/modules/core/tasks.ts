@@ -21,6 +21,7 @@ import {
 } from "./ask-vaenyx.js";
 import { listProjectMemories } from "./memory.js";
 import { schedulePresenceAwarePush } from "./push.js";
+import { pushLanguage } from "./push.js";
 import { ensureTaskThread } from "./threads.js";
 
 const GENERAL_PROJECT_ID = "general";
@@ -885,14 +886,21 @@ function finishTaskRun(
       const titleRow = database.sqlite
         .prepare("SELECT title FROM tasks WHERE id = ?")
         .get(id) as { title: string } | undefined;
+      // In the app's language, not English under a Chinese title (Oskar,
+      // 2026-08-22: 改成跟 app 语言走).
+      const zh = pushLanguage() === "zh";
       schedulePresenceAwarePush(
         database,
         {
-          title: titleRow?.title ?? "Vaenyx task",
+          title: titleRow?.title ?? (zh ? "Vaenyx 任务" : "Vaenyx task"),
           body:
             status === "completed"
-              ? "New result is ready."
-              : "The scheduled run failed.",
+              ? zh
+                ? "有新结果了。"
+                : "New result is ready."
+              : zh
+                ? "这次定时运行失败了。"
+                : "The scheduled run failed.",
           // Open the task itself, not the home screen: a notification that
           // announces a result should land on that result.
           url: `/?task=${encodeURIComponent(id)}`,
