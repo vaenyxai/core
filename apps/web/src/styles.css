@@ -9012,8 +9012,9 @@ body {
 
 /* The + at the far right of a Project row: a new chat born into that Project.
    Small on screen, but the ::after pad keeps the touch target honest. */
-/* Must out-rank .sidebar nav button, whose 42px min-height and 12px padding
-   stretched this into an off-centre pill (Oskar, 2026-08-21, screenshot). */
+/* A bare + at the row's edge — no ring around it (Oskar, 2026-08-21: 不要在
+   圈再加一个东西). The button box is invisible; only the stroke shows, and the
+   ::after pad keeps the touch target honest. */
 .sidebar nav button.sidebar-project-new {
   position: relative;
   display: inline-grid;
@@ -9024,14 +9025,10 @@ body {
   height: 20px;
   min-height: 20px;
   padding: 0;
-  border: 0.5px solid var(--border);
-  border-radius: 50%;
+  border: 0;
+  border-radius: var(--r-sm);
   background: none;
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1;
+  color: var(--text-faint);
   cursor: pointer;
 }
 
@@ -9042,7 +9039,6 @@ body {
 }
 
 .sidebar nav button.sidebar-project-new:hover {
-  border-color: var(--text-muted);
   color: var(--text);
 }
 

@@ -6342,6 +6342,7 @@ function AskVaenyxPanel({
     setActiveConversationId(conversationId);
     setLoadingMessages(true);
     setError(null);
+    clearNotificationsFor(`/?chat=${encodeURIComponent(conversationId)}`);
 
     try {
       const loaded = await fetchAskVaenyxMessages(conversationId);
@@ -24555,6 +24556,27 @@ function codexRemoteViewerNote(zh: boolean): string {
     : "The ChatGPT sign-in has to happen on the computer running Vaenyx (its sign-in page finishes by returning to that machine). Press this button in a browser on that computer; from this device, the Claude subscription or an API key connects fine.";
 }
 
+/** Reading a result IS dealing with its notification: opening the thread in
+ *  the app closes the matching tray entry on this device, and no other —
+ *  read one news item, the other stays waiting (Oskar, 2026-08-21). Matched
+ *  by the deep-link url the push carries; best-effort, because a browser
+ *  without the service worker (dev) simply has no tray to clean. */
+function clearNotificationsFor(url: string): void {
+  try {
+    void navigator.serviceWorker?.getRegistration().then((registration) =>
+      registration?.getNotifications().then((shown) => {
+        for (const notification of shown) {
+          const target =
+            (notification.data as { url?: string } | null)?.url ?? "";
+          if (target === url) notification.close();
+        }
+      }),
+    );
+  } catch {
+    // No service worker here; nothing to clean.
+  }
+}
+
 function consumeUnreadCutoff(key: string): string | null {
   if (!pendingUnreadCutoff) return null;
   // Not this thread's note: leave it for its owner. A read thread opened in
@@ -25007,15 +25029,15 @@ function SidebarThreadTree({
                     <svg
                       aria-hidden="true"
                       fill="none"
-                      height="11"
+                      height="13"
                       viewBox="0 0 12 12"
-                      width="11"
+                      width="13"
                     >
                       <path
                         d="M6 1.5v9M1.5 6h9"
                         stroke="currentColor"
                         strokeLinecap="round"
-                        strokeWidth="1.4"
+                        strokeWidth="1.5"
                       />
                     </svg>
                   </button>
@@ -25807,6 +25829,7 @@ function VaenyxWorkspace({
     );
     setSelectedThreadId(threadId ?? taskThread?.id ?? taskId);
     setFocusedTaskId(taskId);
+    clearNotificationsFor(`/?task=${encodeURIComponent(taskId)}`);
     setPortalView("task");
     setScreen("ask-vaenyx");
     setMobileSidebarOpen(false);
