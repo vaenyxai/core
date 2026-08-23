@@ -1357,6 +1357,8 @@ export function stopTurn(key: string): Promise<{ ok: boolean }> {
 export interface PushDiagnostics {
   subscriptions: number;
   lastResult: string | null;
+  /** Newest first; the last dozen. */
+  recentResults: string[];
 }
 
 export function fetchPushStatus(): Promise<PushDiagnostics> {

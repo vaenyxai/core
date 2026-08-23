@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v12";
+const CACHE_NAME = "vaenyx-shell-v13";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -202,7 +202,12 @@ self.addEventListener("push", (event) => {
         type: "window",
         includeUncontrolled: true,
       });
-      if (windows.some((client) => client.visibilityState === "visible")) {
+      // ...unless the push says otherwise: a TEST push exists to be seen,
+      // and swallowing it here made Test look broken (Oskar, 2026-08-23).
+      if (
+        !data.force &&
+        windows.some((client) => client.visibilityState === "visible")
+      ) {
         return;
       }
       const url = data.url || "/";

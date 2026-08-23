@@ -2926,7 +2926,13 @@ function NotificationsPanel() {
       <h3 className="settings-subhead">Check It Works</h3>
       <p className="settings-card-copy">
         Subscribed devices: <strong>{diagnostics?.subscriptions ?? "…"}</strong>
-        {diagnostics?.lastResult ? (
+        {diagnostics && diagnostics.recentResults.length > 1 ? (
+          <ul className="push-send-history">
+            {diagnostics.recentResults.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : diagnostics?.lastResult ? (
           <>
             <br />
             Last send: {diagnostics.lastResult}

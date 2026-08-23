@@ -9075,3 +9075,13 @@ body {
     padding: 5px 7px;
   }
 }
+
+/* The last dozen push outcomes, newest first — so a Test pressed at 07:10
+   cannot erase what happened to the 07:04 scheduled push. */
+.push-send-history {
+  margin: 0;
+  padding-left: 1.1em;
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+  line-height: 1.5;
+}

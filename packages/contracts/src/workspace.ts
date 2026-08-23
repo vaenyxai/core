@@ -1180,6 +1180,8 @@ export const PushDiagnosticsSchema = Type.Object(
   {
     subscriptions: Type.Integer({ minimum: 0 }),
     lastResult: Type.Union([Type.String(), Type.Null()]),
+    /** Newest first; the last dozen, so a Test cannot erase a morning. */
+    recentResults: Type.Array(Type.String()),
   },
   { additionalProperties: false },
 );

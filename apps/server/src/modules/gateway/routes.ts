@@ -7891,6 +7891,11 @@ export async function registerGatewayRoutes(
             ? "测试通知 —— 推送是通的。"
             : "Test notification — pushes are working.",
         url: "/",
+        // A test exists to be SEEN. Without this, pressing Test on the phone
+        // with the app open showed nothing — the service worker's "never
+        // notify over the app you are looking at" rule ate it, and it read
+        // as broken (Oskar, 2026-08-23).
+        force: true,
       });
       return getPushDiagnostics(context.database);
     },

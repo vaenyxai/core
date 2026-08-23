@@ -86,7 +86,7 @@ const UNSEEN_WAIT_MS = 35_000;
 
 export function schedulePresenceAwarePush(
   database: DatabaseHandle,
-  payload: { title: string; body: string; url: string },
+  payload: PushPayload,
   category: PushCategory = "test",
 ): void {
   const completedAt = Date.now();
@@ -114,27 +114,56 @@ export function initPushService(config: {
 
 // The last send's outcome is written to disk: the server restarts on every
 // deploy, and an in-memory-only record made push silences undiagnosable.
+/** What a push carries. `force` is the test push's word: show it even over a
+ *  visible window, because "press Test, see nothing" reads as broken — which
+ *  is exactly how the Owner read it (2026-08-23). */
+export interface PushPayload {
+  title: string;
+  body: string;
+  url: string;
+  force?: boolean;
+}
+
+// The last dozen outcomes, newest first. One overwritten line was not enough:
+// a Test pressed at 07:10 erased the only record of what happened to the
+// 07:04 scheduled push, and the morning could not be diagnosed afterwards
+// (2026-08-23).
+const SEND_HISTORY = 12;
+
 function recordLastSend(result: string): void {
   lastSendResult = result;
   if (!dataDirectory) return;
   try {
-    writeFileSync(resolve(dataDirectory, LAST_SEND_FILENAME), `${result}\n`);
+    const path = resolve(dataDirectory, LAST_SEND_FILENAME);
+    let previous: string[] = [];
+    try {
+      previous = readFileSync(path, "utf8").split("\n").filter(Boolean);
+    } catch {
+      // First record.
+    }
+    writeFileSync(
+      path,
+      `${[result, ...previous].slice(0, SEND_HISTORY).join("\n")}\n`,
+    );
   } catch {
     // Best-effort.
   }
 }
 
-function readLastSend(): string | null {
-  if (lastSendResult) return lastSendResult;
-  if (!dataDirectory) return null;
+function readSendHistory(): string[] {
+  if (!dataDirectory) return lastSendResult ? [lastSendResult] : [];
   try {
-    return (
-      readFileSync(resolve(dataDirectory, LAST_SEND_FILENAME), "utf8").trim() ||
-      null
-    );
+    return readFileSync(resolve(dataDirectory, LAST_SEND_FILENAME), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .slice(0, SEND_HISTORY);
   } catch {
-    return null;
+    return lastSendResult ? [lastSendResult] : [];
   }
+}
+
+function readLastSend(): string | null {
+  return readSendHistory()[0] ?? lastSendResult ?? null;
 }
 
 interface VapidKeys {
@@ -195,6 +224,7 @@ let lastSendResult: string | null = null;
 export function getPushDiagnostics(database: DatabaseHandle): {
   subscriptions: number;
   lastResult: string | null;
+  recentResults: string[];
 } {
   let subscriptions = 0;
   try {
@@ -206,7 +236,11 @@ export function getPushDiagnostics(database: DatabaseHandle): {
   } catch {
     // Table unavailable; report zero.
   }
-  return { subscriptions, lastResult: readLastSend() };
+  return {
+    subscriptions,
+    lastResult: readLastSend(),
+    recentResults: readSendHistory(),
+  };
 }
 
 // Best-effort broadcast to every subscribed device. Dead subscriptions
@@ -214,7 +248,7 @@ export function getPushDiagnostics(database: DatabaseHandle): {
 // recorded for the Notifications screen but never break the caller.
 export async function sendPushToAllDevices(
   database: DatabaseHandle,
-  payload: { title: string; body: string; url: string },
+  payload: PushPayload,
   category: PushCategory = "test",
 ): Promise<string> {
   if (category !== "test" && !readPushPrefs()[category]) {
