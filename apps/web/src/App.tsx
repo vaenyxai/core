@@ -8550,10 +8550,21 @@ This conversation is its home — feed it something to try it, and ask for chang
   async function sendFocusedTaskMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!focusedTaskId) return;
+    // 🔴 THE BOX EMPTIES ON SEND, NOT ON REPLY. The clear used to sit AFTER the
+    // await, and sendTaskContent only resolves once the whole reply has
+    // streamed — so the words the Owner just sent sat in the composer for the
+    // entire answer, reading as "it did not send" (Oskar, 2026-08-24).
     // No content check: a photo or a PDF on its own is a whole message, and
     // sendTaskContent works out what to call it.
-    await sendTaskContent(taskPrompt.trim());
+    const content = taskPrompt.trim();
     setTaskPrompt("");
+    try {
+      await sendTaskContent(content);
+    } catch (error) {
+      // Nothing was sent: give the words back rather than losing them.
+      setTaskPrompt((current) => (current ? current : content));
+      throw error;
+    }
   }
 
   function retryTaskMessage(list: AskVaenyxMessage[], failedIndex: number) {

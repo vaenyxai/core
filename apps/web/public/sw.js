@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v13";
+const CACHE_NAME = "vaenyx-shell-v14";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -195,21 +195,14 @@ self.addEventListener("push", (event) => {
   }
   event.waitUntil(
     (async () => {
-      // The app is on this screen RIGHT NOW (Oskar, 2026-08-12): the result
-      // is already in front of the Owner, and a banner over the very app it
-      // is about is noise.
-      const windows = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
-      // ...unless the push says otherwise: a TEST push exists to be seen,
-      // and swallowing it here made Test look broken (Oskar, 2026-08-23).
-      if (
-        !data.force &&
-        windows.some((client) => client.visibilityState === "visible")
-      ) {
-        return;
-      }
+      // 🔴 ONE GATE, AND IT IS THE SERVER'S. This used to skip any push while
+      // a Vaenyx window was visible on this device. That was a SECOND gate on
+      // top of the server's: schedulePresenceAwarePush already waits ~35s and
+      // drops the push if any device reported looking at the app. So a push
+      // that arrived here had already survived that decision — and this threw
+      // it away anyway. Both of the morning news pushes were sent 1/1 by the
+      // server on 2026-08-24 and neither was ever seen (Oskar). A notification
+      // the server decided to send is now always shown.
       const url = data.url || "/";
       await self.registration.showNotification(data.title || "Vaenyx", {
         body: data.body || "",
