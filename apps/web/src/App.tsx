@@ -4595,6 +4595,32 @@ function ModesPanel() {
   // Draft names per device; committed on blur/Enter.
   const [deviceNames, setDeviceNames] = useState<Record<string, string>>({});
 
+  // "Which one is which" (Oskar, 2026-08-30: 根本不知道哪台是哪台) — three
+  // Androids all called "Android · Chrome" are told apart by WHEN they last
+  // opened the app: every open refreshes the row, the list is newest-first,
+  // so the device in your hand sits at the top saying "just now".
+  function deviceLastSeen(iso: string): string {
+    const then = new Date(iso).getTime();
+    if (Number.isNaN(then)) return "";
+    const minutes = Math.floor((Date.now() - then) / 60_000);
+    if (minutes < 2) return lang === "zh" ? "刚刚在用" : "active just now";
+    if (minutes < 60)
+      return lang === "zh"
+        ? `${minutes} 分钟前用过`
+        : `active ${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 48)
+      return lang === "zh"
+        ? `${hours} 小时前用过`
+        : `active ${hours} h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30)
+      return lang === "zh" ? `${days} 天前用过` : `active ${days} days ago`;
+    return lang === "zh"
+      ? `${new Date(iso).toLocaleDateString("zh-CN")} 之后没用过`
+      : `not seen since ${new Date(iso).toLocaleDateString()}`;
+  }
+
   async function renameDevice(id: string) {
     const next = (deviceNames[id] ?? "").trim();
     const current = devices.find((device) => device.deviceId === id);
@@ -4945,6 +4971,11 @@ function ModesPanel() {
           A device set to open in a mode lands there every time the app starts.
           Combined with that mode's Exit PIN, the device stays in it.
         </p>
+        <p className="library-note">
+          {lang === "zh"
+            ? "分不清哪台是哪台?拿起那台设备打开 Vaenyx,再回到这页 —— 它会排在最上面、写着「刚刚在用」,自己这台还标着 This Device。认出来就先起个名字。"
+            : "Not sure which is which? Pick up the device, open Vaenyx on it, and come back to this page — it rises to the top saying \"active just now\" (and the one you are reading this on says This Device). Once you can tell, give it a name."}
+        </p>
         {devices.length === 0 ? (
           <p className="library-note">
             No other devices have opened Vaenyx yet.
@@ -4967,6 +4998,9 @@ function ModesPanel() {
                     Forget
                   </button>
                 </div>
+                <p className="library-note">
+                  {deviceLastSeen(device.updatedAt)}
+                </p>
                 {/* Two Android phones look identical without a name of
                     their own (Oskar, dev.172). */}
                 <label className="chat-font-field">

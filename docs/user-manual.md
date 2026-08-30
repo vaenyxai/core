@@ -701,7 +701,10 @@ Read this inside the app: **Settings → Manual**.
     Vaenyx says the mode does not allow it. It never tells whoever is holding
     the device to go and change a setting, because they cannot.
 - **Bind a device** — Settings → Modes → Devices, so a given device always opens
-  in that mode.
+  in that mode. Devices with the same generic label are told apart by when
+  they last opened the app: pick up the one you mean, open Vaenyx on it, and
+  it rises to the top of the list saying "active just now" — then give it a
+  name of its own.
 - **Notifications stay in their mode.** A device only receives the pushes that
   belong to the mode it is bound to: a reply or task result inside a mode
   buzzes that mode's devices, and your own devices hear nothing of it — and
