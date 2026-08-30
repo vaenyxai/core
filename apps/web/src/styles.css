@@ -645,6 +645,18 @@ textarea::placeholder {
   padding: 0 7px;
 }
 
+/* Which mode a paired device is in — under its name, readable at a glance,
+   never fine print (Oskar, 2026-08-30). */
+.device-mode-line {
+  margin: 6px 0 2px;
+  font-size: 14px;
+  color: #b5b1a6;
+}
+
+.device-mode-line strong {
+  color: #eeebe2;
+}
+
 /* The device's own (Owner-given) name, so a tablet in hand can say which one
    it is. Quiet on purpose: it identifies, it does not decorate. */
 .device-name-chip {

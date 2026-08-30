@@ -4983,21 +4983,29 @@ function ModesPanel() {
                     Forget
                   </button>
                 </div>
+                {/* WHICH MODE, right under the name and unmissable (Oskar,
+                    2026-08-30: 请在名字下面显示出它的 Mode) — it was the
+                    tail of the info line and read as fine print. */}
+                <p className="device-mode-line">
+                  {device.currentKnown ? (
+                    <>
+                      {lang === "zh" ? "现在在:" : "Now in: "}
+                      <strong>
+                        {device.currentModeName ??
+                          (lang === "zh" ? "User Mode(无限制)" : "User Mode")}
+                      </strong>
+                    </>
+                  ) : lang === "zh" ? (
+                    "还没报告自己的模式 —— 在那台设备上打开一次 Vaenyx 就会显示。"
+                  ) : (
+                    "Has not reported its mode yet — one open of Vaenyx on it and this fills in."
+                  )}
+                </p>
                 <p className="library-note">
                   {/* Hardware model first when the browser told us one
                       (Android Chrome does; Apple's browsers do not). */}
                   {device.model ? `${device.model} · ` : ""}
                   {deviceLastSeen(device.updatedAt)}
-                  {/* Where the device IS right now — as reported by the
-                      device itself — beside where it is set to open, so the
-                      two can no longer look like a contradiction (Oskar,
-                      2026-08-30: 那台打开是 Yen Mode,为什么我电脑看到是
-                      User Mode). */}
-                  {device.currentKnown
-                    ? lang === "zh"
-                      ? ` · 现在在:${device.currentModeName ?? "User Mode"}`
-                      : ` · now in ${device.currentModeName ?? "User Mode"}`
-                    : ""}
                 </p>
                 {/* Two Android phones look identical without a name of
                     their own (Oskar, dev.172). */}
