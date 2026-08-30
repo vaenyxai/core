@@ -297,18 +297,14 @@ export function setDeviceMode(
     reportedCurrent === undefined ? storedCurrent : reportedCurrent;
   let modeId =
     input.modeId === undefined ? (existing?.mode_id ?? null) : input.modeId;
-  // 🔴 "Opens in" FOLLOWS A CHANGE MADE ON THE DEVICE (Oskar, 2026-08-30:
-  // 是不是应该自动的…不用每一次去这里点设置). Entering a mode on the device
-  // binds it there; exiting unbinds it — the device reopens in whatever state
-  // it was left in, no trip to Settings. A mere reload repeats the SAME
-  // report and changes nothing, which is what protects a choice the Owner
-  // just made remotely on the Devices screen: it stands until the device
-  // itself actually switches next.
-  if (
-    input.modeId === undefined &&
-    reportedCurrent !== undefined &&
-    reportedCurrent !== storedCurrent
-  ) {
+  // 🔴 THE DEVICE SETS ITS OWN MODE (Oskar, 2026-08-30: 每台设备自行设置模式,
+  // 你在这里只是提供信息). Where a device reopens IS wherever it currently
+  // is: every report aligns the open-in mode with the reported one, so
+  // entering a mode on the device keeps it there across opens and exiting
+  // releases it. There is no chooser to fight with any more — the Devices
+  // screen only reports. (The API still accepts an explicit modeId for
+  // compatibility; nothing in the UI sends one.)
+  if (input.modeId === undefined && reportedCurrent !== undefined) {
     modeId = reportedCurrent === "" ? null : reportedCurrent;
   }
   database.sqlite

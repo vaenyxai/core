@@ -4651,22 +4651,6 @@ function ModesPanel() {
       .catch(() => undefined);
   }, []);
 
-  async function applyDeviceDefault(id: string, modeId: string | null) {
-    setBusy(true);
-    setError(null);
-    try {
-      setDevices(await setDeviceMode(id, { modeId }));
-    } catch (nextError) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : "Could not set the device's mode.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function forgetDevice(id: string) {
     setBusy(true);
     setError(null);
@@ -4966,15 +4950,16 @@ function ModesPanel() {
 
       <section className="settings-card">
         <p className="eyebrow">Paired devices</p>
-        <h2>Which Mode Each Device Opens In</h2>
+        <h2>{lang === "zh" ? "每台设备在哪个模式" : "Where Each Device Is"}</h2>
         <p className="settings-card-copy">
-          A device set to open in a mode lands there every time the app starts.
-          Combined with that mode's Exit PIN, the device stays in it.
+          {lang === "zh"
+            ? "模式在设备上自己进、自己退:进了某个模式,它以后就从那个模式打开;配上退出 PIN,设备就一直留在里面。这页只显示情况,不做选择。"
+            : "A device sets its own mode by entering or exiting one on the device: enter a mode and it reopens there from then on; with that mode's Exit PIN it stays in. This page reports — it does not choose."}
         </p>
         <p className="library-note">
           {lang === "zh"
-            ? "分不清哪台是哪台?拿起那台设备打开 Vaenyx,再回到这页 —— 它会排在最上面、写着「刚刚在用」,自己这台还标着 This Device。认出来就先起个名字。"
-            : "Not sure which is which? Pick up the device, open Vaenyx on it, and come back to this page — it rises to the top saying \"active just now\" (and the one you are reading this on says This Device). Once you can tell, give it a name."}
+            ? "分不清哪台是哪台?拿起那台设备打开 Vaenyx,再回到这页 —— 它会排在最上面、写着「刚刚在用」,自己这台还标着 This Device。认出来就先起个名字。忘了某个模式的进入/退出 PIN?在上面那个模式的卡片上按 Edit,直接设一个新的(只有 User Mode 能改)。"
+            : "Not sure which is which? Pick up the device, open Vaenyx on it, and come back to this page — it rises to the top saying \"active just now\" (and the one you are reading this on says This Device). Once you can tell, give it a name. Forgot a mode's Enter/Exit PIN? Edit that mode's card above and set a new one — only User Mode can."}
         </p>
         {devices.length === 0 ? (
           <p className="library-note">
@@ -5036,36 +5021,19 @@ function ModesPanel() {
                     value={deviceNames[device.deviceId] ?? device.label}
                   />
                 </label>
-                <div className="chat-font-field">
-                  <span>Opens in</span>
-                  <Picker
-                    ariaLabel="Opens in"
-                    className="task-select"
-                    disabled={busy}
-                    onChange={(next) =>
-                      void applyDeviceDefault(device.deviceId, next || null)
-                    }
-                    options={[
-                      { label: "User Mode (no restriction)", value: "" },
-                      ...modes.map((mode) => ({
-                        label: mode.name,
-                        value: mode.id,
-                      })),
-                    ]}
-                    value={device.modeId ?? ""}
-                  />
-                </div>
-                {device.currentKnown &&
-                device.currentModeId !== (device.modeId ?? null) ? (
-                  // Rare since Opens-in follows switches made on the device:
-                  // seen only right after a remote change here, before the
-                  // device reopens and lands where Opens-in now points.
-                  <p className="library-note">
-                    {lang === "zh"
-                      ? `它现在还在${device.currentModeName ? `「${device.currentModeName}」` : " User Mode"};下次打开会进上面设的那个。`
-                      : `Right now it is still in ${device.currentModeName ?? "User Mode"}; on its next open it will land in the setting above.`}
-                  </p>
-                ) : null}
+                {/* No chooser here (Oskar, 2026-08-30: 不应该让我们选择,
+                    每台设备自行设置模式) — the device's mode is set ON the
+                    device by entering or exiting a mode, and it reopens
+                    wherever it was left. This screen only reports. */}
+                <p className="library-note">
+                  {device.currentKnown
+                    ? lang === "zh"
+                      ? "模式在设备上自己进/退;它下次打开就回到「现在在」的那个模式。"
+                      : "The mode is entered and exited on the device itself; it reopens wherever it was left."
+                    : lang === "zh"
+                      ? "这台设备还没在新版本里打开过 —— 打开一次它就会报告自己的模式。"
+                      : "This device has not opened the new build yet — one open and it will report its mode."}
+                </p>
               </article>
             ))}
           </div>

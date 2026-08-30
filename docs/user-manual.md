@@ -700,16 +700,18 @@ Read this inside the app: **Settings → Manual**.
   - **What it looks like from inside** — the thing simply does not happen, and
     Vaenyx says the mode does not allow it. It never tells whoever is holding
     the device to go and change a setting, because they cannot.
-- **Bind a device** — Settings → Modes → Devices. *Opens in* follows the
-  device by itself: enter a mode on the device and it opens there from then
-  on; exit the mode and it opens in User Mode again — no trip to this screen.
-  The picker here is the remote override, and a choice made here stands until
-  the device itself next switches. Each card says where the device **is right
-  now**, when it was last active, and — where the browser reports one — its
-  hardware model. Devices with the same generic label are told apart by
-  picking one up and opening Vaenyx on it: it rises to the top saying "active
-  just now" — then give it a name of its own. A named device shows its own
-  name under the logo, so you can tell from the device too.
+- **A device sets its own mode** — enter a mode on the device and it reopens
+  there from then on; exit it (Exit PIN, if set) and it reopens in User Mode.
+  Settings → Modes → Devices only **reports**: where each device is right
+  now, when it was last active, and — where the browser reports one — its
+  hardware model. There is nothing to choose there. Devices with the same
+  generic label are told apart by picking one up and opening Vaenyx on it:
+  it rises to the top saying "active just now" — then give it a name of its
+  own. A named device shows its own name under the logo, so you can tell
+  from the device too.
+- **Forgot a mode's PIN?** From User Mode, edit that mode's card and set a
+  new Enter/Exit PIN (or tick Remove to clear it). Only User Mode can — a
+  forgotten PIN never locks you out of your own machine.
 - **Notifications stay in their mode.** A device only receives the pushes that
   belong to the mode it is bound to: a reply or task result inside a mode
   buzzes that mode's devices, and your own devices hear nothing of it — and
