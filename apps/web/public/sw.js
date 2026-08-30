@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v15";
+const CACHE_NAME = "vaenyx-shell-v16";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -168,12 +168,26 @@ function bootWaitPage() {
     "]).then(function(r){var g=r[0],c=r[1];",
     "if(g===null&&c===null){verdict(",
     "'<p><b>Diagnosis: this device has no internet right now.</b><br>诊断:这台设备现在没有网。</p>');return}",
-    "if(g===0||c===0){var use=g===0?'dns.google (8.8.8.8)':'1.1.1.1';verdict(",
-    "'<p><b>Diagnosis: the address EXISTS — this device&#39;s DNS is answering wrongly.</b> ',",
-    "'Point this device at <code>'+use+'</code>: Android — Settings → Network → Private DNS → <code>dns.google</code>; ',",
+    // One resolver answers, the other says "does not exist": name the broken
+    // one and LEAD with its own public clear-cache page — the ~1-minute fix
+    // anyone in the household can do (Oskar, 2026-08-30: 发现 DNS 有问题时…
+    // 两个之间选择 — the switching no page may do to a device's settings, a
+    // person can do to the resolver's cache instead). Changing the device's
+    // DNS stays as the second option. This page already polls the door every
+    // two seconds and reloads itself the moment it answers.
+    "if(g===0||c===0){var use=g===0?'dns.google (8.8.8.8)':'1.1.1.1';",
+    "var bad=g===0?'Cloudflare (1.1.1.1)':'Google (8.8.8.8)';",
+    "var purge=g===0?'https://one.one.one.one/purge-cache/':'https://dns.google/cache';",
+    "var link='<a href=\"'+purge+'\" target=\"_blank\" rel=\"noopener\" style=\"color:inherit\">'+purge.replace('https://','')+'</a>';",
+    "verdict(",
+    "'<p><b>Diagnosis: the address EXISTS — the public resolver '+bad+' is answering wrongly for it.</b><br>',",
+    "'Fastest fix (~1 minute): open '+link+', enter <code>'+location.hostname+'</code> (record type A), press the button, wait half a minute — this page reloads by itself the moment the door answers. ',",
+    "'Or point this device at <code>'+use+'</code>: Android — Settings → Network → Private DNS → <code>dns.google</code>; ',",
     "'iPhone/iPad — Wi-Fi → (i) → Configure DNS → Manual → <code>8.8.8.8</code>; ',",
     "'Windows/Mac — network adapter DNS → <code>8.8.8.8</code>.<br>',",
-    "'<b>诊断:地址其实存在 —— 是这台设备用的 DNS 在给错答案。</b>把这台设备指到 <code>'+use+'</code>:',",
+    "'<b>诊断:地址其实存在 —— 是 '+bad+' 这家公共 DNS 在答错。</b><br>',",
+    "'最快修法(约 1 分钟):打开 '+link+',填入 <code>'+location.hostname+'</code>(记录类型选 A),按一下清除,等半分钟 —— 门一通,本页会自己刷新。',",
+    "'或者把这台设备指到 <code>'+use+'</code>:',",
     "'安卓 — 设置 → 网络 → 私人 DNS → 填 <code>dns.google</code>;',",
     "'iPhone/iPad — Wi-Fi → (i) → 配置 DNS → 手动 → 加 <code>8.8.8.8</code>;',",
     "'电脑 — 网卡 DNS 填 <code>8.8.8.8</code>。</p>');return}",

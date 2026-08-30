@@ -467,9 +467,16 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
           ? "Google (8.8.8.8)"
           : "Cloudflare (1.1.1.1)";
     const zh = pushLanguage() === "zh";
+    // The one-minute fix, named per culprit: both big resolvers run a public
+    // "clear this name from our cache" page, and pressing it heals EVERY
+    // device that uses that resolver — not just the one in your hand.
+    const purge =
+      google >= 2
+        ? "dns.google/cache"
+        : "one.one.one.one/purge-cache";
     const warning = zh
-      ? `${culprit} 这家公共 DNS 正把你的远程地址记成「不存在」。用它解析的设备暂时打不开 Vaenyx —— 设备没坏,通常几小时自愈;急用就把那台设备的 DNS 换一家。`
-      : `The public resolver ${culprit} is currently answering "does not exist" for your remote address. Devices using it cannot open Vaenyx for now — nothing is broken on them, and it usually clears within hours; to get in sooner, point that device at a different DNS.`;
+      ? `${culprit} 这家公共 DNS 正把你的远程地址记成「不存在」。用它解析的设备暂时打不开 Vaenyx —— 设备没坏,通常几小时自愈。最快修法:打开 ${purge},填入远程地址清一下,半分钟生效;或把那台设备的 DNS 换一家。`
+      : `The public resolver ${culprit} is currently answering "does not exist" for your remote address. Devices using it cannot open Vaenyx for now — nothing is broken on them, and it usually clears within hours. Fastest fix: open ${purge}, enter the remote address and clear it (takes effect in ~half a minute); or point that device at a different DNS.`;
     // The full warning lives in the Owner's main conversation (2026-08-30:
     // 任何通知都是主对话告诉我); the push announces it, to the Owner's own
     // (User Mode) devices.
