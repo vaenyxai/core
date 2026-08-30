@@ -73,7 +73,7 @@ describe("telling a fact proposal from a profile proposal", () => {
     // wrong table with no error anywhere.
     const database = testDatabase();
     seed(database, "fact-1", "home.address", "12 Example St");
-    const listed = listVaenyxMeCandidates(database);
+    const listed = listVaenyxMeCandidates(database, null);
     const fact = listed.find((entry) => entry.id === "fact-1");
     expect(fact?.proposedSlot).toBe("home.address");
     expect(fact?.proposedValue).toBe("12 Example St");
@@ -83,7 +83,7 @@ describe("telling a fact proposal from a profile proposal", () => {
   it("leaves a profile proposal with no slot, which is how it is recognised", () => {
     const database = testDatabase();
     seed(database, "trait-1", null, null);
-    const listed = listVaenyxMeCandidates(database);
+    const listed = listVaenyxMeCandidates(database, null);
     const trait = listed.find((entry) => entry.id === "trait-1");
     expect(trait?.proposedSlot).toBeNull();
     expect(trait?.proposedValue).toBeNull();
@@ -93,7 +93,7 @@ describe("telling a fact proposal from a profile proposal", () => {
     const database = testDatabase();
     seed(database, "fact-1", "home.address", "12 Example St");
     seed(database, "trait-1", null, null);
-    const listed = listVaenyxMeCandidates(database);
+    const listed = listVaenyxMeCandidates(database, null);
     expect(listed.filter((entry) => entry.proposedSlot).length).toBe(1);
     expect(listed.filter((entry) => !entry.proposedSlot).length).toBe(1);
   });

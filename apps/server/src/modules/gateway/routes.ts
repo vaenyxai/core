@@ -1429,7 +1429,12 @@ export async function registerGatewayRoutes(
       if (!owner)
         return reply.code(401).send({ error: "Owner login required." });
       try {
-        approveFactCandidate(context.database, request.params.id, owner.id);
+        approveFactCandidate(
+          context.database,
+          request.params.id,
+          owner.id,
+          owner.modeId ?? null,
+        );
       } catch (error) {
         return reply.code(400).send({
           error:
@@ -4052,11 +4057,14 @@ export async function registerGatewayRoutes(
       },
     },
     async (request, reply) => {
-      if (!requireOwner(request)) {
+      const owner = requireOwner(request);
+      if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
 
-      return listVaenyxMeCandidates(context.database);
+      // The session's own Mode only (Oskar, 2026-08-30: 不同的 mode 要分开) —
+      // the same scope the badge's count always had.
+      return listVaenyxMeCandidates(context.database, owner.modeId ?? null);
     },
   );
 
@@ -4080,7 +4088,7 @@ export async function registerGatewayRoutes(
       // member's chats to build a picture of the Owner is not oversight, it is
       // the wrong person's data in the wrong place.
       await scanVaenyxMe(context.database, owner.id, owner.modeId ?? null);
-      return listVaenyxMeCandidates(context.database);
+      return listVaenyxMeCandidates(context.database, owner.modeId ?? null);
     },
   );
 
@@ -4114,9 +4122,11 @@ export async function registerGatewayRoutes(
         });
       }
 
+      // The session decides the Mode a hand-made card belongs to — never the
+      // body, or a Mode could file cards into another Mode's review pile.
       const candidate = createVaenyxMeCandidate(
         context.database,
-        request.body,
+        { ...request.body, modeId: owner.modeId ?? null },
         owner.id,
       );
       recordAudit(context.database, {
@@ -4174,6 +4184,7 @@ export async function registerGatewayRoutes(
           request.params.id,
           request.body,
           owner.id,
+          owner.modeId ?? null,
         );
         recordAudit(context.database, {
           actorType: "owner",
@@ -4252,6 +4263,7 @@ export async function registerGatewayRoutes(
           request.params.id,
           request.body,
           owner.id,
+          owner.modeId ?? null,
         );
         recordAudit(context.database, {
           actorType: "owner",
@@ -4313,6 +4325,7 @@ export async function registerGatewayRoutes(
           context.database,
           request.params.id,
           owner.id,
+          owner.modeId ?? null,
         );
         recordAudit(context.database, {
           actorType: "owner",
@@ -13240,10 +13253,22 @@ export async function registerGatewayRoutes(
       },
     },
     async (request, reply) => {
-      if (!requireOwner(request)) {
+      const owner = requireOwner(request);
+      if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return getInstanceSettings(context.config, context.database);
+      const settings = getInstanceSettings(context.config, context.database);
+      // Inside a Custom Mode the effective agent name is the MODE's own —
+      // the same resolution the chat header uses, so Settings can never show
+      // a different name from the conversation beside it (Oskar, 2026-08-30:
+      // 改成拿布布了,setting 里面显示的还是另一个名字).
+      if (owner.modeId) {
+        const mode = findMode(context.database, owner.modeId);
+        if (mode?.agentName?.trim()) {
+          return { ...settings, agentName: mode.agentName.trim() };
+        }
+      }
+      return settings;
     },
   );
 
@@ -13268,6 +13293,38 @@ export async function registerGatewayRoutes(
 
       if (!request.body.instanceName.trim()) {
         return reply.code(400).send({ error: "Instance name is required." });
+      }
+
+      // Inside a Custom Mode, "rename the assistant" means THIS MODE's
+      // assistant — the write lands on the mode, never on the household-wide
+      // name (dev.170 kept the field available in a locked mode; 2026-08-30
+      // pins down what it edits there). The instance's own name stays a User
+      // Mode decision: a changed one is refused by name, not ignored.
+      if (owner.modeId) {
+        const current = getInstanceSettings(context.config, context.database);
+        if (request.body.instanceName.trim() !== current.instanceName) {
+          return reply.code(403).send({
+            error:
+              "The instance name is set from User Mode; this mode can only rename its own assistant.",
+          });
+        }
+        const mode = updateMode(context.database, owner.modeId, {
+          agentName: request.body.agentName?.trim() ?? "",
+        });
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "mode.agent.renamed",
+          decision: "allowed",
+          reason: `The mode's assistant was renamed to "${mode.agentName || current.agentName}" from inside the mode.`,
+          resourceType: "mode",
+          resourceId: owner.modeId,
+        });
+        return {
+          ...current,
+          agentName: mode.agentName?.trim() || current.agentName,
+        };
       }
 
       const settings = updateInstanceSettings(

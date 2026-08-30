@@ -175,11 +175,11 @@ function cleanOptionalText(value: string | undefined): string | null {
 function getCandidateRow(
   database: DatabaseHandle,
   candidateId: string,
-): VaenyxMeCandidateRow | null {
+): (VaenyxMeCandidateRow & FactCandidateColumns) | null {
   return (
-    (database.sqlite
-      .prepare(`${candidateSelect} WHERE id = ?`)
-      .get(candidateId) as VaenyxMeCandidateRow | undefined) ?? null
+    (database.sqlite.prepare(`${candidateSelect} WHERE id = ?`).get(candidateId) as
+      | (VaenyxMeCandidateRow & FactCandidateColumns)
+      | undefined) ?? null
   );
 }
 
@@ -210,11 +210,17 @@ export function getVaenyxMeProfile(database: DatabaseHandle): VaenyxMeProfile {
 
 export function listVaenyxMeCandidates(
   database: DatabaseHandle,
+  // The session's own Mode, and ONLY its candidates come back (Oskar,
+  // 2026-08-30: 使用过程中的所有的这些不同的 mode 是要分开的). The waiting
+  // COUNT was born scoped; this list simply never was, so a Custom Mode's
+  // Review panel showed the whole household's cards. IS, not =, because User
+  // Mode is NULL.
+  modeId: string | null,
 ): VaenyxMeCandidate[] {
   const rows = database.sqlite
     .prepare(
       `${candidateSelect}
-       WHERE status != 'deleted'
+       WHERE status != 'deleted' AND mode_id IS ?
        ORDER BY
          CASE status
            WHEN 'pending_review' THEN 0
@@ -224,7 +230,7 @@ export function listVaenyxMeCandidates(
          END,
          created_at DESC`,
     )
-    .all() as unknown as (FactCandidateColumns & VaenyxMeCandidateRow)[];
+    .all(modeId) as unknown as (FactCandidateColumns & VaenyxMeCandidateRow)[];
 
   const currentValueOf = database.sqlite.prepare(
     `SELECT value FROM facts
@@ -717,9 +723,16 @@ export function approveVaenyxMeCandidate(
   candidateId: string,
   input: ApproveVaenyxMeCandidateRequest,
   ownerId: string,
+  // The session's Mode. A candidate belonging to another Mode answers
+  // NOT_FOUND — same sandbox rule as conversations and tasks: what a Mode
+  // cannot list, it cannot reach by id either.
+  sessionModeId: string | null,
 ): { candidate: VaenyxMeCandidate; itemId: string } {
   const candidate = getCandidateRow(database, candidateId);
 
+  if (candidate && (candidate.mode_id ?? null) !== sessionModeId) {
+    throw new Error("VAENYX_ME_CANDIDATE_NOT_FOUND");
+  }
   if (!candidate || candidate.status === "deleted") {
     throw new Error("VAENYX_ME_CANDIDATE_NOT_FOUND");
   }
@@ -832,9 +845,13 @@ export function rejectVaenyxMeCandidate(
   candidateId: string,
   input: RejectVaenyxMeCandidateRequest,
   ownerId: string,
+  sessionModeId: string | null,
 ): VaenyxMeCandidate {
   const candidate = getCandidateRow(database, candidateId);
 
+  if (candidate && (candidate.mode_id ?? null) !== sessionModeId) {
+    throw new Error("VAENYX_ME_CANDIDATE_NOT_FOUND");
+  }
   if (!candidate || candidate.status === "deleted") {
     throw new Error("VAENYX_ME_CANDIDATE_NOT_FOUND");
   }
@@ -860,9 +877,13 @@ export function deleteVaenyxMeCandidate(
   database: DatabaseHandle,
   candidateId: string,
   ownerId: string,
+  sessionModeId: string | null,
 ): VaenyxMeCandidate {
   const candidate = getCandidateRow(database, candidateId);
 
+  if (candidate && (candidate.mode_id ?? null) !== sessionModeId) {
+    throw new Error("VAENYX_ME_CANDIDATE_NOT_FOUND");
+  }
   if (!candidate || candidate.status === "deleted") {
     throw new Error("VAENYX_ME_CANDIDATE_NOT_FOUND");
   }

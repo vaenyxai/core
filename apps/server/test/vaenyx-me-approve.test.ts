@@ -95,6 +95,7 @@ function approve(candidateId: string, summary: string): string {
       confidence: 80,
     },
     "owner-1",
+    null,
   ).itemId;
 }
 

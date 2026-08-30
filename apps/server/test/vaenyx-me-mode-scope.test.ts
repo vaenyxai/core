@@ -118,10 +118,20 @@ describe("which Mode a proposal belongs to", () => {
     expect(withEquals).toEqual([]);
   });
 
-  it("both kinds still land in the one queue", () => {
+  it("🔴 each Mode's review list shows only its own proposals", () => {
+    // The count on the badge was always scoped; the LIST behind it was not,
+    // so a Custom Mode's Review panel showed the whole household's cards
+    // (Oskar, 2026-08-30: 不同的 mode 是要分开的). Both directions matter:
+    // the Mode must not see User Mode's, and User Mode must not see the
+    // Mode's — its proposals are reviewed inside the Mode they belong to.
     const database = testDatabase();
     propose(database, "a", null);
     propose(database, "b", "mode-yen");
-    expect(listVaenyxMeCandidates(database)).toHaveLength(2);
+    expect(
+      listVaenyxMeCandidates(database, null).map((item) => item.title),
+    ).toEqual(["a"]);
+    expect(
+      listVaenyxMeCandidates(database, "mode-yen").map((item) => item.title),
+    ).toEqual(["b"]);
   });
 });

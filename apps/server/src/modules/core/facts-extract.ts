@@ -256,6 +256,9 @@ export function approveFactCandidate(
   database: DatabaseHandle,
   candidateId: string,
   ownerId: string,
+  // The session's Mode: another Mode's proposal answers NOT_FOUND, the same
+  // sandbox line the candidate list draws (Oskar, 2026-08-30).
+  sessionModeId: string | null,
 ): Fact {
   const row = database.sqlite
     .prepare(
@@ -275,6 +278,10 @@ export function approveFactCandidate(
         value: string | null;
       }
     | undefined;
+
+  if (row && (row.modeId ?? null) !== sessionModeId) {
+    throw new Error("FACT_CANDIDATE_NOT_FOUND");
+  }
 
   if (!row || !row.slot || !row.value) {
     throw new Error("FACT_CANDIDATE_NOT_FOUND");

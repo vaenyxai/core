@@ -252,7 +252,7 @@ describe("approving one", () => {
     const first = database.sqlite
       .prepare(`SELECT id FROM vaenyx_me_candidates LIMIT 1`)
       .get() as unknown as { id: string };
-    approveFactCandidate(database, first.id, "owner-1");
+    approveFactCandidate(database, first.id, "owner-1", null);
     expect(listCurrentFacts(database)[0]?.value).toBe("12 Old Street");
 
     queueProposedFacts(database, {
@@ -266,7 +266,7 @@ describe("approving one", () => {
         `SELECT id FROM vaenyx_me_candidates WHERE status = 'pending_review' LIMIT 1`,
       )
       .get() as unknown as { id: string };
-    approveFactCandidate(database, second.id, "owner-1");
+    approveFactCandidate(database, second.id, "owner-1", null);
 
     // 🔴 The thing the ordinary approve path gets wrong: it collapses every
     // candidate in a category onto one row, so the first address would be
@@ -286,8 +286,8 @@ describe("approving one", () => {
     const row = database.sqlite
       .prepare(`SELECT id FROM vaenyx_me_candidates LIMIT 1`)
       .get() as unknown as { id: string };
-    approveFactCandidate(database, row.id, "owner-1");
-    expect(() => approveFactCandidate(database, row.id, "owner-1")).toThrow(
+    approveFactCandidate(database, row.id, "owner-1", null);
+    expect(() => approveFactCandidate(database, row.id, "owner-1", null)).toThrow(
       "FACT_CANDIDATE_NOT_PENDING",
     );
   });

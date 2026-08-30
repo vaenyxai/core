@@ -11973,6 +11973,11 @@ function SubscriptionDoorPanel() {
   }
   const [appBusy, setAppBusy] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
+  // What the Owner is typing into a Limits box, per field, until they leave
+  // it. Saving on every keystroke made "600" impossible: the server clamped
+  // "6" to 10 and the box snapped back mid-typing (Oskar, 2026-08-30: 等我
+  // 600 全部输入完了以后,鼠标点外面再保存).
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
   const [ceiling, setCeiling] = useState<{
     global: Record<string, boolean>;
     implemented: Record<string, boolean>;
@@ -12335,57 +12340,80 @@ function SubscriptionDoorPanel() {
       </div>
 
       <h3 className="door-subhead">Limits</h3>
+      {/* Typed freely, saved when the box loses focus (or on Enter) — never
+          per keystroke, or the server's clamp rewrites the box mid-number. */}
       <div className="door-limits">
-        <label>
-          Files per call
-          <input
-            min={0}
-            max={20}
-            onChange={(event) =>
-              void save({ maxFiles: Number(event.target.value) })
-            }
-            type="number"
-            value={settings.maxFiles}
-          />
-        </label>
-        <label>
-          Largest file (MB)
-          <input
-            min={0}
-            onChange={(event) =>
-              void save({
-                maxFileBytes: Number(event.target.value) * 1024 * 1024,
-              })
-            }
-            type="number"
-            value={Math.round(settings.maxFileBytes / 1024 / 1024)}
-          />
-        </label>
-        <label>
-          All files together (MB)
-          <input
-            min={0}
-            onChange={(event) =>
-              void save({
-                maxTotalBytes: Number(event.target.value) * 1024 * 1024,
-              })
-            }
-            type="number"
-            value={Math.round(settings.maxTotalBytes / 1024 / 1024)}
-          />
-        </label>
-        <label>
-          Timeout (seconds)
-          <input
-            min={10}
-            max={600}
-            onChange={(event) =>
-              void save({ timeoutSeconds: Number(event.target.value) })
-            }
-            type="number"
-            value={settings.timeoutSeconds}
-          />
-        </label>
+        {(
+          [
+            {
+              key: "maxFiles",
+              label: "Files per call",
+              min: 0,
+              max: 20,
+              current: settings.maxFiles,
+              apply: (n: number) => ({ maxFiles: n }),
+            },
+            {
+              key: "maxFileBytes",
+              label: "Largest file (MB)",
+              min: 0,
+              max: undefined,
+              current: Math.round(settings.maxFileBytes / 1024 / 1024),
+              apply: (n: number) => ({ maxFileBytes: n * 1024 * 1024 }),
+            },
+            {
+              key: "maxTotalBytes",
+              label: "All files together (MB)",
+              min: 0,
+              max: undefined,
+              current: Math.round(settings.maxTotalBytes / 1024 / 1024),
+              apply: (n: number) => ({ maxTotalBytes: n * 1024 * 1024 }),
+            },
+            {
+              key: "timeoutSeconds",
+              label: "Timeout (seconds)",
+              min: 10,
+              max: 600,
+              current: settings.timeoutSeconds,
+              apply: (n: number) => ({ timeoutSeconds: n }),
+            },
+          ] as const
+        ).map((field) => (
+          <label key={field.key}>
+            {field.label}
+            <input
+              min={field.min}
+              max={field.max}
+              onChange={(event) => {
+                const next = event.target.value;
+                setLimitDrafts((current) => ({
+                  ...current,
+                  [field.key]: next,
+                }));
+              }}
+              onBlur={() => {
+                const raw = limitDrafts[field.key];
+                setLimitDrafts((current) => {
+                  const next = { ...current };
+                  delete next[field.key];
+                  return next;
+                });
+                if (raw === undefined) return;
+                const parsed = Number(raw);
+                if (!Number.isFinite(parsed)) return;
+                void save(field.apply(parsed));
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              }}
+              type="number"
+              value={limitDrafts[field.key] ?? String(field.current)}
+            />
+          </label>
+        ))}
       </div>
 
       {/* Who spent what, this month (Oskar asked for exactly this page): a nod
@@ -16966,8 +16994,12 @@ function SettingsPanel({
           <div className="settings-card-divider" />
           <h3 className="settings-subhead">Agent Name</h3>
           <p className="settings-card-copy">
-            What your assistant is called in conversations. A Custom Mode can
-            carry its own name — set that on the mode itself.
+            {sessionMode
+              ? // Inside a mode the field shows and renames THIS mode's own
+                // assistant (the server routes the write to the mode), so the
+                // name here always matches the conversation beside it.
+                `What this mode's assistant is called. You are in "${sessionMode.name}" — renaming here changes only this mode.`
+              : "What your assistant is called in conversations. A Custom Mode can carry its own name — set that on the mode's card under Modes."}
           </p>
           <label className="chat-font-field">
             Agent Name
