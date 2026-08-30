@@ -475,8 +475,8 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
         ? "dns.google/cache"
         : "one.one.one.one/purge-cache";
     const warning = zh
-      ? `${culprit} 这家公共 DNS 正把你的远程地址记成「不存在」。用它解析的设备暂时打不开 Vaenyx —— 设备没坏,通常几小时自愈。最快修法:打开 ${purge},填入远程地址清一下,半分钟生效;或把那台设备的 DNS 换一家。`
-      : `The public resolver ${culprit} is currently answering "does not exist" for your remote address. Devices using it cannot open Vaenyx for now — nothing is broken on them, and it usually clears within hours. Fastest fix: open ${purge}, enter the remote address and clear it (takes effect in ~half a minute); or point that device at a different DNS.`;
+      ? `${culprit} 这家公共 DNS 正把你的远程地址记成「不存在」。用它解析的设备暂时打不开 Vaenyx —— 设备没坏,通常几小时自愈。可以先到 ${purge} 清一下缓存(有时管用);可靠的修法是把那台设备的 DNS 换到健康的那家。`
+      : `The public resolver ${culprit} is currently answering "does not exist" for your remote address. Devices using it cannot open Vaenyx for now — nothing is broken on them, and it usually clears within hours. You can try ${purge} to clear the cache (sometimes works); the reliable fix is pointing that device at the healthy resolver.`;
     // The full warning lives in the Owner's main conversation (2026-08-30:
     // 任何通知都是主对话告诉我); the push announces it, to the Owner's own
     // (User Mode) devices.

@@ -650,13 +650,12 @@ Read this inside the app: **Settings → Manual**.
   then only the phone can prove it.
 - **If a device that worked suddenly cannot open it** — the waiting page on
   that device diagnoses itself. When it says a public DNS service is
-  answering wrongly, the fastest fix (~1 minute) is the link it shows: the
-  broken resolver's own **clear-cache page** (`one.one.one.one/purge-cache`
-  for Cloudflare, `dns.google/cache` for Google) — enter the remote address,
-  record type A, press the button; that heals every device using that
-  resolver, and the waiting page reloads by itself. Changing that one
-  device's DNS to the healthy provider works too. Vaenyx also watches its
-  own address and sends a push warning when a resolver goes wrong.
+  answering wrongly, it offers a one-tap "ask them to clear it" first
+  (Cloudflare's own purge tool; Google's equivalent is a link) — worth one
+  try, though it does not always take. The **reliable** fix is the steps
+  under it: point that device at the healthy resolver the page names; the
+  waiting page then reloads by itself. Vaenyx also watches its own address
+  and sends a push warning when a resolver goes wrong.
 - **Notifications** — Settings → Notifications → allow, then **Test** to prove
   one arrives.
 - **Several results fold into one** — a notification arriving while another is
