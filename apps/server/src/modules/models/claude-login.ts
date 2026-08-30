@@ -20,7 +20,7 @@
 // Core and profiles never read each other's directories: Vaenyx changing its
 // account cannot touch an app, and no app can touch Vaenyx or another app.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 
@@ -75,6 +75,28 @@ export function getClaudeHomeDirectory(profileKey: string = CORE_PROFILE): strin
 // in because CORE is: each directory answers only for itself.
 export function claudeMachineLogin(profileKey: string = CORE_PROFILE): boolean {
   return existsSync(
+    join(getClaudeHomeDirectory(profileKey), ".credentials.json"),
+  );
+}
+
+// THE OWNER'S ONE-CLICK GRANT (Oskar, 2026-08-30): copy the Owner's own
+// machine login into an app profile's home — the profile is signed in from
+// that moment, with its own independent copy (revoking the app never touches
+// the Owner's file). Only the machine-login file can be granted; an Owner
+// whose Claude rides a pasted setup token has no file to copy, and the
+// button says so instead of pretending.
+export function grantClaudeLoginToProfile(profileKey: string): void {
+  if (profileKey === CORE_PROFILE) throw new Error("RELAY_PROFILE_INVALID");
+  const coreCredentials = join(
+    getClaudeHomeDirectory(CORE_PROFILE),
+    ".credentials.json",
+  );
+  if (!existsSync(coreCredentials)) {
+    throw new Error("RELAY_OWNER_NOT_SIGNED_IN:claude-cli");
+  }
+  // getClaudeHomeDirectory validates the profile key and creates the home.
+  copyFileSync(
+    coreCredentials,
     join(getClaudeHomeDirectory(profileKey), ".credentials.json"),
   );
 }

@@ -259,6 +259,24 @@ export function codexLoginConnectedAt(profileKey: string): string | null {
   }
 }
 
+// THE OWNER'S ONE-CLICK GRANT (Oskar, 2026-08-30): copy the Owner's own
+// Codex credential into an app profile's home — equivalent to having done
+// that profile's login, without the OAuth ritual that can only happen on
+// this machine. A COPY on purpose: the profile stays its own independent
+// file, so revoking or disconnecting the app touches nothing of the
+// Owner's, and vice versa. Any live session for the profile is ended so
+// the next call spawns on the fresh credential.
+export function grantCodexLoginToProfile(profileKey: string): void {
+  if (profileKey === "core") throw new Error("RELAY_PROFILE_INVALID");
+  const coreAuth = resolve(getCodexHomeDirectory("core"), "auth.json");
+  if (!existsSync(coreAuth)) {
+    throw new Error("RELAY_OWNER_NOT_SIGNED_IN:openai-cli");
+  }
+  // getCodexHomeDirectory validates the profile key shape and creates the home.
+  copyFileSync(coreAuth, resolve(getCodexHomeDirectory(profileKey), "auth.json"));
+  endCodexRelaySession(profileKey);
+}
+
 // Wipe a profile's Codex login. rmSync on the whole home rather than the one
 // file, so session caches the CLI keeps beside it go too — and the profile's
 // live relay session is killed with it, because that child read its

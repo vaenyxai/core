@@ -498,7 +498,9 @@ import {
 } from "../models/provider-settings.js";
 import {
   cancelClaudeLogin,
+  claudeMachineLogin,
   disconnectClaudeProfile,
+  grantClaudeLoginToProfile,
   startClaudeLogin,
   submitClaudeLoginCode,
 } from "../models/claude-login.js";
@@ -615,6 +617,7 @@ import {
   codexProfileSignedIn,
   disconnectCodexProfile,
   ensureCodexInstalled,
+  grantCodexLoginToProfile,
   runCodexChatTest,
   runForgeReadOnly,
   startCodexLogin,
@@ -8285,6 +8288,148 @@ export async function registerGatewayRoutes(
       }
       removePushSubscription(context.database, request.body.endpoint);
       return { ok: true };
+    },
+  );
+
+  // ── One-click login grants (Oskar, 2026-08-30) ──────────────────────────
+  // Engine logins stay isolated per app profile, but the OAuth ritual only
+  // works on this machine — so the Owner may copy their own login into a
+  // profile's home instead of redoing it. Status first: which engines the
+  // Owner can grant at all, and where every relay key stands, in one answer.
+  app.get(
+    "/v1/relay/logins",
+    {
+      schema: {
+        response: {
+          200: Type.Object(
+            {
+              owner: Type.Object(
+                {
+                  "openai-cli": Type.Boolean(),
+                  "claude-cli": Type.Boolean(),
+                },
+                { additionalProperties: false },
+              ),
+              apps: Type.Array(
+                Type.Object(
+                  {
+                    id: Type.String(),
+                    "openai-cli": Type.Boolean(),
+                    "claude-cli": Type.Boolean(),
+                  },
+                  { additionalProperties: false },
+                ),
+              ),
+            },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return {
+        owner: {
+          "openai-cli": codexProfileSignedIn("core"),
+          "claude-cli": claudeMachineLogin("core"),
+        },
+        apps: listAppProfiles(context.database)
+          .filter((profile) => profile.kind === "relay")
+          .map((profile) => ({
+            id: profile.id,
+            "openai-cli": codexProfileSignedIn(profile.id),
+            "claude-cli": claudeMachineLogin(profile.id),
+          })),
+      };
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { engine: string } }>(
+    "/v1/app-profiles/:id/grant-login",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: Type.Object(
+          {
+            engine: Type.Union([
+              Type.Literal("openai-cli"),
+              Type.Literal("claude-cli"),
+            ]),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: Type.Object(
+            {
+              "openai-cli": Type.Boolean(),
+              "claude-cli": Type.Boolean(),
+            },
+            { additionalProperties: false },
+          ),
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      // Handing a login to another program is a User Mode decision, like
+      // every other grant a key can carry.
+      if (owner.modeId) {
+        const language: CapabilityLanguage =
+          request.query && (request.query as { lang?: string }).lang === "zh"
+            ? "zh"
+            : "en";
+        return reply
+          .code(403)
+          .send({ error: switchesLiveInUserMode(language) });
+      }
+      const profile = listAppProfiles(context.database).find(
+        (item) => item.id === request.params.id,
+      );
+      if (!profile || profile.kind !== "relay") {
+        return reply.code(404).send({ error: "App Profile not found." });
+      }
+      try {
+        if (request.body.engine === "openai-cli") {
+          grantCodexLoginToProfile(profile.id);
+        } else {
+          grantClaudeLoginToProfile(profile.id);
+        }
+      } catch (error) {
+        const code =
+          error instanceof Error ? error.message : "RELAY_GRANT_FAILED";
+        if (code.startsWith("RELAY_OWNER_NOT_SIGNED_IN")) {
+          return reply.code(400).send({ error: code });
+        }
+        throw error;
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "relay.login.granted",
+        decision: "allowed",
+        reason: `Owner granted their ${request.body.engine === "openai-cli" ? "Codex" : "Claude"} login to the app key "${profile.name}" (an independent copy; revoking the app never touches the Owner's own).`,
+        resourceType: "app_profile",
+        resourceId: profile.id,
+      });
+      return {
+        "openai-cli": codexProfileSignedIn(profile.id),
+        "claude-cli": claudeMachineLogin(profile.id),
+      };
     },
   );
 

@@ -610,6 +610,13 @@ Read this inside the app: **Settings → Manual**.
   **before** it works: an engine it has not connected gets a clear "not
   connected", never your account by accident. Each app's row here carries its
   capability ticks, a Rotate and a Revoke.
+- **Or grant your own login with one click** — each app's row shows both
+  engines' login state (signed in / not), with a **Grant my login** button
+  per engine. It copies your own login into that app's profile, sparing the
+  sign-in ritual that only works at this computer. The copy is independent:
+  revoking or disconnecting the app never touches your own login. Every
+  grant is written to the audit log, and the button greys out — saying why —
+  while your own side has no login to copy.
 - **The old shared key is retired.** Every app carries its own Model Key; a
   call on the old shared one is simply refused.
 - **Prerequisite** — the app's device must be on your private network, and now

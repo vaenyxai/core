@@ -275,6 +275,9 @@ import {
   testRunMethod,
   updateAppProfile,
   updateAppProfileCapabilities,
+  fetchRelayLogins,
+  grantAppLogin,
+  type RelayLogins,
   updateMemory,
   updateProject,
   updateProjectInstructions,
@@ -12019,12 +12022,18 @@ function SubscriptionDoorPanel() {
     needsOwnTokenApproval: string[];
   } | null>(null);
 
+  // Which engines each key is signed into, and which the Owner can grant.
+  const [logins, setLogins] = useState<RelayLogins | null>(null);
+
   useEffect(() => {
     void fetchRelayUsage()
       .then(setUsage)
       .catch(() => undefined);
     void fetchAppProfiles()
       .then((all) => setApps(all.filter((profile) => profile.kind === "relay")))
+      .catch(() => undefined);
+    void fetchRelayLogins()
+      .then(setLogins)
       .catch(() => undefined);
     void fetchCapabilities()
       .then((result) =>
@@ -12100,6 +12109,40 @@ function SubscriptionDoorPanel() {
         error instanceof Error
           ? error.message
           : "Could not revoke the Model Key.",
+      );
+    } finally {
+      setAppBusy(null);
+    }
+  }
+
+  // Copy the Owner's own engine login into this app's profile — one click in
+  // place of redoing an OAuth ritual that only works on this machine. The
+  // profile gets its OWN copy: revoking the app never touches the Owner's.
+  async function grantLogin(
+    profileId: string,
+    engine: "openai-cli" | "claude-cli",
+  ) {
+    setAppBusy(profileId);
+    try {
+      const status = await grantAppLogin(profileId, engine);
+      setLogins((current) =>
+        current
+          ? {
+              ...current,
+              apps: [
+                ...current.apps.filter((entry) => entry.id !== profileId),
+                { id: profileId, ...status },
+              ],
+            }
+          : current,
+      );
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error
+          ? error.message
+          : lang === "zh"
+            ? "授予失败。"
+            : "Could not grant the login.",
       );
     } finally {
       setAppBusy(null);
@@ -12301,6 +12344,69 @@ function SubscriptionDoorPanel() {
           </div>
           {keyErrors[appProfile.id] ? (
             <p className="form-error">{keyErrors[appProfile.id]}</p>
+          ) : null}
+          {/* Each engine's login state for THIS key, with the Owner's
+              one-click grant (Oskar, 2026-08-30): copies the Owner's own
+              login into this app's profile — its own independent copy, so
+              revoking the app never touches the Owner's. Greyed with the
+              reason when the Owner side has nothing to copy. */}
+          {logins ? (
+            <div className="door-app-caps">
+              {(
+                [
+                  { engine: "openai-cli", name: "OpenAI (Codex)" },
+                  { engine: "claude-cli", name: "Claude" },
+                ] as const
+              ).map((row) => {
+                const appLogin = logins.apps.find(
+                  (entry) => entry.id === appProfile.id,
+                );
+                const signedIn = appLogin?.[row.engine] === true;
+                const ownerHas = logins.owner[row.engine];
+                return (
+                  <div className="door-app-cap" key={row.engine}>
+                    <span>
+                      {row.name}
+                      {" — "}
+                      {signedIn ? (
+                        <strong>{lang === "zh" ? "已登录" : "signed in"}</strong>
+                      ) : lang === "zh" ? (
+                        "未登录"
+                      ) : (
+                        "not signed in"
+                      )}
+                    </span>
+                    <button
+                      className="secondary-button"
+                      disabled={appBusy === appProfile.id || !ownerHas}
+                      onClick={() =>
+                        void grantLogin(appProfile.id, row.engine)
+                      }
+                      title={
+                        ownerHas
+                          ? undefined
+                          : lang === "zh"
+                            ? "你自己这边还没有这个引擎的登录,先在 AI Settings 里登录"
+                            : "Your own login for this engine is missing — sign in under AI Settings first"
+                      }
+                      type="button"
+                    >
+                      {ownerHas
+                        ? lang === "zh"
+                          ? signedIn
+                            ? "重新授予我的登录"
+                            : "授予我的登录"
+                          : signedIn
+                            ? "Re-grant my login"
+                            : "Grant my login"
+                        : lang === "zh"
+                          ? "我这边未登录"
+                          : "Owner not signed in"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           ) : null}
           {/* Only what the door actually serves (Oskar, 2026-08-06: 图一大半
               不需要). Its engines do text + these; hearing, speaking and

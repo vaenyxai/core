@@ -1234,6 +1234,27 @@ export function fetchAppProfileToken(
   return requestJson<{ token: string }>(`/v1/app-profiles/${profileId}/token`);
 }
 
+// Engine login status for the Subscription Door: the Owner's own side (what
+// can be granted at all) and where every relay key stands.
+export interface RelayLogins {
+  owner: { "openai-cli": boolean; "claude-cli": boolean };
+  apps: { id: string; "openai-cli": boolean; "claude-cli": boolean }[];
+}
+
+export function fetchRelayLogins(): Promise<RelayLogins> {
+  return requestJson<RelayLogins>("/v1/relay/logins");
+}
+
+export function grantAppLogin(
+  profileId: string,
+  engine: "openai-cli" | "claude-cli",
+): Promise<{ "openai-cli": boolean; "claude-cli": boolean }> {
+  return requestJson<{ "openai-cli": boolean; "claude-cli": boolean }>(
+    `/v1/app-profiles/${encodeURIComponent(profileId)}/grant-login`,
+    { method: "POST", body: JSON.stringify({ engine }) },
+  );
+}
+
 export function fetchPushPublicKey(): Promise<{ key: string | null }> {
   return requestJson<{ key: string | null }>("/v1/push/public-key");
 }
