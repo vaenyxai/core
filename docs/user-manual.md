@@ -87,7 +87,7 @@ Read this inside the app: **Settings → Manual**.
   installer puts it there), or `Vaenyx-Start.cmd` in the Vaenyx folder — same
   thing. It also starts by itself when the computer boots.
 - **Open it** — a browser at `http://127.0.0.1:3000` on that computer, or the
-  remote address on your phone (see *Using it away from the computer*).
+  remote address on your phone (see _Using it away from the computer_).
 - **Stop it** — Settings → System → **Stop Vaenyx**. Or close the window that
   the launcher opened.
 - **Restart it** — Settings → System → **Restart**. Takes about ten seconds;
@@ -164,17 +164,17 @@ Read this inside the app: **Settings → Manual**.
   first message you have not seen, so you read forward from there.
 - **What it remembers** — the most recent thirty-odd messages in full (a
   question and its answer are never split apart), plus a structured running
-  checkpoint of everything before that, plus your approved *Vaenyx Me* facts.
+  checkpoint of everything before that, plus your approved _Vaenyx Me_ facts.
 - **Looking things up** — whether it really goes and looks depends on which main
   model you are on. Only the ChatGPT (Codex CLI) and Claude subscriptions search
   the web today; every other model answers from what it memorised when it was
   trained, and sounds just as certain when that is out of date. The **Web**
   switch (AI Settings → Capabilities) ships **on**, and switching it off does not
   stop those two searching in an ordinary chat — it stops Methods and app keys.
-  Both of those are said on the card itself; *AI Settings* below has the whole
+  Both of those are said on the card itself; _AI Settings_ below has the whole
   of it.
 - **Files on your computer** — Vaenyx reads nothing on this computer unless you
-  switch **Fetching** on *and* name the folders it may look in (AI Settings →
+  switch **Fetching** on _and_ name the folders it may look in (AI Settings →
   Capabilities → Fetching). Both are needed: the switch on its own, with no
   folder named, still reads nothing at all. Once you have named folders, only
   what is inside them can be opened, text files only — nothing else on the
@@ -220,7 +220,7 @@ Read this inside the app: **Settings → Manual**.
   conversation it was seen in — one line per origin, each with its own View
   source.
 - **A change shows as a change.** When a proposal touches something already
-  approved with a different value, the card reads *was → now proposed* and
+  approved with a different value, the card reads _was → now proposed_ and
   the buttons become **Change it / Keep the old one**. Choosing the new value
   dates the old one into history — never an erasure.
 - **Listed by day**, newest first, so it reads like a diary rather than a pile
@@ -310,7 +310,7 @@ Read this inside the app: **Settings → Manual**.
     rest, because a key that can reach the internet can make this machine
     somebody else's way onto it. You can take it back with the switch.
   - **The ceiling still wins.** A capability switched off in AI Settings shows
-    as *off for the whole machine* and cannot be ticked here at all. One you
+    as _off for the whole machine_ and cannot be ticked here at all. One you
     granted before it was switched off stays on the key, does nothing while the
     machine says no, and works again the moment you switch it back on.
   - **Only from User Mode**, like the other two layers.
@@ -379,7 +379,7 @@ Read this inside the app: **Settings → Manual**.
   and a **Test** to see that it really does; **Models** is where a model gets
   connected. Every provider API key is pasted in Models, without exception. (An
   app's **Model Key** is a different thing: it opens the Subscription Door, and
-  it is made, and replaced, on that card — see *Subscription Door* below.)
+  it is made, and replaced, on that card — see _Subscription Door_ below.)
 - **Models connects the account; Capabilities picks the model** — the Models
   card asks for the key and nothing else. Which model does which job is asked
   once per job, on the capability row, because the answers differ: the model
@@ -422,7 +422,7 @@ Read this inside the app: **Settings → Manual**.
   when, because free tiers change constantly and models state them wrongly with
   confidence. Check the provider's own site before relying on it.
 - **Two groups, never mixed**
-  - *Use a subscription you already have* — ChatGPT (Codex CLI) and Claude.
+  - _Use a subscription you already have_ — ChatGPT (Codex CLI) and Claude.
     They lead the Models card, OpenAI first and Anthropic second, connected or
     not — each with its sign-in right on the card. Sign in once, inside the
     app. These are **not** free credit; they are your own paid subscriptions. Both need a component that is **not** included in the
@@ -433,17 +433,17 @@ Read this inside the app: **Settings → Manual**.
     downloads neither. If the fetch fails
     it says so and retries on the next press; nothing else in Vaenyx is
     affected.
-  - *Free API allowance* — pick a provider and paste its key.
+  - _Free API allowance_ — pick a provider and paste its key.
 - **The Capabilities table is the whole picture** — one row per capability, and
   the row carries both halves: which model does that job, and whether Vaenyx may
   do it at all. Hearing, Speaking, Vision and Drawing each choose their own
   model; Reading, Fetching and Web ride the main model and say so on the row.
-  - **Hearing** *(Voice in)* — speech to text.
-  - **Speaking** *(Voice out)* — text to speech.
-  - **Vision** *(Picture in)* — looking at a photo.
-  - **Drawing** *(Picture out)* — making a picture.
-  - **Reading** *(Documents, PDF)* — a document you attached.
-  - **OCR** *(Text in pictures)* — turns the words in a scan or a photo into
+  - **Hearing** _(Voice in)_ — speech to text.
+  - **Speaking** _(Voice out)_ — text to speech.
+  - **Vision** _(Picture in)_ — looking at a photo.
+  - **Drawing** _(Picture out)_ — making a picture.
+  - **Reading** _(Documents, PDF)_ — a document you attached.
+  - **OCR** _(Text in pictures)_ — turns the words in a scan or a photo into
     text, on a dedicated OCR engine (Mistral OCR), never the main model — a
     chat model that cannot make out a character invents a plausible one, and
     numbers on a quote turn into money. Reading a scanned PDF is OCR plus
@@ -454,14 +454,14 @@ Read this inside the app: **Settings → Manual**.
     words in a photo you attach are machine-read by the same engine and handed
     to the model alongside the picture, so a photo of a page and a scan of the
     same page read identically — each photo is one small metered OCR call.
-  - **Fetching** *(Files on this machine)* — opening text files from folders you
+  - **Fetching** _(Files on this machine)_ — opening text files from folders you
     name yourself, in that row's own setup. Text files only, and not large ones.
     Vaenyx opens the file itself, so it works with whichever main model you
     use — the model is handed words and never gets a tool that could reach a
     disk. A PDF still goes
     through the document button in a chat, which is Reading. A Method or a
     Routine cannot use this at all yet.
-  - **Web** *(Web pages)* — going out to the internet.
+  - **Web** _(Web pages)_ — going out to the internet.
 - **The switch is a ceiling** — anything switched off on a row is out of reach
   of every Method, every mode and every app key, whatever they ask for. Web is
   the one that is not all the way there yet: switching it off stops Methods and
@@ -469,11 +469,11 @@ Read this inside the app: **Settings → Manual**.
   card says so on its face.
 - **A mode can be narrower than this, never wider** — each Custom Mode has its
   own eight switches under Settings → Modes → **What It May Do**, and they can
-  only take away. See *Modes* below.
+  only take away. See _Modes_ below.
 - **An app key is narrower still** — every key another app holds has its own
   eight ticks, under Library → Token → **What It May Do**, and starts with none
-  of them ticked. Fetching can never be ticked there at all. See *Methods and
-  Routines* above.
+  of them ticked. Fetching can never be ticked there at all. See _Methods and
+  Routines_ above.
 - **What is on when you install it** — everything Vaenyx already does on this
   computer: Hearing, Speaking, Vision, Drawing, Reading. **Web is also on**: a
   model that cannot look anything up answers today's question out of last year's
@@ -481,7 +481,7 @@ Read this inside the app: **Settings → Manual**.
   reaching the internet. **Fetching is the one that starts off** and stays off
   until you decide otherwise — that is Vaenyx opening your own folders.
 - **Two of them explain themselves before you use them** — once each, and both
-  buttons in the window are real, so *Switch it off* really switches it off.
+  buttons in the window are real, so _Switch it off_ really switches it off.
   - **Web** — the words your model searches for leave this machine. They go out
     through that model's own backend, and a search company on the far end
     receives them; Vaenyx does not choose that company and never contacts it
@@ -525,7 +525,7 @@ Read this inside the app: **Settings → Manual**.
   model. It tells you which one failed and why, and you change it here. That is
   deliberate: a silent swap means never knowing who wrote the answer.
 - **If your backend cannot do the thing you asked** — one sentence, the same
-  everywhere it happens: *Vaenyx cannot do X with Y*. It names the backend, it
+  everywhere it happens: _Vaenyx cannot do X with Y_. It names the backend, it
   names what could not be done, and **when something else did the job instead it
   names that too, and what it cost you**. Two of those happen every day: a model
   that cannot open a PDF is handed words this machine pulled out of the file, so
@@ -598,7 +598,8 @@ Read this inside the app: **Settings → Manual**.
   token counts appear only where an engine truly reports them — never
   estimated.
 - **Every app has its own Model Key and its own account** — press **Add App**,
-  give it a name, and hand the key over; it is shown once. The app then signs
+  give it a name, and hand the key over. The key stays on the app's row —
+  hidden behind ••••, with Show and Copy beside it. The app then signs
   in with its own ChatGPT or Claude subscription, from inside that app,
   **before** it works: an engine it has not connected gets a clear "not
   connected", never your account by accident. Each app's row here carries its
@@ -615,8 +616,8 @@ Read this inside the app: **Settings → Manual**.
 ## 11. Using it away from the computer
 
 - **The guided way** — Settings → **Phone Access** (the end of the first run
-  offers the same step). Three lights — *Tailscale installed*, *Signed in*,
-  *Phone channel on* — each with a button that fixes it: Vaenyx installs the
+  offers the same step). Three lights — _Tailscale installed_, _Signed in_,
+  _Phone channel on_ — each with a button that fixes it: Vaenyx installs the
   free Tailscale client, opens its sign-in page, and turns the channel on.
   When all three are green, a QR code appears.
 - **The QR code waits for the public side** — before showing it, Vaenyx asks
@@ -633,9 +634,9 @@ Read this inside the app: **Settings → Manual**.
   for your Vaenyx password first. The phone needs no Tailscale app for this.
 - **Log in on the phone** — with your own Vaenyx account, same as at the
   computer.
-- **Add it to the home screen** — iPhone: Safari → Share → *Add to Home
-  Screen*. Android: Chrome → top-right menu → *Install app* (or *Add to Home
-  screen*). It then behaves like an app.
+- **Add it to the home screen** — iPhone: Safari → Share → _Add to Home
+  Screen_. Android: Chrome → top-right menu → _Install app_ (or _Add to Home
+  screen_). It then behaves like an app.
 - **If the phone cannot open it** — a freshly opened channel can take a minute
   or two to become reachable from the internet. The Phone Access page keeps
   rechecking and shows the QR code once the address is confirmed live; if the
@@ -644,7 +645,7 @@ Read this inside the app: **Settings → Manual**.
 - **Notifications** — Settings → Notifications → allow, then **Test** to prove
   one arrives.
 - **Several results fold into one** — a notification arriving while another is
-  still showing becomes a single *Vaenyx (n)* entry with one item per line.
+  still showing becomes a single _Vaenyx (n)_ entry with one item per line.
   Expand it to read them; tapping it opens Vaenyx. Dismiss it and the next
   result starts a fresh, full notification again.
 - **No banner while you are looking at it** — a device with Vaenyx open on
@@ -661,7 +662,7 @@ Read this inside the app: **Settings → Manual**.
 - **Encrypt them** — set a backup password. **Warning:** Lose that password and
   the backup cannot be opened by anyone, including you.
 - **Where they go** — the destination on that screen; how many are kept is the
-  *Keep* setting.
+  _Keep_ setting.
 - **Restore** — Settings → Backup → the backup → **Restore**.
   **Warning: restoring replaces everything you have now. It cannot be undone.**
 - **Note** — pushing to GitHub is not a backup, and deploying is not a backup.
@@ -685,7 +686,7 @@ Read this inside the app: **Settings → Manual**.
     switched off. Those rows show **off for the whole machine** instead of a
     switch, because a switch there would be a switch that does nothing.
   - **It stays narrow.** Turning a capability back on for the whole machine does
-    *not* hand it back to a mode you narrowed — the mode's row shows a switch
+    _not_ hand it back to a mode you narrowed — the mode's row shows a switch
     again, still off, and you decide.
   - **Only from User Mode.** From inside a mode you can neither change this list
     nor read it, whether or not "Lock settings" is ticked. That is the point: a
@@ -715,7 +716,7 @@ Read this inside the app: **Settings → Manual**.
   does not claim otherwise, because the backend is your choice.
 - **Your own files** — none of them, unless you switched **Fetching** on and
   named the folders yourself; then a file from one of those folders can be sent
-  to the model like anything else you attach. See *Files on your computer* above.
+  to the model like anything else you attach. See _Files on your computer_ above.
 - **Audit trail** — the Guard screen lists what was allowed and refused.
 - **Change your password** — Settings → Personal.
 - **Sign every device out** — Settings → Personal → **Log out everywhere**.
@@ -724,27 +725,27 @@ Read this inside the app: **Settings → Manual**.
 
 ## When something goes wrong
 
-| What you see | What to do |
-|---|---|
-| Nothing loads at all | The computer is off or asleep. Wake it. |
-| Phone cannot reach it, computer can | A freshly opened channel needs a minute — wait and retry. Still nothing: Settings → Phone Access, check the three lights. |
-| A computer cannot open it, a phone on mobile data can | That computer's DNS, almost always. See *When it is the network, not Vaenyx* below. |
-| Stuck on "Starting up… this page will open by itself" | Only true for about ten seconds. After six the page replaces that line with what is actually wrong — read it. |
-| The browser console says `ERR_NAME_NOT_RESOLVED` | This device could not look the address up. It is DNS, not Vaenyx. Set this device's DNS to `8.8.8.8` — see below. |
-| "Not signed in" on a subscription | Settings → AI Settings → sign in to that one again. |
-| An engine fails and nothing else happens | By design. Read which one failed, then pick another engine on that row. |
-| Voice button does nothing | The Hearing row has no engine, or Hearing is switched off. Settings → AI Settings → Capabilities → Hearing. |
-| The ▶ button is missing from replies | Speaking is switched off. Settings → AI Settings → Capabilities → Speaking. |
-| "You have that switched off" | You did, on that capability's row. Settings → AI Settings → Capabilities, and turn the row back on. |
-| "the mode you are in does not allow it" | That mode was narrowed, and nothing inside it can widen it. Leave the mode (the badge at the top), then Settings → Modes → that mode → What It May Do. |
-| "this app key was not given that" | The app knocked with its own Token. Library → Token → that key → What It May Do, and tick it. |
-| "no app key can ever be given that" | Fetching, and no key can hold it — not a setting, a rule. Do that job from a chat instead. |
-| Photo comes back with no marks | The Vision row has no engine or is switched off, or the model found nothing to mark. |
-| A PDF asks about pages first | Over ten pages, on purpose. It is telling you the cost before spending it. |
-| Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the app has not signed in to a subscription yet. |
-| Your app gets `RELAY_CAPABILITY_NOT_GRANTED` | That capability is not ticked on the app's Model Key. Settings → AI Settings → Subscription Door → that app's row, and tick it. |
-| A scheduled run failed overnight | The computer slept. The failure and its reason stay on the run. |
-| An update banner will not go away | Press it, then Restart. |
+| What you see                                           | What to do                                                                                                                                             |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Nothing loads at all                                   | The computer is off or asleep. Wake it.                                                                                                                |
+| Phone cannot reach it, computer can                    | A freshly opened channel needs a minute — wait and retry. Still nothing: Settings → Phone Access, check the three lights.                              |
+| A computer cannot open it, a phone on mobile data can  | That computer's DNS, almost always. See _When it is the network, not Vaenyx_ below.                                                                    |
+| Stuck on "Starting up… this page will open by itself"  | Only true for about ten seconds. After six the page replaces that line with what is actually wrong — read it.                                          |
+| The browser console says `ERR_NAME_NOT_RESOLVED`       | This device could not look the address up. It is DNS, not Vaenyx. Set this device's DNS to `8.8.8.8` — see below.                                      |
+| "Not signed in" on a subscription                      | Settings → AI Settings → sign in to that one again.                                                                                                    |
+| An engine fails and nothing else happens               | By design. Read which one failed, then pick another engine on that row.                                                                                |
+| Voice button does nothing                              | The Hearing row has no engine, or Hearing is switched off. Settings → AI Settings → Capabilities → Hearing.                                            |
+| The ▶ button is missing from replies                   | Speaking is switched off. Settings → AI Settings → Capabilities → Speaking.                                                                            |
+| "You have that switched off"                           | You did, on that capability's row. Settings → AI Settings → Capabilities, and turn the row back on.                                                    |
+| "the mode you are in does not allow it"                | That mode was narrowed, and nothing inside it can widen it. Leave the mode (the badge at the top), then Settings → Modes → that mode → What It May Do. |
+| "this app key was not given that"                      | The app knocked with its own Token. Library → Token → that key → What It May Do, and tick it.                                                          |
+| "no app key can ever be given that"                    | Fetching, and no key can hold it — not a setting, a rule. Do that job from a chat instead.                                                             |
+| Photo comes back with no marks                         | The Vision row has no engine or is switched off, or the model found nothing to mark.                                                                   |
+| A PDF asks about pages first                           | Over ten pages, on purpose. It is telling you the cost before spending it.                                                                             |
+| Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the app has not signed in to a subscription yet.                                                 |
+| Your app gets `RELAY_CAPABILITY_NOT_GRANTED`           | That capability is not ticked on the app's Model Key. Settings → AI Settings → Subscription Door → that app's row, and tick it.                        |
+| A scheduled run failed overnight                       | The computer slept. The failure and its reason stay on the run.                                                                                        |
+| An update banner will not go away                      | Press it, then Restart.                                                                                                                                |
 
 ## When it is the network, not Vaenyx
 
@@ -782,7 +783,7 @@ gap, and nothing is wrong with the app.
   button re-ran the Tailscale installer over a working copy and told Windows
   not to reboot. Windows then sat waiting to swap the network driver, so
   Tailscale's background service could never finish starting and the remote
-  address stopped working. Restarting the *service* could not fix it.
+  address stopped working. Restarting the _service_ could not fix it.
   - **The tell:** the address stops resolving right after anything installed or
     updated Tailscale, and the computer has not been restarted since.
   - **The fix:** restart Windows. Then, if the address still does not open,

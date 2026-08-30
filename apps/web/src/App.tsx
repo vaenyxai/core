@@ -11886,11 +11886,87 @@ function SubscriptionDoorPanel() {
   const [apps, setApps] = useState<AppProfile[]>([]);
   const [newAppName, setNewAppName] = useState("");
   const [addBusy, setAddBusy] = useState(false);
-  // {profileId, token}: the one moment an app's key is readable.
-  const [mintedApp, setMintedApp] = useState<{
-    profileId: string;
-    token: string;
-  } | null>(null);
+  // 🔴 A KEY IS RETRIEVABLE, NOT A ONE-TIME FLASH (Oskar, 2026-08-24: 需要
+  // 保留在那里…正常是隐藏的状态,可以显示,也可以直接 copy). The server has
+  // stored a recoverable cipher for every key since the vault existed, and
+  // the Tokens screen already reveals through it — the Door hiding the key
+  // forever was theatre that cost real keys a Rotate. Hidden by default;
+  // revealed or copied on demand, fetched from the vault each time it is
+  // first needed. profileId -> plaintext, only for keys the Owner asked for.
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({});
+  const [shownKeys, setShownKeys] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [keyErrors, setKeyErrors] = useState<Record<string, string>>({});
+
+  /** The plaintext for one app's key: from this session's cache, else the
+   *  vault. Throws only when the key predates the vault (the 404 case). */
+  async function keyPlaintext(profileId: string): Promise<string> {
+    const cached = revealedKeys[profileId];
+    if (cached) return cached;
+    const result = await fetchAppProfileToken(profileId);
+    setRevealedKeys((current) => ({ ...current, [profileId]: result.token }));
+    return result.token;
+  }
+
+  async function toggleKeyShown(profileId: string): Promise<void> {
+    if (shownKeys.has(profileId)) {
+      setShownKeys((current) => {
+        const next = new Set(current);
+        next.delete(profileId);
+        return next;
+      });
+      return;
+    }
+    try {
+      await keyPlaintext(profileId);
+      setKeyErrors((current) => {
+        const next = { ...current };
+        delete next[profileId];
+        return next;
+      });
+      setShownKeys((current) => new Set(current).add(profileId));
+    } catch (error) {
+      setKeyErrors((current) => ({
+        ...current,
+        [profileId]:
+          error instanceof Error && error.message
+            ? error.message
+            : lang === "zh"
+              ? "这把钥匙取不出来。"
+              : "This key could not be retrieved.",
+      }));
+    }
+  }
+
+  async function copyKey(profileId: string): Promise<void> {
+    try {
+      const token = await keyPlaintext(profileId);
+      await navigator.clipboard?.writeText(token);
+      setKeyErrors((current) => {
+        const next = { ...current };
+        delete next[profileId];
+        return next;
+      });
+      setCopiedKey(profileId);
+      window.setTimeout(
+        () =>
+          setCopiedKey((current) => (current === profileId ? null : current)),
+        2000,
+      );
+    } catch (error) {
+      setKeyErrors((current) => ({
+        ...current,
+        [profileId]:
+          error instanceof Error && error.message
+            ? error.message
+            : lang === "zh"
+              ? "这把钥匙取不出来。"
+              : "This key could not be retrieved.",
+      }));
+    }
+  }
   const [appBusy, setAppBusy] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
   const [ceiling, setCeiling] = useState<{
@@ -11926,7 +12002,13 @@ function SubscriptionDoorPanel() {
     try {
       const created = await createAppProfile({ name, kind: "relay" });
       setApps((current) => [created.profile, ...current]);
-      setMintedApp({ profileId: created.profile.id, token: created.token });
+      // The fresh key lands in the same reveal row every key uses — shown
+      // right away, hideable after.
+      setRevealedKeys((current) => ({
+        ...current,
+        [created.profile.id]: created.token,
+      }));
+      setShownKeys((current) => new Set(current).add(created.profile.id));
       setNewAppName("");
     } catch (error) {
       showErrorToast(
@@ -11946,7 +12028,11 @@ function SubscriptionDoorPanel() {
           entry.id === profileId ? result.profile : entry,
         ),
       );
-      setMintedApp({ profileId, token: result.token });
+      setRevealedKeys((current) => ({
+        ...current,
+        [profileId]: result.token,
+      }));
+      setShownKeys((current) => new Set(current).add(profileId));
     } catch (error) {
       showErrorToast(
         error instanceof Error
@@ -12137,24 +12223,41 @@ function SubscriptionDoorPanel() {
               </button>
             )}
           </div>
-          {mintedApp?.profileId === appProfile.id ? (
-            <div className="door-address door-key-new">
-              <code>{mintedApp.token}</code>
-              <button
-                className="door-copy"
-                onClick={() =>
-                  void navigator.clipboard?.writeText(mintedApp.token)
-                }
-                type="button"
-              >
-                Copy
-              </button>
-              <span>
-                {lang === "zh"
-                  ? "现在就复制这把模型钥匙 —— 之后不再显示"
-                  : "copy the Model Key now — it is never shown again"}
-              </span>
-            </div>
+          <div className="door-address door-key-row">
+            <code>
+              {shownKeys.has(appProfile.id) && revealedKeys[appProfile.id]
+                ? revealedKeys[appProfile.id]
+                : `${appProfile.tokenPrefix}••••••••••••••••`}
+            </code>
+            <button
+              className="door-copy"
+              onClick={() => void toggleKeyShown(appProfile.id)}
+              type="button"
+            >
+              {shownKeys.has(appProfile.id)
+                ? lang === "zh"
+                  ? "隐藏"
+                  : "Hide"
+                : lang === "zh"
+                  ? "显示"
+                  : "Show"}
+            </button>
+            <button
+              className="door-copy"
+              onClick={() => void copyKey(appProfile.id)}
+              type="button"
+            >
+              {copiedKey === appProfile.id
+                ? lang === "zh"
+                  ? "已复制 ✓"
+                  : "Copied ✓"
+                : lang === "zh"
+                  ? "复制"
+                  : "Copy"}
+            </button>
+          </div>
+          {keyErrors[appProfile.id] ? (
+            <p className="form-error">{keyErrors[appProfile.id]}</p>
           ) : null}
           {/* Only what the door actually serves (Oskar, 2026-08-06: 图一大半
               不需要). Its engines do text + these two; hearing, speaking and

@@ -9085,3 +9085,12 @@ body {
   font-size: var(--fs-label);
   line-height: 1.5;
 }
+
+/* The Model Key on its own row: masked by default, Show and Copy beside it.
+   The code truncates rather than wraps — a key is copied, not read. */
+.door-key-row code {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
