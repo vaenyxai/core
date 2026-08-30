@@ -1,7 +1,8 @@
 // The subscription door. Everything tested here is a promise made to an app
 // that cannot see this code, so none of it is assumed: the door starts shut,
-// only the Owner's own addresses get through it, it offers exactly two of the
-// five capabilities, and a link may only point at a host the Owner listed.
+// only the Owner's own addresses get through it, it serves only the
+// capabilities its engines actually have (and shows `web` only to a key that
+// was granted it), and a link may only point at a host the Owner listed.
 // Nothing here reaches a real subscription — the refusals happen before any
 // engine is asked, which is the whole point of testing them.
 import { mkdtempSync, rmSync } from "node:fs";
@@ -11,6 +12,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
+import { writeGlobalCapabilities } from "../src/modules/core/capabilities.js";
 import {
   DEFAULT_RELAY_CONFIG,
   listRelayCalls,
@@ -59,13 +61,16 @@ const OPEN_DOOR = {
 // planted straight into the table with the grants the door serves.
 const TEST_PROFILE = "11111111-2222-4333-8444-555555555555";
 
-function plantProfile(database: DatabaseHandle): void {
+function plantProfile(
+  database: DatabaseHandle,
+  capabilities: string[] = ["vision", "reading"],
+): void {
   database.sqlite
     .prepare(
       `INSERT OR IGNORE INTO app_profiles (id, name, token_hash, token_prefix, kind, capabilities)
        VALUES (?, 'relay-test', 'x', 'vaenyx_app_test...', 'relay', ?)`,
     )
-    .run(TEST_PROFILE, JSON.stringify(["vision", "reading"]));
+    .run(TEST_PROFILE, JSON.stringify(capabilities));
 }
 
 function runOnce(
@@ -104,7 +109,59 @@ describe("the subscription door", () => {
       expect(engine.capabilities).not.toContain("hearing");
       expect(engine.capabilities).not.toContain("speaking");
       expect(engine.capabilities).not.toContain("drawing");
+      // Not granted to this key, so health does not light the button.
+      expect(engine.capabilities).not.toContain("web");
     }
+  });
+
+  it("shows web in health only to a key that was granted it", () => {
+    const database = createTestDatabase();
+    plantProfile(database, ["vision", "reading", "web"]);
+    const health = relayHealth(database, TEST_PROFILE);
+    for (const engine of health.engines) {
+      expect(engine.capabilities).toContain("web");
+    }
+    // And never to a different, ungranted key — the answer is per profile.
+    const other = relayHealth(
+      database,
+      "99999999-8888-4777-8666-555555555555",
+    );
+    for (const engine of other.engines) {
+      expect(engine.capabilities).not.toContain("web");
+    }
+  });
+
+  it("refuses a web call from a key that was not granted web", async () => {
+    const database = createTestDatabase();
+    writeRelayConfig(database, OPEN_DOOR);
+    await expect(runOnce(database, { capability: "web" })).rejects.toThrow(
+      "RELAY_CAPABILITY_NOT_GRANTED:web",
+    );
+  });
+
+  it("refuses a web call while web is off for the whole machine", async () => {
+    const database = createTestDatabase();
+    writeRelayConfig(database, OPEN_DOOR);
+    writeGlobalCapabilities(database, { web: false });
+    plantProfile(database, ["web"]);
+    await expect(runOnce(database, { capability: "web" })).rejects.toThrow(
+      "RELAY_CAPABILITY_OFF:web",
+    );
+  });
+
+  it("lets a granted web call through the gates to the engine itself", async () => {
+    const database = createTestDatabase();
+    writeRelayConfig(database, OPEN_DOOR);
+    plantProfile(database, ["web"]);
+    // Past both capability layers, and stopped only by the profile having no
+    // login on this machine — proof the gate opened without a subscription
+    // being touched. The same key's plain text call takes the same path.
+    await expect(runOnce(database, { capability: "web" })).rejects.toThrow(
+      "RELAY_PROFILE_NOT_CONNECTED:claude-cli",
+    );
+    await expect(runOnce(database, { capability: "text" })).rejects.toThrow(
+      "RELAY_PROFILE_NOT_CONNECTED:claude-cli",
+    );
   });
 
   it("refuses everything while it is switched off", async () => {

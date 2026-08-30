@@ -47,12 +47,14 @@ import { recordEngineUsage } from "./relay-usage.js";
 export const RELAY_ENGINES = ["openai-cli", "claude-cli"] as const;
 export type RelayEngine = (typeof RELAY_ENGINES)[number];
 
-// The five names the whole system uses for what a model can do. The door offers
-// the first and the fourth; the rest belong to engines that are not these two
-// subscriptions (voice runs on Groq or a local Whisper, pictures come out of
-// Cloudflare), so they are reported unsupported rather than quietly missing.
+// The names the whole system uses for what a model can do. The door serves
+// text, web, vision, reading and ocr; the rest belong to engines that are not
+// these two subscriptions (voice runs on Groq or a local Whisper, pictures
+// come out of Cloudflare), so they are reported unsupported rather than
+// quietly missing.
 export const RELAY_CAPABILITIES = [
   "text",
+  "web",
   "hearing",
   "speaking",
   "vision",
@@ -65,10 +67,37 @@ export type RelayCapability = (typeof RELAY_CAPABILITIES)[number];
 // Split now that the vocabulary distinguishes them: Claude reads a PDF itself,
 // Codex takes pictures only — so a caller sending a PDF to Codex must turn its
 // pages into images first, which is what the hand-off prompt already says.
+// `web` is a text call that may search the live internet; both subscriptions
+// can do it, and whether a given KEY may is a per-key grant, not this table.
 const ENGINE_CAPABILITIES: Record<RelayEngine, RelayCapability[]> = {
-  "openai-cli": ["text", "vision"],
-  "claude-cli": ["text", "vision", "reading"],
+  "openai-cli": ["text", "vision", "web"],
+  "claude-cli": ["text", "vision", "reading", "web"],
 };
+
+// The one capability whose presence in health depends on WHO is asking: an
+// engine "supports" web for every key, but a caller reads health to light its
+// own buttons, and a lit button the run would refuse is worse than none — the
+// same reasoning that made `signedIn` per-profile. Same two layers as the run
+// itself: the machine's ceiling, then the key's own grant list.
+function webGranted(database: DatabaseHandle, profileId: string): boolean {
+  return (
+    !capabilityOff(database, "web") &&
+    decideTokenCapabilities(
+      database,
+      ["web"],
+      readProfileCapabilities(database, profileId),
+    ).allowed.includes("web")
+  );
+}
+
+function engineCapabilitiesFor(
+  engine: RelayEngine,
+  webAllowed: boolean,
+): RelayCapability[] {
+  return webAllowed
+    ? ENGINE_CAPABILITIES[engine]
+    : ENGINE_CAPABILITIES[engine].filter((capability) => capability !== "web");
+}
 
 export interface RelayConfig {
   enabled: boolean;
@@ -161,18 +190,19 @@ export function relayHealth(
   profileId: string,
 ): RelayHealth {
   const config = readRelayConfig(database);
+  const webAllowed = webGranted(database, profileId);
   return {
     on: config.enabled,
     engines: [
       {
         id: "openai-cli",
         signedIn: codexProfileSignedIn(profileId),
-        capabilities: ENGINE_CAPABILITIES["openai-cli"],
+        capabilities: engineCapabilitiesFor("openai-cli", webAllowed),
       },
       {
         id: "claude-cli",
         signedIn: claudeMachineLogin(profileId),
-        capabilities: ENGINE_CAPABILITIES["claude-cli"],
+        capabilities: engineCapabilitiesFor("claude-cli", webAllowed),
       },
     ],
     limits: {
@@ -297,10 +327,16 @@ export interface RelayProfileEngineStatus {
   capabilities: RelayCapability[];
 }
 
-export function relayProfileEngineStatus(profileId: string): {
+export function relayProfileEngineStatus(
+  database: DatabaseHandle,
+  profileId: string,
+): {
   mode: "dedicated";
   engines: RelayProfileEngineStatus[];
 } {
+  // Same per-key rule as relayHealth: `web` appears only for a key that was
+  // granted it, so the two answers a calling app might read cannot disagree.
+  const webAllowed = webGranted(database, profileId);
   return {
     mode: "dedicated",
     engines: [
@@ -308,13 +344,13 @@ export function relayProfileEngineStatus(profileId: string): {
         id: "openai-cli",
         connected: codexProfileSignedIn(profileId),
         connectedAt: codexLoginConnectedAt(profileId),
-        capabilities: ENGINE_CAPABILITIES["openai-cli"],
+        capabilities: engineCapabilitiesFor("openai-cli", webAllowed),
       },
       {
         id: "claude-cli",
         connected: claudeMachineLogin(profileId),
         connectedAt: claudeLoginConnectedAt(profileId),
-        capabilities: ENGINE_CAPABILITIES["claude-cli"],
+        capabilities: engineCapabilitiesFor("claude-cli", webAllowed),
       },
     ],
   };
@@ -344,7 +380,10 @@ export async function runRelay(
   // and an outside app asking this machine to look at a picture is an app key
   // asking. Refused before the linked file is fetched: a capability that is
   // switched off should not pull the customer's file onto this disk at all.
-  // `text` is not one of the eight — it is the door itself.
+  // `text` is not one of the eight — it is the door itself. `web` IS one of
+  // the eight, and the sternest of them: it can turn this machine into
+  // somebody else's proxy, so it rides the same two-layer check and its grant
+  // additionally required the Owner's own separate approval when it was made.
   //
   // Two layers here: the machine's ceiling, then the key's own grant list. No
   // mode layer, deliberately — a relay call arrives from another program over
@@ -407,6 +446,10 @@ export async function runRelay(
     // subscription, and "which app spent this" must include the failures.
     recordEngineUsage(database, request.appProfileId, request.engine);
 
+    // A `web` call is a text call whose engine child is allowed the ONE extra
+    // tool, live web search — decided here, enforced inside each engine
+    // (separate session lane / tool allow-list), never by prompt alone.
+    const allowWeb = request.capability === "web";
     const text =
       request.engine === "claude-cli"
         ? await claudeSubscriptionRelay(
@@ -416,6 +459,7 @@ export async function runRelay(
               ? { base64: attachment.base64, mediaType: attachment.mediaType }
               : undefined,
             profileKey,
+            allowWeb,
           )
         : await runCodexRelay(
             request.prompt,
@@ -426,6 +470,7 @@ export async function runRelay(
               ? attachment.path
               : undefined,
             profileKey,
+            allowWeb,
           );
 
     return {

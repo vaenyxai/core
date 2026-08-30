@@ -2975,8 +2975,9 @@ export type ConnectModelProviderRequest = Static<
 
 // THE SUBSCRIPTION DOOR (Oskar, 2026-07-29). Two logins lent to his own apps:
 // they name the one they want, and Vaenyx either does the work on it or says
-// plainly why it could not. Two capabilities are on offer; the other three are
-// reported unsupported rather than left for an app to discover the hard way.
+// plainly why it could not. Text, web, vision, reading and ocr are on offer;
+// the voice-and-drawing three are reported unsupported rather than left for
+// an app to discover the hard way.
 export const RelayEngineSchema = Type.Union([
   Type.Literal("openai-cli"),
   Type.Literal("claude-cli"),
@@ -2984,10 +2985,14 @@ export const RelayEngineSchema = Type.Union([
 
 export const RelayCapabilitySchema = Type.Union([
   Type.Literal("text"),
+  // Text that may search the live internet. Off for every key until the Owner
+  // grants it per app, with its own approval step — see NEEDS_OWN_TOKEN_APPROVAL.
+  Type.Literal("web"),
   Type.Literal("hearing"),
   Type.Literal("speaking"),
   Type.Literal("vision"),
   Type.Literal("reading"),
+  Type.Literal("ocr"),
   Type.Literal("drawing"),
 ]);
 

@@ -5412,7 +5412,7 @@ export async function registerGatewayRoutes(
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
       }
-      const status = relayProfileEngineStatus(profile.id);
+      const status = relayProfileEngineStatus(context.database, profile.id);
       return {
         mode: status.mode,
         engines: status.engines,

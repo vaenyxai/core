@@ -579,10 +579,17 @@ Read this inside the app: **Settings → Manual**.
 - **Who gets in** — only an app holding a **Model Key** you issued here, calling
   from a device on your private network. There is no address list to keep: the
   key is the identity.
-- **What it can do** — text, and reading a picture or PDF. These two
-  subscriptions do no voice and make no pictures, and **Fetching** and **Web**
-  never come through this door at all, whatever is ticked anywhere — so each
-  app's row here shows only the ticks this door can actually serve.
+- **What it can do** — text, reading a picture or PDF, and — per app, off
+  until you allow it — **Web**: a text call that may search the live internet
+  for its answer. These two subscriptions do no voice and make no pictures,
+  and **Fetching** never comes through this door at all, whatever is ticked
+  anywhere — so each app's row here shows only the ticks this door can
+  actually serve.
+- **Web takes its own approval** — on an app's row it is not a tick but an
+  **Approve** button with its own confirmation, because a key that can search
+  the web can use this machine as its way onto the internet. It starts off for
+  every app, you grant it per app, and you can take it back at any time. An
+  app only sees `web` in the door's health answer once its own key has it.
 - **A Token is not a Model Key** — this door takes Model Keys only. A Method or
   Routine Token from Library → Token knocking here is refused with its own
   answer (`RELAY_KEY_WRONG_KIND`), so you always know which of the two an app
@@ -801,5 +808,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.9** · last updated 2026-08-17.
+Manual for **v0.4.9** · last updated 2026-08-30.
 Keep this file up to date whenever a feature changes.
