@@ -4,6 +4,71 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.10.0 — 2026-08-30
+
+**Modes grew a real supervision loop.** A Custom Mode now reports to you in
+the one conversation Vaenyx speaks from: the periodic summary you set on its
+card (daily / weekly / monthly) arrives there as a message — how many chats,
+how many messages, and how many questions its rules refused — and every
+single rule refusal lands there immediately too, with the question and the
+time. Refusals are recognisable because they must open with one fixed,
+honest sentence the person also reads. Anything Vaenyx needs to tell you now
+arrives in that same conversation, with a push that just says it is there.
+
+**Notifications stay in their mode.** Each device only receives the pushes
+that belong to the mode it is in: a reply or task result inside a mode
+buzzes that mode's devices and nobody else's — and your own reports never
+buzz the supervised device. A device sets its own mode by entering or
+exiting one on the device, and reopens wherever it was left; the Devices
+page only reports — name, hardware model, when it was last active, and
+which mode it is in right now, in plain sight under its name. A device you
+have named shows that name under its own logo, so telling tablets apart
+works from the device in hand. The Review queue, Vaenyx Me proposals and
+the whole approval surface are now walled per mode as well.
+
+**The Subscription Door can lend the live web.** A new per-app **Web** tick
+(off for every key until you grant it) lets that app make text calls that
+search the internet for their answer — on either subscription, inside a
+separate engine lane that may use exactly one tool: web search. Pages are
+treated as untrusted data, files and commands stay banned, and an app only
+sees `web` in the door's health answer once its own key carries it. The
+door also fixed a day-one gap: OCR calls were being refused at the wire by
+the request format despite the whole OCR lane behind it.
+
+**Model Keys stopped being write-only.** Every app's key now lives on its
+row behind ••••, with Show and Copy beside it — no more rotating a working
+key just to read it. The Limits boxes accept typed numbers and save when
+you leave the box, so entering 600 no longer fights the clamp at "6".
+
+**Chat got quicker to drive.** Enter sends and Shift+Enter makes a new line,
+everywhere. New conversations name themselves with the fewest words that
+fit after the first reply. A project's + button creates a real, empty
+conversation in that project on the spot. Prompts, choosers and build
+notices scroll themselves into view, and "building in the background" is a
+line in the conversation instead of a floating banner.
+
+**Phone notifications grew up.** One notification per result, which opens
+that result and clears only itself; reading a result in the app clears its
+notification; bodies follow the app's language; the Test button always
+shows its notification; and the last dozen send outcomes are kept so a
+silent morning can be diagnosed instead of guessed at.
+
+**The waiting page now diagnoses the outage.** When the app cannot be
+reached, the page asks two public DNS services itself and says which side
+is broken — including the recurring disease where a public resolver caches
+your address as "does not exist". It names the broken resolver, offers a
+one-tap "ask them to clear it" where that exists, and lays out the reliable
+per-device fix for whichever provider is healthy. Vaenyx also watches its
+own address from the inside and pushes you a warning when a resolver goes
+wrong, deliverable precisely because push rides a different road than the
+broken name.
+
+**Smaller, sharper edges.** Settings prose across the app was shortened to
+one plain line plus a ? hint, in both languages. Fetching's folder is
+chosen by browsing instead of typing a path. Routine results lead with the
+visual, photo-filled fields stay out of the confirm card, and a run lands
+at the bottom of the conversation where the reply appears.
+
 ## v0.4.9.0 — 2026-08-16
 
 **One ChatGPT window, always.** Pressing Sign In With ChatGPT used to open
