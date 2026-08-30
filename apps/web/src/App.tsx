@@ -12240,11 +12240,23 @@ function SubscriptionDoorPanel() {
       </div>
 
       <h3 className="door-subhead">Your apps</h3>
-      <p className="door-legend">
-        {lang === "zh"
-          ? "一个 app 一把模型钥匙、一个订阅身份:钥匙配好后,app 要在它自己里面完成一次订阅登录才可用 —— 它花的是它登录的那个账号,绝不借用 Vaenyx 自己的。"
-          : "One Model Key and one subscription identity per app: after the key is in place, the app signs in to a subscription from inside itself before it works — it spends the account it signed in with, never Vaenyx's own."}
-      </p>
+      <ul className="settings-dots">
+        <li>
+          {lang === "zh"
+            ? "一个 app 一把钥匙、一个订阅身份"
+            : "One Model Key and one subscription identity per app"}
+        </li>
+        <li>
+          {lang === "zh"
+            ? "登录:app 自己登录一次,或按下面的按钮把你的登录授予它"
+            : "Sign in from inside the app, or grant your own login with the button below"}
+        </li>
+        <li>
+          {lang === "zh"
+            ? "它花的是它自己登录的账号,绝不借用 Vaenyx 的"
+            : "It spends the account it signed in with, never Vaenyx's own"}
+        </li>
+      </ul>
       <div className="door-address">
         <input
           className="door-add-input"
@@ -14298,31 +14310,27 @@ function CapabilitiesPanel({
           </button>
         </div>
       </div>
-      <p className="settings-card-copy">
-        {lang === "zh"
-          ? "这是天花板。在这里关掉的东西,任何 Method、任何模式、任何 app 钥匙都够不着 —— 不管它们要什么。"
-          : "The ceiling. Anything switched off here is out of reach of every Method, every mode and every app key — whatever they ask for."}
-      </p>
-      {/* One row is not yet all of that, and saying so is cheaper than a
-          promise that quietly is not kept: switching Web off does stop a
-          Method and an app key from searching, but an ordinary chat still
-          looks things up. Enforcing it there would need every backend to
-          honour it, and two of them cannot yet. */}
-      <p className="settings-card-copy">
-        {lang === "zh"
-          ? "只有「上网」还差一步:关掉它,Method 和 app 钥匙就不能搜了,但普通聊天还是会去查。"
-          : "Web is the one that is not all the way there yet: switching it off stops Methods and app keys from searching, but an ordinary chat still looks things up."}
-      </p>
-      {/* The fact the old Model keys card opened with: these are not eight
-          separate accounts. It used to read "a key added on any row" — true
-          when two rows took a key of their own, and false since both moved to
-          Models (Oskar, 2026-08-01). What it has to say now is why a row can
-          offer a model the Owner never set up on that row. */}
-      <p className="settings-card-copy">
-        {lang === "zh"
-          ? "一个服务商在下面的 Models 里连一次,进的就是同一个池子:凡是它能干的活,每一行都能挑它。"
-          : "Connect a provider once, below in Models, and it joins one shared pool: every row that provider can serve may choose it."}
-      </p>
+      {/* Three facts, three dots (Oskar, 2026-08-31: 设置文字都用简洁 dot
+          point) — the same content the three paragraphs carried, without the
+          wall. The Web caveat stays because a promise quietly not kept is
+          worse than a named gap. */}
+      <ul className="settings-dots">
+        <li>
+          {lang === "zh"
+            ? "天花板:这里关掉的,任何 Method、模式、app 钥匙都够不着"
+            : "The ceiling: switched off here = out of reach of every Method, mode and app key"}
+        </li>
+        <li>
+          {lang === "zh"
+            ? "只有「上网」差一步:关掉挡住 Method 和 app 钥匙,普通聊天还是会查"
+            : "Web is the one exception: off stops Methods and app keys, an ordinary chat still looks things up"}
+        </li>
+        <li>
+          {lang === "zh"
+            ? "服务商在下面 Models 连一次就进同一个池子,哪行用得上都能挑它"
+            : "Connect a provider once under Models and every row it can serve may choose it"}
+        </li>
+      </ul>
       {/* N5 — the answer to "what does one call cost", which the app could not
           give anywhere except in the title of a Test button. Above the switches
           because that is where somebody is deciding whether to switch one on,
@@ -14332,13 +14340,16 @@ function CapabilitiesPanel({
           none. */}
       <div className="capability-cost">
         <p className="drawer-head">{t("legal.notice.capability.cost.title")}</p>
-        {t("legal.notice.capability.cost")
-          .split("\n\n")
-          .map((paragraph) => (
-            <p className="settings-card-copy" key={paragraph.slice(0, 24)}>
-              {paragraph}
-            </p>
-          ))}
+        {/* The WORDS are the copy pack's, verbatim (N5 — legal strings are
+            never reworded here); only the PRESENTATION changed: each agreed
+            paragraph is one dot instead of one wall (Oskar, 2026-08-31). */}
+        <ul className="settings-dots">
+          {t("legal.notice.capability.cost")
+            .split("\n\n")
+            .map((paragraph) => (
+              <li key={paragraph.slice(0, 24)}>{paragraph}</li>
+            ))}
+        </ul>
       </div>
       {/* N1/N2 — said once, before the capability is used, and both buttons are
           real: "Switch it off" really switches it off, so this is a decision

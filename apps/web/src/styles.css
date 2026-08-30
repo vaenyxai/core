@@ -1497,7 +1497,10 @@ textarea::placeholder {
 
 /* On a phone the row wraps to two lines rather than crushing the name: the
    drawing and the name keep the first line, model and switch take the second
-   (Oskar: "一行显示一个,或者分两行"). */
+   (Oskar: "一行显示一个,或者分两行"). The name claims the WHOLE first line —
+   at 60% a short engine name ("Groq") squeezed onto line one while long ones
+   wrapped, so sibling rows wore two different layouts (Oskar, 2026-08-31:
+   hearing 那个地方为什么跟下面的不一样). */
 @media (max-width: 560px) {
   .capability-row {
     flex-wrap: wrap;
@@ -1505,7 +1508,7 @@ textarea::placeholder {
   }
 
   .capability-row-name {
-    flex: 1 0 60%;
+    flex: 1 0 100%;
   }
 
   .capability-row-engine {
@@ -9117,6 +9120,19 @@ body {
   .capability-row-test {
     padding: 5px 7px;
   }
+}
+
+/* Settings prose as dot points (Oskar, 2026-08-31: 设置里面的文字排版都用
+   简洁的 dot point) — visible bullets, one short line each, never a wall. */
+.settings-dots {
+  margin: var(--space-2) 0;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 5px;
+  list-style: disc;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
 }
 
 /* The last dozen push outcomes, newest first — so a Test pressed at 07:10
