@@ -107,7 +107,8 @@ export async function buildApp(
   const database = createDatabase(config);
   // Watches the funnel hostname in public DNS and pushes one warning when a
   // resolver starts denying it exists — see phone-access.ts, the sentinel.
-  startFunnelDnsSentinel(database);
+  // The data directory carries the throttle stamp across restarts.
+  startFunnelDnsSentinel(database, config.dataDirectory);
   // Usage bookkeeping (who spent what, by month): the model providers have no
   // database handle, so the sink is bound here once.
   bindUsageDatabase(database);

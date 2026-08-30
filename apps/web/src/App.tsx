@@ -12268,9 +12268,11 @@ function SubscriptionDoorPanel() {
         <div className="door-app" key={appProfile.id}>
           <div className="door-app-head">
             <strong>{appProfile.name}</strong>
+            {/* Date only: the key row right below already carries the prefix,
+                and on a phone the two prefixes read as a duplicated mess
+                (Oskar, 2026-08-31: 手机这个页面乱乱的). */}
             <span className="door-app-meta">
-              {new Date(appProfile.createdAt).toLocaleDateString()} ·{" "}
-              <code>{appProfile.tokenPrefix}</code>
+              {new Date(appProfile.createdAt).toLocaleDateString()}
             </span>
             <button
               className="door-copy"
@@ -12364,8 +12366,8 @@ function SubscriptionDoorPanel() {
                 const signedIn = appLogin?.[row.engine] === true;
                 const ownerHas = logins.owner[row.engine];
                 return (
-                  <div className="door-app-cap" key={row.engine}>
-                    <span>
+                  <div className="door-app-cap door-engine-row" key={row.engine}>
+                    <span className="door-engine-line">
                       {row.name}
                       {" — "}
                       {signedIn ? (
@@ -12377,7 +12379,7 @@ function SubscriptionDoorPanel() {
                       )}
                     </span>
                     <button
-                      className="secondary-button"
+                      className="door-copy"
                       disabled={appBusy === appProfile.id || !ownerHas}
                       onClick={() =>
                         void grantLogin(appProfile.id, row.engine)

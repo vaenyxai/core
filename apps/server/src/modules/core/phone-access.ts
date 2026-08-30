@@ -21,7 +21,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseHandle } from "../../db/database.js";
 import { pushLanguage, sendPushToAllDevices } from "./push.js";
 import { postInboxNote } from "./inbox-thread.js";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { execFile, spawn, spawnSync } from "node:child_process";
@@ -421,8 +421,31 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
 // not our hostname. Throttled to one alert per 12 hours; recovery resets it.
 const SENTINEL_INTERVAL_MS = 30 * 60 * 1000;
 const SENTINEL_ALERT_GAP_MS = 12 * 60 * 60 * 1000;
-let sentinelLastAlertAt = 0;
+// 🔴 ON DISK, not in memory (Oskar, 2026-08-31: 昨天到现在提示3次了). The
+// throttle lived in a variable, the server restarts on every deploy, and a
+// deploy-heavy day during an outage re-alerted after every restart. The file
+// survives restarts; the 12 hours mean 12 hours.
+let sentinelStampPath: string | null = null;
 let sentinelTimer: ReturnType<typeof setInterval> | null = null;
+
+function sentinelLastAlertAt(): number {
+  if (!sentinelStampPath) return 0;
+  try {
+    const stamp = Date.parse(readFileSync(sentinelStampPath, "utf8").trim());
+    return Number.isNaN(stamp) ? 0 : stamp;
+  } catch {
+    return 0;
+  }
+}
+
+function recordSentinelAlert(): void {
+  if (!sentinelStampPath) return;
+  try {
+    writeFileSync(sentinelStampPath, `${new Date().toISOString()}\n`);
+  } catch {
+    // Best-effort; worst case is one extra alert after a restart.
+  }
+}
 
 async function sampleResolver(url: string, host: string): Promise<number> {
   let bad = 0;
@@ -454,12 +477,15 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
       sampleResolver("https://cloudflare-dns.com/dns-query?name=", host),
     ]);
     if (google < 2 && cloudflare < 2) {
-      // Healthy again: the next incident may alert immediately.
-      sentinelLastAlertAt = 0;
+      // Healthy. Deliberately NOT resetting the throttle: this outage flaps
+      // (a resolver's nodes disagree mid-incident), and reset-on-recovery
+      // turned one incident into an alert per flap. One warning per 12 hours,
+      // full stop — the waiting page carries the fix for anyone who hits it
+      // in between.
       return;
     }
-    if (Date.now() - sentinelLastAlertAt < SENTINEL_ALERT_GAP_MS) return;
-    sentinelLastAlertAt = Date.now();
+    if (Date.now() - sentinelLastAlertAt() < SENTINEL_ALERT_GAP_MS) return;
+    recordSentinelAlert();
     const culprit =
       google >= 2 && cloudflare >= 2
         ? "Google + Cloudflare"
@@ -504,8 +530,16 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
   }
 }
 
-export function startFunnelDnsSentinel(database: DatabaseHandle): void {
+export function startFunnelDnsSentinel(
+  database: DatabaseHandle,
+  // Where the alert throttle stamp lives (the caller's data directory), so a
+  // restart cannot forget when the last warning went out.
+  dataDirectory?: string,
+): void {
   if (sentinelTimer) return;
+  if (dataDirectory) {
+    sentinelStampPath = join(dataDirectory, "dns-sentinel-last-alert.txt");
+  }
   sentinelTimer = setInterval(
     () => void sentinelTick(database),
     SENTINEL_INTERVAL_MS,

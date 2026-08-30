@@ -2234,6 +2234,25 @@ textarea::placeholder {
   gap: var(--space-2);
 }
 
+/* Engine login rows: one full-width line each — status left, small button
+   right — so a phone shows two tidy rows instead of a jumble of wrapped
+   text and oversized buttons (Oskar, 2026-08-31). */
+.door-engine-row {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.door-engine-line {
+  font-size: var(--fs-sm);
+  color: var(--text-muted, #b5b1a6);
+}
+
+.door-engine-line strong {
+  color: var(--text);
+}
+
 .door-add-input {
   flex: 1;
   min-width: 0;
