@@ -23,6 +23,7 @@ import { resolveClaudeSubscriptionAuth } from "./modules/models/claude-subscript
 import { seedLibraryIfEmpty } from "./modules/core/library-seed.js";
 import { initModelRegistry } from "./modules/models/registry.js";
 import { normalizeEngineConnections } from "./modules/models/provider-settings.js";
+import { startFunnelDnsSentinel } from "./modules/core/phone-access.js";
 import { initPushService } from "./modules/core/push.js";
 import {
   reconcileInterruptedTasks,
@@ -104,6 +105,9 @@ export async function buildApp(
   initPushService(config);
 
   const database = createDatabase(config);
+  // Watches the funnel hostname in public DNS and pushes one warning when a
+  // resolver starts denying it exists — see phone-access.ts, the sentinel.
+  startFunnelDnsSentinel(database);
   // Usage bookkeeping (who spent what, by month): the model providers have no
   // database handle, so the sink is bound here once.
   bindUsageDatabase(database);

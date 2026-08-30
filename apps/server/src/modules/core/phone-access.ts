@@ -18,6 +18,8 @@
 //     the Owner's Surface proved the gap: local config said ON, the public
 //     name did not exist, the QR led nowhere.
 import { randomUUID } from "node:crypto";
+import type { DatabaseHandle } from "../../db/database.js";
+import { pushLanguage, sendPushToAllDevices } from "./push.js";
 import { existsSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -406,6 +408,91 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
 }
 
 // ── Status ────────────────────────────────────────────────────────────────
+
+// ── The DNS sentinel ────────────────────────────────────────────────────────
+// Third strike of the same outage (2026-08-17 twice, 2026-08-25): a public
+// resolver caches NXDOMAIN for the funnel hostname while the record is fine at
+// its source, and whichever household device uses that resolver silently
+// cannot open Vaenyx. The Owner found each one by a family member's dead
+// screen. The server can see it FIRST: every half hour it asks both big
+// resolvers about its own name, and a sustained "does not exist" becomes one
+// push notification — deliverable exactly then, because Web Push rides FCM,
+// not our hostname. Throttled to one alert per 12 hours; recovery resets it.
+const SENTINEL_INTERVAL_MS = 30 * 60 * 1000;
+const SENTINEL_ALERT_GAP_MS = 12 * 60 * 60 * 1000;
+let sentinelLastAlertAt = 0;
+let sentinelTimer: ReturnType<typeof setInterval> | null = null;
+
+async function sampleResolver(url: string, host: string): Promise<number> {
+  let bad = 0;
+  for (let i = 0; i < 4; i += 1) {
+    try {
+      const response = await fetch(`${url}${encodeURIComponent(host)}&type=A`, {
+        headers: { accept: "application/dns-json" },
+        signal: AbortSignal.timeout(4000),
+      });
+      const parsed = (await response.json()) as { Status?: number };
+      if (parsed.Status === 3) bad += 1;
+    } catch {
+      // Unreachable is not NXDOMAIN; only a lying answer counts.
+    }
+  }
+  return bad;
+}
+
+async function sentinelTick(database: DatabaseHandle): Promise<void> {
+  try {
+    const command = findTailscaleCommand();
+    if (!command) return;
+    const serveResult = await run(command, ["serve", "status", "--json"]);
+    const serve = parseServeStatus(serveResult.stdout);
+    if (!serve.tunnelUp || !serve.phoneUrl) return;
+    const host = new URL(serve.phoneUrl).hostname;
+    const [google, cloudflare] = await Promise.all([
+      sampleResolver("https://dns.google/resolve?name=", host),
+      sampleResolver("https://cloudflare-dns.com/dns-query?name=", host),
+    ]);
+    if (google < 2 && cloudflare < 2) {
+      // Healthy again: the next incident may alert immediately.
+      sentinelLastAlertAt = 0;
+      return;
+    }
+    if (Date.now() - sentinelLastAlertAt < SENTINEL_ALERT_GAP_MS) return;
+    sentinelLastAlertAt = Date.now();
+    const culprit =
+      google >= 2 && cloudflare >= 2
+        ? "Google + Cloudflare"
+        : google >= 2
+          ? "Google (8.8.8.8)"
+          : "Cloudflare (1.1.1.1)";
+    const zh = pushLanguage() === "zh";
+    // "test" category on purpose: it is the always-send lane, and a warning
+    // that some devices cannot reach the app must not depend on a preference
+    // that was tuned for chatter. One per 12h keeps it from becoming noise.
+    await sendPushToAllDevices(database, {
+      title: zh ? "远程地址预警" : "Remote address warning",
+      body: zh
+        ? `${culprit} 这家公共 DNS 正把你的远程地址记成「不存在」。用它解析的设备暂时打不开 Vaenyx —— 设备没坏,通常几小时自愈;急用就把那台设备的 DNS 换一家。`
+        : `The public resolver ${culprit} is currently answering "does not exist" for your remote address. Devices using it cannot open Vaenyx for now — nothing is broken on them, and it usually clears within hours; to get in sooner, point that device at a different DNS.`,
+      url: "/",
+      force: true,
+    });
+  } catch {
+    // The sentinel never breaks anything else.
+  }
+}
+
+export function startFunnelDnsSentinel(database: DatabaseHandle): void {
+  if (sentinelTimer) return;
+  sentinelTimer = setInterval(
+    () => void sentinelTick(database),
+    SENTINEL_INTERVAL_MS,
+  );
+  sentinelTimer.unref?.();
+  // First look two minutes after boot, so a restart during an incident still
+  // alerts promptly instead of half an hour later.
+  setTimeout(() => void sentinelTick(database), 2 * 60 * 1000).unref?.();
+}
 
 export async function getPhoneAccessStatus(): Promise<PhoneAccessStatus> {
   const command = findTailscaleCommand();

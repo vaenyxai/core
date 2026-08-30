@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v14";
+const CACHE_NAME = "vaenyx-shell-v15";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -129,6 +129,10 @@ function bootWaitPage() {
     "而且它们不会同时坏。</li>",
     "<li>这台设备连的网络,跟 Vaenyx 所在的网络对不上。</li>",
     "</ul>",
+    // Filled by the self-diagnosis below: a decisive verdict instead of the
+    // three guesses above, once the page has ASKED the public resolvers
+    // itself (Oskar, 2026-08-25: 其他用户不应该再出现这个问题).
+    '<div id="verdict" style="display:none"></div>',
     // The one address that never needs DNS at all.
     "<p>On the computer Vaenyx runs on, <code>http://127.0.0.1:3000</code> ",
     "always works — it never looks anything up.<br>",
@@ -146,8 +150,40 @@ function bootWaitPage() {
     "function honest(){",
     'document.getElementById("wait").style.display="none";',
     'document.getElementById("hint").style.display="block"}',
-    "if(Date.now()-t>=6000)honest();",
-    "setInterval(function(){if(Date.now()-t>=6000)honest();",
+    // 🔴 DIAGNOSE, DON'T GUESS. The device that cannot resolve OUR name can
+    // still reach dns.google and cloudflare-dns.com — the 2026-08-25 tablet
+    // proved it. So the page asks both: name EXISTS there while this page
+    // cannot load -> this device's resolver is lying, said as a verdict with
+    // the one working resolver named. Both say NXDOMAIN -> the name really is
+    // gone from public DNS for a while. Both unreachable -> no internet.
+    "var diagnosed=false;",
+    "function verdict(html){var v=document.getElementById('verdict');",
+    "v.innerHTML=html;v.style.display='block'}",
+    "function ask(url,extra){return fetch(url+encodeURIComponent(location.hostname)+'&type=A',",
+    "Object.assign({cache:'no-store'},extra||{})).then(function(r){return r.json()})",
+    ".then(function(j){return j.Status}).catch(function(){return null})}",
+    "function diagnose(){if(diagnosed)return;diagnosed=true;",
+    "Promise.all([ask('https://dns.google/resolve?name='),",
+    "ask('https://cloudflare-dns.com/dns-query?name=',{headers:{accept:'application/dns-json'}})",
+    "]).then(function(r){var g=r[0],c=r[1];",
+    "if(g===null&&c===null){verdict(",
+    "'<p><b>Diagnosis: this device has no internet right now.</b><br>诊断:这台设备现在没有网。</p>');return}",
+    "if(g===0||c===0){var use=g===0?'dns.google (8.8.8.8)':'1.1.1.1';verdict(",
+    "'<p><b>Diagnosis: the address EXISTS — this device&#39;s DNS is answering wrongly.</b> ',",
+    "'Point this device at <code>'+use+'</code>: Android — Settings → Network → Private DNS → <code>dns.google</code>; ',",
+    "'iPhone/iPad — Wi-Fi → (i) → Configure DNS → Manual → <code>8.8.8.8</code>; ',",
+    "'Windows/Mac — network adapter DNS → <code>8.8.8.8</code>.<br>',",
+    "'<b>诊断:地址其实存在 —— 是这台设备用的 DNS 在给错答案。</b>把这台设备指到 <code>'+use+'</code>:',",
+    "'安卓 — 设置 → 网络 → 私人 DNS → 填 <code>dns.google</code>;',",
+    "'iPhone/iPad — Wi-Fi → (i) → 配置 DNS → 手动 → 加 <code>8.8.8.8</code>;',",
+    "'电脑 — 网卡 DNS 填 <code>8.8.8.8</code>。</p>');return}",
+    "if(g===3&&c===3){verdict(",
+    "'<p><b>Diagnosis: the address really is missing from public DNS right now.</b> Nothing on this device is broken — it usually returns within a few hours.<br>',",
+    "'<b>诊断:这个地址此刻在公共 DNS 里确实查不到。</b>这台设备没坏 —— 通常几小时内自己恢复。</p>');return}",
+    "verdict('<p>Diagnosis was inconclusive — one resolver did not answer.<br>诊断没有定论 —— 有一家解析服务没有应答。</p>');",
+    "})}",
+    "if(Date.now()-t>=6000){honest();diagnose();}",
+    "setInterval(function(){if(Date.now()-t>=6000){honest();diagnose();}",
     'fetch("/v1/system/status",{cache:"no-store"}).then(function(r){',
     "if(r.ok){try{localStorage.removeItem(K)}catch(e){}location.reload()}",
     "}).catch(function(){})},2000)})()",
