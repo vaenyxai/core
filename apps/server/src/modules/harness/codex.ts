@@ -289,11 +289,12 @@ export function disconnectCodexProfile(profileKey: string): void {
 }
 
 export function endCodexRelaySession(profileKey: string): void {
-  // Both lanes: a revoked login must not keep answering on either child.
-  for (const lanes of [relaySessions, relayWebSessions]) {
-    const lane = lanes.get(profileKey);
-    if (lane?.session && !lane.session.closed) lane.session.end();
-    lanes.delete(profileKey);
+  // EVERY lane the profile has (plain/web × effort × model): a revoked login
+  // must not keep answering on any child.
+  for (const [key, lane] of relayLanes) {
+    if (!key.startsWith(`${profileKey}|`)) continue;
+    if (lane.session && !lane.session.closed) lane.session.end();
+    relayLanes.delete(key);
   }
 }
 
@@ -873,11 +874,18 @@ class CodexChatSession {
   #turn: PendingChatTurn | undefined;
   #web: boolean;
 
-  constructor(profileKey: string = "core", options?: { web?: boolean }) {
+  constructor(
+    profileKey: string = "core",
+    options?: { web?: boolean; effort?: string; model?: string },
+  ) {
     // A web session is spawned WITH the web_search config — the tool exists —
     // and its item guard admits webSearch items alone. A plain session has
     // neither: the tool is not merely forbidden, it is not there. Which kind a
     // caller gets is decided by the capability gate in relay.ts, per key.
+    //
+    // Effort and model ride the same spawn-time flags the Owner's chat uses —
+    // a session IS its config, so each requested combination gets (and
+    // reuses) its own lane; relay.ts owns the whitelist that guards `model`.
     this.#web = options?.web === true;
     const executable = findCodexCommand();
     this.#child = spawn(
@@ -887,6 +895,10 @@ class CodexChatSession {
         "app-server",
         "--stdio",
         ...(this.#web ? ["--config", 'web_search="live"'] : []),
+        ...(options?.effort
+          ? ["--config", `model_reasoning_effort="${options.effort}"`]
+          : []),
+        ...(options?.model ? ["--config", `model="${options.model}"`] : []),
       ],
       {
         cwd: this.#cwd,
@@ -1200,27 +1212,29 @@ export async function runCodexChatTest(request: string): Promise<string> {
 // apart from the smoke test and from the Owner's chat, and every run opens a
 // fresh ephemeral thread — an outside app's request never joins a conversation.
 //
-// One session PER PROFILE (Relay Profiles, 2026-08-02): a session is a child
-// process whose CODEX_HOME is fixed at spawn, so two identities cannot share
-// one. "core" is the shared-door session every legacy caller still rides.
-//
-// Web lanes are a SEPARATE map, not a flag on the same session: whether the
-// web_search tool exists is fixed at spawn, so a profile that makes both kinds
-// of call keeps two children — the plain one still has no tool to misuse.
-const relaySessions = new Map<
+// One lane PER (profile × web × effort × model): a session is a child process
+// whose CODEX_HOME, web tool, reasoning effort and model are all fixed at
+// spawn, so every distinct combination an app asks for gets — and reuses —
+// its own child. Lanes spawn lazily; an app that only ever asks one way keeps
+// one child, exactly as before. "core" is the shared-door lane every legacy
+// caller still rides.
+const relayLanes = new Map<
   string,
   { session: CodexChatSession | undefined; queue: Promise<void> }
 >();
-const relayWebSessions = new Map<
-  string,
-  { session: CodexChatSession | undefined; queue: Promise<void> }
->();
+
+// Relay lanes think at MEDIUM unless the call says otherwise (Oskar,
+// 2026-08-30): they used to inherit the machine's global default (xhigh),
+// which made an outside app's single web lookup take minutes.
+const RELAY_DEFAULT_EFFORT = "medium";
 
 export async function runCodexRelay(
   request: string,
   imagePath?: string,
   profileKey: string = "core",
   allowWeb: boolean = false,
+  effort?: string,
+  model?: string,
 ): Promise<string> {
   if (profileKey === "core") {
     const status = getCodexStatus();
@@ -1235,11 +1249,17 @@ export async function runCodexRelay(
     throw new Error("RELAY_PROFILE_NOT_CONNECTED:openai-cli");
   }
 
-  const lanes = allowWeb ? relayWebSessions : relaySessions;
-  let lane = lanes.get(profileKey);
+  const wantEffort = effort ?? RELAY_DEFAULT_EFFORT;
+  const laneKey = [
+    profileKey,
+    allowWeb ? "web" : "plain",
+    wantEffort,
+    model ?? "",
+  ].join("|");
+  let lane = relayLanes.get(laneKey);
   if (!lane) {
     lane = { session: undefined, queue: Promise.resolve() };
-    lanes.set(profileKey, lane);
+    relayLanes.set(laneKey, lane);
   }
 
   let releaseQueue: () => void = () => undefined;
@@ -1251,7 +1271,11 @@ export async function runCodexRelay(
 
   try {
     if (!lane.session || lane.session.closed) {
-      lane.session = new CodexChatSession(profileKey, { web: allowWeb });
+      lane.session = new CodexChatSession(profileKey, {
+        web: allowWeb,
+        effort: wantEffort,
+        model: model || undefined,
+      });
     }
     return await lane.session.run(request, {
       instructions: allowWeb

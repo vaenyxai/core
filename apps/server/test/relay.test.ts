@@ -225,6 +225,36 @@ describe("the subscription door", () => {
     ).rejects.toThrow("RELAY_TOO_MANY_FILES");
   });
 
+  it("refuses an effort or model outside the engine's whitelist, echoing it", async () => {
+    const database = createTestDatabase();
+    writeRelayConfig(database, OPEN_DOOR);
+    // The engine's word comes back with the caller's own value — never a
+    // silent acceptance that would do nothing.
+    await expect(
+      runOnce(database, { engine: "openai-cli", effort: "xhigh" }),
+    ).rejects.toThrow("RELAY_EFFORT_INVALID:openai-cli:xhigh");
+    await expect(
+      runOnce(database, { engine: "openai-cli", model: "gpt-99" }),
+    ).rejects.toThrow("RELAY_MODEL_INVALID:openai-cli:gpt-99");
+    // Claude's lists are empty on purpose: no equivalent knob, so any value
+    // is refused rather than accepted-and-ignored.
+    await expect(
+      runOnce(database, { engine: "claude-cli", effort: "medium" }),
+    ).rejects.toThrow("RELAY_EFFORT_INVALID:claude-cli:medium");
+  });
+
+  it("tells callers what each engine will accept", () => {
+    const database = createTestDatabase();
+    const health = relayHealth(database, TEST_PROFILE);
+    const codex = health.engines.find((engine) => engine.id === "openai-cli");
+    const claude = health.engines.find((engine) => engine.id === "claude-cli");
+    expect(codex?.efforts).toEqual(["low", "medium", "high"]);
+    // Empty until a model override verifies live — see RELAY_CODEX_MODELS.
+    expect(codex?.models).toEqual([]);
+    expect(claude?.efforts).toEqual([]);
+    expect(claude?.models).toEqual([]);
+  });
+
   it("an engine the profile has not connected refuses by name", async () => {
     const database = createTestDatabase();
     writeRelayConfig(database, OPEN_DOOR);

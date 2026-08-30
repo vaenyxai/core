@@ -74,6 +74,28 @@ const ENGINE_CAPABILITIES: Record<RelayEngine, RelayCapability[]> = {
   "claude-cli": ["text", "vision", "reading", "web"],
 };
 
+// What a call may ASK FOR, per engine (Oskar, 2026-08-30): a reasoning-effort
+// tier, valid for that one call, enforced at the codex lane's spawn flags.
+// Claude's single-turn relay has no equivalent knob, so its list is empty and
+// health says so rather than accepting a field that would do nothing.
+//
+// The model list is EMPTY on purpose (2026-08-31, live-verified): spawning the
+// relay's app-server with any --config model="…" — including the working
+// default's own id — made every turn come back with no answer, so until that
+// is understood no model override is offered. The field and its whitelist
+// check stay wired; filling this list is the whole change when a variant
+// verifies.
+export const RELAY_EFFORTS = ["low", "medium", "high"] as const;
+export const RELAY_CODEX_MODELS = [] as const;
+
+function engineEfforts(engine: RelayEngine): string[] {
+  return engine === "openai-cli" ? [...RELAY_EFFORTS] : [];
+}
+
+function engineModels(engine: RelayEngine): string[] {
+  return engine === "openai-cli" ? [...RELAY_CODEX_MODELS] : [];
+}
+
 // The one capability whose presence in health depends on WHO is asking: an
 // engine "supports" web for every key, but a caller reads health to light its
 // own buttons, and a lit button the run would refuse is worse than none — the
@@ -171,6 +193,10 @@ export interface RelayHealth {
     id: RelayEngine;
     signedIn: boolean;
     capabilities: RelayCapability[];
+    // What a call may ask for on this engine, so a caller can build its
+    // dropdowns from the door's own answer. Empty = not selectable here.
+    efforts: string[];
+    models: string[];
   }[];
   limits: {
     maxFiles: number;
@@ -198,11 +224,15 @@ export function relayHealth(
         id: "openai-cli",
         signedIn: codexProfileSignedIn(profileId),
         capabilities: engineCapabilitiesFor("openai-cli", webAllowed),
+        efforts: engineEfforts("openai-cli"),
+        models: engineModels("openai-cli"),
       },
       {
         id: "claude-cli",
         signedIn: claudeMachineLogin(profileId),
         capabilities: engineCapabilitiesFor("claude-cli", webAllowed),
+        efforts: engineEfforts("claude-cli"),
+        models: engineModels("claude-cli"),
       },
     ],
     limits: {
@@ -232,6 +262,11 @@ export interface RelayRunRequest {
   // Which app key knocked. Always set — the shared door key retired in phase
   // two, so there is no callerless path left.
   appProfileId: string;
+  // Per-call knobs (2026-08-30): a reasoning-effort tier and a model
+  // override, valid for this one call only. Checked against the engine's own
+  // whitelist — an illegal value is refused echoing the caller's word.
+  effort?: string;
+  model?: string;
 }
 
 export interface RelayRunResult {
@@ -325,6 +360,8 @@ export interface RelayProfileEngineStatus {
   connected: boolean;
   connectedAt: string | null;
   capabilities: RelayCapability[];
+  efforts: string[];
+  models: string[];
 }
 
 export function relayProfileEngineStatus(
@@ -345,12 +382,16 @@ export function relayProfileEngineStatus(
         connected: codexProfileSignedIn(profileId),
         connectedAt: codexLoginConnectedAt(profileId),
         capabilities: engineCapabilitiesFor("openai-cli", webAllowed),
+        efforts: engineEfforts("openai-cli"),
+        models: engineModels("openai-cli"),
       },
       {
         id: "claude-cli",
         connected: claudeMachineLogin(profileId),
         connectedAt: claudeLoginConnectedAt(profileId),
         capabilities: engineCapabilitiesFor("claude-cli", webAllowed),
+        efforts: engineEfforts("claude-cli"),
+        models: engineModels("claude-cli"),
       },
     ],
   };
@@ -402,6 +443,25 @@ export async function runRelay(
     ) {
       throw new Error(`RELAY_CAPABILITY_NOT_GRANTED:${request.capability}`);
     }
+  }
+
+  // Per-call effort/model, validated against the ENGINE's own whitelist and
+  // refused echoing the caller's word — never accepted-and-ignored. Claude's
+  // lists are empty on purpose (no equivalent knob), so any value sent for
+  // it is refused the same way.
+  if (
+    request.effort !== undefined &&
+    !engineEfforts(request.engine).includes(request.effort)
+  ) {
+    throw new Error(
+      `RELAY_EFFORT_INVALID:${request.engine}:${request.effort}`,
+    );
+  }
+  if (
+    request.model !== undefined &&
+    !engineModels(request.engine).includes(request.model)
+  ) {
+    throw new Error(`RELAY_MODEL_INVALID:${request.engine}:${request.model}`);
   }
 
   // The call rides the profile's own login, nothing else. The shared door
@@ -471,12 +531,17 @@ export async function runRelay(
               : undefined,
             profileKey,
             allowWeb,
+            request.effort,
+            request.model,
           );
 
     return {
       text,
       engine: request.engine,
-      model: request.engine === "claude-cli" ? "claude-subscription" : "codex",
+      model:
+        request.engine === "claude-cli"
+          ? "claude-subscription"
+          : (request.model ?? "codex"),
       ms: Date.now() - started,
     };
   } finally {

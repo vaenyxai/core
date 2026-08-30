@@ -5300,6 +5300,8 @@ export async function registerGatewayRoutes(
             capability: request.body.capability,
             files: request.body.files ?? [],
             appProfileId: knocker.profileId,
+            effort: request.body.effort,
+            model: request.body.model,
           },
         );
         recordRelayCall(context.database, {
@@ -5369,6 +5371,10 @@ export async function registerGatewayRoutes(
               : code.startsWith("RELAY_CAPABILITY_UNSUPPORTED") ||
                   code.startsWith("RELAY_HOST_NOT_ALLOWED") ||
                   code.startsWith("RELAY_TOO_MANY_FILES") ||
+                  // An effort/model outside the engine's whitelist: the
+                  // caller's own word comes back in the code.
+                  code.startsWith("RELAY_EFFORT_INVALID") ||
+                  code.startsWith("RELAY_MODEL_INVALID") ||
                   code.includes("TOO_LARGE") ||
                   code === "RELAY_NO_FILE"
                 ? 400

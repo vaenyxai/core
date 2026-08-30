@@ -3042,6 +3042,13 @@ export const RelayRunRequestSchema = Type.Object(
         { maxItems: 20 },
       ),
     ),
+    // Per-call knobs (2026-08-30): reasoning-effort tier and model override,
+    // valid for this one call. Loose strings on the wire on purpose — the
+    // server checks them against each engine's whitelist and refuses an
+    // illegal value echoing the caller's own word, which a schema enum's
+    // generic 400 could not.
+    effort: Type.Optional(Type.String({ minLength: 1, maxLength: 20 })),
+    model: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
   },
   { additionalProperties: false },
 );
@@ -3065,6 +3072,10 @@ export const RelayHealthSchema = Type.Object(
           id: RelayEngineSchema,
           signedIn: Type.Boolean(),
           capabilities: Type.Array(RelayCapabilitySchema),
+          // What a call may ask for on this engine (dropdown material).
+          // Empty = not selectable here.
+          efforts: Type.Array(Type.String()),
+          models: Type.Array(Type.String()),
         },
         { additionalProperties: false },
       ),
@@ -3136,6 +3147,8 @@ export const RelayProfileStatusSchema = Type.Object(
           connected: Type.Boolean(),
           connectedAt: Type.Union([Type.String(), Type.Null()]),
           capabilities: Type.Array(RelayCapabilitySchema),
+          efforts: Type.Array(Type.String()),
+          models: Type.Array(Type.String()),
         },
         { additionalProperties: false },
       ),
