@@ -214,6 +214,7 @@ export function listDeviceModes(database: DatabaseHandle): DeviceMode[] {
               modes.name AS modeName,
               device_modes.current_mode_id AS currentModeId,
               current_modes.name AS currentModeName,
+              device_modes.model AS model,
               device_modes.updated_at AS updatedAt
        FROM device_modes
        LEFT JOIN modes ON modes.id = device_modes.mode_id
@@ -228,6 +229,7 @@ export function listDeviceModes(database: DatabaseHandle): DeviceMode[] {
     modeName: string | null;
     currentModeId: string | null;
     currentModeName: string | null;
+    model: string | null;
     updatedAt: string;
   }[];
   return rows.map((row) => ({
@@ -240,6 +242,7 @@ export function listDeviceModes(database: DatabaseHandle): DeviceMode[] {
     currentModeId: row.currentModeId ? row.currentModeId : null,
     currentModeName: row.currentModeId ? row.currentModeName : null,
     currentKnown: row.currentModeId !== null,
+    model: row.model || null,
     updatedAt: row.updatedAt,
   }));
 }
@@ -254,6 +257,7 @@ export function setDeviceMode(
     label?: string;
     register?: boolean;
     currentModeId?: string | null;
+    model?: string;
   },
 ): DeviceMode[] {
   if (input.modeId && !findMode(database, input.modeId)) {
@@ -261,38 +265,71 @@ export function setDeviceMode(
   }
   const existing = database.sqlite
     .prepare(
-      "SELECT label, mode_id, current_mode_id FROM device_modes WHERE device_id = ?",
+      "SELECT label, mode_id, current_mode_id, model FROM device_modes WHERE device_id = ?",
     )
     .get(deviceId) as
-    | { label: string; mode_id: string | null; current_mode_id: string | null }
+    | {
+        label: string;
+        mode_id: string | null;
+        current_mode_id: string | null;
+        model: string | null;
+      }
     | undefined;
   // A device re-registering on open keeps whatever name the Owner gave it.
   const label =
     input.register && existing?.label
       ? existing.label
       : input.label?.trim() || existing?.label || "Device";
-  const modeId =
-    input.modeId === undefined ? (existing?.mode_id ?? null) : input.modeId;
+  // The hardware model only ever improves: a browser that knows it fills it
+  // in, one that does not leaves what an earlier open reported.
+  const model = input.model?.trim() || existing?.model || null;
   // Three states on disk (0077): NULL = never reported, '' = reported User
   // Mode, id = reported that mode. An unknown mode id is stored as User Mode
   // rather than refused — a report must never fail the open it rides on.
-  const currentModeId =
+  const storedCurrent = existing?.current_mode_id ?? null;
+  const reportedCurrent =
     input.currentModeId === undefined
-      ? (existing?.current_mode_id ?? null)
+      ? undefined
       : input.currentModeId && findMode(database, input.currentModeId)
         ? input.currentModeId
         : "";
+  const currentModeId =
+    reportedCurrent === undefined ? storedCurrent : reportedCurrent;
+  let modeId =
+    input.modeId === undefined ? (existing?.mode_id ?? null) : input.modeId;
+  // 🔴 "Opens in" FOLLOWS A CHANGE MADE ON THE DEVICE (Oskar, 2026-08-30:
+  // 是不是应该自动的…不用每一次去这里点设置). Entering a mode on the device
+  // binds it there; exiting unbinds it — the device reopens in whatever state
+  // it was left in, no trip to Settings. A mere reload repeats the SAME
+  // report and changes nothing, which is what protects a choice the Owner
+  // just made remotely on the Devices screen: it stands until the device
+  // itself actually switches next.
+  if (
+    input.modeId === undefined &&
+    reportedCurrent !== undefined &&
+    reportedCurrent !== storedCurrent
+  ) {
+    modeId = reportedCurrent === "" ? null : reportedCurrent;
+  }
   database.sqlite
     .prepare(
-      `INSERT INTO device_modes (device_id, label, mode_id, current_mode_id, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO device_modes (device_id, label, mode_id, current_mode_id, model, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(device_id) DO UPDATE SET
          label = excluded.label,
          mode_id = excluded.mode_id,
          current_mode_id = excluded.current_mode_id,
+         model = excluded.model,
          updated_at = excluded.updated_at`,
     )
-    .run(deviceId, label, modeId, currentModeId, new Date().toISOString());
+    .run(
+      deviceId,
+      label,
+      modeId,
+      currentModeId,
+      model,
+      new Date().toISOString(),
+    );
   return listDeviceModes(database);
 }
 

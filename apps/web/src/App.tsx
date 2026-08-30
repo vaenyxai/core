@@ -4999,6 +4999,9 @@ function ModesPanel() {
                   </button>
                 </div>
                 <p className="library-note">
+                  {/* Hardware model first when the browser told us one
+                      (Android Chrome does; Apple's browsers do not). */}
+                  {device.model ? `${device.model} · ` : ""}
                   {deviceLastSeen(device.updatedAt)}
                   {/* Where the device IS right now — as reported by the
                       device itself — beside where it is set to open, so the
@@ -5054,10 +5057,13 @@ function ModesPanel() {
                 </div>
                 {device.currentKnown &&
                 device.currentModeId !== (device.modeId ?? null) ? (
+                  // Rare since Opens-in follows switches made on the device:
+                  // seen only right after a remote change here, before the
+                  // device reopens and lands where Opens-in now points.
                   <p className="library-note">
                     {lang === "zh"
-                      ? `它现在在${device.currentModeName ? `「${device.currentModeName}」` : " User Mode"},和上面设的不一样 —— 想让它每次打开都进那个模式,就把 Opens in 也选成那个。`
-                      : `Right now it is in ${device.currentModeName ?? "User Mode"}, which differs from the setting above — to make it land there on every open, set Opens in to match.`}
+                      ? `它现在还在${device.currentModeName ? `「${device.currentModeName}」` : " User Mode"};下次打开会进上面设的那个。`
+                      : `Right now it is still in ${device.currentModeName ?? "User Mode"}; on its next open it will land in the setting above.`}
                   </p>
                 ) : null}
               </article>
@@ -26070,20 +26076,41 @@ function VaenyxWorkspace({
   const [thisDeviceName, setThisDeviceName] = useState<string | null>(null);
   useEffect(() => {
     const id = deviceId();
-    void setDeviceMode(id, {
-      label: deviceLabel(),
-      register: true,
-      currentModeId: workspace.mode?.id ?? null,
-    })
-      .then((rows) => {
-        const own = rows.find((row) => row.deviceId === id);
-        // Only a name the Owner typed is worth announcing; the automatic
-        // "Android · Chrome" label says nothing the device does not.
-        setThisDeviceName(
-          own && own.label && own.label !== deviceLabel() ? own.label : null,
-        );
-      })
-      .catch(() => undefined);
+    void (async () => {
+      // The hardware model, where the browser will say it: Android Chrome
+      // answers via client hints ("SM-X510"); Apple's browsers answer
+      // nothing, and an empty answer sends nothing.
+      let model = "";
+      try {
+        const data = (
+          navigator as {
+            userAgentData?: {
+              getHighEntropyValues?: (
+                hints: string[],
+              ) => Promise<{ model?: string }>;
+            };
+          }
+        ).userAgentData;
+        if (data?.getHighEntropyValues) {
+          model = ((await data.getHighEntropyValues(["model"])).model ?? "")
+            .trim();
+        }
+      } catch {
+        // Unknown stays unknown.
+      }
+      const rows = await setDeviceMode(id, {
+        label: deviceLabel(),
+        register: true,
+        currentModeId: workspace.mode?.id ?? null,
+        ...(model ? { model } : {}),
+      });
+      const own = rows.find((row) => row.deviceId === id);
+      // Only a name the Owner typed is worth announcing; the automatic
+      // "Android · Chrome" label says nothing the device does not.
+      setThisDeviceName(
+        own && own.label && own.label !== deviceLabel() ? own.label : null,
+      );
+    })().catch(() => undefined);
     if (workspace.mode) return;
     let exited = false;
     try {

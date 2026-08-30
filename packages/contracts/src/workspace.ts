@@ -951,6 +951,9 @@ export const DeviceModeSchema = Type.Object(
     currentModeId: Type.Union([Type.String(), Type.Null()]),
     currentModeName: Type.Union([Type.String(), Type.Null()]),
     currentKnown: Type.Boolean(),
+    // Hardware model where the browser will say it (Android Chrome does;
+    // Apple's browsers do not) — beside the name, never instead of it.
+    model: Type.Union([Type.String(), Type.Null()]),
     updatedAt: Type.String(),
   },
   { additionalProperties: false },
@@ -966,6 +969,8 @@ export const SetDeviceModeRequestSchema = Type.Object(
     // The mode this device's session is in right now (null = User Mode).
     // Sent on every open and every mode change; omitted = no report.
     currentModeId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // Hardware model as the browser reports it; omitted/empty = unknown.
+    model: Type.Optional(Type.String({ maxLength: 120 })),
   },
   { additionalProperties: false },
 );
