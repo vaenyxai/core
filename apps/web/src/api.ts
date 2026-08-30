@@ -1241,6 +1241,9 @@ export function fetchPushPublicKey(): Promise<{ key: string | null }> {
 export function subscribePush(subscription: {
   endpoint: string;
   keys: { p256dh: string; auth: string };
+  // Ties the subscription to this device so pushes can be scoped to the mode
+  // the device is currently in.
+  deviceId?: string;
 }): Promise<{ ok: boolean }> {
   return requestJson<{ ok: boolean }>("/v1/push/subscriptions", {
     method: "POST",

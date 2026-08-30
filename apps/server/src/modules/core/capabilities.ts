@@ -554,11 +554,13 @@ export function writeModeCapabilities(
 // behalf of another app is not something a token should be able to carry,
 // whatever the Method declared and whatever the Owner ticked — so this is a
 // property of the code, not a default someone can turn around.
-// 🔴 `web` needs its own explicit approval per token: it can turn this machine
-// into somebody else's proxy, which is a different question from "may this app
-// use my Method".
+// `web` used to demand its own second press per token; Oskar retired the
+// ceremony (2026-08-30: 不要 approve 什么东西,就是一个 toggle) — the real
+// protections stay: a key starts at NOTHING, so web is off until ticked, and
+// the machinery below remains for any future capability that earns a second
+// press.
 export const NEVER_VIA_TOKEN: readonly Capability[] = ["fetching"];
-export const NEEDS_OWN_TOKEN_APPROVAL: readonly Capability[] = ["web"];
+export const NEEDS_OWN_TOKEN_APPROVAL: readonly Capability[] = [];
 
 export function tokenGrantable(declared: Capability[]): Capability[] {
   return declared.filter(

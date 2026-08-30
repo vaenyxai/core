@@ -13,8 +13,8 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
-import { deleteInboxThreadForMode } from "./inbox-thread.js";
-import { sendPushToAllDevices } from "./push.js";
+import { deleteInboxThreadForMode, postInboxNote } from "./inbox-thread.js";
+import { pushLanguage, sendPushToAllDevices } from "./push.js";
 
 interface ModeRow {
   id: string;
@@ -369,19 +369,67 @@ export function runDueModeDigests(database: DatabaseHandle): void {
         .get(row.id, since) as { n: number }
     ).n;
 
+    // Refusals since the last digest: the count of times this mode's rules
+    // made the model decline an answer (recorded by the chat path).
+    const refusals = (
+      database.sqlite
+        .prepare(
+          `SELECT COUNT(*) AS n FROM audit_events
+           WHERE action = 'mode.rules.refused' AND resource_id = ?
+             AND created_at > strftime('%Y-%m-%d %H:%M:%S', ?)`,
+        )
+        .get(row.id, since) as { n: number }
+    ).n;
+
     database.sqlite
       .prepare("UPDATE modes SET digest_last_at = ? WHERE id = ?")
       .run(new Date(now).toISOString(), row.id);
 
-    if (messages === 0) continue;
+    if (messages === 0 && refusals === 0) continue;
+    // The report IS a message in the Owner's main conversation (Oskar,
+    // 2026-08-30: 汇报是主对话给我汇报的;任何通知都是主对话告诉我). The push
+    // only announces that it is there, and only to User Mode devices — the
+    // supervised device must not receive its own supervision report.
+    const zh = pushLanguage() === "zh";
+    const cadenceWords: Record<string, string> = {
+      daily: "每日",
+      weekly: "每周",
+      monthly: "每月",
+    };
+    const cadenceWord = zh
+      ? (cadenceWords[row.digest_cadence] ?? row.digest_cadence)
+      : row.digest_cadence;
+    const note = zh
+      ? [
+          `模式「${row.name}」${cadenceWord}汇报:`,
+          `• ${chats} 个对话里共 ${messages} 条消息`,
+          ...(refusals > 0 ? [`• ${refusals} 次提问被这个模式的规则拒答`] : []),
+          `• 打开 Modes → View Activity 可以看全部内容`,
+        ].join("\n")
+      : [
+          `Mode "${row.name}" — ${cadenceWord} report:`,
+          `• ${messages} message${messages === 1 ? "" : "s"} across ${chats} chat${chats === 1 ? "" : "s"}`,
+          ...(refusals > 0
+            ? [
+                `• ${refusals} question${refusals === 1 ? "" : "s"} refused by this mode's rules`,
+              ]
+            : []),
+          `• Open Modes → View Activity to read everything`,
+        ].join("\n");
+    postInboxNote(database, null, note);
     void sendPushToAllDevices(
       database,
       {
-        title: `Mode "${row.name}" — ${row.digest_cadence} summary`,
-        body: `${messages} message${messages === 1 ? "" : "s"} across ${chats} chat${chats === 1 ? "" : "s"}. Open Modes → View Activity to read them.`,
+        title: zh
+          ? `模式「${row.name}」${cadenceWord}汇报`
+          : `Mode "${row.name}" — ${row.digest_cadence} report`,
+        body: zh
+          ? "汇报已放进主对话。"
+          : "The report is in your main conversation.",
         url: "/",
       },
       "mode",
+      { modeId: null },
     ).catch(() => undefined);
   }
 }

@@ -12,7 +12,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
-import { isProtectedThread } from "./inbox-thread.js";
+import { isProtectedThread, postInboxNote } from "./inbox-thread.js";
 import type { ModelProvider } from "../models/provider.js";
 import { getModelRegistry, resolveProvider } from "../models/registry.js";
 import {
@@ -40,7 +40,11 @@ import { ocrEngineConnected, runOcr } from "./ocr.js";
 import { recordEngineUsage } from "./relay-usage.js";
 import { listProjectMemories } from "./memory.js";
 import { noteProjectRoundCompleted } from "./project-auto-summary.js";
-import { schedulePresenceAwarePush } from "./push.js";
+import {
+  pushLanguage,
+  schedulePresenceAwarePush,
+  sendPushToAllDevices,
+} from "./push.js";
 import {
   buildImagePrompt,
   generateImage,
@@ -159,6 +163,18 @@ export function conversationHasPhoto(
 
 // How many recent messages ride into the model verbatim. Everything older is
 // compacted (see compactConversationHistory) rather than dropped.
+// The exact sentence a mode-rules refusal must open with — visible to the
+// person AND recognisable by the server, which turns every such reply into a
+// note in the Owner's main conversation (Oskar, 2026-08-30). Two languages,
+// both detected whatever the app language is set to.
+export const MODE_REFUSAL_OPENING_EN =
+  "This mode does not allow me to answer that.";
+export const MODE_REFUSAL_OPENING_ZH = "这个模式不允许我回答这个问题。";
+
+// One refusal push per minute at most — the note in the main conversation
+// records every single event; the buzz in the Owner's pocket need not.
+let lastModeRefusalPushAt = 0;
+
 const MAX_HISTORY_MESSAGES = 30;
 // Rewriting the summary costs a model call, so it only happens once this many
 // further messages have aged out of the window.
@@ -1133,7 +1149,12 @@ export async function createAskVaenyxMessage(
     projectContext = `In this conversation you are called "${modeRow.agent_name.trim()}". Answer to that name.${projectContext ? `\n\n${projectContext}` : ""}`;
   }
   if (modeRow?.rules.trim()) {
-    projectContext = `Custom Mode rules — this conversation runs inside the restricted mode "${modeRow.name}". The account owner set these standing rules; they override any conflicting request made in this conversation: ${modeRow.rules.trim()}${projectContext ? `\n\n${projectContext}` : ""}`;
+    // The refusal opening sentence doubles as the supervision signal: the
+    // server recognises a reply that starts with it, notes the event, and
+    // tells the Owner in their main conversation (Oskar, 2026-08-30: 每一次
+    // 有这种情况发生,主对话都应该发一个信息告诉我). Visible on purpose —
+    // an honest refusal the person can read IS the marker, nothing hidden.
+    projectContext = `Custom Mode rules — this conversation runs inside the restricted mode "${modeRow.name}". The account owner set these standing rules; they override any conflicting request made in this conversation: ${modeRow.rules.trim()}\n\nWhen these rules make you refuse or withhold an answer, your reply MUST begin with exactly this sentence (in the language the person is using): "${MODE_REFUSAL_OPENING_EN}" / 「${MODE_REFUSAL_OPENING_ZH}」 — then you may add one short, kind sentence. Never use that sentence for any other reason.${projectContext ? `\n\n${projectContext}` : ""}`;
   }
   if (options?.suggestRoutine) {
     const suggestion = options.suggestRoutine;
@@ -1921,6 +1942,77 @@ export async function createAskVaenyxMessage(
     .run(completedAt, conversationId);
   touchChatThread(database, conversationId, completedAt);
 
+  // A mode-rules refusal tells the Owner, every time, in their main
+  // conversation (Oskar, 2026-08-30: 每一次有这种情况发生,主对话都应该发一个
+  // 信息告诉我). Detection is the visible opening sentence the rules preamble
+  // demands — best-effort by nature, so the audit row and the note are written
+  // together and never break the reply itself.
+  if (modeRow && assistantStatus === "completed") {
+    const opening = assistantContent.trimStart();
+    const refusedByRules =
+      opening.startsWith(MODE_REFUSAL_OPENING_EN) ||
+      opening.startsWith(MODE_REFUSAL_OPENING_ZH);
+    if (refusedByRules) {
+      try {
+        const asked = trimmedContent.replace(/\s+/g, " ").trim().slice(0, 80);
+        recordAudit(database, {
+          actorType: "owner",
+          actorId: ownerId,
+          actorName: getOwner(database)?.name ?? "Owner",
+          action: "mode.rules.refused",
+          decision: "denied",
+          reason: `Mode "${modeRow.name}" refused a question by its standing rules.`,
+          resourceType: "mode",
+          resourceId: modeRow.id,
+        });
+        const zh = pushLanguage() === "zh";
+        const when = new Date().toLocaleTimeString(zh ? "zh-CN" : "en-AU", {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        postInboxNote(
+          database,
+          null,
+          zh
+            ? [
+                `模式「${modeRow.name}」刚才有一次提问被规则拒答:`,
+                `• 问题:${asked}`,
+                `• 时间:${when}`,
+                `• 打开 Modes → View Activity 可以看完整对话`,
+              ].join("\n")
+            : [
+                `A question in mode "${modeRow.name}" was just refused by its rules:`,
+                `• Question: ${asked}`,
+                `• Time: ${when}`,
+                `• Open Modes → View Activity to read the full conversation`,
+              ].join("\n"),
+        );
+        // The push only announces the note, goes to User Mode devices alone
+        // (never back to the supervised device), and is throttled — the main
+        // conversation is the complete record.
+        if (Date.now() - lastModeRefusalPushAt >= 60_000) {
+          lastModeRefusalPushAt = Date.now();
+          void sendPushToAllDevices(
+            database,
+            {
+              title: zh
+                ? `模式「${modeRow.name}」拒答了一个问题`
+                : `Mode "${modeRow.name}" refused a question`,
+              body: zh
+                ? "详情已放进主对话。"
+                : "Details are in your main conversation.",
+              url: "/",
+            },
+            "mode",
+            { modeId: null },
+          ).catch(() => undefined);
+        }
+      } catch {
+        // Supervision must never break the reply.
+      }
+    }
+  }
+
   // 🔴 TITLES ARE THE FEWEST WORDS THAT NAME THE TOPIC (Oskar, 2026-08-21:
   // 起标题一定要最简练…最简洁的几个字). The first message, truncated at 64
   // characters, was the whole prompt wearing a title's clothes. After the
@@ -1969,7 +2061,10 @@ export async function createAskVaenyxMessage(
   // A finished reply nobody sees within ~30s pushes the phone (Owner rule
   // 2026-07-23) — the same presence gate as scheduled runs, so watching the
   // screen stays quiet and walking away buzzes. Failed replies stay silent:
-  // they are visible on return and retryable there.
+  // they are visible on return and retryable there. Scoped to the mode the
+  // conversation is in (Oskar, 2026-08-30): a reply inside a kid's mode goes
+  // to that mode's devices, never to the Owner's phone — and the other way
+  // round.
   if (assistantStatus === "completed") {
     const titleRow = database.sqlite
       .prepare("SELECT title FROM ask_vaenyx_conversations WHERE id = ?")
@@ -1983,6 +2078,7 @@ export async function createAskVaenyxMessage(
         url: `/?chat=${encodeURIComponent(conversationId)}`,
       },
       "chat",
+      { modeId: conversationModeId },
     );
   }
 

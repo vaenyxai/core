@@ -585,11 +585,10 @@ Read this inside the app: **Settings → Manual**.
   and **Fetching** never comes through this door at all, whatever is ticked
   anywhere — so each app's row here shows only the ticks this door can
   actually serve.
-- **Web takes its own approval** — on an app's row it is not a tick but an
-  **Approve** button with its own confirmation, because a key that can search
-  the web can use this machine as its way onto the internet. It starts off for
-  every app, you grant it per app, and you can take it back at any time. An
-  app only sees `web` in the door's health answer once its own key has it.
+- **Web is a per-app tick, off by default** — every key starts with nothing,
+  so no app can search the web until you tick Web on its row; untick it to
+  take it back at any time. An app only sees `web` in the door's health
+  answer once its own key has it.
 - **A Token is not a Model Key** — this door takes Model Keys only. A Method or
   Routine Token from Library → Token knocking here is refused with its own
   answer (`RELAY_KEY_WRONG_KIND`), so you always know which of the two an app
@@ -703,6 +702,17 @@ Read this inside the app: **Settings → Manual**.
     the device to go and change a setting, because they cannot.
 - **Bind a device** — Settings → Modes → Devices, so a given device always opens
   in that mode.
+- **Notifications stay in their mode.** A device only receives the pushes that
+  belong to the mode it is bound to: a reply or task result inside a mode
+  buzzes that mode's devices, and your own devices hear nothing of it — and
+  the other way round. A device bound to no mode counts as yours (User Mode).
+- **The mode reports to your main conversation.** The periodic summary you set
+  on a mode's card (daily / weekly / monthly) arrives as a message in the
+  conversation Vaenyx speaks from — messages, chats, and how many questions
+  its rules refused — with a push that just says it is there. Every time the
+  rules refuse a question, a note lands there too, immediately, with the
+  question and the time. Anything Vaenyx needs to tell you arrives in that
+  same conversation.
 - **Leave a mode** — the badge at the top of the screen.
 - **Modes you already made** — a mode you made before this existed adds no
   restriction of its own until you open **What It May Do** and switch something

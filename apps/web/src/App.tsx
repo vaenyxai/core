@@ -2660,10 +2660,13 @@ async function healPushSubscription(): Promise<boolean> {
     };
     if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) return false;
     // Always re-sync to the server: this also repairs a server-side prune
-    // while the browser still held a valid subscription.
+    // while the browser still held a valid subscription. The device id ties
+    // the subscription to this device's current mode, so pushes reach only
+    // the devices the event belongs to.
     await subscribePush({
       endpoint: json.endpoint,
       keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      deviceId: deviceId(),
     });
     return true;
   } catch {
@@ -2784,6 +2787,7 @@ function NotificationsPanel() {
       await subscribePush({
         endpoint: json.endpoint,
         keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        deviceId: deviceId(),
       });
       try {
         window.localStorage.removeItem(PUSH_OPTOUT_KEY);
@@ -11969,12 +11973,6 @@ function SubscriptionDoorPanel() {
   }
   const [appBusy, setAppBusy] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
-  // The web grant mid-flight: which key is being asked "really give this app
-  // the internet?", so the press that answers is its own deliberate act.
-  const [approvingApp, setApprovingApp] = useState<{
-    profileId: string;
-    capability: string;
-  } | null>(null);
   const [ceiling, setCeiling] = useState<{
     global: Record<string, boolean>;
     implemented: Record<string, boolean>;
@@ -12269,9 +12267,10 @@ function SubscriptionDoorPanel() {
               不需要). Its engines do text + these; hearing, speaking and
               drawing exist on no door engine, and fetching is not even in the
               door's request vocabulary. Web joined 2026-08-30: a text call
-              that may search the live internet, off per key until granted
-              here. The full eight-row grant surface stays where the other
-              kinds of key live, on the Tokens screen. */}
+              that may search the live internet — a plain toggle like the rest
+              (Oskar: 不要 approve,就是一个 toggle), off for every key until
+              ticked here. The full eight-row grant surface stays where the
+              other kinds of key live, on the Tokens screen. */}
           {ceiling ? (
             <div className="door-app-caps">
               {CAPABILITY_META.filter((meta) =>
@@ -12279,11 +12278,6 @@ function SubscriptionDoorPanel() {
               ).map((meta) => {
                 const machineOn = ceiling.global[meta.id] === true;
                 const granted = appProfile.capabilities.includes(meta.id);
-                // Same rule as the Tokens screen, from the same server list:
-                // web is granted by its own deliberate press, never the same
-                // tick as the rest.
-                const ownApproval =
-                  ceiling.needsOwnTokenApproval.includes(meta.id) && !granted;
                 return (
                   <div className="door-app-cap" key={meta.id}>
                     <CapabilityChip id={meta.id} lang={lang} showName />
@@ -12291,20 +12285,6 @@ function SubscriptionDoorPanel() {
                       <span className="capability-row-pending">
                         {lang === "zh" ? "整机关着" : "machine off"}
                       </span>
-                    ) : ownApproval ? (
-                      <button
-                        className="secondary-button"
-                        disabled={appBusy === appProfile.id}
-                        onClick={() =>
-                          setApprovingApp({
-                            profileId: appProfile.id,
-                            capability: meta.id,
-                          })
-                        }
-                        type="button"
-                      >
-                        {lang === "zh" ? "单独批准" : "Approve"}
-                      </button>
                     ) : (
                       <input
                         aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
@@ -12325,47 +12305,6 @@ function SubscriptionDoorPanel() {
                   </div>
                 );
               })}
-            </div>
-          ) : null}
-          {approvingApp?.profileId === appProfile.id ? (
-            <div className="token-reset-confirm">
-              <span>
-                {lang === "zh"
-                  ? "把「联网搜索」给这把钥匙?拿着它的程序就能通过这台机器上网。随时可以收回。"
-                  : "Give this key live web search? Whatever holds it can then reach the internet through this machine. You can take it back at any time."}
-              </span>
-              <div className="profile-card-actions">
-                <button
-                  className="danger-button"
-                  disabled={appBusy === appProfile.id}
-                  onClick={() => {
-                    const grant = approvingApp;
-                    void grantAppCapability(
-                      grant.profileId,
-                      grant.capability,
-                      true,
-                      [grant.capability],
-                    ).then(() => setApprovingApp(null));
-                  }}
-                  type="button"
-                >
-                  {appBusy === appProfile.id
-                    ? lang === "zh"
-                      ? "处理中…"
-                      : "Working..."
-                    : lang === "zh"
-                      ? "批准"
-                      : "Approve"}
-                </button>
-                <button
-                  className="text-button"
-                  disabled={appBusy === appProfile.id}
-                  onClick={() => setApprovingApp(null)}
-                  type="button"
-                >
-                  {lang === "zh" ? "取消" : "Cancel"}
-                </button>
-              </div>
             </div>
           ) : null}
         </div>

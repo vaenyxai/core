@@ -20,6 +20,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseHandle } from "../../db/database.js";
 import { pushLanguage, sendPushToAllDevices } from "./push.js";
+import { postInboxNote } from "./inbox-thread.js";
 import { existsSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -466,17 +467,31 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
           ? "Google (8.8.8.8)"
           : "Cloudflare (1.1.1.1)";
     const zh = pushLanguage() === "zh";
+    const warning = zh
+      ? `${culprit} 这家公共 DNS 正把你的远程地址记成「不存在」。用它解析的设备暂时打不开 Vaenyx —— 设备没坏,通常几小时自愈;急用就把那台设备的 DNS 换一家。`
+      : `The public resolver ${culprit} is currently answering "does not exist" for your remote address. Devices using it cannot open Vaenyx for now — nothing is broken on them, and it usually clears within hours; to get in sooner, point that device at a different DNS.`;
+    // The full warning lives in the Owner's main conversation (2026-08-30:
+    // 任何通知都是主对话告诉我); the push announces it, to the Owner's own
+    // (User Mode) devices.
+    postInboxNote(
+      database,
+      null,
+      zh ? `远程地址预警:\n• ${warning}` : `Remote address warning:\n• ${warning}`,
+    );
     // "test" category on purpose: it is the always-send lane, and a warning
     // that some devices cannot reach the app must not depend on a preference
     // that was tuned for chatter. One per 12h keeps it from becoming noise.
-    await sendPushToAllDevices(database, {
-      title: zh ? "远程地址预警" : "Remote address warning",
-      body: zh
-        ? `${culprit} 这家公共 DNS 正把你的远程地址记成「不存在」。用它解析的设备暂时打不开 Vaenyx —— 设备没坏,通常几小时自愈;急用就把那台设备的 DNS 换一家。`
-        : `The public resolver ${culprit} is currently answering "does not exist" for your remote address. Devices using it cannot open Vaenyx for now — nothing is broken on them, and it usually clears within hours; to get in sooner, point that device at a different DNS.`,
-      url: "/",
-      force: true,
-    });
+    await sendPushToAllDevices(
+      database,
+      {
+        title: zh ? "远程地址预警" : "Remote address warning",
+        body: warning,
+        url: "/",
+        force: true,
+      },
+      "test",
+      { modeId: null },
+    );
   } catch {
     // The sentinel never breaks anything else.
   }

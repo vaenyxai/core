@@ -1156,6 +1156,10 @@ export const SubscribePushRequestSchema = Type.Object(
       },
       { additionalProperties: false },
     ),
+    // The Modes screen's device id: binds this subscription to a device so
+    // pushes can be scoped to the mode that device is currently in. Optional —
+    // an old client's subscription counts as a User Mode device.
+    deviceId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
   },
   { additionalProperties: false },
 );

@@ -884,8 +884,8 @@ function finishTaskRun(
     // pressed the button and is looking at the task.
     if (trigger === "schedule") {
       const titleRow = database.sqlite
-        .prepare("SELECT title FROM tasks WHERE id = ?")
-        .get(id) as { title: string } | undefined;
+        .prepare("SELECT title, mode_id FROM tasks WHERE id = ?")
+        .get(id) as { title: string; mode_id: string | null } | undefined;
       // In the app's language, not English under a Chinese title (Oskar,
       // 2026-08-22: 改成跟 app 语言走).
       const zh = pushLanguage() === "zh";
@@ -906,6 +906,10 @@ function finishTaskRun(
           url: `/?task=${encodeURIComponent(id)}`,
         },
         "scheduled",
+        // Only the devices in the mode this task belongs to (Oskar,
+        // 2026-08-30): a kid-mode task's result must not buzz the Owner's
+        // phone, and an Owner task must not buzz the kid's.
+        { modeId: titleRow?.mode_id ?? null },
       );
     }
   } catch {

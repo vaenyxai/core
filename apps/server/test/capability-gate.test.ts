@@ -848,40 +848,32 @@ describe("what one app key may do", () => {
     await app.close();
   });
 
-  it("makes the web its own approval, not one more tick", async () => {
+  it("grants web with a plain tick, off for every key until then", async () => {
+    // The approval ceremony retired (Oskar 2026-08-30: 不要 approve,就是一个
+    // toggle). What stands: a key starts at NOTHING, so web is off until the
+    // Owner ticks it — and the tick works on its own, no second press.
     const { app, cookie } = await startWithOwner();
     const keyId = await makeKey(app, cookie, "Quote app");
 
-    const sneaked = await app.inject({
-      method: "PUT",
-      url: `/v1/app-profiles/${keyId}/capabilities`,
-      headers: { cookie },
-      payload: { changes: { vision: true, web: true } },
-    });
-    expect(sneaked.statusCode).toBe(400);
-    expect(String(sneaked.json().error)).toContain("its own decision");
-
-    // Nothing at all was stored: the whole write is refused, so `vision` did
-    // not slip through on the back of the refused one.
-    const after = await app.inject({
+    const before = await app.inject({
       method: "GET",
       url: "/v1/app-profiles",
       headers: { cookie },
     });
     expect(
-      (after.json() as { id: string; capabilities: string[] }[]).find(
+      (before.json() as { id: string; capabilities: string[] }[]).find(
         (item) => item.id === keyId,
       )?.capabilities,
     ).toEqual([]);
 
-    const approved = await app.inject({
+    const ticked = await app.inject({
       method: "PUT",
       url: `/v1/app-profiles/${keyId}/capabilities`,
       headers: { cookie },
-      payload: { changes: { web: true }, approve: ["web"] },
+      payload: { changes: { vision: true, web: true } },
     });
-    expect(approved.statusCode).toBe(200);
-    expect(approved.json().profile.capabilities).toEqual(["web"]);
+    expect(ticked.statusCode).toBe(200);
+    expect(ticked.json().profile.capabilities).toEqual(["vision", "web"]);
 
     await app.close();
   });

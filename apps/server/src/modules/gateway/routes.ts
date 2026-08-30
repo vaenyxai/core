@@ -527,7 +527,7 @@ import {
   toFolderId,
 } from "../core/fork-method.js";
 import { listExampleProvenance } from "../core/example-origin.js";
-import { ensureInboxThread } from "../core/inbox-thread.js";
+import { ensureInboxThread, postInboxNote } from "../core/inbox-thread.js";
 import {
   clearRegression,
   listRegressions,
@@ -1023,12 +1023,15 @@ export async function registerGatewayRoutes(
       ? "能力的开关与测试只在 User Mode 里进行 —— 先退出当前模式。"
       : "Capabilities are set and tested in User Mode — exit this mode first.";
 
-  // Custom Mode supervision events (spec §6, "must push"): a blocked action
-  // inside a mode notifies every device immediately — deliberately NOT
-  // presence-aware (the blocked device is the one actively viewing), and
-  // throttled so a hammering finger cannot flood the Owner's phone.
+  // Custom Mode supervision events (spec §6, "must push"). Every event lands
+  // as a note in the Owner's MAIN CONVERSATION (Oskar, 2026-08-30: 任何通知
+  // 都是主对话告诉我) — the note is the complete record. The push merely
+  // announces it, goes to User Mode devices only (the blocked device is the
+  // one actively viewing; its holder already saw the refusal on screen), and
+  // stays throttled so a hammering finger cannot flood the Owner's phone.
   let lastModeBlockPushAt = 0;
   const notifyModeBlocked = (modeName: string, body: string): void => {
+    postInboxNote(context.database, null, body);
     const nowMs = Date.now();
     if (nowMs - lastModeBlockPushAt < 60_000) return;
     lastModeBlockPushAt = nowMs;
@@ -1039,10 +1042,14 @@ export async function registerGatewayRoutes(
           pushLanguage() === "zh"
             ? `模式「${modeName}」碰到了限制`
             : `Mode "${modeName}" hit a restriction`,
-        body,
+        body:
+          pushLanguage() === "zh"
+            ? "详情已放进主对话。"
+            : "Details are in your main conversation.",
         url: "/",
       },
       "mode",
+      { modeId: null },
     ).catch(() => undefined);
   };
 
@@ -8238,7 +8245,11 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      savePushSubscription(context.database, request.body);
+      savePushSubscription(
+        context.database,
+        request.body,
+        request.body.deviceId ?? null,
+      );
       return { ok: true };
     },
   );

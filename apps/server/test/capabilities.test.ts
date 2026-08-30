@@ -460,18 +460,11 @@ describe("capabilities", () => {
       writeProfileCapabilities(database, "k2", { drawing: true }),
     ).toThrow("TOKEN_GRANT_REFUSED:ceiling:drawing");
 
-    // `web` needs its own approval, so ticking it alongside the rest is not
-    // enough — naming it is.
-    expect(() =>
-      writeProfileCapabilities(database, "k2", { vision: true, web: true }),
-    ).toThrow("TOKEN_GRANT_REFUSED:approval:web");
+    // `web` is a plain tick like the rest (Oskar 2026-08-30: 不要 approve,
+    // 就是一个 toggle) — the protection that stands is that a key starts at
+    // NOTHING, so web is off for every key until this write.
     expect(
-      writeProfileCapabilities(
-        database,
-        "k2",
-        { vision: true, web: true },
-        ["web"],
-      ),
+      writeProfileCapabilities(database, "k2", { vision: true, web: true }),
     ).toEqual(["vision", "web"]);
 
     // Taking something back never needs an approval or a ceiling.
@@ -525,6 +518,8 @@ describe("capabilities", () => {
     expect(tokenGrantRefusedMessage(["drawing"], "ceiling")).toContain(
       "Switch it on in Capabilities",
     );
+    // The approval sentence machinery stays for any future capability that
+    // earns a second press, even though nothing uses it today.
     expect(tokenGrantRefusedMessage(["web"], "approval", "zh")).toContain(
       "单独",
     );

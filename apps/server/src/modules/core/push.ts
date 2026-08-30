@@ -88,6 +88,7 @@ export function schedulePresenceAwarePush(
   database: DatabaseHandle,
   payload: PushPayload,
   category: PushCategory = "test",
+  scope?: PushScope,
 ): void {
   const completedAt = Date.now();
   setTimeout(() => {
@@ -98,7 +99,7 @@ export function schedulePresenceAwarePush(
       );
       return;
     }
-    void sendPushToAllDevices(database, payload, category).catch(
+    void sendPushToAllDevices(database, payload, category, scope).catch(
       () => undefined,
     );
   }, UNSEEN_WAIT_MS).unref?.();
@@ -193,17 +194,24 @@ export function getPushPublicKey(): string | null {
 export function savePushSubscription(
   database: DatabaseHandle,
   subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
+  // The Modes screen's device id, so a send can be scoped to the devices
+  // whose current mode matches. Old clients send none; their subscriptions
+  // count as User Mode devices, which is what they are.
+  deviceId?: string | null,
 ): void {
   database.sqlite
     .prepare(
-      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth`,
+      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, device_id, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh,
+                                           auth = excluded.auth,
+                                           device_id = COALESCE(excluded.device_id, push_subscriptions.device_id)`,
     )
     .run(
       subscription.endpoint,
       subscription.keys.p256dh,
       subscription.keys.auth,
+      deviceId ?? null,
       new Date().toISOString(),
     );
 }
@@ -243,13 +251,26 @@ export function getPushDiagnostics(database: DatabaseHandle): {
   };
 }
 
-// Best-effort broadcast to every subscribed device. Dead subscriptions
-// (endpoint gone: 404/410) are pruned as they surface; other failures are
-// recorded for the Notifications screen but never break the caller.
+// Which devices an event belongs to (Oskar 2026-08-30: 每一台 device 的推送
+// 只是自己当前这个 mode 的推送). `modeId` names the mode the event happened
+// in; null is User Mode — where the Owner lives, and where every device that
+// never named itself (old subscription, unpaired device) also lands.
+export interface PushScope {
+  modeId: string | null;
+}
+
+// Best-effort send. With a `scope`, only the devices whose CURRENT mode
+// matches the event's mode are addressed — a kid-mode reply must not buzz the
+// Owner's phone, and the Owner's reports must not buzz the kid's. Without a
+// scope it is the old broadcast, kept for the Test button, whose whole job is
+// "does push reach this phone at all". Dead subscriptions (endpoint gone:
+// 404/410) are pruned as they surface; other failures are recorded for the
+// Notifications screen but never break the caller.
 export async function sendPushToAllDevices(
   database: DatabaseHandle,
   payload: PushPayload,
   category: PushCategory = "test",
+  scope?: PushScope,
 ): Promise<string> {
   if (category !== "test" && !readPushPrefs()[category]) {
     recordLastSend(
@@ -264,16 +285,35 @@ export async function sendPushToAllDevices(
   }
   let rows: { endpoint: string; p256dh: string; auth: string }[];
   try {
-    rows = database.sqlite
-      .prepare("SELECT endpoint, p256dh, auth FROM push_subscriptions")
-      .all() as { endpoint: string; p256dh: string; auth: string }[];
+    rows = scope
+      ? (database.sqlite
+          .prepare(
+            // LEFT JOIN so a subscription with no device id, or a device the
+            // Modes screen never assigned, resolves to NULL = User Mode.
+            `SELECT push_subscriptions.endpoint, push_subscriptions.p256dh,
+                    push_subscriptions.auth
+             FROM push_subscriptions
+             LEFT JOIN device_modes
+               ON device_modes.device_id = push_subscriptions.device_id
+             WHERE COALESCE(device_modes.mode_id, '') = COALESCE(?, '')`,
+          )
+          .all(scope.modeId) as {
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+        }[])
+      : (database.sqlite
+          .prepare("SELECT endpoint, p256dh, auth FROM push_subscriptions")
+          .all() as { endpoint: string; p256dh: string; auth: string }[]);
   } catch {
     recordLastSend("Could not read subscriptions.");
     return lastSendResult ?? "";
   }
   if (rows.length === 0) {
     recordLastSend(
-      `${new Date().toISOString()} — nothing sent: no devices subscribed.`,
+      `${new Date().toISOString()} — nothing sent: no devices ${
+        scope ? "in this event's mode are" : ""
+      } subscribed.`.replace("  ", " "),
     );
     return lastSendResult ?? "";
   }
