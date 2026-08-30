@@ -290,12 +290,24 @@ export async function sendPushToAllDevices(
           .prepare(
             // LEFT JOIN so a subscription with no device id, or a device the
             // Modes screen never assigned, resolves to NULL = User Mode.
+            // The mode that counts is where the device IS (current_mode_id,
+            // reported on every open and mode change; '' = User Mode), not
+            // where it is set to open — a tablet that entered a mode by hand
+            // must get that mode's pushes. A device that never reported (old
+            // build; current NULL) falls back to its Opens-in binding.
             `SELECT push_subscriptions.endpoint, push_subscriptions.p256dh,
                     push_subscriptions.auth
              FROM push_subscriptions
              LEFT JOIN device_modes
                ON device_modes.device_id = push_subscriptions.device_id
-             WHERE COALESCE(device_modes.mode_id, '') = COALESCE(?, '')`,
+             WHERE COALESCE(
+                     CASE
+                       WHEN device_modes.current_mode_id IS NULL
+                         THEN device_modes.mode_id
+                       WHEN device_modes.current_mode_id = '' THEN NULL
+                       ELSE device_modes.current_mode_id
+                     END,
+                     '') = COALESCE(?, '')`,
           )
           .all(scope.modeId) as {
           endpoint: string;

@@ -212,9 +212,13 @@ export function listDeviceModes(database: DatabaseHandle): DeviceMode[] {
               device_modes.label AS label,
               device_modes.mode_id AS modeId,
               modes.name AS modeName,
+              device_modes.current_mode_id AS currentModeId,
+              current_modes.name AS currentModeName,
               device_modes.updated_at AS updatedAt
        FROM device_modes
        LEFT JOIN modes ON modes.id = device_modes.mode_id
+       LEFT JOIN modes AS current_modes
+         ON current_modes.id = device_modes.current_mode_id
        ORDER BY device_modes.updated_at DESC`,
     )
     .all() as unknown as {
@@ -222,6 +226,8 @@ export function listDeviceModes(database: DatabaseHandle): DeviceMode[] {
     label: string;
     modeId: string | null;
     modeName: string | null;
+    currentModeId: string | null;
+    currentModeName: string | null;
     updatedAt: string;
   }[];
   return rows.map((row) => ({
@@ -229,22 +235,37 @@ export function listDeviceModes(database: DatabaseHandle): DeviceMode[] {
     label: row.label,
     modeId: row.modeId,
     modeName: row.modeName,
+    // '' is the stored word for "reported, and in User Mode"; NULL means the
+    // device has never reported (an old build) — see 0077.
+    currentModeId: row.currentModeId ? row.currentModeId : null,
+    currentModeName: row.currentModeId ? row.currentModeName : null,
+    currentKnown: row.currentModeId !== null,
     updatedAt: row.updatedAt,
   }));
 }
 
-// Register (or refresh) this device, optionally setting its default mode.
+// Register (or refresh) this device, optionally setting its default mode
+// and/or reporting which mode its session is in right now.
 export function setDeviceMode(
   database: DatabaseHandle,
   deviceId: string,
-  input: { modeId?: string | null; label?: string; register?: boolean },
+  input: {
+    modeId?: string | null;
+    label?: string;
+    register?: boolean;
+    currentModeId?: string | null;
+  },
 ): DeviceMode[] {
   if (input.modeId && !findMode(database, input.modeId)) {
     throw new Error("MODE_NOT_FOUND");
   }
   const existing = database.sqlite
-    .prepare("SELECT label, mode_id FROM device_modes WHERE device_id = ?")
-    .get(deviceId) as { label: string; mode_id: string | null } | undefined;
+    .prepare(
+      "SELECT label, mode_id, current_mode_id FROM device_modes WHERE device_id = ?",
+    )
+    .get(deviceId) as
+    | { label: string; mode_id: string | null; current_mode_id: string | null }
+    | undefined;
   // A device re-registering on open keeps whatever name the Owner gave it.
   const label =
     input.register && existing?.label
@@ -252,16 +273,26 @@ export function setDeviceMode(
       : input.label?.trim() || existing?.label || "Device";
   const modeId =
     input.modeId === undefined ? (existing?.mode_id ?? null) : input.modeId;
+  // Three states on disk (0077): NULL = never reported, '' = reported User
+  // Mode, id = reported that mode. An unknown mode id is stored as User Mode
+  // rather than refused — a report must never fail the open it rides on.
+  const currentModeId =
+    input.currentModeId === undefined
+      ? (existing?.current_mode_id ?? null)
+      : input.currentModeId && findMode(database, input.currentModeId)
+        ? input.currentModeId
+        : "";
   database.sqlite
     .prepare(
-      `INSERT INTO device_modes (device_id, label, mode_id, updated_at)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO device_modes (device_id, label, mode_id, current_mode_id, updated_at)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(device_id) DO UPDATE SET
          label = excluded.label,
          mode_id = excluded.mode_id,
+         current_mode_id = excluded.current_mode_id,
          updated_at = excluded.updated_at`,
     )
-    .run(deviceId, label, modeId, new Date().toISOString());
+    .run(deviceId, label, modeId, currentModeId, new Date().toISOString());
   return listDeviceModes(database);
 }
 
@@ -451,9 +482,16 @@ export function deleteMode(database: DatabaseHandle, modeId: string): Mode {
   // belonged to a Mode that is being removed, and its contents are that Mode's.
   deleteInboxThreadForMode(database, modeId);
 
-  // Devices pointing at this mode fall back to User Mode (spec 建议 G).
+  // Devices pointing at this mode fall back to User Mode (spec 建议 G) —
+  // both where they open AND where they currently are: the mode they were in
+  // no longer exists, so User Mode is now the truth ('' = reported User Mode).
   database.sqlite
     .prepare("UPDATE device_modes SET mode_id = NULL WHERE mode_id = ?")
+    .run(modeId);
+  database.sqlite
+    .prepare(
+      "UPDATE device_modes SET current_mode_id = '' WHERE current_mode_id = ?",
+    )
     .run(modeId);
   for (const table of [
     "vaenyx_threads",

@@ -5000,6 +5000,16 @@ function ModesPanel() {
                 </div>
                 <p className="library-note">
                   {deviceLastSeen(device.updatedAt)}
+                  {/* Where the device IS right now — as reported by the
+                      device itself — beside where it is set to open, so the
+                      two can no longer look like a contradiction (Oskar,
+                      2026-08-30: 那台打开是 Yen Mode,为什么我电脑看到是
+                      User Mode). */}
+                  {device.currentKnown
+                    ? lang === "zh"
+                      ? ` · 现在在:${device.currentModeName ?? "User Mode"}`
+                      : ` · now in ${device.currentModeName ?? "User Mode"}`
+                    : ""}
                 </p>
                 {/* Two Android phones look identical without a name of
                     their own (Oskar, dev.172). */}
@@ -5042,6 +5052,14 @@ function ModesPanel() {
                     value={device.modeId ?? ""}
                   />
                 </div>
+                {device.currentKnown &&
+                device.currentModeId !== (device.modeId ?? null) ? (
+                  <p className="library-note">
+                    {lang === "zh"
+                      ? `它现在在${device.currentModeName ? `「${device.currentModeName}」` : " User Mode"},和上面设的不一样 —— 想让它每次打开都进那个模式,就把 Opens in 也选成那个。`
+                      : `Right now it is in ${device.currentModeName ?? "User Mode"}, which differs from the setting above — to make it land there on every open, set Opens in to match.`}
+                  </p>
+                ) : null}
               </article>
             ))}
           </div>
@@ -26043,11 +26061,29 @@ function VaenyxWorkspace({
   // Owner can see it, then land in its default mode on app open. Skipped
   // for the rest of a session in which the Owner explicitly exited, so
   // fixing a device's setting is always possible.
+  //
+  // The registration also REPORTS which mode this session is in right now
+  // (dep re-fires on every enter/exit), so the Devices screen and push
+  // scoping see where the device actually is — and the answer carries this
+  // device's own name back, shown under the brand so a device can say who
+  // it is (Oskar, 2026-08-30).
+  const [thisDeviceName, setThisDeviceName] = useState<string | null>(null);
   useEffect(() => {
     const id = deviceId();
-    void setDeviceMode(id, { label: deviceLabel(), register: true }).catch(
-      () => undefined,
-    );
+    void setDeviceMode(id, {
+      label: deviceLabel(),
+      register: true,
+      currentModeId: workspace.mode?.id ?? null,
+    })
+      .then((rows) => {
+        const own = rows.find((row) => row.deviceId === id);
+        // Only a name the Owner typed is worth announcing; the automatic
+        // "Android · Chrome" label says nothing the device does not.
+        setThisDeviceName(
+          own && own.label && own.label !== deviceLabel() ? own.label : null,
+        );
+      })
+      .catch(() => undefined);
     if (workspace.mode) return;
     let exited = false;
     try {
@@ -26101,6 +26137,11 @@ function VaenyxWorkspace({
           {/* The mode marker sits with the identity it belongs to (Oskar,
               dev.171) instead of floating over the sign-out row. */}
           {workspace.mode ? <ModeBadge mode={workspace.mode} /> : null}
+          {/* A named device says who it is, so telling tablets apart works
+              from the device too — auto labels stay silent. */}
+          {thisDeviceName ? (
+            <span className="device-name-chip">{thisDeviceName}</span>
+          ) : null}
         </div>
 
         <nav aria-label="Vaenyx navigation">

@@ -945,6 +945,12 @@ export const DeviceModeSchema = Type.Object(
     label: Type.String(),
     modeId: Type.Union([Type.String(), Type.Null()]),
     modeName: Type.Union([Type.String(), Type.Null()]),
+    // Where the device actually IS right now, reported by the device on every
+    // open and mode change — as opposed to modeId, where it is set to START.
+    // currentKnown false = an old build that never reported.
+    currentModeId: Type.Union([Type.String(), Type.Null()]),
+    currentModeName: Type.Union([Type.String(), Type.Null()]),
+    currentKnown: Type.Boolean(),
     updatedAt: Type.String(),
   },
   { additionalProperties: false },
@@ -957,6 +963,9 @@ export const SetDeviceModeRequestSchema = Type.Object(
     // true = the automatic registration a device does on every open: it
     // must never overwrite a name the Owner typed.
     register: Type.Optional(Type.Boolean()),
+    // The mode this device's session is in right now (null = User Mode).
+    // Sent on every open and every mode change; omitted = no report.
+    currentModeId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );

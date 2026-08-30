@@ -640,7 +640,19 @@ textarea::placeholder {
 }
 
 .sidebar-brand {
+  display: flex;
+  flex-wrap: wrap;
   padding: 0 7px;
+}
+
+/* The device's own (Owner-given) name, so a tablet in hand can say which one
+   it is. Quiet on purpose: it identifies, it does not decorate. */
+.device-name-chip {
+  flex-basis: 100%;
+  color: #87847b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .sidebar nav {

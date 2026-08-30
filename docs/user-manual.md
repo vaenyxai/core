@@ -704,7 +704,10 @@ Read this inside the app: **Settings → Manual**.
   in that mode. Devices with the same generic label are told apart by when
   they last opened the app: pick up the one you mean, open Vaenyx on it, and
   it rises to the top of the list saying "active just now" — then give it a
-  name of its own.
+  name of its own. Each card also says where the device **is right now** —
+  which can differ from *Opens in* when someone entered a mode by hand; the
+  card points that out so you can make the two match. A named device shows
+  its own name under the logo, so you can tell from the device too.
 - **Notifications stay in their mode.** A device only receives the pushes that
   belong to the mode it is bound to: a reply or task result inside a mode
   buzzes that mode's devices, and your own devices hear nothing of it — and
