@@ -121,10 +121,11 @@ Read this inside the app: **Settings → Manual**.
   button is not there at all — replaying a voice message you recorded yourself
   still works, because that is your voice, not Vaenyx speaking.
 - **Send a photo** — the camera button (take one) or the picture button (choose
-  one). The model reads the photo itself; you do not have to describe it.
+  one), always available. The model reads the photo itself; you do not have to
+  describe it — a photo with no words at all is a complete message.
 - **Mark things on a photo** — ask, in your own words, to point something out.
-  Dots and names appear on the picture. The layers button on the photo turns the
-  marks on and off.
+  Dots and names appear **on the photo you sent** — the reply does not repeat
+  the picture. The layers button on the photo turns the marks on and off.
 - **Look closer** — tap a photo for fullscreen; pinch to zoom. The marks and the
   layers button come with it.
 - **Send a document** — the document button. It takes PDFs, plain-text files
