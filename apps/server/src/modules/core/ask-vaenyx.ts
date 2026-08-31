@@ -965,7 +965,18 @@ export async function createAskVaenyxMessage(
   const conversation = getConversationRow(database, conversationId, ownerId);
   const now = new Date().toISOString();
   const ownerMessageId = randomUUID();
-  const trimmedContent = content.trim();
+  // A photo may BE the message (Oskar, 2026-08-31: 能否把照片作为我的对话
+  // 输入). With no words and a photo attached, a small stand-in line becomes
+  // the text — visible on the bubble, honest about what was asked, and every
+  // downstream reader (title, history, the model) keeps working. No words and
+  // no photo stays refused.
+  let trimmedContent = content.trim();
+  if (!trimmedContent && options?.imageId) {
+    trimmedContent = pushLanguage() === "zh" ? "(看看这张照片)" : "(Look at this photo.)";
+  }
+  if (!trimmedContent) {
+    throw new Error("EMPTY_MESSAGE");
+  }
 
   // Custom Mode M3: a conversation inside a mode carries the mode's
   // natural-language rules as standing instructions, and "local only"
@@ -1624,22 +1635,19 @@ export async function createAskVaenyxMessage(
       ? [projectContext, photoContext].filter(Boolean).join("\n\n")
       : projectContext;
 
-    // A photo sent for analysis comes BACK with the answer, marked ("你的回复
-    // 里面再把那个图片再来一次,然后叠加上识别图片内容的工具", Oskar
-    // 2026-07-29): the reply carries the same picture with dots and names, and
-    // the written summary sits under it. The marking runs in parallel with the
-    // model call, so it costs no extra wall time.
+    // The photo is the Owner's message and the reply does NOT carry it again
+    // (Oskar, 2026-08-31: 不要再带照片了,照片就是我发的那一张图 — reversing
+    // 2026-07-29's echo). The MARKS survive: they key on the image id, and the
+    // Owner's own bubble shows the same picture, so the dots and names land on
+    // the photo he sent instead of on a duplicate. The marking still runs in
+    // parallel with the model call.
     if (
       options?.imageId &&
       options.dataDirectory &&
       options.secretsDirectory &&
       !visionRefused
     ) {
-      echoImageId = options.imageId;
       const photoId = options.imageId;
-      // Tell the client NOW: the picture appears with the first words, not
-      // after them.
-      options.onEchoImage?.(photoId);
       const found = readImage(options.dataDirectory, photoId);
       const secrets = options.secretsDirectory;
       if (found) {

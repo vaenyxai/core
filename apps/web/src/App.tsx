@@ -2314,6 +2314,10 @@ function MicButton({
 
   async function start() {
     setError(null);
+    // Pressing the mic SILENCES whatever is still talking (Oskar, 2026-08-31:
+    // 点击输入语音,正在播放的语音要马上停止) — recording over the app's own
+    // voice would transcribe it back at itself.
+    stopReplySpeech();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = ["audio/webm", "audio/mp4", "audio/ogg"].find((type) =>
@@ -8811,9 +8815,10 @@ This conversation is its home — feed it something to try it, and ask for chang
       chatProviders.find((candidate) => candidate.id === newChatProviderId) ??
       chatProviders.find((candidate) => candidate.isDefault) ??
       null;
-    const defaultCanAttach = VISION_DIRECT_IDS.includes(
-      newChatEffective?.id ?? "",
-    );
+    // Always attachable (Oskar, 2026-08-31: 任何时候都要能够输入照片): a chat
+    // model that cannot read pictures itself is not the wall — the photo goes
+    // through the Vision slot's own engine, whoever answers the words.
+    const defaultCanAttach = true;
     const newChatModelChoices =
       newChatEffective && newChatEffective.kind !== "cli-login"
         ? (MODEL_CHOICES[newChatEffective.id] ?? [])
@@ -22253,18 +22258,10 @@ const MODEL_FREE_TIER_NOTES: Record<string, string> = {
   workersai: "Free: 10,000 Neurons/day — about 170 pictures.",
 };
 
-// Backends whose chat endpoint reads images directly (Phase B) — must mirror
-// the server's VISION_DIRECT_PROVIDER_IDS.
-const VISION_DIRECT_IDS = [
-  "gemini",
-  "zhipu",
-  "openai",
-  "mistral",
-  "groq",
-  "codex",
-  "anthropic",
-  "claude-sub",
-];
+// The old VISION_DIRECT_IDS gate is gone (2026-08-31): the attach button no
+// longer depends on the CHAT backend reading images itself — a photo travels
+// through the Vision slot's engine whoever answers the words, so attaching is
+// always offered.
 
 // Per-provider model shortlists for the in-chat picker (curated 2026-07-22;
 // the provider's own configured model always remains the Default option, and

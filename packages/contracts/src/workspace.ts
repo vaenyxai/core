@@ -350,7 +350,9 @@ export const CreateAskVaenyxConversationRequestSchema = Type.Object(
 
 export const CreateAskVaenyxMessageRequestSchema = Type.Object(
   {
-    content: Type.String({ minLength: 1, maxLength: 10_000 }),
+    // minLength 0: a photo may be the whole message — the server refuses
+    // empty-and-no-photo itself, with a clearer answer than a schema 400.
+    content: Type.String({ minLength: 0, maxLength: 10_000 }),
     // Library v2 (AI-driven): when the intent classifier returned "suggest",
     // the reply may briefly offer this Routine. Omitted = a plain reply.
     suggestRoutineId: Type.Optional(Type.String({ minLength: 1 })),

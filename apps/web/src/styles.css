@@ -921,6 +921,11 @@ textarea::placeholder {
 .thread-folder summary span,
 .project-thread-folder summary span,
 .thread-groups summary span {
+  /* The name takes the slack, so the count and the + sit at the FAR RIGHT of
+     every row on every width — a short project name used to leave them
+     huddled on the left on a phone (Oskar, 2026-08-31: 加号在右边,就都在
+     右边). */
+  flex: 1 1 auto;
   overflow: hidden;
   min-width: 0;
   text-overflow: ellipsis;
