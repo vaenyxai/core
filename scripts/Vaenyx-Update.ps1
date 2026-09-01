@@ -26,6 +26,7 @@ if (git status --porcelain) {
 }
 
 if (
+  (Test-Path (Join-Path $projectRoot "userdata\db\vaenyx.db")) -or
   (Test-Path (Join-Path $projectRoot "private\data\vaenyx.db")) -or
   (Test-Path (Join-Path $projectRoot "data\vaenyx.db"))
 ) {

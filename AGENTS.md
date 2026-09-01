@@ -25,35 +25,29 @@
 - Architecture or capability work: inspect the directly affected module and
   its tests before changing it. A task-specific private design document may be
   read only when Oskar explicitly authorizes that exact file.
-- Private handoffs, Owner data, other repositories, and other sessions'
-  instruction files are not default project sources and must not be scanned.
 
 ## Current Snapshot
 
-- Current production version: `v0.4.12.0` (verified 2026-09-01 against
-  `apps/server/src/config.ts`, local tag `v0.4.12.0`, `CHANGELOG.md`, and the
-  published GitHub Release).
-- Updates are transactional from this version onward: code and database
-  snapshots precede replacement; migrations run on a candidate copy; startup,
-  integrity, foreign-key and health checks gate the switch; failed or
-  interrupted switches automatically restore the old code/data pair.
-- Repository layout: application code in `apps/`, shared packages in
-  `packages/`, backup/diagnosis/licence tooling in `scripts/`, user
-  documentation in `docs/`, and neutral demo content only in `sample-library/`.
+- Latest formal release: `v0.4.12.0` (verified 2026-09-01 by tag, changelog and
+  published GitHub Release); source may carry a later `-dev` internal build.
+- Updates are transactional: verified code/database snapshots and candidate
+  migration, startup, integrity, foreign-key and health checks gate the switch;
+  failure or interruption restores the old code/data pair.
 - `userdata/` is the Owner's private instance state: database, WAL/SHM,
   library, backups, update state and logs. It is gitignored and is never a test
   fixture or source of repository facts.
 
 ## Hard Rules
 
-- Absolute no-read boundaries: `userdata/`, every `.env`, and everything under
-  the active Windows user's profile (including secret/config stores). Never
-  request a bypass.
-- This repository is public. Never commit credentials, tokens, real personal
+- Never inspect `userdata/` contents, any `.env`, or the active Windows user's
+  profile. Audited backup/update/deploy scripts may operate on `userdata/`
+  without exposing its contents; never request direct-read access.
+- Never commit credentials, tokens, real personal
   paths, logs, Owner content, database material, or real user data.
-- Port 3000 is production: do not connect to it, occupy it, build in its live
-  checkout, stop it, or restart it. Run tests in an isolated worktree with an
-  isolated data directory and test/smoke-server mode.
+- Port 3000 and live `main` are protected during coding: use an isolated
+  worktree/data directory and test mode. After a checked DEV commit is pushed
+  to current `main`, only `scripts/Vaenyx-Deploy-Dev.ps1` may back up, stop,
+  build, restart and health-probe the local instance; no manual substitute.
 - Code and an approved design document disagreeing is a hard stop: report the
   exact divergence and let Oskar decide which is wrong. An unwritten design
   question is a question, not a finding. Review conclusions stay in chat, not
@@ -101,8 +95,10 @@
   `node scripts/Vaenyx-Check-Translations.mjs --write`.
 - When dependencies change, regenerate the shipped licence manifest with
   `npm run licenses`.
-- Release automation is `scripts/Vaenyx-Release.ps1`; run it only from a clean,
-  current `main` when the task explicitly authorizes a release.
+- Before completing each code/behavior task, run `scripts/Vaenyx-Prepare-Dev.ps1`;
+  after check, commit(s), merge and push, run `scripts/Vaenyx-Deploy-Dev.ps1`.
+- Formal release automation is `scripts/Vaenyx-Release.ps1`; only the exact
+  Owner instruction `发布正式版` authorizes its `-OwnerApproval RELEASE` gate.
 
 ## Verification And Release
 
@@ -118,10 +114,14 @@
 - Before commit, inspect `git status --short` and `git diff --cached`; confirm
   the staged set contains no secret, token, personal path, or user data. Add
   only named files, never `git add .` or `git add -A`.
-- `apps/server/src/config.ts` is the version source; released versions also
-  require the matching `CHANGELOG.md` entry, tag, GitHub Release and verified
-  fixed/versioned assets. Production versions have no suffix. Do not bump or
-  release unless the task authorizes it.
+- `apps/server/src/config.ts` is the version source. Each completed code or
+  behavior task is one local internal build: bump only the fourth segment and
+  keep `-dev`, then check, commit/push, deploy and verify it. DEV builds never
+  get a tag, GitHub Release, website update or public download.
+- Discussion, `做完`, `部署`, `发布闭环`, or website wording is not formal-release
+  permission. Only a direct `发布正式版` promotes the tested DEV series: bump the
+  third segment, reset the fourth to `0`, remove `-dev`, write What's New, then
+  create the tag/GitHub Release and verify website downloads.
 
 ## Multi-Agent Conflict Hotspots
 
