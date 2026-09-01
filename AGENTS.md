@@ -30,8 +30,8 @@
 
 ## Current Snapshot
 
-- Current production version: `v0.4.11.0` (verified 2026-09-01 against
-  `apps/server/src/config.ts`, local tag `v0.4.11.0`, `CHANGELOG.md`, and the
+- Current production version: `v0.4.12.0` (verified 2026-09-01 against
+  `apps/server/src/config.ts`, local tag `v0.4.12.0`, `CHANGELOG.md`, and the
   published GitHub Release).
 - Updates are transactional from this version onward: code and database
   snapshots precede replacement; migrations run on a candidate copy; startup,
