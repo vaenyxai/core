@@ -49,6 +49,7 @@ const stopScript = readFileSync(
 );
 assert.match(stopScript, /restart-requested\.flag/);
 assert.match(stopScript, /Vaenyx is still running/);
+assert.match(stopScript, /attempt -lt 40/);
 
 const updateScript = readFileSync(
   resolve(root, "scripts", "Vaenyx-Update.ps1"),

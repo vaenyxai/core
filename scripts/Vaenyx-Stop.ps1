@@ -29,7 +29,7 @@ try {
   $status = Invoke-RestMethod -Uri "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 2
   if ($status.name -eq "Vaenyx") {
     Set-Content -LiteralPath $restartFlag -Value "stop-requested" -Encoding ASCII
-    for ($attempt = 0; $attempt -lt 16; $attempt++) {
+    for ($attempt = 0; $attempt -lt 40; $attempt++) {
       Start-Sleep -Milliseconds 500
       try {
         $status = Invoke-RestMethod -Uri "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 1
