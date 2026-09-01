@@ -4,6 +4,24 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.12.0 — 2026-09-01
+
+**Archive now makes a scheduled Conversation quiet immediately.** Its next
+run is paused in the same database transaction that archives the Conversation,
+while cadence, time and timezone stay intact. Scheduler polling also fences
+archived Conversations, including the race where Archive lands after a due row
+was found but before it starts.
+
+**Restore stays paused until you say Resume.** The preserved Schedule appears
+as Paused with one clear Resume action; restoring never silently turns it back
+on. Single and bulk Archive/Restore follow the same rule, and an Archive
+confirmation names the schedule impact only when there is an active Schedule.
+
+**Archive keeps context; permanent delete stays a second step.** Conversation
+history, Project and Memory scope, shared Routines and Owner Connections remain
+in place. Permanent deletion is accepted only from Archived and never removes
+a shared Routine.
+
 ## v0.4.11.0 — 2026-09-01
 
 **An update is now one all-or-nothing change.** Vaenyx takes a verified
