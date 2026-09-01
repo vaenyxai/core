@@ -43,6 +43,13 @@ assert.match(deployScript, /origin\/main/);
 assert.match(deployScript, /Vaenyx-Stop\.ps1/);
 assert.match(deployScript, /status\.database\.status -ne "ready"/);
 
+const stopScript = readFileSync(
+  resolve(root, "scripts", "Vaenyx-Stop.ps1"),
+  "utf8",
+);
+assert.match(stopScript, /restart-requested\.flag/);
+assert.match(stopScript, /Vaenyx is still running/);
+
 const updateScript = readFileSync(
   resolve(root, "scripts", "Vaenyx-Update.ps1"),
   "utf8",

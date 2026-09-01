@@ -16,6 +16,34 @@ Set-Content -LiteralPath (Join-Path $dataDir "autostart-paused.flag") `
 
 Write-Host "Stopping Vaenyx..."
 
+# The watchdog runs the server as SYSTEM, so a normal Owner session cannot
+# reliably terminate it with Stop-Process. Ask the server to close itself first;
+# app.ts deliberately watches this local flag for deploy/restart tooling. The
+# stop sentinel above prevents the watchdog from bringing the old build back.
+$configDir = Join-Path $projectRoot "userdata\config"
+if (-not (Test-Path $configDir)) {
+  New-Item -ItemType Directory -Force -Path $configDir | Out-Null
+}
+$restartFlag = Join-Path $configDir "restart-requested.flag"
+try {
+  $status = Invoke-RestMethod -Uri "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 2
+  if ($status.name -eq "Vaenyx") {
+    Set-Content -LiteralPath $restartFlag -Value "stop-requested" -Encoding ASCII
+    for ($attempt = 0; $attempt -lt 16; $attempt++) {
+      Start-Sleep -Milliseconds 500
+      try {
+        $status = Invoke-RestMethod -Uri "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 1
+        if ($status.name -ne "Vaenyx") { break }
+      } catch {
+        $stopped = $true
+        break
+      }
+    }
+  }
+} catch {
+  # Vaenyx is not listening; the process fallback below is still harmless.
+}
+
 foreach ($pidFile in $pidFiles) {
   if (Test-Path $pidFile) {
     $savedPid = Get-Content -LiteralPath $pidFile -ErrorAction SilentlyContinue |
@@ -79,6 +107,17 @@ try {
 } catch {
   # Vaenyx is no longer listening on the production port.
 }
+
+try {
+  $status = Invoke-RestMethod -Uri "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 2
+  if ($status.name -eq "Vaenyx") {
+    Write-Error "Vaenyx is still running. The stop request did not complete."
+    exit 1
+  }
+} catch {
+  # No Vaenyx listener remains.
+}
+Remove-Item -LiteralPath $restartFlag -Force -ErrorAction SilentlyContinue
 
 if ($stopped) {
   Write-Host "Vaenyx has stopped."
