@@ -106,6 +106,9 @@ Read this inside the app: **Settings → Manual**.
   bottom-left corner, and what changed is on the update card itself.
 - **A banner appears at the bottom** when a newer build is ready. It never
   refreshes by itself while you are typing.
+- **If an update cannot finish**, Vaenyx restores the matching old app and old
+  data automatically, checks that the restored version can start, and tells you
+  what happened. You do not need to repair the database or open PowerShell.
 
 ## 3. Chatting
 
@@ -844,5 +847,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.10** · last updated 2026-08-30.
+Manual for **v0.4.11** · last updated 2026-09-01.
 Keep this file up to date whenever a feature changes.

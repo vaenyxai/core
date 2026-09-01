@@ -72,12 +72,17 @@ export async function buildApp(
   // installer wrote the list and did none of it, so it happens here, with the
   // code that already does each of these and with progress the first-run
   // screen can show. Failures are lines in the log, never a boot that stops.
-  const asked = startWantedComponents({
-    dataDirectory: config.dataDirectory,
-    install: (id) => installWantedComponent(id, config.dataDirectory),
-    onDone: (results) =>
-      app.log.info({ results: results.done }, "installer components finished"),
-  });
+  const asked = config.updateProbe
+    ? []
+    : startWantedComponents({
+        dataDirectory: config.dataDirectory,
+        install: (id) => installWantedComponent(id, config.dataDirectory),
+        onDone: (results) =>
+          app.log.info(
+            { results: results.done },
+            "installer components finished",
+          ),
+      });
   if (asked.length) {
     app.log.info(
       { components: asked },
@@ -87,19 +92,21 @@ export async function buildApp(
 
   // An instance that was already using its Claude subscription keeps it: the
   // component used to be a dependency, and this upgrade prunes it.
-  restoreClaudeSdkForConnectedInstance({
-    connected: Boolean(
-      resolveClaudeSubscriptionAuth(config.secretsDirectory).token ||
-      claudeMachineLogin(),
-    ),
-    dataDirectory: config.dataDirectory,
-    onDone: (outcome) =>
-      outcome === "installed"
-        ? app.log.info("claude subscription component restored after upgrade")
-        : app.log.warn(
-            "claude subscription component could not be restored; the Claude subscription will say so and everything else is unaffected",
-          ),
-  });
+  if (!config.updateProbe) {
+    restoreClaudeSdkForConnectedInstance({
+      connected: Boolean(
+        resolveClaudeSubscriptionAuth(config.secretsDirectory).token ||
+        claudeMachineLogin(),
+      ),
+      dataDirectory: config.dataDirectory,
+      onDone: (outcome) =>
+        outcome === "installed"
+          ? app.log.info("claude subscription component restored after upgrade")
+          : app.log.warn(
+              "claude subscription component could not be restored; the Claude subscription will say so and everything else is unaffected",
+            ),
+    });
+  }
   // Web Push: point the push module at the secrets directory (VAPID keypair
   // lives there, generated on first use).
   initPushService(config);

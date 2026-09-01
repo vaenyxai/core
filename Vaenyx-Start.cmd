@@ -55,6 +55,11 @@ REM the files being replaced are not in use. No-op when nothing is pending.
 if exist "userdata\config\update-pending.json" (
   echo [1b/4] Finishing a downloaded update...
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Vaenyx-Apply-Update.ps1"
+  if errorlevel 1 (
+    echo Vaenyx is still completing automatic update recovery, or another Vaenyx process is already active.
+    echo Wait a moment, then double-click Vaenyx-Start.cmd again. Your data and pending update were kept.
+    exit /b 1
+  )
 )
 
 echo [2/4] Building Vaenyx production files...

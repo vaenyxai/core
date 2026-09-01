@@ -47,6 +47,11 @@ REM is nothing pending.
 if exist "userdata\config\update-pending.json" (
   echo [%date% %time%] Applying staged update >> "userdata\logs\vaenyx-service.log"
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Vaenyx-Apply-Update.ps1"
+  if errorlevel 1 (
+    echo [%date% %time%] Update is still recovering or another Vaenyx process is active; retrying shortly. >> "userdata\logs\vaenyx-service.log"
+    ping -n 11 127.0.0.1 >nul
+    goto loop
+  )
 )
 REM Find node.exe without trusting PATH. This script runs as SYSTEM under the
 REM Task Scheduler service, whose environment is a boot-time snapshot: a

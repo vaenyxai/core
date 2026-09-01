@@ -25,7 +25,8 @@
     "start": "npm run start -w @vaenyx/server",
     "test": "npm run build -w @vaenyx/contracts && npm run test -w @vaenyx/contracts && npm run test -w @vaenyx/server && npm run test -w @vaenyx/web",
     "test:production": "node scripts/production-smoke.mjs",
-    "test:ops": "node scripts/ops-smoke.mjs",
+    "test:ops": "node scripts/ops-smoke.mjs && node scripts/update-transaction-smoke.mjs",
+    "test:update:windows": "node scripts/update-windows-rehearsal.mjs",
     "test:ui": "playwright test",
     "typecheck": "npm run build -w @vaenyx/contracts && npm run typecheck -w @vaenyx/server && npm run typecheck -w @vaenyx/web"
   },

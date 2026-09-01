@@ -1565,6 +1565,7 @@ export async function registerGatewayRoutes(
       return getUpdateStatus(
         context.config.version,
         context.config.repositoryRoot,
+        context.config.dataDirectory,
       );
     },
   );
@@ -1584,6 +1585,7 @@ export async function registerGatewayRoutes(
       return checkForUpdate(
         context.config.version,
         context.config.repositoryRoot,
+        context.config.dataDirectory,
       );
     },
   );

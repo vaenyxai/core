@@ -24,6 +24,7 @@ export interface AppConfig {
   corsOrigins: string[];
   dataDirectory: string;
   databasePath: string;
+  instanceLockPath: string;
   backupsDirectory: string;
   repositoryRoot: string;
   host: string;
@@ -33,6 +34,7 @@ export interface AppConfig {
   logLevel: string;
   migrationsDirectory: string;
   mode: VaenyxMode;
+  updateProbe: boolean;
   port: number;
   version: string;
   webDistDirectory: string;
@@ -172,6 +174,9 @@ export function loadConfig(): AppConfig {
     corsOrigins: readCorsOrigins(process.env.VAENYX_CORS_ORIGINS, mode),
     dataDirectory,
     databasePath: resolve(dataDirectory, "vaenyx.db"),
+    instanceLockPath: process.env.VAENYX_INSTANCE_LOCK_PATH
+      ? resolve(serverRoot, process.env.VAENYX_INSTANCE_LOCK_PATH)
+      : resolve(dataDirectory, "..", "config", "instance.lock.json"),
     // Backups live under userdata/backups (the in-app Backup & Restore page and
     // the Vaenyx-Backup scripts read/write here). Falls back to the pre-migration
     // private/backups -> backups locations; VAENYX_BACKUPS_DIR overrides.
@@ -207,6 +212,7 @@ export function loadConfig(): AppConfig {
       process.env.VAENYX_MIGRATIONS_DIR ?? "./migrations",
     ),
     mode,
+    updateProbe: process.env.VAENYX_UPDATE_PROBE === "1",
     port: readPort(process.env.VAENYX_PORT),
     version: "0.4.10.5-dev",
     webDistDirectory: resolve(

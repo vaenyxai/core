@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import type { AppConfig } from "../config.js";
+import { assertInstanceLock } from "../runtime/instance-lock.js";
 
 const PENDING_RESTORE_FLAG = "pending-restore.flag";
 
@@ -115,7 +116,7 @@ export interface DatabaseHandle {
   ping: () => boolean;
 }
 
-function runMigrations(
+export function runMigrations(
   sqlite: DatabaseSync,
   migrationsDirectory: string,
 ): void {
@@ -169,6 +170,10 @@ function runMigrations(
 export function createDatabase(config: AppConfig): DatabaseHandle {
   mkdirSync(config.dataDirectory, { recursive: true });
 
+  if (process.env.NODE_ENV !== "test" && config.mode !== "test") {
+    assertInstanceLock(config.instanceLockPath);
+  }
+
   // Apply an owner-requested restore before opening the database.
   applyPendingRestore(config);
 
@@ -189,6 +194,14 @@ export function createDatabase(config: AppConfig): DatabaseHandle {
   const sqlite = new DatabaseSync(config.databasePath);
   sqlite.exec("PRAGMA foreign_keys = ON;");
   sqlite.exec("PRAGMA journal_mode = WAL;");
+  if (
+    config.updateProbe &&
+    process.env.VAENYX_UPDATE_PROBE_NAME === "candidate" &&
+    process.env.VAENYX_UPDATE_FAULT === "migration"
+  ) {
+    sqlite.close();
+    throw new Error("Injected candidate migration failure.");
+  }
   runMigrations(sqlite, config.migrationsDirectory);
   const integrity = sqlite.prepare("PRAGMA quick_check").get() as
     | { quick_check: string }
@@ -200,7 +213,13 @@ export function createDatabase(config: AppConfig): DatabaseHandle {
   }
 
   return {
-    close: () => sqlite.close(),
+    close: () => {
+      try {
+        sqlite.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+      } finally {
+        sqlite.close();
+      }
+    },
     sqlite,
     ping: () => {
       const result = sqlite.prepare("SELECT 1 AS ok").get() as

@@ -14,8 +14,14 @@ import {
   dataDirectory,
   libraryDirectory,
   readBackupConfig,
+  instanceLockPath,
 } from "./lib/paths.mjs";
 import { unpackArchive } from "./lib/vbak.mjs";
+import { acquireInstanceLock } from "./lib/instance-lock.mjs";
+
+const instanceLock = acquireInstanceLock(instanceLockPath, "restore");
+process.env.VAENYX_INSTANCE_LOCK_TOKEN = instanceLock.token;
+process.on("exit", () => instanceLock.release());
 
 const requestedBackup = process.argv[2];
 
@@ -134,3 +140,4 @@ if (safetyUsed) {
 }
 
 console.log(`Restore completed from: ${backupDirectory}`);
+instanceLock.release();

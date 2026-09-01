@@ -136,6 +136,7 @@ export function createBackupNow(config: AppConfig): {
     env: {
       ...process.env,
       VAENYX_DATA_DIR: config.dataDirectory,
+      VAENYX_INSTANCE_LOCK_PATH: config.instanceLockPath,
       // Owner-configured destination wins; retention rides along the same way.
       VAENYX_BACKUPS_DIR: effectiveBackupsDirectory(config),
       ...(backupConfig.keep

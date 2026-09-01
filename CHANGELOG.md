@@ -4,6 +4,21 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.11.0 — 2026-09-01
+
+**An update is now one all-or-nothing change.** Vaenyx takes a verified
+snapshot of both the app and its database before replacing anything. Database
+migrations run against an isolated candidate first; integrity, foreign keys,
+startup and database-backed health must all pass before that candidate can
+become live. The SQLite database, WAL and SHM files move as one family, behind
+one exclusive instance lock.
+
+**A failed or interrupted update repairs itself.** Migration failures, health
+failures and interruptions during the database switch restore the matching old
+app and old data, then prove that the restored version can start before cleanup.
+The update card says what happened; an ordinary user never has to open
+PowerShell or repair SQLite by hand.
+
 ## v0.4.10.0 — 2026-08-30
 
 **Modes grew a real supervision loop.** A Custom Mode now reports to you in

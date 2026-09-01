@@ -53,6 +53,9 @@ export const dataDirectory =
   firstContaining(dataCandidates, "vaenyx.db") ??
   dataCandidates[0];
 export const databasePath = resolve(dataDirectory, "vaenyx.db");
+export const instanceLockPath = process.env.VAENYX_INSTANCE_LOCK_PATH
+  ? resolve(repositoryRoot, process.env.VAENYX_INSTANCE_LOCK_PATH)
+  : resolve(dataDirectory, "..", "config", "instance.lock.json");
 
 // --- Backup config (userdata/config/backup.json) ---------------------------
 // Owner-set backup preferences: an optional destination folder (another disk,
