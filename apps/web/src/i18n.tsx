@@ -265,12 +265,23 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     // "Skill compatible" or "runs Skills" (L4).
     "threads.bulk.count": "{n} selected",
     "threads.bulk.archive": "Archive",
+    "threads.archive.confirm": 'Archive "{title}"? You can restore it later.',
+    "threads.archive.confirmScheduled":
+      'Archive "{title}"? Its scheduled runs will pause immediately. Restoring it will keep the Schedule paused until you press Resume.',
+    "threads.bulk.archiveConfirm":
+      "Archive {n} Conversations? You can restore them later.",
+    "threads.bulk.archiveConfirmScheduled":
+      "Archive {n} Conversations? Scheduled runs on {scheduled} of them will pause immediately. Restoring them will keep those Schedules paused until you press Resume.",
     "threads.bulk.delete": "Delete",
     "threads.bulk.clear": "Clear",
     "threads.archived": "Archived",
     "threads.newInProject": "New chat in this project",
     "threads.archived.empty": "Nothing archived yet.",
     "threads.archived.restore": "Restore",
+    "schedule.paused": "Paused",
+    "schedule.pausedByArchive":
+      "Paused by Archive. Restoring the Conversation does not restart it.",
+    "schedule.resume": "Resume",
     "photo.add": "Add a photo",
     "photo.take": "Take a photo",
     "photo.choose": "Choose an existing photo",
@@ -622,12 +633,21 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "method.fork.credit.unknown": "改自「{id}」",
     "threads.bulk.count": "已选 {n} 个",
     "threads.bulk.archive": "归档",
+    "threads.archive.confirm": "归档“{title}”?之后可以取回。",
+    "threads.archive.confirmScheduled":
+      "归档“{title}”?它的定时运行会立即暂停。取回后仍保持暂停,直到你按“恢复定时”。",
+    "threads.bulk.archiveConfirm": "归档 {n} 个对话?之后可以取回。",
+    "threads.bulk.archiveConfirmScheduled":
+      "归档 {n} 个对话?其中 {scheduled} 个的定时运行会立即暂停。取回后仍保持暂停,直到你按“恢复定时”。",
     "threads.bulk.delete": "删除",
     "threads.bulk.clear": "取消选择",
     "threads.archived": "已归档",
     "threads.newInProject": "在这个项目里新建对话",
     "threads.archived.empty": "还没有归档的对话。",
     "threads.archived.restore": "取回",
+    "schedule.paused": "已暂停",
+    "schedule.pausedByArchive": "因归档而暂停。取回对话不会自动重启定时。",
+    "schedule.resume": "恢复定时",
     "photo.add": "添加照片",
     "photo.take": "拍照",
     "photo.choose": "从相册选择",

@@ -58,6 +58,7 @@ interface TaskRow {
   schedule_day_of_month: number | null;
   next_run_at: string | null;
   schedule_enabled: number;
+  schedule_paused_by_archive: number;
 }
 
 interface TaskConversationSeedRow {
@@ -289,6 +290,7 @@ function toTask(row: TaskRow): Task {
     scheduleDayOfMonth: row.schedule_day_of_month ?? null,
     nextRunAt: row.next_run_at,
     scheduleEnabled: row.schedule_enabled === 1,
+    schedulePausedByArchive: row.schedule_paused_by_archive === 1,
   };
 }
 
@@ -481,6 +483,7 @@ export function createMockTask(
     scheduleDayOfMonth: null,
     nextRunAt: null,
     scheduleEnabled: false,
+    schedulePausedByArchive: false,
   };
 }
 
@@ -591,6 +594,7 @@ export async function createForgeTask(
     scheduleDayOfMonth: null,
     nextRunAt: null,
     scheduleEnabled: false,
+    schedulePausedByArchive: false,
   };
 }
 
@@ -700,6 +704,7 @@ export function createResearchTask(
     scheduleDayOfMonth: null,
     nextRunAt: null,
     scheduleEnabled: false,
+    schedulePausedByArchive: false,
   };
 }
 
@@ -882,7 +887,10 @@ function finishTaskRun(
     // unseen for ~30s (a device viewing the app counts as seen; see
     // schedulePresenceAwarePush). Manual runs never push: the Owner just
     // pressed the button and is looking at the task.
-    if (trigger === "schedule") {
+    if (
+      trigger === "schedule" &&
+      scheduledResultStillNotifiable(database, id)
+    ) {
       const titleRow = database.sqlite
         .prepare("SELECT title, mode_id FROM tasks WHERE id = ?")
         .get(id) as { title: string; mode_id: string | null } | undefined;
@@ -910,12 +918,45 @@ function finishTaskRun(
         // 2026-08-30): a kid-mode task's result must not buzz the Owner's
         // phone, and an Owner task must not buzz the kid's.
         { modeId: titleRow?.mode_id ?? null },
+        {
+          key: `scheduled-task:${id}`,
+          shouldSend: () => scheduledResultStillNotifiable(database, id),
+          suppressedReason:
+            "the scheduled Conversation was archived before the notification was sent.",
+        },
       );
     }
   } catch {
     // Server shutting down (database closed); reconcile handles it next start.
   }
   return Promise.resolve();
+}
+
+function scheduledResultStillNotifiable(
+  database: DatabaseHandle,
+  taskId: string,
+): boolean {
+  const row = database.sqlite
+    .prepare(
+      `SELECT tasks.schedule_paused_by_archive,
+              task_threads.status AS thread_status
+       FROM tasks
+       LEFT JOIN vaenyx_threads AS task_threads
+         ON task_threads.task_id = tasks.id
+        AND task_threads.kind = 'task'
+       WHERE tasks.id = ?`,
+    )
+    .get(taskId) as
+    | {
+        schedule_paused_by_archive: number;
+        thread_status: "active" | "pinned" | "archived" | null;
+      }
+    | undefined;
+
+  return (
+    row?.schedule_paused_by_archive === 0 &&
+    (row.thread_status === "active" || row.thread_status === "pinned")
+  );
 }
 
 // On startup, any task left "running" was interrupted by a restart/crash. Mark
@@ -1050,11 +1091,28 @@ export function setTaskSchedule(
   input: SetTaskScheduleRequest,
 ): Task {
   const existing = database.sqlite
-    .prepare("SELECT id FROM tasks WHERE id = ?")
-    .get(taskId) as { id: string } | undefined;
+    .prepare(
+      `SELECT tasks.id, tasks.mode_id,
+              task_threads.status AS thread_status
+       FROM tasks
+       LEFT JOIN vaenyx_threads AS task_threads
+         ON task_threads.task_id = tasks.id
+        AND task_threads.kind = 'task'
+       WHERE tasks.id = ?`,
+    )
+    .get(taskId) as
+    | {
+        id: string;
+        mode_id: string | null;
+        thread_status: "active" | "pinned" | "archived" | null;
+      }
+    | undefined;
   if (!existing) throw new Error("TASK_NOT_FOUND");
 
   const enabled = input.enabled && input.cadence !== null;
+  if (enabled && existing.thread_status === "archived") {
+    throw new Error("TASK_THREAD_ARCHIVED");
+  }
   const time = input.time ?? null;
   const dayOfWeek = input.dayOfWeek ?? null;
   const dayOfMonth = input.dayOfMonth ?? null;
@@ -1070,7 +1128,8 @@ export function setTaskSchedule(
     .prepare(
       `UPDATE tasks
        SET schedule_cadence = ?, schedule_time = ?, schedule_day_of_week = ?,
-           schedule_day_of_month = ?, schedule_enabled = ?, next_run_at = ?
+           schedule_day_of_month = ?, schedule_enabled = ?, next_run_at = ?,
+           schedule_paused_by_archive = 0
        WHERE id = ?`,
     )
     .run(
@@ -1083,7 +1142,9 @@ export function setTaskSchedule(
       taskId,
     );
 
-  const updated = listTasks(database).find((task) => task.id === taskId);
+  const updated = listTasks(database, existing.mode_id).find(
+    (task) => task.id === taskId,
+  );
   if (!updated) throw new Error("TASK_NOT_FOUND");
   return updated;
 }
@@ -1210,9 +1271,23 @@ function runTaskById(
   taskId: string,
   trigger: "manual" | "schedule",
 ): boolean {
+  const scheduleFence =
+    trigger === "schedule"
+      ? ` AND tasks.schedule_enabled = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM vaenyx_threads
+            WHERE vaenyx_threads.task_id = tasks.id
+              AND vaenyx_threads.kind = 'task'
+              AND vaenyx_threads.status = 'archived'
+          )`
+      : "";
   const task = database.sqlite
     .prepare(
-      "SELECT id, request, skill_id, project_id, agent FROM tasks WHERE id = ? AND harness = 'codex-harness'",
+      `SELECT tasks.id, tasks.request, tasks.skill_id, tasks.project_id,
+              tasks.agent
+       FROM tasks
+       WHERE tasks.id = ?
+         AND tasks.harness = 'codex-harness'${scheduleFence}`,
     )
     .get(taskId) as
     | {
@@ -1258,59 +1333,95 @@ function runTaskById(
         .then((reply) => reply.answer);
   }
 
-  database.sqlite
+  const started = database.sqlite
     .prepare(
-      "UPDATE tasks SET status = 'running', result = '', completed_at = NULL WHERE id = ?",
+      `UPDATE tasks
+       SET status = 'running', result = '', completed_at = NULL
+       WHERE id = ?
+         AND status != 'running'${scheduleFence}`,
     )
     .run(taskId);
+  if (started.changes === 0) return false;
   void executeTaskRun(database, taskId, trigger, run);
   return true;
 }
 
 // The scheduler tick: run every enabled task whose next run is due. Skips tasks
-// already running, queues the next run, and records each as a scheduled run.
-export function runDueTasks(database: DatabaseHandle): number {
+// already running, atomically claims the due timestamp, queues the next run,
+// and records each as a scheduled run. The optional hook is a deterministic
+// test seam for "Archive wins after polling but before claim".
+export function runDueTasks(
+  database: DatabaseHandle,
+  beforeClaim?: (taskId: string) => void,
+): number {
   const now = Date.now();
+  const dueAt = new Date(now).toISOString();
   const dueRows = database.sqlite
     .prepare(
-      `SELECT id, schedule_cadence, schedule_time, schedule_day_of_week,
-              schedule_day_of_month
+      `SELECT tasks.id, tasks.schedule_cadence, tasks.schedule_time,
+              tasks.schedule_day_of_week, tasks.schedule_day_of_month,
+              tasks.next_run_at
        FROM tasks
-       WHERE schedule_enabled = 1
-         AND status != 'running'
-         AND harness = 'codex-harness'
-         AND next_run_at IS NOT NULL
-         AND next_run_at <= ?`,
+       WHERE tasks.schedule_enabled = 1
+         AND tasks.status != 'running'
+         AND tasks.harness = 'codex-harness'
+         AND tasks.next_run_at IS NOT NULL
+         AND tasks.next_run_at <= ?
+         AND NOT EXISTS (
+           SELECT 1 FROM vaenyx_threads
+           WHERE vaenyx_threads.task_id = tasks.id
+             AND vaenyx_threads.kind = 'task'
+             AND vaenyx_threads.status = 'archived'
+         )`,
     )
-    .all(new Date(now).toISOString()) as {
+    .all(dueAt) as {
     id: string;
     schedule_cadence: Cadence | null;
     schedule_time: string | null;
     schedule_day_of_week: number | null;
     schedule_day_of_month: number | null;
+    next_run_at: string;
   }[];
 
+  let launched = 0;
   for (const due of dueRows) {
-    database.sqlite
-      .prepare("UPDATE tasks SET next_run_at = ? WHERE id = ?")
-      .run(
-        due.schedule_cadence
-          ? computeNextRun(
-              {
-                cadence: due.schedule_cadence,
-                time: due.schedule_time,
-                dayOfWeek: due.schedule_day_of_week,
-                dayOfMonth: due.schedule_day_of_month,
-              },
-              now,
-            )
-          : null,
-        due.id,
-      );
-    runTaskById(database, due.id, "schedule");
+    beforeClaim?.(due.id);
+    const successor = due.schedule_cadence
+      ? computeNextRun(
+          {
+            cadence: due.schedule_cadence,
+            time: due.schedule_time,
+            dayOfWeek: due.schedule_day_of_week,
+            dayOfMonth: due.schedule_day_of_month,
+          },
+          now,
+        )
+      : null;
+    // The original due timestamp is the claim token. A competing scheduler,
+    // or Archive's transaction, changes it first and makes this UPDATE a no-op.
+    const claim = database.sqlite
+      .prepare(
+        `UPDATE tasks
+         SET next_run_at = ?
+         WHERE id = ?
+           AND schedule_enabled = 1
+           AND status != 'running'
+           AND harness = 'codex-harness'
+           AND next_run_at = ?
+           AND next_run_at <= ?
+           AND NOT EXISTS (
+             SELECT 1 FROM vaenyx_threads
+             WHERE vaenyx_threads.task_id = tasks.id
+               AND vaenyx_threads.kind = 'task'
+               AND vaenyx_threads.status = 'archived'
+           )`,
+      )
+      .run(successor, due.id, due.next_run_at, dueAt);
+    if (claim.changes === 0) continue;
+    if (runTaskById(database, due.id, "schedule")) launched += 1;
   }
 
-  return dueRows.length;
+  return launched;
 }
 
 // Manually re-run a failed/completed Forge task. Returns the now-running task.

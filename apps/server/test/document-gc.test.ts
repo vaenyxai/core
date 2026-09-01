@@ -50,6 +50,13 @@ function addConversation(database: DatabaseHandle, id: string): void {
        VALUES (?, 'owner-1', 'Chat')`,
     )
     .run(id);
+  database.sqlite
+    .prepare(
+      `INSERT INTO vaenyx_threads (
+         id, owner_id, kind, title, status, conversation_id
+       ) VALUES (?, 'owner-1', 'chat', 'Chat', 'archived', ?)`,
+    )
+    .run(`thread-${id}`, id);
 }
 
 function addDocumentMessage(

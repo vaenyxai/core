@@ -3448,6 +3448,7 @@ export async function registerGatewayRoutes(
         ),
         response: {
           200: MessageResponseSchema,
+          409: ErrorResponseSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
@@ -3486,6 +3487,14 @@ export async function registerGatewayRoutes(
         ) {
           return reply.code(404).send({
             error: "Vaenyx Chat conversation not found.",
+          });
+        }
+        if (
+          error instanceof Error &&
+          error.message === "CONVERSATION_NOT_ARCHIVED"
+        ) {
+          return reply.code(409).send({
+            error: "Archive this Conversation before deleting it.",
           });
         }
 
@@ -4712,6 +4721,7 @@ export async function registerGatewayRoutes(
         body: SetTaskScheduleRequestSchema,
         response: {
           200: TaskSchema,
+          409: ErrorResponseSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
@@ -4746,6 +4756,14 @@ export async function registerGatewayRoutes(
       } catch (error) {
         if (error instanceof Error && error.message === "TASK_NOT_FOUND") {
           return reply.code(404).send({ error: "Task not found." });
+        }
+        if (
+          error instanceof Error &&
+          error.message === "TASK_THREAD_ARCHIVED"
+        ) {
+          return reply.code(409).send({
+            error: "Restore this Conversation before resuming its Schedule.",
+          });
         }
         throw error;
       }

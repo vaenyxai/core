@@ -84,14 +84,52 @@ export function notePresence(): void {
 // completion never does, so the phone buzzes.
 const UNSEEN_WAIT_MS = 35_000;
 
+interface PresenceAwarePushOptions {
+  /** A later event (such as Archive) can cancel this not-yet-sent push. */
+  key?: string;
+  /** Re-check durable state immediately before the delayed send. */
+  shouldSend?: () => boolean;
+  suppressedReason?: string;
+}
+
+const pendingPresencePushes = new Map<string, ReturnType<typeof setTimeout>>();
+
+export function cancelPresenceAwarePush(key: string, reason: string): void {
+  const timer = pendingPresencePushes.get(key);
+  if (!timer) return;
+  clearTimeout(timer);
+  pendingPresencePushes.delete(key);
+  recordLastSend(`${new Date().toISOString()} — suppressed: ${reason}`);
+}
+
 export function schedulePresenceAwarePush(
   database: DatabaseHandle,
   payload: PushPayload,
   category: PushCategory = "test",
   scope?: PushScope,
+  options: PresenceAwarePushOptions = {},
 ): void {
   const completedAt = Date.now();
-  setTimeout(() => {
+  if (options.key) {
+    cancelPresenceAwarePush(options.key, "a newer result replaced it.");
+  }
+  const timer = setTimeout(() => {
+    if (options.key) pendingPresencePushes.delete(options.key);
+    try {
+      if (options.shouldSend && !options.shouldSend()) {
+        recordLastSend(
+          `${new Date().toISOString()} — suppressed: ${options.suppressedReason ?? "the event is no longer current."}`,
+        );
+        return;
+      }
+    } catch {
+      // If the durable state cannot be re-read, silence is safer than a stale
+      // notification (normally this means the database is closing).
+      recordLastSend(
+        `${new Date().toISOString()} — suppressed: the event could not be re-checked.`,
+      );
+      return;
+    }
     if (lastPresenceAt >= completedAt) {
       // Someone saw it — stay quiet, but leave a diagnosable trace.
       recordLastSend(
@@ -102,7 +140,9 @@ export function schedulePresenceAwarePush(
     void sendPushToAllDevices(database, payload, category, scope).catch(
       () => undefined,
     );
-  }, UNSEEN_WAIT_MS).unref?.();
+  }, UNSEEN_WAIT_MS);
+  if (options.key) pendingPresencePushes.set(options.key, timer);
+  timer.unref?.();
 }
 
 export function initPushService(config: {

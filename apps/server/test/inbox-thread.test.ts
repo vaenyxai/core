@@ -121,13 +121,20 @@ describe("the three ways it must not stop being permanent", () => {
     ).toThrow(/THREAD_PROTECTED/);
   });
 
-  it("leaves ordinary conversations deletable", () => {
+  it("leaves archived ordinary conversations deletable", () => {
     const database = testDatabase();
     ensureInboxThread(database, "owner-1", null, "Vaenyx");
     database.sqlite
       .prepare(
         `INSERT INTO ask_vaenyx_conversations (id, owner_id, title)
          VALUES ('c1', 'owner-1', 'A chat')`,
+      )
+      .run();
+    database.sqlite
+      .prepare(
+        `INSERT INTO vaenyx_threads (
+           id, owner_id, kind, title, status, conversation_id
+         ) VALUES ('t1', 'owner-1', 'chat', 'A chat', 'archived', 'c1')`,
       )
       .run();
     expect(isProtectedThread(database, "c1")).toBe(false);

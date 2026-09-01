@@ -159,6 +159,14 @@ Read this inside the app: **Settings → Manual**.
 - **Switch model or thinking level** — the two pickers under the message box.
   They apply to this conversation only.
 - **Rename, archive, delete a chat** — the ⋮ menu at the top of the chat.
+- **Archive makes a conversation quiet without erasing it.** Its history,
+  Project, Routine and memory scope stay attached. If it has an active
+  Schedule, the confirmation says so and Archive pauses future runs at once
+  without losing the cadence, time or timezone. Restore brings the
+  Conversation back but leaves that Schedule paused; press **Resume** on the
+  task or the **Scheduled** screen when you want it running again.
+- **Permanent delete starts in Archived.** Deleting a Conversation never
+  deletes a shared Routine or an Owner connection.
 - **Unread** — the coloured dot beside a conversation breathes when there is
   something new in it. Read is read everywhere: open it on the phone and the
   dot goes out on the computer too (the computer notices within a minute, or
@@ -359,6 +367,9 @@ Read this inside the app: **Settings → Manual**.
 - **One-off task** — ask for something to be done and Vaenyx files it as a task.
 - **Scheduled task** — the **Scheduled** screen. Set it to run daily, weekly, or
   on a pattern.
+- **Paused Schedules stay visible.** Their saved timing is shown with one
+  **Resume** button; restoring an archived Conversation never presses it for
+  you.
 - **See what ran** — the same screen: each run, its result, and how long it took.
 - **Cancel or retry** — buttons on the run itself.
 - **Talk to a task** — the box at the bottom of a task takes everything the chat

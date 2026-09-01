@@ -6,6 +6,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import { cancelPresenceAwarePush } from "./push.js";
 
 interface VaenyxThreadRow {
   id: string;
@@ -171,28 +172,69 @@ export function updateVaenyxThreadStatus(
   ownerId: string,
   input: UpdateVaenyxThreadStatusRequest,
 ): VaenyxThread {
-  const row = getThreadRow(database, threadId, ownerId);
+  const now = new Date().toISOString();
+  let archivedTaskId: string | null = null;
+  let updated: VaenyxThread;
+  let transactionOpen = false;
 
-  // 🔴 The Mode's permanent conversation stays pinned. Archiving it would take
-  // it off the screen, which is deleting it as far as anybody looking can
-  // tell, and un-pinning it would bury the one place Vaenyx speaks from under
-  // whatever was talked about most recently.
-  if (row.kind === "inbox") {
-    throw new Error("THREAD_PROTECTED");
+  try {
+    // The thread status and its task schedule are one decision. BEGIN IMMEDIATE
+    // also serialises this decision against a scheduler claim from another
+    // connection: whichever wins first leaves one coherent state behind.
+    database.sqlite.exec("BEGIN IMMEDIATE;");
+    transactionOpen = true;
+    const row = getThreadRow(database, threadId, ownerId);
+
+    // 🔴 The Mode's permanent conversation stays pinned. Archiving it would
+    // take it off the screen, which is deleting it as far as anybody looking
+    // can tell, and un-pinning it would bury the one place Vaenyx speaks from.
+    if (row.kind === "inbox") {
+      throw new Error("THREAD_PROTECTED");
+    }
+
+    if (input.status === "archived" && row.task_id) {
+      archivedTaskId = row.task_id;
+      database.sqlite
+        .prepare(
+          `UPDATE tasks
+           SET schedule_paused_by_archive =
+                 CASE WHEN schedule_enabled = 1
+                      THEN 1 ELSE schedule_paused_by_archive END,
+               schedule_enabled = 0,
+               next_run_at = NULL
+           WHERE id = ?`,
+        )
+        .run(row.task_id);
+    }
+
+    database.sqlite
+      .prepare(
+        `UPDATE vaenyx_threads
+         SET status = ?, updated_at = ?
+         WHERE id = ?
+           AND (owner_id = ? OR owner_id IS NULL)`,
+      )
+      .run(input.status, now, threadId, ownerId);
+
+    updated = toThread(getThreadRow(database, threadId, ownerId));
+    database.sqlite.exec("COMMIT;");
+    transactionOpen = false;
+  } catch (error) {
+    if (transactionOpen) database.sqlite.exec("ROLLBACK;");
+    throw error;
   }
 
-  const now = new Date().toISOString();
+  // A result may already be waiting through the 35-second unseen window when
+  // Archive lands. It belongs in history, but must not buzz about a
+  // Conversation the Owner just made quiet.
+  if (archivedTaskId) {
+    cancelPresenceAwarePush(
+      `scheduled-task:${archivedTaskId}`,
+      "the scheduled Conversation was archived.",
+    );
+  }
 
-  database.sqlite
-    .prepare(
-      `UPDATE vaenyx_threads
-       SET status = ?, updated_at = ?
-       WHERE id = ?
-         AND (owner_id = ? OR owner_id IS NULL)`,
-    )
-    .run(input.status, now, threadId, ownerId);
-
-  return toThread(getThreadRow(database, threadId, ownerId));
+  return updated;
 }
 
 /** The Owner has this thread open: everything in it up to its current

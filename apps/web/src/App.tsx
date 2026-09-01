@@ -8740,6 +8740,12 @@ This conversation is its home — feed it something to try it, and ask for chang
     thread: VaenyxThread,
     status: VaenyxThread["status"],
   ) {
+    if (
+      status === "archived" &&
+      !confirmThreadArchive(thread, workspace.tasks, t)
+    ) {
+      return;
+    }
     setError(null);
 
     try {
@@ -8776,6 +8782,19 @@ This conversation is its home — feed it something to try it, and ask for chang
           : "Vaenyx could not update the schedule.",
       );
     }
+  }
+
+  function resumeFocusedTaskSchedule(task: Task): void {
+    if (!task.scheduleCadence) return;
+    void applyTaskSchedule(task.id, task.scheduleCadence, {
+      ...(task.scheduleTime ? { time: task.scheduleTime } : {}),
+      ...(task.scheduleDayOfWeek != null
+        ? { dayOfWeek: task.scheduleDayOfWeek }
+        : {}),
+      ...(task.scheduleDayOfMonth != null
+        ? { dayOfMonth: task.scheduleDayOfMonth }
+        : {}),
+    });
   }
 
   async function retryFocusedTask(taskId: string): Promise<void> {
@@ -10555,6 +10574,23 @@ This conversation is its home — feed it something to try it, and ask for chang
                         : ""
                     }
                   />
+                  {!focusedTask.scheduleEnabled &&
+                  focusedTask.scheduleCadence ? (
+                    <>
+                      <span className="task-next">
+                        {focusedTask.schedulePausedByArchive
+                          ? t("schedule.pausedByArchive")
+                          : t("schedule.paused")}
+                      </span>
+                      <button
+                        className="task-toolbar-action"
+                        onClick={() => resumeFocusedTaskSchedule(focusedTask)}
+                        type="button"
+                      >
+                        {t("schedule.resume")}
+                      </button>
+                    </>
+                  ) : null}
                   {focusedTask.scheduleEnabled &&
                   focusedTask.scheduleCadence &&
                   focusedTask.scheduleCadence !== "hourly" ? (
@@ -22795,15 +22831,17 @@ function looksLikeMedicationTask(title: string): boolean {
 function ScheduledPanel({
   tasks,
   onOpenTask,
+  onResume,
   onTurnOff,
 }: {
   tasks: Task[];
   onOpenTask: (taskId: string) => void;
+  onResume: (task: Task) => void;
   onTurnOff: (taskId: string) => void;
 }) {
   const { t } = useI18n();
   const scheduled = tasks.filter(
-    (task) => task.scheduleEnabled && task.scheduleCadence,
+    (task) => task.scheduleCadence && task.threadStatus !== "archived",
   );
   return (
     <div className="library-area">
@@ -22827,17 +22865,26 @@ function ScheduledPanel({
             <div className="scheduled-card" key={task.id}>
               <div className="scheduled-card-head">
                 <strong>{task.title}</strong>
-                <span className="schedule-pill on">On</span>
+                <span
+                  className={`schedule-pill ${
+                    task.scheduleEnabled ? "on" : "paused"
+                  }`}
+                >
+                  {task.scheduleEnabled ? "On" : t("schedule.paused")}
+                </span>
               </div>
               <div className="schedule-row">
                 <span className="label">Runs</span>
                 <span>{describeSchedule(task)}</span>
               </div>
-              {task.nextRunAt ? (
+              {task.scheduleEnabled && task.nextRunAt ? (
                 <div className="schedule-row">
                   <span className="label">Next</span>
                   <span>{formatTime(task.nextRunAt)}</span>
                 </div>
+              ) : null}
+              {!task.scheduleEnabled && task.schedulePausedByArchive ? (
+                <p className="text-faint">{t("schedule.pausedByArchive")}</p>
               ) : null}
               {looksLikeMedicationTask(task.title) ? (
                 <>
@@ -22857,13 +22904,23 @@ function ScheduledPanel({
                 >
                   Open
                 </button>
-                <button
-                  className="text-button"
-                  onClick={() => onTurnOff(task.id)}
-                  type="button"
-                >
-                  Turn off
-                </button>
+                {task.scheduleEnabled ? (
+                  <button
+                    className="text-button"
+                    onClick={() => onTurnOff(task.id)}
+                    type="button"
+                  >
+                    Turn off
+                  </button>
+                ) : (
+                  <button
+                    className="text-button"
+                    onClick={() => onResume(task)}
+                    type="button"
+                  >
+                    {t("schedule.resume")}
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -24629,6 +24686,41 @@ function LibraryPanel({
   );
 }
 
+function hasActiveThreadSchedule(thread: VaenyxThread, tasks: Task[]): boolean {
+  if (!thread.taskId) return false;
+  const task = tasks.find((candidate) => candidate.id === thread.taskId);
+  return Boolean(task?.scheduleEnabled && task.scheduleCadence);
+}
+
+function confirmThreadArchive(
+  thread: VaenyxThread,
+  tasks: Task[],
+  t: (key: string) => string,
+): boolean {
+  const key = hasActiveThreadSchedule(thread, tasks)
+    ? "threads.archive.confirmScheduled"
+    : "threads.archive.confirm";
+  return window.confirm(t(key).replace("{title}", thread.title));
+}
+
+function confirmBulkThreadArchive(
+  threads: VaenyxThread[],
+  tasks: Task[],
+  t: (key: string) => string,
+): boolean {
+  const scheduled = threads.filter((thread) =>
+    hasActiveThreadSchedule(thread, tasks),
+  ).length;
+  const key = scheduled
+    ? "threads.bulk.archiveConfirmScheduled"
+    : "threads.bulk.archiveConfirm";
+  return window.confirm(
+    t(key)
+      .replace("{n}", String(threads.length))
+      .replace("{scheduled}", String(scheduled)),
+  );
+}
+
 function ThreadActionsMenu({
   projects,
   thread,
@@ -24939,7 +25031,7 @@ function ThreadList({
   // Bulk actions on a selection. Ctrl/Cmd-click adds one, Shift-click takes a
   // run — the same gesture as a file manager, because that is what people
   // already know (Oskar, 2026-07-27).
-  onBulkArchive: (threads: VaenyxThread[]) => void;
+  onBulkArchive: (threads: VaenyxThread[]) => Promise<boolean>;
   onBulkDelete: (threads: VaenyxThread[]) => void;
 }) {
   const { t } = useI18n();
@@ -24994,10 +25086,11 @@ function ThreadList({
           </span>
           <button
             className="text-button"
-            onClick={() => {
-              onBulkArchive(selectedThreads);
-              setSelected([]);
-            }}
+            onClick={() =>
+              void onBulkArchive(selectedThreads).then((archived) => {
+                if (archived) setSelected([]);
+              })
+            }
             type="button"
           >
             {t("threads.bulk.archive")}
@@ -25196,7 +25289,7 @@ function SidebarThreadTree({
     thread: VaenyxThread,
     status: VaenyxThread["status"],
   ) => void;
-  onBulkArchive: (threads: VaenyxThread[]) => void;
+  onBulkArchive: (threads: VaenyxThread[]) => Promise<boolean>;
   onBulkDelete: (threads: VaenyxThread[]) => void;
   onNewChatInProject: (projectId: string) => void;
 }) {
@@ -25782,6 +25875,30 @@ function VaenyxWorkspace({
     }
   }
 
+  async function resumeTaskSchedule(task: Task): Promise<void> {
+    if (!task.scheduleCadence) return;
+    try {
+      await setTaskSchedule(task.id, {
+        cadence: task.scheduleCadence,
+        enabled: true,
+        ...(task.scheduleTime ? { time: task.scheduleTime } : {}),
+        ...(task.scheduleDayOfWeek != null
+          ? { dayOfWeek: task.scheduleDayOfWeek }
+          : {}),
+        ...(task.scheduleDayOfMonth != null
+          ? { dayOfMonth: task.scheduleDayOfMonth }
+          : {}),
+      });
+      await refreshWorkspace();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Vaenyx could not resume the schedule.",
+      );
+    }
+  }
+
   // Navigation switches the screen FIRST and loads data behind it. These used
   // to await their fetches before setScreen, so one failed request meant the
   // click did nothing at all — which is exactly how Guard "stopped working"
@@ -26002,6 +26119,12 @@ function VaenyxWorkspace({
     thread: VaenyxThread,
     status: VaenyxThread["status"],
   ) {
+    if (
+      status === "archived" &&
+      !confirmThreadArchive(thread, workspace.tasks, t)
+    ) {
+      return;
+    }
     setError(null);
 
     try {
@@ -26088,9 +26211,10 @@ function VaenyxWorkspace({
     window.history.replaceState({}, "", url.toString());
   }, [screen, focusedTaskId, selectedThreadConversationId]);
 
-  // Bulk archive: one call per thread, then a single refresh. Archiving is
-  // reversible, so it needs no confirmation.
-  async function archiveThreads(threads: VaenyxThread[]): Promise<void> {
+  // Bulk archive uses the same server-side transaction as a single item. One
+  // confirmation names the schedule impact before any request is sent.
+  async function archiveThreads(threads: VaenyxThread[]): Promise<boolean> {
+    if (!confirmBulkThreadArchive(threads, workspace.tasks, t)) return false;
     for (const thread of threads) {
       try {
         await updateVaenyxThreadStatus(thread.id, { status: "archived" });
@@ -26099,6 +26223,7 @@ function VaenyxWorkspace({
       }
     }
     await refreshWorkspace();
+    return true;
   }
 
   // Bulk delete: this one asks first, because it cannot be undone and the
@@ -26303,7 +26428,7 @@ function VaenyxWorkspace({
             onSetThreadStatus={(thread, status) =>
               void setWorkspaceThreadStatus(thread, status)
             }
-            onBulkArchive={(threads) => void archiveThreads(threads)}
+            onBulkArchive={archiveThreads}
             onBulkDelete={(threads) => void deleteThreads(threads)}
           />
         </nav>
@@ -26609,6 +26734,7 @@ function VaenyxWorkspace({
               );
               if (thread) openThreadTask(taskId, thread.id);
             }}
+            onResume={(task) => void resumeTaskSchedule(task)}
             onTurnOff={(taskId) => void turnOffSchedule(taskId)}
           />
         ) : screen === "settings" && settings ? (

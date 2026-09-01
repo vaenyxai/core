@@ -840,6 +840,9 @@ export const TaskSchema = Type.Object(
     scheduleDayOfMonth: Type.Union([Type.Integer(), Type.Null()]),
     nextRunAt: Type.Union([Type.String(), Type.Null()]),
     scheduleEnabled: Type.Boolean(),
+    // True when Archive, rather than the Owner, switched an enabled schedule
+    // off. Restore keeps it true and paused until the Owner explicitly resumes.
+    schedulePausedByArchive: Type.Boolean(),
   },
   { additionalProperties: false },
 );

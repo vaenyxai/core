@@ -808,6 +808,22 @@ export function deleteAskVaenyxConversation(
     throw new Error("CONVERSATION_PROTECTED");
   }
 
+  // Permanent deletion is deliberately a second step from Archived. Enforce
+  // it here, not only in the current UI, so an old browser or direct API call
+  // cannot skip the recoverable Archive step.
+  const thread = database.sqlite
+    .prepare(
+      `SELECT status FROM vaenyx_threads
+       WHERE conversation_id = ?
+         AND (owner_id = ? OR owner_id IS NULL)`,
+    )
+    .get(conversationId, ownerId) as
+    | { status: "active" | "pinned" | "archived" }
+    | undefined;
+  if (thread?.status !== "archived") {
+    throw new Error("CONVERSATION_NOT_ARCHIVED");
+  }
+
   // The cascade is about to erase the evidence of which documents this
   // conversation held — collect them first, sweep after.
   const documentIds = dataDirectory

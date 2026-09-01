@@ -838,6 +838,21 @@ describe("Vaenyx Gateway foundation", () => {
       id: created.json().id,
     });
 
+    const deleteBeforeArchive = await app.inject({
+      method: "DELETE",
+      url: `/v1/ask-vaenyx/conversations/${created.json().id}`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(deleteBeforeArchive.statusCode).toBe(409);
+
+    const archived = await app.inject({
+      method: "PUT",
+      url: `/v1/threads/${created.json().id}/status`,
+      headers: { cookie: sessionCookie },
+      payload: { status: "archived" },
+    });
+    expect(archived.statusCode).toBe(200);
+
     const deleted = await app.inject({
       method: "DELETE",
       url: `/v1/ask-vaenyx/conversations/${created.json().id}`,
