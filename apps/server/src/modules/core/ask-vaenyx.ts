@@ -5,6 +5,7 @@ import { formatFactsContext, listCurrentFacts } from "./facts.js";
 import type {
   AskVaenyxConversation,
   AskVaenyxMessage,
+  ClientMessageStatus,
   CreateAskVaenyxConversationRequest,
   CreateAskVaenyxMessageResponse,
   ImageAnnotationItem,
@@ -963,6 +964,9 @@ export function listAskVaenyxMessages(
 }
 
 export interface CreateAskVaenyxMessageOptions {
+  // H-012: a device-local draft keeps this id across retries. The database
+  // accepts its Owner message once and replays that canonical turn thereafter.
+  clientMessageId?: string;
   onOwnerMessage?: (message: AskVaenyxMessage) => void;
   onDelta?: (text: string) => void;
   signal?: AbortSignal;
@@ -1019,6 +1023,87 @@ export interface CreateAskVaenyxMessageOptions {
   // question resolution before generation starts. Reuse that canonical Owner
   // row instead of inserting a second message here.
   structuredQuestionClaim?: StructuredQuestionClaim;
+}
+
+export function getAskVaenyxClientMessageStatus(
+  database: DatabaseHandle,
+  conversationId: string,
+  ownerId: string,
+  clientMessageId: string,
+): ClientMessageStatus {
+  getConversationRow(database, conversationId, ownerId);
+  const row = database.sqlite
+    .prepare(
+      `SELECT id FROM ask_vaenyx_messages
+       WHERE conversation_id = ? AND role = 'owner'
+         AND client_message_id = ?
+       LIMIT 1`,
+    )
+    .get(conversationId, clientMessageId) as { id: string } | undefined;
+  return {
+    accepted: Boolean(row),
+    conversationId,
+    messageId: row?.id ?? null,
+  };
+}
+
+function existingIdempotentTurn(
+  database: DatabaseHandle,
+  conversationId: string,
+  ownerId: string,
+  clientMessageId: string,
+  content: string,
+  options: CreateAskVaenyxMessageOptions,
+): CreateAskVaenyxMessageResponse | null {
+  const existing = database.sqlite
+    .prepare(
+      `SELECT id, content, audio_id, image_id, document_id, document_name
+       FROM ask_vaenyx_messages
+       WHERE conversation_id = ? AND role = 'owner'
+         AND client_message_id = ?
+       LIMIT 1`,
+    )
+    .get(conversationId, clientMessageId) as
+    | {
+        audio_id: string | null;
+        content: string;
+        document_id: string | null;
+        document_name: string | null;
+        id: string;
+        image_id: string | null;
+      }
+    | undefined;
+  if (!existing) return null;
+
+  if (
+    existing.content !== content ||
+    existing.audio_id !== (options.voiceAudioId ?? null) ||
+    existing.image_id !== (options.imageId ?? null) ||
+    existing.document_id !== (options.documentId ?? null) ||
+    existing.document_name !== (options.documentName ?? null)
+  ) {
+    throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+  }
+
+  const messages = listAskVaenyxMessages(database, conversationId, ownerId);
+  const ownerIndex = messages.findIndex(
+    (message) => message.id === existing.id,
+  );
+  const nextOwnerIndex = messages.findIndex(
+    (message, index) => index > ownerIndex && message.role === "owner",
+  );
+  const turn = messages.slice(
+    ownerIndex,
+    nextOwnerIndex < 0 ? messages.length : nextOwnerIndex,
+  );
+  const ownerMessage = turn[0];
+  if (ownerMessage) options.onOwnerMessage?.(ownerMessage);
+  return {
+    conversation: toConversation(
+      getConversationRow(database, conversationId, ownerId),
+    ),
+    messages: turn,
+  };
 }
 
 // Insert a Vaenyx-authored status note into a conversation (e.g. "✔ Routine X
@@ -1084,6 +1169,18 @@ export async function createAskVaenyxMessage(
   }
   if (!trimmedContent) {
     throw new Error("EMPTY_MESSAGE");
+  }
+
+  if (options?.clientMessageId && !options.structuredQuestionClaim) {
+    const existing = existingIdempotentTurn(
+      database,
+      conversationId,
+      ownerId,
+      options.clientMessageId,
+      trimmedContent,
+      options,
+    );
+    if (existing) return existing;
   }
 
   // Custom Mode M3: a conversation inside a mode carries the mode's
@@ -1182,25 +1279,45 @@ export async function createAskVaenyxMessage(
   }
 
   if (!options?.structuredQuestionClaim) {
-    database.sqlite
-      .prepare(
-        `INSERT INTO ask_vaenyx_messages (
+    try {
+      database.sqlite
+        .prepare(
+          `INSERT INTO ask_vaenyx_messages (
           id, conversation_id, role, content, status, web_search_used, created_at,
-          voice, audio_id, image_id, document_id, document_name, document_pages
-        ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        ownerMessageId,
-        conversationId,
-        trimmedContent,
-        now,
-        options?.voiceAudioId ? 1 : 0,
-        options?.voiceAudioId ?? null,
-        options?.imageId ?? null,
-        options?.documentId ?? null,
-        options?.documentName ?? null,
-        documentPages,
-      );
+          voice, audio_id, image_id, document_id, document_name, document_pages,
+          client_message_id
+        ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          ownerMessageId,
+          conversationId,
+          trimmedContent,
+          now,
+          options?.voiceAudioId ? 1 : 0,
+          options?.voiceAudioId ?? null,
+          options?.imageId ?? null,
+          options?.documentId ?? null,
+          options?.documentName ?? null,
+          documentPages,
+          options?.clientMessageId ?? null,
+        );
+    } catch (error) {
+      // A document inspection yields to the event loop before this INSERT.
+      // If two retries crossed during that window, the unique index chose the
+      // winner; return its canonical turn instead of leaking a SQLite 500.
+      if (options?.clientMessageId) {
+        const existing = existingIdempotentTurn(
+          database,
+          conversationId,
+          ownerId,
+          options.clientMessageId,
+          trimmedContent,
+          options,
+        );
+        if (existing) return existing;
+      }
+      throw error;
+    }
   }
 
   const firstExchange =

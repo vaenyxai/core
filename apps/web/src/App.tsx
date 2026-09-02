@@ -274,6 +274,8 @@ import {
   setMethodTags,
   streamAskVaenyxMessage,
   streamTaskMessage,
+  fetchChatClientMessageStatus,
+  fetchTaskClientMessageStatus,
   fetchTaskLive,
   retryTask,
   setTaskSchedule,
@@ -305,6 +307,21 @@ import {
   fetchComponentProgress,
   type ComponentBootProgress,
 } from "./api.js";
+import {
+  clearConversationDrafts,
+  clearExpiredDrafts,
+  clearModeDrafts,
+  clearOwnerDrafts,
+  createComposerDraft,
+  deleteDraft,
+  draftKey,
+  loadDraft,
+  moveDraft,
+  saveDraft,
+  type ComposerDraft,
+  type DraftAttachment,
+  type DraftScope,
+} from "./draft-recovery.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
 import {
   StructuredQuestionCard,
@@ -1148,27 +1165,24 @@ async function downscalePhoto(file: File): Promise<Blob> {
 function CameraButton({
   disabled,
   lang,
-  onAttach,
+  onLocalPhoto,
   onPreview,
   onText,
-  onUploadStart,
 }: {
   disabled?: boolean;
   lang: string;
-  // The photo attaches to the message itself and STAYS a photo everywhere —
-  // chat and Routines alike; any text extraction happens server-side, out of
-  // sight ("visual first", Oskar 2026-07-28). When absent (a surface with no
-  // attachment slot), the describe fallback fills the box with text instead.
-  onAttach?: (imageId: string) => void;
+  onLocalPhoto?: (photo: {
+    id: string;
+    blob: Blob;
+    name: string;
+    type: string;
+  }) => void;
   // Fires the moment the photo is picked, with a local object URL — the
   // thumbnail shows instantly instead of after the upload round-trip
   // ("过了一秒钟才把照片固定住", Oskar 2026-07-28). Empty string = the upload
   // failed, clear the preview.
   onPreview?: (localUrl: string) => void;
   onText: (text: string) => void;
-  // The in-flight upload, so a Run pressed before it finishes can await the
-  // imageId instead of losing the photo.
-  onUploadStart?: (upload: Promise<string>) => void;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -1179,6 +1193,7 @@ function CameraButton({
   async function handleFile(file: File) {
     setBusy(true);
     setError(null);
+    const localId = crypto.randomUUID();
     try {
       // The photo is ALWAYS kept: it uploads, attaches to the message, and
       // stays a photo in the conversation. It used to be turned into text and
@@ -1193,12 +1208,23 @@ function CameraButton({
       // photo has to look "held" the instant it is taken (Oskar, 2026-08-16
       // — "拍完照要等两秒才固定住"). The downscaled copy is only what
       // uploads.
-      if (onAttach) onPreview?.(URL.createObjectURL(file));
+      if (onLocalPhoto) {
+        onLocalPhoto?.({
+          id: localId,
+          blob: file,
+          name: file.name || "photo.jpg",
+          type: file.type || "image/jpeg",
+        });
+        onPreview?.(URL.createObjectURL(file));
+      }
       const blob = await downscalePhoto(file);
-      if (onAttach) {
-        const upload = uploadPhoto(blob).then((result) => result.imageId);
-        onUploadStart?.(upload);
-        onAttach(await upload);
+      if (onLocalPhoto) {
+        onLocalPhoto?.({
+          id: localId,
+          blob,
+          name: file.name || "photo.jpg",
+          type: blob.type || file.type || "image/jpeg",
+        });
       } else {
         // Surfaces with no attachment slot (the start-work box) still get the
         // description in text form, because there is nowhere to hang a photo.
@@ -1215,7 +1241,7 @@ function CameraButton({
       // A tooltip is not an error message on a phone: there is nothing to
       // hover. A photo that silently does nothing reads as a broken button,
       // so the reason is said out loud (Oskar, 2026-07-26).
-      onPreview?.("");
+      if (!onLocalPhoto) onPreview?.("");
       const message =
         nextError instanceof Error
           ? nextError.message
@@ -1880,64 +1906,35 @@ interface SpeechPrewarm {
 // gate names. Every refusal (too big, too many pages, password-protected,
 // old Office format, unreadable) comes back from the server in words the
 // Owner can act on.
-interface PickedDocument {
-  documentId: string;
+interface PendingDocumentAttachment {
+  documentId: string | null;
+  local: DraftAttachment;
   name: string;
-  pages: number;
+  pages: number | null;
+  acknowledged: boolean;
   needsCostGate: boolean;
+}
+
+interface DraftSendLifecycle {
+  clientMessageId: string;
+  attachmentReady: (attachment: DraftAttachment) => Promise<void>;
+  movedToConversation: (conversationId: string) => Promise<void>;
+  accepted: () => Promise<void>;
+  restore: (uncertain?: boolean) => Promise<void>;
 }
 
 function DocumentButton({
   disabled,
-  onPicked,
+  onLocalPicked,
 }: {
   disabled?: boolean;
-  onPicked: (document: PickedDocument) => void;
+  onLocalPicked: (file: File) => void;
 }) {
-  const { lang, t } = useI18n();
-  const [busy, setBusy] = useState(false);
-  // The scanned-file moment: the server refused the upload because OCR is
-  // off, and the fix is one switch. The sentence and the button live in one
-  // small window — a toast cannot carry a button, and sending somebody to
-  // Settings to hunt for a row they have never heard of is how a feature
-  // stays "broken" for a month.
-  const [needsOcr, setNeedsOcr] = useState<string | null>(null);
-  const [ocrFlipBusy, setOcrFlipBusy] = useState(false);
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <>
-      {needsOcr ? (
-        <Modal
-          onClose={() => setNeedsOcr(null)}
-          title={lang === "zh" ? "这份是扫描件" : "This one is a scan"}
-        >
-          <p className="settings-card-copy">{needsOcr}</p>
-          <div className="modal-actions">
-            <button
-              className="primary-button"
-              disabled={ocrFlipBusy}
-              onClick={() => {
-                setOcrFlipBusy(true);
-                void updateCapabilities({ ocr: true }, lang)
-                  .then(() => {
-                    setNeedsOcr(null);
-                    showErrorToast(
-                      lang === "zh"
-                        ? "「图转文」打开了 —— 再发一次那份文件。"
-                        : "OCR is on — send that file again.",
-                    );
-                  })
-                  .catch(() => undefined)
-                  .finally(() => setOcrFlipBusy(false));
-              }}
-              type="button"
-            >
-              {lang === "zh" ? "打开图转文" : "Turn on OCR"}
-            </button>
-          </div>
-        </Modal>
-      ) : null}
       <input
         accept="application/pdf,.pdf,.txt,.md,.markdown,text/plain,text/markdown,.docx,.xlsx,.pptx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
         hidden
@@ -1945,31 +1942,20 @@ function DocumentButton({
           const file = event.target.files?.[0];
           event.target.value = "";
           if (!file) return;
-          setBusy(true);
-          void uploadDocument(file, lang)
-            .then(onPicked)
-            .catch((error: unknown) => {
-              const message = error instanceof Error ? error.message : "";
-              if (message.startsWith("DOCUMENT_NEEDS_OCR:")) {
-                setNeedsOcr(message.slice("DOCUMENT_NEEDS_OCR:".length));
-                return;
-              }
-              // Every other reason already raised the toast.
-            })
-            .finally(() => setBusy(false));
+          onLocalPicked(file);
         }}
         ref={inputRef}
         type="file"
       />
       <button
         aria-label={t("document.add")}
-        className={`mic-button${busy ? " mic-button--busy" : ""}`}
-        disabled={disabled || busy}
+        className="mic-button"
+        disabled={disabled}
         onClick={() => inputRef.current?.click()}
         title={t("document.add")}
         type="button"
       >
-        {busy ? <IconSpinner /> : <IconDocument />}
+        <IconDocument />
       </button>
     </>
   );
@@ -1992,24 +1978,27 @@ function ComposerTools({
   canAttachPhoto = true,
   disabled,
   lang,
-  onDocument,
-  onPhoto,
+  onLocalDocument,
+  onLocalPhoto,
   onPhotoPreview,
   onSpoken,
   onTranscribed,
-  onUploadStart,
   showCamera,
   showMic,
 }: {
   canAttachPhoto?: boolean;
   disabled: boolean;
   lang: string;
-  onDocument: (picked: PickedDocument) => void;
-  onPhoto: (imageId: string) => void;
+  onLocalDocument: (file: File) => void;
+  onLocalPhoto: (photo: {
+    id: string;
+    blob: Blob;
+    name: string;
+    type: string;
+  }) => void;
   onPhotoPreview: (url: string) => void;
   onSpoken: (text: string, audioId?: string) => void;
   onTranscribed: (text: string) => void;
-  onUploadStart: (upload: Promise<string>) => void;
   showCamera: boolean;
   showMic: boolean;
 }) {
@@ -2068,15 +2057,15 @@ function ComposerTools({
           <CameraButton
             disabled={disabled}
             lang={lang}
-            onAttach={canAttachPhoto ? closeThen(onPhoto) : undefined}
+            onLocalPhoto={canAttachPhoto ? closeThen(onLocalPhoto) : undefined}
             onPreview={canAttachPhoto ? closeThen(onPhotoPreview) : undefined}
             onText={closeThen(onTranscribed)}
-            onUploadStart={
-              canAttachPhoto ? closeThen(onUploadStart) : undefined
-            }
           />
         ) : null}
-        <DocumentButton disabled={disabled} onPicked={closeThen(onDocument)} />
+        <DocumentButton
+          disabled={disabled}
+          onLocalPicked={closeThen(onLocalDocument)}
+        />
         {showMic ? (
           <MicButton disabled={disabled} onText={closeThen(onSpoken)} />
         ) : null}
@@ -2103,8 +2092,8 @@ function Composer({
   children,
   documentTray,
   lang,
-  onDocument,
-  onPhoto,
+  onLocalDocument,
+  onLocalPhoto,
   onPhotoPreview,
   onRemoveDocument,
   onRemovePhoto,
@@ -2112,7 +2101,6 @@ function Composer({
   onStop,
   onSubmit,
   onTranscribed,
-  onUploadStart,
   photoTray,
   placeholder,
   showCamera,
@@ -2128,8 +2116,13 @@ function Composer({
   children?: React.ReactNode;
   documentTray: { name: string } | null;
   lang: string;
-  onDocument: (picked: PickedDocument) => void;
-  onPhoto: (imageId: string) => void;
+  onLocalDocument: (file: File) => void;
+  onLocalPhoto: (photo: {
+    id: string;
+    blob: Blob;
+    name: string;
+    type: string;
+  }) => void;
   onPhotoPreview: (url: string) => void;
   onRemoveDocument: () => void;
   onRemovePhoto: () => void;
@@ -2137,7 +2130,6 @@ function Composer({
   onStop: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTranscribed: (text: string) => void;
-  onUploadStart: (upload: Promise<string>) => void;
   photoTray: string | null;
   placeholder: string;
   showCamera: boolean;
@@ -2213,20 +2205,22 @@ function Composer({
             );
             if (!file) return;
             event.preventDefault();
-            onPhotoPreview(URL.createObjectURL(file));
-            const upload = (async () => {
-              const blob = await downscalePhoto(file);
-              return (await uploadPhoto(blob)).imageId;
-            })();
-            onUploadStart(upload);
-            upload.then(onPhoto).catch(() => {
-              onPhotoPreview("");
-              showErrorToast(
-                lang === "zh"
-                  ? "粘贴的照片没能上传。"
-                  : "The pasted photo could not be uploaded.",
-              );
+            const localId = crypto.randomUUID();
+            onLocalPhoto({
+              id: localId,
+              blob: file,
+              name: file.name || "pasted-photo.jpg",
+              type: file.type || "image/jpeg",
             });
+            onPhotoPreview(URL.createObjectURL(file));
+            void downscalePhoto(file).then((blob) =>
+              onLocalPhoto({
+                id: localId,
+                blob,
+                name: file.name || "pasted-photo.jpg",
+                type: blob.type || file.type || "image/jpeg",
+              }),
+            );
           }}
           placeholder={placeholder}
           required={!hasAttachment}
@@ -2237,12 +2231,11 @@ function Composer({
           canAttachPhoto={!attachDisabled}
           disabled={busy}
           lang={lang}
-          onDocument={onDocument}
-          onPhoto={onPhoto}
+          onLocalDocument={onLocalDocument}
+          onLocalPhoto={onLocalPhoto}
           onPhotoPreview={onPhotoPreview}
           onSpoken={onSpoken}
           onTranscribed={onTranscribed}
-          onUploadStart={onUploadStart}
           showCamera={showCamera}
           showMic={showMic}
         />
@@ -4830,6 +4823,7 @@ function ModesPanel() {
     setError(null);
     try {
       await deleteMode(modeId);
+      await clearModeDrafts(modeId).catch(() => undefined);
       setConfirmRemove(null);
       setModes((current) => current.filter((item) => item.id !== modeId));
     } catch (nextError) {
@@ -6198,32 +6192,77 @@ function AskVaenyxPanel({
   // Phase B: an uploaded photo waiting to ride on the next message (direct
   // vision mode); null = no attachment pending.
   const [pendingImageId, setPendingImageId] = useState<string | null>(null);
+  const [pendingPhotoLocal, setPendingPhotoLocal] =
+    useState<DraftAttachment | null>(null);
   // Instant thumbnail: a local object URL shown the moment the photo is
-  // picked, while the upload runs behind it. The ref holds the in-flight
-  // upload so a Run pressed early can await the imageId.
+  // picked. H-012 keeps the blob on-device and uploads only after Send.
   const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(
     null,
   );
-  const pendingUploadRef = useRef<Promise<string> | null>(null);
   function clearPendingPhoto() {
     setPendingImageId(null);
-    setPendingPhotoPreview(null);
-    pendingUploadRef.current = null;
+    setPendingPhotoLocal(null);
+    setPendingPhotoPreview((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+      return null;
+    });
   }
   // A PDF waiting to ride the next message, and the M1 cost gate it may have
   // to pass first. acknowledged is the Owner's answer — the server refuses a
   // gated document without it, so the gate is not just a screen.
-  const [pendingDocument, setPendingDocument] = useState<{
-    documentId: string;
+  const [pendingDocument, setPendingDocument] =
+    useState<PendingDocumentAttachment | null>(null);
+  const [documentGate, setDocumentGate] =
+    useState<PendingDocumentAttachment | null>(null);
+  const [documentNeedsOcr, setDocumentNeedsOcr] = useState<string | null>(null);
+  const [ocrFlipBusy, setOcrFlipBusy] = useState(false);
+
+  function holdLocalPhoto(photo: {
+    id: string;
+    blob: Blob;
     name: string;
-    pages: number;
-    acknowledged: boolean;
-  } | null>(null);
-  const [documentGate, setDocumentGate] = useState<{
-    documentId: string;
-    name: string;
-    pages: number;
-  } | null>(null);
+    type: string;
+  }) {
+    setPendingPhotoLocal((current) => ({
+      id: photo.id,
+      kind: "photo",
+      name: photo.name,
+      type: photo.type,
+      size: photo.blob.size,
+      blob: photo.blob,
+      serverId: current?.id === photo.id ? current.serverId : null,
+    }));
+  }
+
+  function finishPhotoUpload(imageId: string) {
+    setPendingImageId(imageId);
+    setPendingPhotoLocal((current) =>
+      current ? { ...current, serverId: imageId } : current,
+    );
+  }
+
+  function holdLocalDocument(file: File) {
+    const local: DraftAttachment = {
+      id: crypto.randomUUID(),
+      kind: "document",
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      size: file.size,
+      blob: file,
+      serverId: null,
+      pages: null,
+      acknowledged: false,
+    };
+    setPendingDocument({
+      documentId: null,
+      local,
+      name: file.name,
+      pages: null,
+      acknowledged: false,
+      needsCostGate: false,
+    });
+  }
+
   // New-chat model choice (dev.156): picked before the conversation exists,
   // applied the moment it is created so the very first turn uses it.
   const [newChatProviderId, setNewChatProviderId] = useState<string | null>(
@@ -6641,6 +6680,354 @@ function AskVaenyxPanel({
       cancelled = true;
     };
   }, [focusedTaskId, view]);
+
+  // H-012 — an unsent composer belongs to exactly one Owner × Mode × surface.
+  // Blobs live only in IndexedDB on this device; nothing reaches the server
+  // until Send. A recovered draft is deliberately visible and never auto-sent.
+  const currentDraftScope = useMemo<DraftScope>(
+    () => ({
+      ownerId: workspace.owner.id,
+      modeId: workspace.owner.modeId ?? "__user__",
+      kind: view === "task" ? "task" : view === "chat" ? "conversation" : "new",
+      scopeId:
+        view === "task"
+          ? focusedTaskId
+          : view === "chat"
+            ? activeConversationId
+            : null,
+    }),
+    [
+      activeConversationId,
+      focusedTaskId,
+      view,
+      workspace.owner.id,
+      workspace.owner.modeId,
+    ],
+  );
+  const currentDraftKey = draftKey(currentDraftScope);
+  const [loadedDraftKey, setLoadedDraftKey] = useState<string | null>(null);
+  const [draftClientMessageId, setDraftClientMessageId] = useState<string>(() =>
+    crypto.randomUUID(),
+  );
+  const [draftRecovered, setDraftRecovered] = useState(false);
+  const [draftUncertain, setDraftUncertain] = useState(false);
+  const [draftOmittedNames, setDraftOmittedNames] = useState<string[]>([]);
+  const draftSendingRef = useRef(false);
+  const draftSnapshotRef = useRef<ComposerDraft | null>(null);
+
+  function draftText(): string {
+    return view === "task"
+      ? taskPrompt
+      : view === "chat"
+        ? prompt
+        : startWorkPrompt;
+  }
+
+  function setDraftText(text: string) {
+    if (view === "task") setTaskPrompt(text);
+    else if (view === "chat") setPrompt(text);
+    else setStartWorkPrompt(text);
+  }
+
+  function restoreDraftAttachments(draft: ComposerDraft) {
+    clearPendingPhoto();
+    setPendingDocument(null);
+    const photo = draft.attachments.find((item) => item.kind === "photo");
+    if (photo) {
+      setPendingPhotoLocal(photo);
+      setPendingImageId(photo.serverId);
+      setPendingPhotoPreview(URL.createObjectURL(photo.blob));
+    }
+    const document = draft.attachments.find((item) => item.kind === "document");
+    if (document) {
+      setPendingDocument({
+        documentId: document.serverId,
+        local: document,
+        name: document.name,
+        pages: document.pages ?? null,
+        acknowledged: document.acknowledged ?? false,
+        needsCostGate: false,
+      });
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadedDraftKey(null);
+    setDraftRecovered(false);
+    setDraftUncertain(false);
+    setDraftOmittedNames([]);
+    setDraftClientMessageId(crypto.randomUUID());
+    setPrompt("");
+    setTaskPrompt("");
+    setStartWorkPrompt("");
+    clearPendingPhoto();
+    setPendingDocument(null);
+    void clearExpiredDrafts().catch(() => undefined);
+    void loadDraft(currentDraftScope)
+      .then(async (stored) => {
+        if (!stored || cancelled) return stored;
+        if (stored.deliveryState !== "uncertain" || !stored.scopeId) {
+          return stored;
+        }
+        try {
+          const status =
+            stored.kind === "task"
+              ? await fetchTaskClientMessageStatus(
+                  stored.scopeId,
+                  stored.clientMessageId,
+                )
+              : stored.kind === "conversation"
+                ? await fetchChatClientMessageStatus(
+                    stored.scopeId,
+                    stored.clientMessageId,
+                  )
+                : null;
+          if (status?.accepted) {
+            await deleteDraft(stored.key);
+            return null;
+          }
+          const editing = { ...stored, deliveryState: "editing" as const };
+          await saveDraft(editing);
+          return editing;
+        } catch {
+          // Offline or a dropped status check: keep the uncertainty visible.
+          return stored;
+        }
+      })
+      .then((stored) => {
+        if (cancelled) return;
+        if (stored) {
+          setDraftClientMessageId(stored.clientMessageId);
+          setDraftText(stored.text);
+          restoreDraftAttachments(stored);
+          setComposeProjectId(stored.projectId ?? requestedProjectId ?? "");
+          setDraftRecovered(true);
+          setDraftUncertain(stored.deliveryState === "uncertain");
+          setDraftOmittedNames(stored.attachmentOmittedNames);
+        }
+        setLoadedDraftKey(currentDraftKey);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadedDraftKey(currentDraftKey);
+      });
+    return () => {
+      cancelled = true;
+      const leaving = draftSnapshotRef.current;
+      if (leaving?.key === currentDraftKey && !draftSendingRef.current) {
+        void saveDraft(leaving).catch(() => undefined);
+      }
+    };
+  }, [currentDraftKey]);
+
+  const currentDraftAttachments = useMemo(
+    () =>
+      [pendingPhotoLocal, pendingDocument?.local].filter(
+        (item): item is DraftAttachment => Boolean(item),
+      ),
+    [pendingDocument, pendingPhotoLocal],
+  );
+
+  useEffect(() => {
+    if (loadedDraftKey !== currentDraftKey) return undefined;
+    const snapshot = createComposerDraft(currentDraftScope, {
+      clientMessageId: draftClientMessageId,
+      text: draftText(),
+      attachments: currentDraftAttachments,
+      projectId: view === "new" ? composeProjectId || null : null,
+      deliveryState: draftUncertain ? "uncertain" : "editing",
+      attachmentOmittedNames: draftOmittedNames,
+    });
+    draftSnapshotRef.current = snapshot;
+    if (draftSendingRef.current) return undefined;
+    const timer = window.setTimeout(() => {
+      void saveDraft(snapshot)
+        .then((result) => {
+          if (result.attachmentOmittedNames.length) {
+            setDraftOmittedNames(result.attachmentOmittedNames);
+          }
+        })
+        .catch(() => undefined);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [
+    composeProjectId,
+    currentDraftAttachments,
+    currentDraftKey,
+    draftClientMessageId,
+    draftOmittedNames,
+    draftUncertain,
+    loadedDraftKey,
+    prompt,
+    startWorkPrompt,
+    taskPrompt,
+    view,
+  ]);
+
+  useEffect(() => {
+    const flush = () => {
+      if (!draftSendingRef.current && draftSnapshotRef.current) {
+        void saveDraft(draftSnapshotRef.current).catch(() => undefined);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, []);
+
+  async function discardCurrentDraft() {
+    draftSendingRef.current = true;
+    await deleteDraft(currentDraftKey).catch(() => undefined);
+    setDraftText("");
+    clearPendingPhoto();
+    setPendingDocument(null);
+    setDraftRecovered(false);
+    setDraftUncertain(false);
+    setDraftOmittedNames([]);
+    setDraftClientMessageId(crypto.randomUUID());
+    draftSendingRef.current = false;
+  }
+
+  function renderDraftRecoveryNotice(): ReactNode {
+    if (!draftRecovered && draftOmittedNames.length === 0) return null;
+    return (
+      <div className="draft-recovery-notice" role="status">
+        <span>
+          {draftUncertain
+            ? lang === "zh"
+              ? "发送状态未确认。草稿已恢复，请先检查再发送。"
+              : "Sending status is unknown. Draft recovered — review before sending."
+            : lang === "zh"
+              ? "已恢复草稿，请检查后再发送。"
+              : "Draft recovered — review before sending."}
+          {draftOmittedNames.length
+            ? lang === "zh"
+              ? ` 设备空间不足，未恢复附件：${draftOmittedNames.join("、")}。`
+              : ` Device storage was full, so these attachments were not recovered: ${draftOmittedNames.join(", ")}.`
+            : ""}
+        </span>
+        <button
+          className="text-button"
+          onClick={() => void discardCurrentDraft()}
+          type="button"
+        >
+          {lang === "zh" ? "丢弃" : "Discard"}
+        </button>
+      </div>
+    );
+  }
+
+  async function beginDraftSend(): Promise<DraftSendLifecycle> {
+    let saved = createComposerDraft(currentDraftScope, {
+      clientMessageId: draftClientMessageId,
+      text: draftText(),
+      attachments: currentDraftAttachments,
+      projectId: view === "new" ? composeProjectId || null : null,
+      deliveryState: "uncertain",
+      attachmentOmittedNames: draftOmittedNames,
+    });
+    draftSendingRef.current = true;
+    setDraftUncertain(true);
+    const saveResult = await saveDraft(saved).catch(() => ({
+      attachmentOmittedNames: [] as string[],
+    }));
+    if (saveResult.attachmentOmittedNames.length) {
+      setDraftOmittedNames(saveResult.attachmentOmittedNames);
+    }
+
+    const restoreValues = () => {
+      if (saved.kind === "task") setTaskPrompt(saved.text);
+      else if (saved.kind === "conversation") setPrompt(saved.text);
+      else setStartWorkPrompt(saved.text);
+      restoreDraftAttachments(saved);
+      setDraftRecovered(true);
+    };
+
+    return {
+      clientMessageId: saved.clientMessageId,
+      attachmentReady: async (attachment) => {
+        saved = {
+          ...saved,
+          attachments: saved.attachments.map((current) =>
+            current.kind === attachment.kind ? attachment : current,
+          ),
+        };
+        await saveDraft(saved).catch(() => undefined);
+      },
+      movedToConversation: async (conversationId) => {
+        if (saved.kind !== "new") return;
+        const scope: DraftScope = {
+          ownerId: saved.ownerId,
+          modeId: saved.modeId,
+          kind: "conversation",
+          scopeId: conversationId,
+        };
+        saved = await moveDraft(saved, scope);
+      },
+      accepted: async () => {
+        await deleteDraft(saved.key).catch(() => undefined);
+        setDraftRecovered(false);
+        setDraftUncertain(false);
+        setDraftOmittedNames([]);
+        setDraftClientMessageId(crypto.randomUUID());
+        draftSendingRef.current = false;
+      },
+      restore: async (uncertain = true) => {
+        saved = {
+          ...saved,
+          deliveryState: uncertain ? "uncertain" : "editing",
+        };
+        await saveDraft(saved).catch(() => undefined);
+        setDraftUncertain(uncertain);
+        restoreValues();
+        draftSendingRef.current = false;
+      },
+    };
+  }
+
+  async function ensureDocumentUploaded(
+    document: PendingDocumentAttachment | null,
+    draftLifecycle?: DraftSendLifecycle,
+  ): Promise<PendingDocumentAttachment | null> {
+    if (!document || document.documentId) return document;
+    const file = new File([document.local.blob], document.name, {
+      type: document.local.type,
+    });
+    try {
+      const picked = await uploadDocument(file, lang);
+      const uploaded: PendingDocumentAttachment = {
+        ...document,
+        documentId: picked.documentId,
+        local: {
+          ...document.local,
+          serverId: picked.documentId,
+          pages: picked.pages,
+        },
+        name: picked.name,
+        pages: picked.pages,
+        needsCostGate: picked.needsCostGate,
+      };
+      setPendingDocument(uploaded);
+      await draftLifecycle?.attachmentReady(uploaded.local);
+      if (picked.needsCostGate && !uploaded.acknowledged) {
+        setDocumentGate(uploaded);
+        return null;
+      }
+      return uploaded;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("DOCUMENT_NEEDS_OCR:")) {
+        setDocumentNeedsOcr(message.slice("DOCUMENT_NEEDS_OCR:".length));
+      }
+      return null;
+    }
+  }
 
   // Coming back to a suspended page (phone unlock, tab switch): the reply may
   // have finished server-side while the stream connection was dead — refetch
@@ -7834,19 +8221,33 @@ This conversation is its home — feed it something to try it, and ask for chang
   async function sendChatContent(
     content: string,
     voiceAudioId?: string,
+    draftLifecycle?: DraftSendLifecycle,
   ): Promise<void> {
     // Phase B: a pending photo rides on this message; a photo alone is a
     // valid message too. A Run pressed while the upload is still in flight
     // waits for the imageId here instead of dropping the photo.
     let imageId = pendingImageId ?? undefined;
-    if (!imageId && pendingUploadRef.current) {
+    if (!imageId && pendingPhotoLocal) {
       try {
-        imageId = await pendingUploadRef.current;
+        imageId = (await uploadPhoto(pendingPhotoLocal.blob)).imageId;
+        await draftLifecycle?.attachmentReady({
+          ...pendingPhotoLocal,
+          serverId: imageId,
+        });
+        finishPhotoUpload(imageId);
       } catch {
-        // Upload failed: the toast already said so; send goes on without it.
+        await draftLifecycle?.restore(false);
+        return;
       }
     }
-    const document = pendingDocument;
+    const document = await ensureDocumentUploaded(
+      pendingDocument,
+      draftLifecycle,
+    );
+    if (pendingDocument && !document) {
+      await draftLifecycle?.restore(false);
+      return;
+    }
     if (!content.trim()) {
       if (!imageId && !document) return;
       content = document ? `(Document: ${document.name})` : "(Photo)";
@@ -7919,6 +8320,7 @@ This conversation is its home — feed it something to try it, and ask for chang
         removeIntentTemp();
         if (chatIntentController.signal.aborted && !intentTimedOut) {
           // The Owner pressed Stop: nothing fires.
+          await draftLifecycle?.restore(false);
           return;
         }
         if (decision === "edit") {
@@ -7927,6 +8329,7 @@ This conversation is its home — feed it something to try it, and ask for chang
             activeThread.routineId,
             content,
           );
+          await draftLifecycle?.restore(false);
           return;
         }
         if (decision === "unsure") {
@@ -7936,6 +8339,7 @@ This conversation is its home — feed it something to try it, and ask for chang
             content,
             speakResult: Boolean(voiceAudioId),
           });
+          await draftLifecycle?.restore(false);
           return;
         }
       }
@@ -7948,6 +8352,7 @@ This conversation is its home — feed it something to try it, and ask for chang
         imageId,
         Boolean(voiceAudioId),
       );
+      await draftLifecycle?.accepted();
       return;
     }
 
@@ -7982,6 +8387,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           projectId: composeProjectId || null,
         });
         preCreatedConversationId = conversation.id;
+        await draftLifecycle?.movedToConversation(conversation.id);
         onConversationsChange(upsertConversation(conversations, conversation));
         setActiveConversationId(conversation.id);
         // Switch into the chat view NOW, not after classification: the judge
@@ -8056,6 +8462,7 @@ This conversation is its home — feed it something to try it, and ask for chang
       removePending();
       if (turnController.signal.aborted) {
         setSending(false);
+        await draftLifecycle?.restore(false);
         return;
       }
       // go-to: the Owner asked to open a screen or change a setting that
@@ -8089,6 +8496,7 @@ This conversation is its home — feed it something to try it, and ask for chang
               content,
             );
             setSending(false);
+            await draftLifecycle?.accepted();
             return;
           }
           // The Routine's newest existing conversation, or a fresh one. The
@@ -8134,6 +8542,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           await openConversation(targetId);
           setSending(false);
           await runRoutineMessage(targetId, verdict.routineId, content);
+          await draftLifecycle?.accepted();
           return;
         } catch {
           // Jump/run failed — fall through to a normal reply here instead.
@@ -8158,6 +8567,7 @@ This conversation is its home — feed it something to try it, and ask for chang
               editRoutineId,
               editAsk,
             );
+            await draftLifecycle?.restore(false);
             return;
           }
           const existing = workspace.threads
@@ -8197,6 +8607,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           await openConversation(targetId);
           setSending(false);
           await startRoutineChatEdit(targetId, editRoutineId, editAsk);
+          await draftLifecycle?.restore(false);
           return;
         } catch {
           // Jump failed — fall through to a normal reply here instead.
@@ -8248,6 +8659,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           }
           setPrompt("");
           setSending(false);
+          await draftLifecycle?.accepted();
           return;
         } catch {
           // Task creation failed — fall through to a normal reply.
@@ -8321,6 +8733,7 @@ This conversation is its home — feed it something to try it, and ask for chang
         onConversationsChange(nextConversations);
         setActiveConversationId(conversation.id);
         createdConversationId = conversation.id;
+        await draftLifecycle?.movedToConversation(conversation.id);
         await applyNewChatModelChoice(conversation.id);
       }
 
@@ -8439,11 +8852,12 @@ This conversation is its home — feed it something to try it, and ask for chang
         annotateRide,
         document
           ? {
-              documentId: document.documentId,
+              documentId: document.documentId!,
               name: document.name,
               acknowledged: document.acknowledged,
             }
           : undefined,
+        draftLifecycle?.clientMessageId,
       );
 
       // Voice replies: spoken in → spoken out ("我输入是语音,你的输出才是
@@ -8495,6 +8909,7 @@ This conversation is its home — feed it something to try it, and ask for chang
         ];
       });
       void onWorkspaceRefresh();
+      await draftLifecycle?.accepted();
     } catch (nextError) {
       if (
         nextError instanceof DOMException &&
@@ -8510,6 +8925,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           ),
         );
         void onWorkspaceRefresh();
+        await draftLifecycle?.restore();
       } else {
         setError(
           nextError instanceof Error
@@ -8531,6 +8947,21 @@ This conversation is its home — feed it something to try it, and ask for chang
           activeConversationId ??
           preCreatedConversationId;
         if (reconcileId) {
+          if (draftLifecycle) {
+            try {
+              const status = await fetchChatClientMessageStatus(
+                reconcileId,
+                draftLifecycle.clientMessageId,
+              );
+              if (status.accepted) {
+                await draftLifecycle.accepted();
+              } else {
+                await draftLifecycle.restore(false);
+              }
+            } catch {
+              await draftLifecycle.restore();
+            }
+          }
           void (async () => {
             for (let attempt = 0; attempt < 4; attempt += 1) {
               await new Promise((resolveWait) =>
@@ -8551,6 +8982,8 @@ This conversation is its home — feed it something to try it, and ask for chang
               }
             }
           })();
+        } else {
+          await draftLifecycle?.restore();
         }
       }
     } finally {
@@ -8575,7 +9008,8 @@ This conversation is its home — feed it something to try it, and ask for chang
       return;
     }
 
-    await sendChatContent(content);
+    const draftLifecycle = await beginDraftSend();
+    await sendChatContent(content, undefined, draftLifecycle);
   }
 
   // Find the owner question that preceded a failed assistant reply.
@@ -8603,6 +9037,7 @@ This conversation is its home — feed it something to try it, and ask for chang
   async function sendTaskContent(
     content: string,
     voiceAudioId?: string,
+    draftLifecycle?: DraftSendLifecycle,
   ): Promise<void> {
     if (!focusedTaskId) return;
     const taskId = focusedTaskId;
@@ -8610,14 +9045,27 @@ This conversation is its home — feed it something to try it, and ask for chang
     // same composer: one photo tray, one document tray, one place they are
     // cleared (Oskar, 2026-07-30).
     let imageId = pendingImageId ?? undefined;
-    if (!imageId && pendingUploadRef.current) {
+    if (!imageId && pendingPhotoLocal) {
       try {
-        imageId = await pendingUploadRef.current;
+        imageId = (await uploadPhoto(pendingPhotoLocal.blob)).imageId;
+        await draftLifecycle?.attachmentReady({
+          ...pendingPhotoLocal,
+          serverId: imageId,
+        });
+        finishPhotoUpload(imageId);
       } catch {
-        // Upload failed: the toast already said so; send goes on without it.
+        await draftLifecycle?.restore(false);
+        return;
       }
     }
-    const document = pendingDocument;
+    const document = await ensureDocumentUploaded(
+      pendingDocument,
+      draftLifecycle,
+    );
+    if (pendingDocument && !document) {
+      await draftLifecycle?.restore(false);
+      return;
+    }
     let trimmed = content.trim();
     if (!trimmed) {
       // A photo or a PDF on its own is a complete message here too.
@@ -8689,11 +9137,14 @@ This conversation is its home — feed it something to try it, and ask for chang
           ...(document
             ? {
                 document: {
-                  documentId: document.documentId,
+                  documentId: document.documentId!,
                   name: document.name,
                   acknowledged: document.acknowledged,
                 },
               }
+            : {}),
+          ...(draftLifecycle
+            ? { clientMessageId: draftLifecycle.clientMessageId }
             : {}),
         },
       );
@@ -8710,6 +9161,7 @@ This conversation is its home — feed it something to try it, and ask for chang
         ];
       });
       void onWorkspaceRefresh();
+      await draftLifecycle?.accepted();
     } catch (nextError) {
       if (
         nextError instanceof DOMException &&
@@ -8723,6 +9175,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           ),
         );
         void onWorkspaceRefresh();
+        await draftLifecycle?.restore();
       } else {
         setError(
           nextError instanceof Error
@@ -8735,6 +9188,18 @@ This conversation is its home — feed it something to try it, and ask for chang
               message.id !== tempOwnerId && message.id !== tempAssistantId,
           ),
         );
+        if (draftLifecycle) {
+          try {
+            const status = await fetchTaskClientMessageStatus(
+              taskId,
+              draftLifecycle.clientMessageId,
+            );
+            if (status.accepted) await draftLifecycle.accepted();
+            else await draftLifecycle.restore(false);
+          } catch {
+            await draftLifecycle.restore();
+          }
+        }
       }
     } finally {
       streamControllerRef.current = null;
@@ -8754,9 +9219,10 @@ This conversation is its home — feed it something to try it, and ask for chang
     // No content check: a photo or a PDF on its own is a whole message, and
     // sendTaskContent works out what to call it.
     const content = taskPrompt.trim();
+    const draftLifecycle = await beginDraftSend();
     setTaskPrompt("");
     try {
-      await sendTaskContent(content);
+      await sendTaskContent(content, undefined, draftLifecycle);
     } catch (error) {
       // Nothing was sent: give the words back rather than losing them.
       setTaskPrompt((current) => (current ? current : content));
@@ -8805,10 +9271,12 @@ This conversation is its home — feed it something to try it, and ask for chang
   async function startWork(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = startWorkPrompt.trim();
-    if (!content && !pendingImageId) return;
+    if (!content && !pendingImageId && !pendingPhotoLocal && !pendingDocument)
+      return;
     // Compose always opens a Chat now; new chats default to Unsorted. Work is
     // activated later from inside the chat ("Run as task"). See spec.md §2.
-    await sendChatContent(content);
+    const draftLifecycle = await beginDraftSend();
+    await sendChatContent(content, undefined, draftLifecycle);
   }
 
   const activeConversation =
@@ -9011,20 +9479,15 @@ This conversation is its home — feed it something to try it, and ask for chang
             <h2>Where should we begin?</h2>
           </div>
 
+          {renderDraftRecoveryNotice()}
           <Composer
             attachDisabled={!defaultCanAttach}
             boxClassName="simple-compose-box"
             busy={sending}
             documentTray={pendingDocument}
             lang={lang}
-            onDocument={(picked) => {
-              if (picked.needsCostGate) {
-                setDocumentGate(picked);
-                return;
-              }
-              setPendingDocument({ ...picked, acknowledged: false });
-            }}
-            onPhoto={(id) => setPendingImageId(id)}
+            onLocalDocument={holdLocalDocument}
+            onLocalPhoto={holdLocalPhoto}
             onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
             onRemoveDocument={() => setPendingDocument(null)}
             onRemovePhoto={clearPendingPhoto}
@@ -9036,9 +9499,6 @@ This conversation is its home — feed it something to try it, and ask for chang
                 current ? `${current}\n${text}` : text,
               )
             }
-            onUploadStart={(upload) => {
-              pendingUploadRef.current = upload;
-            }}
             onValueChange={setStartWorkPrompt}
             photoTray={
               pendingPhotoPreview ??
@@ -9722,6 +10182,38 @@ This conversation is its home — feed it something to try it, and ask for chang
           />
         ) : null}
 
+        {documentNeedsOcr ? (
+          <Modal
+            onClose={() => setDocumentNeedsOcr(null)}
+            title={lang === "zh" ? "这份是扫描件" : "This one is a scan"}
+          >
+            <p className="settings-card-copy">{documentNeedsOcr}</p>
+            <div className="modal-actions">
+              <button
+                className="primary-button"
+                disabled={ocrFlipBusy}
+                onClick={() => {
+                  setOcrFlipBusy(true);
+                  void updateCapabilities({ ocr: true }, lang)
+                    .then(() => {
+                      setDocumentNeedsOcr(null);
+                      showErrorToast(
+                        lang === "zh"
+                          ? "「图转文」打开了 —— 文件还在草稿里，再按一次发送。"
+                          : "OCR is on — the file is still in your draft. Send again.",
+                      );
+                    })
+                    .catch(() => undefined)
+                    .finally(() => setOcrFlipBusy(false));
+                }}
+                type="button"
+              >
+                {lang === "zh" ? "打开图转文" : "Turn on OCR"}
+              </button>
+            </div>
+          </Modal>
+        ) : null}
+
         {/* M1 — the document cost gate. Full-screen and blocking, never a
             toast and never small print (private + Oskar: it has to be
             impossible to miss). The page count is the file's REAL count, and
@@ -9744,10 +10236,12 @@ This conversation is its home — feed it something to try it, and ask for chang
                   className="secondary-button"
                   onClick={() => {
                     setPendingDocument({
-                      documentId: documentGate.documentId,
-                      name: documentGate.name,
-                      pages: documentGate.pages,
+                      ...documentGate,
                       acknowledged: true,
+                      local: {
+                        ...documentGate.local,
+                        acknowledged: true,
+                      },
                     });
                     setDocumentGate(null);
                   }}
@@ -9757,7 +10251,10 @@ This conversation is its home — feed it something to try it, and ask for chang
                 </button>
                 <button
                   className="secondary-button"
-                  onClick={() => setDocumentGate(null)}
+                  onClick={() => {
+                    setDocumentGate(null);
+                    setPendingDocument(null);
+                  }}
                   type="button"
                 >
                   {t("document.gate.cancel")}
@@ -10400,20 +10897,13 @@ This conversation is its home — feed it something to try it, and ask for chang
         />
 
         <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
+          {renderDraftRecoveryNotice()}
           <Composer
             busy={sending}
             documentTray={pendingDocument}
             lang={lang}
-            onDocument={(picked) => {
-              if (picked.needsCostGate) {
-                // The gate stands BEFORE the file is attached: nothing can be
-                // sent, and nothing spent, until it is answered.
-                setDocumentGate(picked);
-                return;
-              }
-              setPendingDocument({ ...picked, acknowledged: false });
-            }}
-            onPhoto={(id) => setPendingImageId(id)}
+            onLocalDocument={holdLocalDocument}
+            onLocalPhoto={holdLocalPhoto}
             onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
             onRemoveDocument={() => setPendingDocument(null)}
             onRemovePhoto={clearPendingPhoto}
@@ -10423,9 +10913,6 @@ This conversation is its home — feed it something to try it, and ask for chang
             onTranscribed={(text) =>
               setPrompt((current) => (current ? `${current}\n${text}` : text))
             }
-            onUploadStart={(upload) => {
-              pendingUploadRef.current = upload;
-            }}
             onValueChange={setPrompt}
             photoTray={
               pendingPhotoPreview ??
@@ -11056,18 +11543,13 @@ This conversation is its home — feed it something to try it, and ask for chang
             className="ask-vaenyx-composer"
             onSubmit={sendFocusedTaskMessage}
           >
+            {renderDraftRecoveryNotice()}
             <Composer
               busy={sendingTaskMessage}
               documentTray={pendingDocument}
               lang={lang}
-              onDocument={(picked) => {
-                if (picked.needsCostGate) {
-                  setDocumentGate(picked);
-                  return;
-                }
-                setPendingDocument({ ...picked, acknowledged: false });
-              }}
-              onPhoto={(id) => setPendingImageId(id)}
+              onLocalDocument={holdLocalDocument}
+              onLocalPhoto={holdLocalPhoto}
               onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
               onRemoveDocument={() => setPendingDocument(null)}
               onRemovePhoto={clearPendingPhoto}
@@ -11079,9 +11561,6 @@ This conversation is its home — feed it something to try it, and ask for chang
                   current ? `${current}\n${text}` : text,
                 )
               }
-              onUploadStart={(upload) => {
-                pendingUploadRef.current = upload;
-              }}
               onValueChange={setTaskPrompt}
               photoTray={
                 pendingPhotoPreview ??
@@ -27452,6 +27931,9 @@ function VaenyxWorkspace({
             memoryAction,
             previewRevision: preview.revision,
           });
+          await clearConversationDrafts(thread.conversationId).catch(
+            () => undefined,
+          );
           deletedIds.add(thread.conversationId);
         }
       } catch {
@@ -29037,6 +29519,9 @@ export function App() {
   }, []);
 
   async function logout() {
+    if (workspace?.owner.id) {
+      await clearOwnerDrafts(workspace.owner.id).catch(() => undefined);
+    }
     await logoutOwner();
     await loadAuthenticatedWorkspace();
   }

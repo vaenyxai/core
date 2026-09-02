@@ -39,6 +39,7 @@ import type {
   CreateAskVaenyxConversationRequest,
   CreateAskVaenyxMessageRequest,
   CreateAskVaenyxMessageResponse,
+  ClientMessageStatus,
   ResolveStructuredQuestionRequest,
   CreateAppProfileRequest,
   CreateAppProfileResponse,
@@ -931,6 +932,7 @@ async function streamMessageRequest(
   annotate?: boolean,
   // A PDF fed with this message, plus the Owner's answer to the M1 cost gate.
   document?: { documentId: string; name: string; acknowledged: boolean },
+  clientMessageId?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -941,6 +943,7 @@ async function streamMessageRequest(
     },
     body: JSON.stringify({
       content,
+      ...(clientMessageId ? { clientMessageId } : {}),
       ...(suggestRoutineId ? { suggestRoutineId } : {}),
       ...(suggestTask ? { suggestTask: true } : {}),
       ...(suggestCreate ? { suggestCreate } : {}),
@@ -1045,6 +1048,7 @@ export function streamAskVaenyxMessage(
   imagePrompt?: string,
   annotate?: boolean,
   document?: { documentId: string; name: string; acknowledged: boolean },
+  clientMessageId?: string,
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -1059,6 +1063,16 @@ export function streamAskVaenyxMessage(
     imagePrompt,
     annotate,
     document,
+    clientMessageId,
+  );
+}
+
+export function fetchChatClientMessageStatus(
+  conversationId: string,
+  clientMessageId: string,
+): Promise<ClientMessageStatus> {
+  return requestJson<ClientMessageStatus>(
+    `/v1/ask-vaenyx/conversations/${encodeURIComponent(conversationId)}/messages/client/${encodeURIComponent(clientMessageId)}`,
   );
 }
 
@@ -1110,6 +1124,7 @@ export function streamTaskMessage(
   content: string,
   callbacks: StreamMessageCallbacks,
   extras?: {
+    clientMessageId?: string;
     voiceAudioId?: string;
     imageId?: string;
     annotate?: boolean;
@@ -1129,6 +1144,16 @@ export function streamTaskMessage(
     undefined,
     extras?.annotate,
     extras?.document,
+    extras?.clientMessageId,
+  );
+}
+
+export function fetchTaskClientMessageStatus(
+  taskId: string,
+  clientMessageId: string,
+): Promise<ClientMessageStatus> {
+  return requestJson<ClientMessageStatus>(
+    `/v1/tasks/${encodeURIComponent(taskId)}/messages/client/${encodeURIComponent(clientMessageId)}`,
   );
 }
 

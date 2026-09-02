@@ -7,6 +7,7 @@ import {
   AskVaenyxMessageSchema,
   ApproveVaenyxMeCandidateRequestSchema,
   ChatConnectionTestRequestSchema,
+  ClientMessageStatusSchema,
   CreateAskVaenyxConversationRequestSchema,
   CreateAskVaenyxMessageRequestSchema,
   CreateProjectMemoryRequestSchema,
@@ -136,6 +137,14 @@ describe("M1 contracts", () => {
     expect(
       Value.Check(CreateAskVaenyxMessageRequestSchema, {
         content: "What is the weather today?",
+        clientMessageId: "device-draft-1",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ClientMessageStatusSchema, {
+        accepted: true,
+        conversationId: "conversation-id",
+        messageId: "message-id",
       }),
     ).toBe(true);
     expect(

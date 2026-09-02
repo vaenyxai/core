@@ -937,6 +937,101 @@ describe("Vaenyx Gateway foundation", () => {
     await app.close();
   });
 
+  it("accepts each recovered client message id only once", async () => {
+    process.env.VAENYX_CODEX_COMMAND = createFakeCodexCommand();
+    const app = await buildApp(createTestConfig());
+    const sessionCookie = await createOwnerAndSession(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/ask-vaenyx/conversations",
+      headers: { cookie: sessionCookie },
+      payload: {},
+    });
+    const conversationId = created.json().id as string;
+    const clientMessageId = "device-draft-chat-1";
+    const send = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+        headers: { cookie: sessionCookie },
+        payload: { content: "Keep this recovered turn once.", clientMessageId },
+      });
+
+    expect((await send()).statusCode).toBe(200);
+    expect((await send()).statusCode).toBe(200);
+
+    const status = await app.inject({
+      method: "GET",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/messages/client/${clientMessageId}`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(status.json()).toMatchObject({
+      accepted: true,
+      conversationId,
+      messageId: expect.any(String),
+    });
+
+    const messages = await app.inject({
+      method: "GET",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(messages.json()).toHaveLength(2);
+
+    const conflict = await app.inject({
+      method: "POST",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+      headers: { cookie: sessionCookie },
+      payload: { content: "Different content.", clientMessageId },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().error).toContain("different content");
+
+    const task = await app.inject({
+      method: "POST",
+      url: "/v1/tasks",
+      headers: { cookie: sessionCookie },
+      payload: {
+        request: "Make a recovery test task.",
+        projectId: "vaenyx",
+        skillId: "general-ask",
+      },
+    });
+    expect(task.statusCode).toBe(200);
+    const taskId = task.json().id as string;
+    const taskClientMessageId = "device-draft-task-1";
+    const sendTask = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/tasks/${taskId}/messages`,
+        headers: { cookie: sessionCookie },
+        payload: {
+          content: "Keep this task follow-up once.",
+          clientMessageId: taskClientMessageId,
+        },
+      });
+    expect((await sendTask()).statusCode).toBe(200);
+    expect((await sendTask()).statusCode).toBe(200);
+
+    const taskStatus = await app.inject({
+      method: "GET",
+      url: `/v1/tasks/${taskId}/messages/client/${taskClientMessageId}`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(taskStatus.json()).toMatchObject({
+      accepted: true,
+      messageId: expect.any(String),
+    });
+    const taskMessages = await app.inject({
+      method: "GET",
+      url: `/v1/tasks/${taskId}/messages`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(taskMessages.json()).toHaveLength(4);
+
+    await app.close();
+  });
+
   it("fails closed when Vaenyx Chat tries to cross the chat boundary", async () => {
     process.env.VAENYX_CODEX_COMMAND = createFakeCodexCommand();
     const app = await buildApp(createTestConfig());

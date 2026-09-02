@@ -124,6 +124,14 @@ Read this inside the app: **Settings → Manual**.
 - **Enter sends; Shift+Enter makes a new line** — the usual chat convention.
   While typing Chinese, Enter picks the candidate word and never fires the
   message. On a phone, the Send button is the send.
+- **An unfinished message survives a reload** — text and selected photo or
+  document are kept only in this browser for up to fourteen days. They return
+  only in the same account, Mode and Conversation (or task), with a **Draft
+  recovered** notice; Vaenyx never sends them by itself. Press **Discard** to
+  remove one. A selected attachment is not uploaded until you press **Send**.
+  Signing out, or deleting its Mode or Conversation, removes the matching local
+  draft. If device storage is full, the text is still kept and the notice names
+  any attachment that could not be recovered.
 - **Answer a decision with one tap** — when Vaenyx genuinely needs your choice,
   the reply may show two or more large answer buttons. Tap one, type your own
   answer, or press **Skip**. The first answer is the recorded one even after a

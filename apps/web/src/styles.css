@@ -2771,6 +2771,25 @@ textarea::placeholder {
   height: 12px;
 }
 
+.draft-recovery-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 0.5px solid color-mix(in srgb, var(--accent) 48%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+
+.draft-recovery-notice .text-button {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
 /* Source pill (Oskar, dev.150): a bare URL in a reply renders as a small
    domain chip at the end of the sentence, GPT-style. */
 .source-pill {

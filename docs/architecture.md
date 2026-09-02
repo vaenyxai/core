@@ -31,6 +31,23 @@ the selected Memory action and transcript deletion share one SQLite
 transaction. Forget audit rows contain only hashed ids, outcome, reason and
 time—never Memory or transcript text.
 
+## Unsent drafts stay device-local and sends are idempotent
+
+Composer text and selected attachment blobs are stored only in the browser's
+IndexedDB, keyed by Owner, Mode and exact surface (new Conversation, existing
+Conversation or task). They expire after fourteen days and are never included
+in search, Memory, backups, logs, API requests, or Service Worker caches. A
+restored draft is labelled and waits for an explicit Send or Discard; it is
+never auto-sent. Sign-out and deletion of the owning Mode or Conversation clear
+the matching device records.
+
+Each draft keeps one `clientMessageId` through retries. Once Send is pressed,
+the server's partial unique index allows that id to create only one Owner
+message per Conversation. After an interrupted response, the client asks for
+the canonical acceptance status before restoring or clearing the draft. An
+already uploaded attachment keeps its server id, while an attachment that only
+exists locally is uploaded on Send, preventing duplicate files and messages.
+
 ## Model-visible means persisted
 
 **Anything that entered a model request must be reconstructable from the

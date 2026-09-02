@@ -467,6 +467,11 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     // minLength 0: a photo may be the whole message — the server refuses
     // empty-and-no-photo itself, with a clearer answer than a schema 400.
     content: Type.String({ minLength: 0, maxLength: 10_000 }),
+    // H-012: stable for the lifetime of one local composer draft. A retry with
+    // the same id returns the canonical turn instead of inserting it twice.
+    clientMessageId: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 100 }),
+    ),
     // Library v2 (AI-driven): when the intent classifier returned "suggest",
     // the reply may briefly offer this Routine. Omitted = a plain reply.
     suggestRoutineId: Type.Optional(Type.String({ minLength: 1 })),
@@ -501,6 +506,15 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     documentId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     documentName: Type.Optional(Type.String({ maxLength: 200 })),
     documentAcknowledged: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
+export const ClientMessageStatusSchema = Type.Object(
+  {
+    accepted: Type.Boolean(),
+    conversationId: Type.String(),
+    messageId: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
@@ -3061,6 +3075,7 @@ export type RoutineRunNeedsInput = Static<typeof RoutineRunNeedsInputSchema>;
 
 export type BootstrapStatus = Static<typeof BootstrapStatusSchema>;
 export type AskVaenyxConversation = Static<typeof AskVaenyxConversationSchema>;
+export type ClientMessageStatus = Static<typeof ClientMessageStatusSchema>;
 export type ReasoningEffort = Static<typeof ReasoningEffortSchema>;
 export type SetReasoningEffortRequest = Static<
   typeof SetReasoningEffortRequestSchema

@@ -66,6 +66,7 @@ import {
   SetMemorySourceExclusionRequestSchema,
   ForgetMemoryFromSourceRequestSchema,
   DeleteConversationRequestSchema,
+  ClientMessageStatusSchema,
   RecordFactRequestSchema,
   type RecordFactRequest,
   type MemoryKind,
@@ -586,6 +587,7 @@ import {
   conversationHasPhoto,
   createAskVaenyxConversation,
   createAskVaenyxMessage,
+  getAskVaenyxClientMessageStatus,
   resolveAskVaenyxStructuredQuestion,
   deleteAskVaenyxConversationWithMemory,
   listAskVaenyxConversations,
@@ -4398,6 +4400,7 @@ export async function registerGatewayRoutes(
         response: {
           200: CreateAskVaenyxMessageResponseSchema,
           400: ErrorResponseSchema,
+          409: ErrorResponseSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
@@ -4419,6 +4422,9 @@ export async function registerGatewayRoutes(
           request.params.id,
           owner.id,
           request.body.content,
+          request.body.clientMessageId
+            ? { clientMessageId: request.body.clientMessageId }
+            : undefined,
         );
         const assistantMessage = response.messages.find(
           (message) => message.role === "assistant",
@@ -4445,6 +4451,14 @@ export async function registerGatewayRoutes(
         ) {
           return reply.code(404).send({
             error: "Vaenyx Chat conversation not found.",
+          });
+        }
+        if (
+          error instanceof Error &&
+          error.message === "IDEMPOTENCY_KEY_CONFLICT"
+        ) {
+          return reply.code(409).send({
+            error: "That recovered draft id belongs to different content.",
           });
         }
         throw error;
@@ -4498,6 +4512,9 @@ export async function registerGatewayRoutes(
             request.body.content,
             {
               ...options,
+              ...(request.body.clientMessageId
+                ? { clientMessageId: request.body.clientMessageId }
+                : {}),
               ...(streamSuggest
                 ? {
                     suggestRoutine: {
@@ -4556,6 +4573,50 @@ export async function registerGatewayRoutes(
           });
         },
       );
+    },
+  );
+
+  app.get<{ Params: { clientId: string; id: string } }>(
+    "/v1/ask-vaenyx/conversations/:id/messages/client/:clientId",
+    {
+      schema: {
+        params: Type.Object(
+          {
+            id: Type.String({ minLength: 1 }),
+            clientId: Type.String({ minLength: 1, maxLength: 100 }),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: ClientMessageStatusSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        return getAskVaenyxClientMessageStatus(
+          context.database,
+          request.params.id,
+          owner.id,
+          request.params.clientId,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
+        ) {
+          return reply.code(404).send({
+            error: "Vaenyx Chat conversation not found.",
+          });
+        }
+        throw error;
+      }
     },
   );
 
@@ -4990,6 +5051,7 @@ export async function registerGatewayRoutes(
         response: {
           200: CreateAskVaenyxMessageResponseSchema,
           400: ErrorResponseSchema,
+          409: ErrorResponseSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
@@ -5015,6 +5077,9 @@ export async function registerGatewayRoutes(
           {
             // Same set as the streaming route above: a task follow-up may carry
             // whatever a chat message may carry.
+            ...(request.body.clientMessageId
+              ? { clientMessageId: request.body.clientMessageId }
+              : {}),
             ...(request.body.voiceAudioId
               ? { voiceAudioId: request.body.voiceAudioId }
               : {}),
@@ -5056,6 +5121,14 @@ export async function registerGatewayRoutes(
       } catch (error) {
         if (error instanceof Error && error.message === "TASK_NOT_FOUND") {
           return reply.code(404).send({ error: "Task not found." });
+        }
+        if (
+          error instanceof Error &&
+          error.message === "IDEMPOTENCY_KEY_CONFLICT"
+        ) {
+          return reply.code(409).send({
+            error: "That recovered draft id belongs to different content.",
+          });
         }
 
         throw error;
@@ -5105,6 +5178,9 @@ export async function registerGatewayRoutes(
               // route simply dropped them (Oskar, 2026-07-30: the task screen
               // had only a Send button). One conversation, one set of things
               // you can put in it.
+              ...(request.body.clientMessageId
+                ? { clientMessageId: request.body.clientMessageId }
+                : {}),
               ...(request.body.voiceAudioId
                 ? { voiceAudioId: request.body.voiceAudioId }
                 : {}),
@@ -5145,6 +5221,68 @@ export async function registerGatewayRoutes(
           });
         },
       );
+    },
+  );
+
+  app.get<{ Params: { clientId: string; id: string } }>(
+    "/v1/tasks/:id/messages/client/:clientId",
+    {
+      schema: {
+        params: Type.Object(
+          {
+            id: Type.String({ minLength: 1 }),
+            clientId: Type.String({ minLength: 1, maxLength: 100 }),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: ClientMessageStatusSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const row = context.database.sqlite
+        .prepare(
+          `SELECT threads.conversation_id
+           FROM tasks
+           LEFT JOIN vaenyx_threads AS threads
+             ON threads.task_id = tasks.id AND threads.kind = 'task'
+           WHERE tasks.id = ?
+           LIMIT 1`,
+        )
+        .get(request.params.id) as
+        | { conversation_id: string | null }
+        | undefined;
+      if (!row) return reply.code(404).send({ error: "Task not found." });
+      if (!row.conversation_id) {
+        return {
+          accepted: false,
+          conversationId: `task:${request.params.id}`,
+          messageId: null,
+        };
+      }
+      try {
+        return getAskVaenyxClientMessageStatus(
+          context.database,
+          row.conversation_id,
+          owner.id,
+          request.params.clientId,
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
+        ) {
+          return reply.code(404).send({ error: "Task not found." });
+        }
+        throw error;
+      }
     },
   );
 
