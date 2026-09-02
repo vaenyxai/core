@@ -25,7 +25,10 @@ import {
   runRelay,
   writeRelayConfig,
 } from "../src/modules/core/relay.js";
-import { normalizeSearchEvidence } from "../src/modules/core/relay-search.js";
+import {
+  normalizeSearchEvidence,
+  normalizeSearchRunEvidence,
+} from "../src/modules/core/relay-search.js";
 
 const temporaryDirectories: string[] = [];
 const openDatabases: DatabaseHandle[] = [];
@@ -347,6 +350,23 @@ describe("the subscription door", () => {
         published_at: null,
       },
     ]);
+  });
+
+  it("accepts final JSON URLs only when the native search tool ran", () => {
+    const finalText = JSON.stringify({
+      results: [
+        {
+          title: "Codex CLI reference",
+          url: "https://developers.openai.com/codex/cli/reference",
+          snippet: "Live search uses --search.",
+          published_at: null,
+        },
+      ],
+    });
+    expect(normalizeSearchRunEvidence([], finalText)).toEqual([]);
+    expect(
+      normalizeSearchRunEvidence([{ type: "search", query: "Codex CLI" }], finalText),
+    ).toHaveLength(1);
   });
 
   it("never returns engine paths or credentials in public errors", () => {

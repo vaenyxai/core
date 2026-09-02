@@ -38,7 +38,7 @@ import { claudeSubscriptionRelay } from "../models/claude-subscription-provider.
 import { capabilityOff } from "./capabilities.js";
 import { recordEngineUsage } from "./relay-usage.js";
 import {
-  normalizeSearchEvidence,
+  normalizeSearchRunEvidence,
   RELAY_CAPABILITY_PROBE_REVISION,
   RELAY_CONTRACT_VERSION,
   relaySearchPrompt,
@@ -725,10 +725,14 @@ export async function probeRelayCapabilities(
           }),
           { web: true },
         );
-        const evidence = normalizeSearchEvidence(output.searchEvidence, {
+        const evidence = normalizeSearchRunEvidence(
+          output.searchEvidence,
+          output.text,
+          {
           allowedDomains: ["openai.com", "chatgpt.com"],
           maxResults: 3,
-        });
+          },
+        );
         note(engine, "web_search", evidence.length > 0, {
           provider: output.provider,
           model: output.model,
@@ -870,7 +874,7 @@ export async function runRelay(
           );
 
     const results = allowWeb
-      ? normalizeSearchEvidence(engineResult.searchEvidence, {
+      ? normalizeSearchRunEvidence(engineResult.searchEvidence, engineResult.text, {
           allowedDomains: request.allowedDomains,
           maxResults: request.maxResults,
         })

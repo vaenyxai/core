@@ -1,5 +1,5 @@
 export const RELAY_CONTRACT_VERSION = 2;
-export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.2";
+export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.3";
 
 export interface RelaySearchResult {
   title: string;
@@ -114,6 +114,22 @@ export function normalizeSearchEvidence(
   return [...found.values()].slice(0, maxResults);
 }
 
+/**
+ * A model-produced JSON result is admissible only after the native engine
+ * emitted at least one web-search tool event in the same turn. This supports
+ * CLIs that expose search activity but leave their URL list in the final
+ * structured answer, without ever treating an ungrounded model answer as a
+ * successful search.
+ */
+export function normalizeSearchRunEvidence(
+  toolEvidence: unknown[],
+  finalText: string,
+  options: { allowedDomains?: string[]; maxResults?: number } = {},
+): RelaySearchResult[] {
+  if (toolEvidence.length === 0) return [];
+  return normalizeSearchEvidence([toolEvidence, finalText], options);
+}
+
 export function relaySearchPrompt(input: {
   query: string;
   allowedDomains?: string[];
@@ -130,7 +146,9 @@ export function relaySearchPrompt(input: {
     domains.length > 0 ? `Allowed domains: ${domains.join(", ")}` : "Allowed domains: any public domain",
     input.language?.trim() ? `Answer language: ${input.language.trim()}` : "",
     input.region?.trim() ? `Region: ${input.region.trim()}` : "",
-    "Give a short summary, but the calling application will trust only structured URLs returned by the search tool.",
+    "You must use the native web-search tool at least once.",
+    'Return JSON only: {"results":[{"title":"...","url":"https://...","snippet":"...","published_at":null}]}.',
+    "Every result must be a source you actually used. Do not wrap the JSON in Markdown.",
   ]
     .filter(Boolean)
     .join("\n");
