@@ -2,6 +2,7 @@ import type {
   AppProfile,
   AskVaenyxConversation,
   AskVaenyxMessage,
+  ConversationSearchResponse,
   RelayPanel,
   RelayUsageResponse,
   RelaySettings,
@@ -660,6 +661,16 @@ export function fetchAskVaenyxMessages(
 ): Promise<AskVaenyxMessage[]> {
   return requestJson<AskVaenyxMessage[]>(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+  );
+}
+
+export function searchConversations(
+  query: string,
+  limit = 20,
+): Promise<ConversationSearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  return requestJson<ConversationSearchResponse>(
+    `/v1/ask-vaenyx/search?${params.toString()}`,
   );
 }
 

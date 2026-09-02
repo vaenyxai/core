@@ -15,6 +15,7 @@ import {
   CreateTaskRequestSchema,
   CreateVaenyxMeCandidateRequestSchema,
   CatalogueInstallPreviewSchema,
+  ConversationSearchResponseSchema,
   RejectVaenyxMeCandidateRequestSchema,
   UpdateVaenyxThreadProjectRequestSchema,
   UpdateVaenyxThreadStatusRequestSchema,
@@ -153,6 +154,37 @@ describe("M1 contracts", () => {
         status: "completed",
         webSearchUsed: true,
         createdAt: "2026-06-08T00:00:01.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("accepts safe local Conversation search results", () => {
+    expect(
+      Value.Check(ConversationSearchResponseSchema, {
+        results: [
+          {
+            messageId: "message-id",
+            conversationId: "conversation-id",
+            threadId: "thread-id",
+            threadKind: "chat",
+            taskId: null,
+            title: "Groceries",
+            role: "owner",
+            messageCreatedAt: "2026-08-01T00:00:00.000Z",
+            excerpt: "Bought fresh milk",
+            highlights: [{ start: 13, end: 17 }],
+            before: null,
+            after: {
+              id: "next-message",
+              role: "assistant",
+              content: "Added it to the list.",
+              createdAt: "2026-08-01T00:00:01.000Z",
+            },
+            archived: false,
+            modeId: null,
+            modeName: null,
+          },
+        ],
       }),
     ).toBe(true);
   });

@@ -14,6 +14,10 @@ import { DatabaseSync } from "node:sqlite";
 import type { AppConfig } from "../config.js";
 import { assertInstanceLock } from "../runtime/instance-lock.js";
 import { redactDiagnosticText } from "../runtime/owner-safe-errors.js";
+import {
+  ensureConversationSearchIndex,
+  registerConversationSearchFunctions,
+} from "../modules/core/conversation-search.js";
 
 const PENDING_RESTORE_FLAG = "pending-restore.flag";
 
@@ -121,8 +125,13 @@ export function runMigrations(
   sqlite: DatabaseSync,
   migrationsDirectory: string,
 ): void {
+  // Migration 0080 and its triggers call this deterministic local function.
+  // Keep it here so probes and migration tests use the live DB contract too.
+  registerConversationSearchFunctions(sqlite);
   if (!existsSync(migrationsDirectory)) {
-    throw new Error(`Vaenyx migrations directory not found: ${migrationsDirectory}`);
+    throw new Error(
+      `Vaenyx migrations directory not found: ${migrationsDirectory}`,
+    );
   }
 
   sqlite.exec(`
@@ -150,10 +159,7 @@ export function runMigrations(
       continue;
     }
 
-    const migration = readFileSync(
-      join(migrationsDirectory, filename),
-      "utf8",
-    );
+    const migration = readFileSync(join(migrationsDirectory, filename), "utf8");
 
     sqlite.exec("BEGIN IMMEDIATE;");
 
@@ -204,6 +210,7 @@ export function createDatabase(config: AppConfig): DatabaseHandle {
     throw new Error("Injected candidate migration failure.");
   }
   runMigrations(sqlite, config.migrationsDirectory);
+  ensureConversationSearchIndex(sqlite);
   const integrity = sqlite.prepare("PRAGMA quick_check").get() as
     | { quick_check: string }
     | undefined;

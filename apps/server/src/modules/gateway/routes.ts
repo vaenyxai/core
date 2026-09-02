@@ -20,6 +20,7 @@ import {
   SetChatModelRequestSchema,
   type SetChatModelRequest,
   AskVaenyxMessageSchema,
+  ConversationSearchResponseSchema,
   CreateAppProfileRequestSchema,
   CreateAppProfileResponseSchema,
   RevealAppTokenResponseSchema,
@@ -579,6 +580,7 @@ import {
   setAskVaenyxChatModel,
   type CreateAskVaenyxMessageOptions,
 } from "../core/ask-vaenyx.js";
+import { searchConversations } from "../core/conversation-search.js";
 import {
   cancelTask,
   createForgeTask,
@@ -2958,6 +2960,46 @@ export async function registerGatewayRoutes(
         owner.id,
         owner.modeId,
       );
+    },
+  );
+
+  app.get<{ Querystring: { q?: string; limit?: number } }>(
+    "/v1/ask-vaenyx/search",
+    {
+      schema: {
+        querystring: Type.Object(
+          {
+            q: Type.Optional(Type.String({ maxLength: 200 })),
+            limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 })),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: ConversationSearchResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const query = request.query.q?.trim() ?? "";
+      if (!query) return { results: [] };
+
+      // User Mode is the established supervisory view and searches every Mode
+      // owned by this Owner. A Custom Mode supplies its id to the same SQL and
+      // cannot see User Mode or another sandbox.
+      return {
+        results: searchConversations(
+          context.database,
+          owner.id,
+          owner.modeId,
+          query,
+          request.query.limit,
+        ),
+      };
     },
   );
 

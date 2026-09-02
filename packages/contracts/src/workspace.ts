@@ -325,6 +325,55 @@ export const AskVaenyxMessageSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const ConversationSearchHighlightSchema = Type.Object(
+  {
+    start: Type.Integer({ minimum: 0 }),
+    end: Type.Integer({ minimum: 0 }),
+  },
+  { additionalProperties: false },
+);
+
+export const ConversationSearchContextSchema = Type.Object(
+  {
+    id: Type.String(),
+    role: Type.Union([Type.Literal("owner"), Type.Literal("assistant")]),
+    content: Type.String(),
+    createdAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const ConversationSearchResultSchema = Type.Object(
+  {
+    messageId: Type.String(),
+    conversationId: Type.String(),
+    threadId: Type.Union([Type.String(), Type.Null()]),
+    threadKind: Type.Union([
+      Type.Literal("chat"),
+      Type.Literal("task"),
+      Type.Literal("inbox"),
+      Type.Null(),
+    ]),
+    taskId: Type.Union([Type.String(), Type.Null()]),
+    title: Type.String(),
+    role: Type.Union([Type.Literal("owner"), Type.Literal("assistant")]),
+    messageCreatedAt: Type.String(),
+    excerpt: Type.String(),
+    highlights: Type.Array(ConversationSearchHighlightSchema),
+    before: Type.Union([ConversationSearchContextSchema, Type.Null()]),
+    after: Type.Union([ConversationSearchContextSchema, Type.Null()]),
+    archived: Type.Boolean(),
+    modeId: Type.Union([Type.String(), Type.Null()]),
+    modeName: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const ConversationSearchResponseSchema = Type.Object(
+  { results: Type.Array(ConversationSearchResultSchema) },
+  { additionalProperties: false },
+);
+
 // What the app learns about an uploaded document before anything is spent —
 // the page count is what the M1 cost gate names.
 export const DocumentUploadResponseSchema = Type.Object(
@@ -2877,6 +2926,18 @@ export type SetEngineChoiceRequest = Static<
 >;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
+export type ConversationSearchHighlight = Static<
+  typeof ConversationSearchHighlightSchema
+>;
+export type ConversationSearchContext = Static<
+  typeof ConversationSearchContextSchema
+>;
+export type ConversationSearchResult = Static<
+  typeof ConversationSearchResultSchema
+>;
+export type ConversationSearchResponse = Static<
+  typeof ConversationSearchResponseSchema
+>;
 export type ImageAnnotationItem = Static<typeof ImageAnnotationItemSchema>;
 export type AnnotateImageRequest = Static<typeof AnnotateImageRequestSchema>;
 export type AnnotateImageResponse = Static<typeof AnnotateImageResponseSchema>;

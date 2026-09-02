@@ -26,6 +26,8 @@ import type {
   SkillImportPreviewResponse,
   AskVaenyxConversation,
   AskVaenyxMessage,
+  ConversationSearchHighlight,
+  ConversationSearchResult,
   ImageAnnotationItem,
   ReasoningEffort,
   AuditEvent,
@@ -90,6 +92,7 @@ import {
   enableAppProfile,
   fetchAskVaenyxConversations,
   fetchAskVaenyxMessages,
+  searchConversations,
   fetchAppProfiles,
   fetchAuditEvents,
   draftMethod,
@@ -6020,8 +6023,10 @@ function AskVaenyxPanel({
   onLibraryRefresh,
   onOpenSettings,
   onRequestedConversationHandled,
+  onRequestedMessageHandled,
   onWorkspaceRefresh,
   requestedConversationId,
+  requestedMessageId,
   requestedProjectId,
   view,
   focusedTaskId,
@@ -6051,8 +6056,10 @@ function AskVaenyxPanel({
   onDraftConversationStarted: (conversationId: string) => void;
   onLibraryRefresh: () => void;
   onRequestedConversationHandled: () => void;
+  onRequestedMessageHandled: () => void;
   onWorkspaceRefresh: () => Promise<void>;
   requestedConversationId: string | null;
+  requestedMessageId: string | null;
   requestedProjectId: string | null;
   composeKey: number;
   view: PortalView;
@@ -6266,6 +6273,9 @@ function AskVaenyxPanel({
     string | null
   >(conversations[0]?.id ?? null);
   const [messages, setMessages] = useState<AskVaenyxMessage[]>([]);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null);
   const [routineJournal, setRoutineJournal] = useState<RoutineJournalEntry[]>(
     [],
   );
@@ -6772,6 +6782,35 @@ function AskVaenyxPanel({
     };
     landingFrameRef.current = requestAnimationFrame(attempt);
   }
+
+  useEffect(() => {
+    if (!requestedMessageId) return undefined;
+    const visibleMessages = view === "task" ? taskMessages : messages;
+    if (!visibleMessages.some((message) => message.id === requestedMessageId)) {
+      return undefined;
+    }
+    const openedKey =
+      view === "task"
+        ? `task:${focusedTaskId ?? ""}`
+        : `chat:${activeConversationId ?? ""}`;
+    openedThreadRef.current = openedKey;
+    consumeUnreadCutoff(openedKey);
+    setHighlightedMessageId(requestedMessageId);
+    requestLanding(
+      `search:${requestedMessageId}`,
+      () => document.getElementById(`message-${requestedMessageId}`),
+      "start",
+    );
+    onRequestedMessageHandled();
+    const timer = window.setTimeout(() => setHighlightedMessageId(null), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [
+    messages,
+    onRequestedMessageHandled,
+    requestedMessageId,
+    taskMessages,
+    view,
+  ]);
 
   function reanchorAfterImageLoad() {
     if (Date.now() - lastAnchorAtRef.current > 3000) return;
@@ -9974,7 +10013,8 @@ This conversation is its home — feed it something to try it, and ask for chang
                 {timeline.map((node) =>
                   node.kind === "message" ? (
                     <article
-                      className={`ask-vaenyx-message ${node.message.role} ${node.message.status}`}
+                      className={`ask-vaenyx-message ${node.message.role} ${node.message.status}${highlightedMessageId === node.message.id ? " search-target" : ""}`}
+                      id={`message-${node.message.id}`}
                       key={node.id}
                     >
                       <div className="ask-vaenyx-message-head">
@@ -10086,7 +10126,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           ) : (
             messages.map((message, index) => (
               <article
-                className={`ask-vaenyx-message ${message.role} ${message.status}`}
+                className={`ask-vaenyx-message ${message.role} ${message.status}${highlightedMessageId === message.id ? " search-target" : ""}`}
                 id={`message-${message.id}`}
                 key={message.id}
               >
@@ -10777,7 +10817,7 @@ This conversation is its home — feed it something to try it, and ask for chang
             ) : (
               visibleTaskMessages.map((message, index) => (
                 <article
-                  className={`ask-vaenyx-message ${message.role} ${message.status}`}
+                  className={`ask-vaenyx-message ${message.role} ${message.status}${highlightedMessageId === message.id ? " search-target" : ""}`}
                   id={`message-${message.id}`}
                   key={message.id}
                 >
@@ -25223,6 +25263,214 @@ function consumeUnreadCutoff(key: string): string | null {
   return Date.now() - at < 8000 ? cutoff : null;
 }
 
+function HighlightedSearchExcerpt({
+  text,
+  highlights,
+}: {
+  text: string;
+  highlights: ConversationSearchHighlight[];
+}) {
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const range of highlights) {
+    const start = Math.max(cursor, Math.min(text.length, range.start));
+    const end = Math.max(start, Math.min(text.length, range.end));
+    if (start > cursor) parts.push(text.slice(cursor, start));
+    if (end > start) {
+      parts.push(<mark key={`${start}-${end}`}>{text.slice(start, end)}</mark>);
+    }
+    cursor = end;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts.length > 0 ? parts : text}</>;
+}
+
+/** One local search entrance for every Conversation in this Mode's scope. */
+function ConversationSearch({
+  onOpen,
+}: {
+  onOpen: (result: ConversationSearchResult) => void;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ConversationSearchResult[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        if (modalStack.length > 0) return;
+        event.preventDefault();
+        setOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, [open]);
+
+  async function runSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = query.trim();
+    setSearched(true);
+    setError(null);
+    if (!text) {
+      setResults([]);
+      return;
+    }
+    setBusy(true);
+    try {
+      setResults((await searchConversations(text)).results);
+    } catch (nextError) {
+      setResults([]);
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "搜索暂时不可用。"
+            : "Search is unavailable right now.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        aria-keyshortcuts="Control+K Meta+K"
+        className="conversation-search-trigger"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        <span>{zh ? "搜索对话" : "Search Conversations"}</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+      {open ? (
+        <Modal
+          onClose={() => setOpen(false)}
+          title={zh ? "搜索对话" : "Search Conversations"}
+          variant="doc"
+        >
+          <form className="conversation-search-form" onSubmit={runSearch}>
+            <input
+              aria-label={
+                zh ? "关键词或引号中的完整短语" : "Keywords or a quoted phrase"
+              }
+              maxLength={200}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={
+                zh
+                  ? '关键词，或输入 "完整短语"'
+                  : 'Keywords, or type "an exact phrase"'
+              }
+              ref={inputRef}
+              type="search"
+              value={query}
+            />
+            <button className="secondary-button" disabled={busy} type="submit">
+              {busy
+                ? zh
+                  ? "正在搜索…"
+                  : "Searching…"
+                : zh
+                  ? "搜索"
+                  : "Search"}
+            </button>
+          </form>
+          <p className="conversation-search-note">
+            {zh
+              ? "只在这台 Vaenyx 上搜索；不会调用模型或云端服务。"
+              : "Search stays on this Vaenyx. No model or cloud service is used."}
+          </p>
+          {error ? <p className="form-error">{error}</p> : null}
+          <div aria-live="polite" className="conversation-search-results">
+            {busy ? (
+              <p className="conversation-search-state">
+                {zh ? "正在查找…" : "Looking…"}
+              </p>
+            ) : searched && results.length === 0 && !error ? (
+              <p className="conversation-search-state">
+                {zh ? "没有找到匹配的对话。" : "No matching Conversations."}
+              </p>
+            ) : (
+              results.map((result) => (
+                <button
+                  className="conversation-search-result"
+                  key={result.messageId}
+                  onClick={() => {
+                    let opened = false;
+                    const openResult = () => {
+                      if (opened) return;
+                      opened = true;
+                      window.removeEventListener("popstate", openResult);
+                      onOpen(result);
+                    };
+                    window.addEventListener("popstate", openResult, {
+                      once: true,
+                    });
+                    setOpen(false);
+                    // Modal owns one temporary browser-history entry. Let its
+                    // close pop that entry before writing the Conversation's
+                    // durable ?chat=/?task= URL, or Back can erase the deep
+                    // link a moment after the matching message opens.
+                    window.setTimeout(openResult, 250);
+                  }}
+                  type="button"
+                >
+                  <span className="conversation-search-result-head">
+                    <strong>
+                      {result.title.trim() ||
+                        (zh ? "新对话" : "New Conversation")}
+                    </strong>
+                    <small>
+                      {new Intl.DateTimeFormat(zh ? "zh-CN" : "en-AU", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      }).format(new Date(result.messageCreatedAt))}
+                    </small>
+                  </span>
+                  <span className="conversation-search-badges">
+                    {result.archived ? (
+                      <em>{zh ? "已归档" : "Archived"}</em>
+                    ) : null}
+                    {result.modeName ? <em>{result.modeName}</em> : null}
+                  </span>
+                  {result.before ? (
+                    <span className="conversation-search-context">
+                      {result.before.content}
+                    </span>
+                  ) : null}
+                  <span className="conversation-search-excerpt">
+                    <HighlightedSearchExcerpt
+                      highlights={result.highlights}
+                      text={result.excerpt}
+                    />
+                  </span>
+                  {result.after ? (
+                    <span className="conversation-search-context">
+                      {result.after.content}
+                    </span>
+                  ) : null}
+                </button>
+              ))
+            )}
+          </div>
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+
 // Read tracking for the sidebar's unread dots. It used to live in each
 // browser's localStorage, and that was wrong in the way one person with two
 // devices feels immediately: reading a result on the phone left the same
@@ -25877,6 +26125,9 @@ function VaenyxWorkspace({
   const [requestedConversationId, setRequestedConversationId] = useState<
     string | null
   >(bootChatId);
+  const [requestedMessageId, setRequestedMessageId] = useState<string | null>(
+    null,
+  );
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
     bootChatId ?? bootTaskId,
   );
@@ -26382,12 +26633,17 @@ function VaenyxWorkspace({
     }
   }
 
-  function openSourceConversation(sourceChatId: string, threadId?: string) {
+  function openSourceConversation(
+    sourceChatId: string,
+    threadId?: string,
+    messageId?: string,
+  ) {
     const sourceThread = workspace.threads.find(
       (thread) => thread.conversationId === sourceChatId,
     );
     setSelectedThreadId(threadId ?? sourceThread?.id ?? sourceChatId);
     setRequestedConversationId(sourceChatId);
+    setRequestedMessageId(messageId ?? null);
     setFocusedTaskId(null);
     setRequestedProjectId(null);
     setPortalView("chat");
@@ -26492,16 +26748,61 @@ function VaenyxWorkspace({
     await refreshWorkspace();
   }
 
-  function openThreadTask(taskId: string, threadId?: string) {
+  function openThreadTask(
+    taskId: string,
+    threadId?: string,
+    messageId?: string,
+  ) {
     const taskThread = workspace.threads.find(
       (thread) => thread.taskId === taskId,
     );
     setSelectedThreadId(threadId ?? taskThread?.id ?? taskId);
     setFocusedTaskId(taskId);
+    setRequestedMessageId(messageId ?? null);
     clearNotificationsFor(`/?task=${encodeURIComponent(taskId)}`);
     setPortalView("task");
     setScreen("ask-vaenyx");
     setMobileSidebarOpen(false);
+  }
+
+  function openConversationSearchResult(result: ConversationSearchResult) {
+    const taskVisibleHere = result.taskId
+      ? workspace.tasks.some((task) => task.id === result.taskId)
+      : false;
+    if (result.threadKind === "task" && result.taskId && taskVisibleHere) {
+      openThreadTask(
+        result.taskId,
+        result.threadId ?? undefined,
+        result.messageId,
+      );
+      return;
+    }
+
+    // User Mode can supervise another Mode even though its normal sidebar is
+    // intentionally scoped. Keep the found title while opening that direct-id
+    // conversation; the server still owns the read and authorization.
+    setAskVaenyxConversations((current) =>
+      current.some((conversation) => conversation.id === result.conversationId)
+        ? current
+        : [
+            {
+              id: result.conversationId,
+              title: result.title,
+              messageCount: 0,
+              createdAt: result.messageCreatedAt,
+              updatedAt: result.messageCreatedAt,
+              reasoningEffort: "medium",
+              modelProviderId: null,
+              modelName: null,
+            },
+            ...current,
+          ],
+    );
+    openSourceConversation(
+      result.conversationId,
+      result.threadId ?? undefined,
+      result.messageId,
+    );
   }
 
   const screenTitle = (value: Screen): string => t(`title.${value}`);
@@ -26641,6 +26942,7 @@ function VaenyxWorkspace({
               <span className="nav-label">New</span>
             </button>
           </div>
+          <ConversationSearch onOpen={openConversationSearchResult} />
           {/* The Scheduled block is gone (Oskar, 2026-08-09). It sat between
               New and the permanent conversation, pushing both down for a list
               that lives on the Scheduled screen anyway. */}
@@ -26832,8 +27134,10 @@ function VaenyxWorkspace({
             onRequestedConversationHandled={() =>
               setRequestedConversationId(null)
             }
+            onRequestedMessageHandled={() => setRequestedMessageId(null)}
             onWorkspaceRefresh={refreshWorkspace}
             requestedConversationId={requestedConversationId}
+            requestedMessageId={requestedMessageId}
             requestedProjectId={requestedProjectId}
             view={portalView}
             focusedTaskId={focusedTaskId}

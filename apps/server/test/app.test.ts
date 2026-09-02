@@ -611,6 +611,11 @@ describe("Vaenyx Gateway foundation", () => {
       url: "/v1/ask-vaenyx/conversations",
     });
     expect(unauthorized.statusCode).toBe(401);
+    const unauthorizedSearch = await app.inject({
+      method: "GET",
+      url: "/v1/ask-vaenyx/search?q=weather",
+    });
+    expect(unauthorizedSearch.statusCode).toBe(401);
 
     const sessionCookie = await createOwnerAndSession(app);
     const created = await app.inject({
@@ -678,6 +683,27 @@ describe("Vaenyx Gateway foundation", () => {
     });
     expect(messages.statusCode).toBe(200);
     expect(messages.json()).toHaveLength(4);
+
+    const search = await app.inject({
+      method: "GET",
+      url: `/v1/ask-vaenyx/search?q=${encodeURIComponent('"First question"')}`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(search.statusCode).toBe(200);
+    expect(search.json().results).toEqual([
+      expect.objectContaining({
+        conversationId: created.json().id,
+        title: expect.any(String),
+        archived: false,
+        excerpt: expect.stringContaining("First question"),
+        highlights: expect.arrayContaining([
+          expect.objectContaining({
+            start: expect.any(Number),
+            end: expect.any(Number),
+          }),
+        ]),
+      }),
+    ]);
 
     const conversations = await app.inject({
       method: "GET",
@@ -853,6 +879,15 @@ describe("Vaenyx Gateway foundation", () => {
     });
     expect(archived.statusCode).toBe(200);
 
+    const archivedSearch = await app.inject({
+      method: "GET",
+      url: "/v1/ask-vaenyx/search?q=weather",
+      headers: { cookie: sessionCookie },
+    });
+    expect(archivedSearch.json().results).toEqual(
+      expect.arrayContaining([expect.objectContaining({ archived: true })]),
+    );
+
     const deleted = await app.inject({
       method: "DELETE",
       url: `/v1/ask-vaenyx/conversations/${created.json().id}`,
@@ -874,6 +909,13 @@ describe("Vaenyx Gateway foundation", () => {
       headers: { cookie: sessionCookie },
     });
     expect(messagesAfterDelete.statusCode).toBe(404);
+
+    const searchAfterDelete = await app.inject({
+      method: "GET",
+      url: `/v1/ask-vaenyx/search?q=${encodeURIComponent('"First question"')}`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(searchAfterDelete.json()).toEqual({ results: [] });
 
     await app.close();
   });

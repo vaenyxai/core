@@ -167,6 +167,12 @@ Read this inside the app: **Settings → Manual**.
   task or the **Scheduled** screen when you want it running again.
 - **Permanent delete starts in Archived.** Deleting a Conversation never
   deletes a shared Routine or an Owner connection.
+- **Search old Conversations** — press **Search Conversations** under **New**
+  (or `Ctrl/Cmd + K`), type keywords, or put an exact phrase in double quotes.
+  Results include active, pinned, Inbox and Archived Conversations; tap one to
+  open the matching message. Search stays on this computer and uses no model or
+  cloud service. User Mode can search the Modes it supervises; a Custom Mode
+  can search only itself. Opening an Archived result does not restore it.
 - **Unread** — the coloured dot beside a conversation breathes when there is
   something new in it. Read is read everywhere: open it on the phone and the
   dot goes out on the computer too (the computer notices within a minute, or
