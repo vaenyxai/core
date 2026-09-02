@@ -93,11 +93,14 @@ fields, then adds `searched_at`, `query`, structured `results`, `citations`,
 `fallback_occurred: false`, `fallback_disclosure`, and
 `capability_probe_revision`.
 
-Evidence is accepted only from structured Web Search tool output. Model prose
-is never parsed as a source. Results require a valid HTTP(S) URL, are deduped,
-filtered to `allowed_domains`, limited to `max_results`, and shaped as
-`title`, `url`, `snippet`, `published_at`. If a Subscription CLI cannot
-return verifiable URLs, Vaenyx returns
+Evidence is accepted only when the native Web Search tool ran in the same
+turn. Vaenyx accepts structured tool URLs and the same turn's strict JSON
+result list; ordinary model prose and JSON from a turn with no search-tool
+event are never sources. Results require a valid HTTP(S) URL, are deduped,
+merged so later metadata can fill an earlier empty snippet, filtered to
+`allowed_domains`, limited to `max_results`, and shaped as `title`, `url`,
+`snippet`, `published_at`. If a Subscription CLI cannot return verifiable
+URLs, Vaenyx returns
 `RELAY_CAPABILITY_UNSUPPORTED:<engine>:web_search:VERIFIABLE_SOURCES_NOT_RETURNED`.
 
 ## Other endpoints
