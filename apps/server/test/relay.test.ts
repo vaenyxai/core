@@ -15,13 +15,17 @@ import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import { writeGlobalCapabilities } from "../src/modules/core/capabilities.js";
 import {
   DEFAULT_RELAY_CONFIG,
+  assertRelayRateLimit,
   listRelayCalls,
   readRelayConfig,
   recordRelayCall,
+  recordRelayCapabilityProbe,
+  publicRelayError,
   relayHealth,
   runRelay,
   writeRelayConfig,
 } from "../src/modules/core/relay.js";
+import { normalizeSearchEvidence } from "../src/modules/core/relay-search.js";
 
 const temporaryDirectories: string[] = [];
 const openDatabases: DatabaseHandle[] = [];
@@ -96,7 +100,17 @@ describe("the subscription door", () => {
     expect(DEFAULT_RELAY_CONFIG.enabled).toBe(false);
   });
 
-  it("offers the same words a Method declares, and says so about the rest", () => {
+  it("keeps a per-key call limit", () => {
+    const key = `rate-${Date.now()}-${Math.random()}`;
+    assertRelayRateLimit(key, 2, 1_000_000);
+    assertRelayRateLimit(key, 2, 1_000_001);
+    expect(() => assertRelayRateLimit(key, 2, 1_000_002)).toThrow(
+      "RELAY_RATE_LIMITED",
+    );
+    expect(() => assertRelayRateLimit(key, 2, 1_060_001)).not.toThrow();
+  });
+
+  it("advertises every implemented safe capability without per-key grants", () => {
     const database = createTestDatabase();
     const health = relayHealth(database, TEST_PROFILE);
     expect(health.on).toBe(false);
@@ -105,37 +119,50 @@ describe("the subscription door", () => {
       "claude-cli",
     ]);
     for (const engine of health.engines) {
-      expect(engine.capabilities).toEqual(engine.id === "claude-cli" ? ["text", "vision", "reading"] : ["text", "vision"]);
+      expect(engine.capabilities).toEqual(
+        engine.id === "claude-cli"
+          ? [
+              "text_analysis",
+              "structured_output",
+              "vision_analysis",
+              "document_analysis",
+              "web_search",
+            ]
+          : [
+              "text_analysis",
+              "structured_output",
+              "vision_analysis",
+              "web_search",
+            ],
+      );
       expect(engine.capabilities).not.toContain("hearing");
       expect(engine.capabilities).not.toContain("speaking");
       expect(engine.capabilities).not.toContain("drawing");
-      // Not granted to this key, so health does not light the button.
-      expect(engine.capabilities).not.toContain("web");
+      expect(engine.capabilities).toContain("web_search");
     }
   });
 
-  it("shows web in health only to a key that was granted it", () => {
+  it("does not vary safe capabilities by the old per-key grant list", () => {
     const database = createTestDatabase();
-    plantProfile(database, ["vision", "reading", "web"]);
+    plantProfile(database, []);
     const health = relayHealth(database, TEST_PROFILE);
     for (const engine of health.engines) {
-      expect(engine.capabilities).toContain("web");
+      expect(engine.capabilities).toContain("web_search");
     }
-    // And never to a different, ungranted key — the answer is per profile.
     const other = relayHealth(
       database,
       "99999999-8888-4777-8666-555555555555",
     );
     for (const engine of other.engines) {
-      expect(engine.capabilities).not.toContain("web");
+      expect(engine.capabilities).toContain("web_search");
     }
   });
 
-  it("refuses a web call from a key that was not granted web", async () => {
+  it("lets any valid relay key reach web without a per-capability grant", async () => {
     const database = createTestDatabase();
     writeRelayConfig(database, OPEN_DOOR);
     await expect(runOnce(database, { capability: "web" })).rejects.toThrow(
-      "RELAY_CAPABILITY_NOT_GRANTED:web",
+      "RELAY_PROFILE_NOT_CONNECTED:claude-cli",
     );
   });
 
@@ -253,6 +280,69 @@ describe("the subscription door", () => {
     expect(codex?.models).toEqual([]);
     expect(claude?.efforts).toEqual([]);
     expect(claude?.models).toEqual([]);
+  });
+
+  it("reports probe-backed availability and keeps unsupported distinct", () => {
+    const database = createTestDatabase();
+    recordRelayCapabilityProbe(
+      database,
+      TEST_PROFILE,
+      "openai-cli",
+      "web_search",
+      {
+        available: true,
+        unavailableReason: null,
+        provider: "openai",
+        model: "gpt-test",
+        probedAt: "2026-09-03T00:00:00.000Z",
+      },
+    );
+    const health = relayHealth(database, TEST_PROFILE);
+    const codex = health.engines.find((engine) => engine.id === "openai-cli");
+    const document = codex?.capability_status.find(
+      (status) => status.capability === "document_analysis",
+    );
+    expect(document).toMatchObject({
+      supported: false,
+      available: false,
+      unavailable_reason: "FILE_TRANSPORT_NOT_IMPLEMENTED",
+    });
+    expect(health.contract_version).toBe(2);
+  });
+
+  it("accepts only structured, valid, domain-filtered web evidence", () => {
+    expect(
+      normalizeSearchEvidence(
+        {
+          results: [
+            {
+              title: "OpenAI docs",
+              url: "https://openai.com/index/codex/",
+              snippet: "Codex",
+            },
+            { title: "Wrong", url: "https://example.net/private" },
+            { title: "Broken", url: "file:///C:/secret.txt" },
+          ],
+        },
+        { allowedDomains: ["openai.com"], maxResults: 5 },
+      ),
+    ).toEqual([
+      {
+        title: "OpenAI docs",
+        url: "https://openai.com/index/codex/",
+        snippet: "Codex",
+        published_at: null,
+      },
+    ]);
+  });
+
+  it("never returns engine paths or credentials in public errors", () => {
+    expect(
+      publicRelayError(
+        new Error("spawn failed at C:\\Users\\Owner\\.claude token=secret"),
+        "claude-cli",
+      ),
+    ).toBe("RELAY_ENGINE_FAILED:claude-cli");
   });
 
   it("an engine the profile has not connected refuses by name", async () => {

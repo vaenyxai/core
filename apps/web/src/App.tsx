@@ -299,6 +299,7 @@ import {
   updateAppProfileCapabilities,
   fetchRelayLogins,
   grantAppLogin,
+  probeRelayApp,
   type RelayLogins,
   updateMemory,
   updateProject,
@@ -6439,6 +6440,7 @@ function AskVaenyxPanel({
   const [taskMessages, setTaskMessages] = useState<AskVaenyxMessage[]>([]);
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
   const [taskProgress, setTaskProgress] = useState<TaskRunProgress | null>(null);
+  const focusedTaskIdRef = useRef(focusedTaskId);
   const [prompt, setPrompt] = useState("");
   const [taskPrompt, setTaskPrompt] = useState("");
   const [startWorkPrompt, setStartWorkPrompt] = useState("");
@@ -6449,6 +6451,9 @@ function AskVaenyxPanel({
   const [loadingTaskMessages, setLoadingTaskMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingTaskMessage, setSendingTaskMessage] = useState(false);
+  const [sendingTaskId, setSendingTaskId] = useState<string | null>(null);
+  const focusedTaskSending =
+    sendingTaskMessage && sendingTaskId === focusedTaskId;
   const [resolvingQuestionIds, setResolvingQuestionIds] = useState<Set<string>>(
     new Set(),
   );
@@ -6457,6 +6462,10 @@ function AskVaenyxPanel({
   const taskEndRef = useRef<HTMLDivElement | null>(null);
   // Controls the in-flight streaming request so a Stop button can abort it.
   const streamControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    focusedTaskIdRef.current = focusedTaskId;
+  }, [focusedTaskId]);
   // Live "Thinking… Ns" counter while the model is reasoning before its reply.
 
   function upsertConversation(
@@ -6658,6 +6667,8 @@ function AskVaenyxPanel({
     setLoadingTaskMessages(true);
     setTaskProgress(null);
     setTaskPrompt("");
+    setStreamStatus(null);
+    setStreamThinking("");
     setError(null);
 
     fetchTaskMessages(focusedTaskId)
@@ -6694,7 +6705,7 @@ function AskVaenyxPanel({
       .then((next) => {
         if (!cancelled) {
           setTaskProgress((current) =>
-            acceptTaskProgressUpdate(current, next),
+            acceptTaskProgressUpdate(current, next, focusedTaskId),
           );
         }
       })
@@ -7061,11 +7072,11 @@ function AskVaenyxPanel({
   // Runs once immediately and once after 2.5s: on resume, the dead stream's
   // rejection may not have settled yet (sending still true on the first pass).
   const sendingRef = useRef(sending);
-  const sendingTaskRef = useRef(sendingTaskMessage);
+  const sendingTaskRef = useRef(focusedTaskSending);
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
     sendingRef.current = sending;
-    sendingTaskRef.current = sendingTaskMessage;
+    sendingTaskRef.current = focusedTaskSending;
   });
   useEffect(() => {
     const run = () => {
@@ -7084,7 +7095,11 @@ function AskVaenyxPanel({
       }
       if (view === "task" && focusedTaskId && !sendingTaskRef.current) {
         void fetchTaskMessages(focusedTaskId)
-          .then(setTaskMessages)
+          .then((fresh) => {
+            if (focusedTaskIdRef.current === focusedTaskId) {
+              setTaskMessages(fresh);
+            }
+          })
           .catch(() => undefined);
         // The header (Last run / Next / chips) reads the workspace — a PWA
         // waking from the background otherwise shows yesterday's values.
@@ -7092,7 +7107,7 @@ function AskVaenyxPanel({
         void fetchTaskProgress(focusedTaskId)
           .then((next) =>
             setTaskProgress((current) =>
-              acceptTaskProgressUpdate(current, next),
+              acceptTaskProgressUpdate(current, next, focusedTaskId),
             ),
           )
           .catch(() => undefined);
@@ -7130,12 +7145,14 @@ function AskVaenyxPanel({
       void fetchTaskProgress(focusedTaskId)
         .then((next) =>
           setTaskProgress((current) =>
-            acceptTaskProgressUpdate(current, next),
+            acceptTaskProgressUpdate(current, next, focusedTaskId),
           ),
         )
         .catch(() => undefined);
       void fetchTaskRuns(focusedTaskId)
-        .then(setTaskRuns)
+        .then((runs) => {
+          if (focusedTaskIdRef.current === focusedTaskId) setTaskRuns(runs);
+        })
         .catch(() => undefined);
     }, 2000);
     return () => window.clearInterval(timer);
@@ -7154,15 +7171,21 @@ function AskVaenyxPanel({
       (focusedTaskStatus === "completed" || focusedTaskStatus === "failed")
     ) {
       void fetchTaskMessages(focusedTaskId)
-        .then(setTaskMessages)
+        .then((fresh) => {
+          if (focusedTaskIdRef.current === focusedTaskId) {
+            setTaskMessages(fresh);
+          }
+        })
         .catch(() => undefined);
       void fetchTaskRuns(focusedTaskId)
-        .then(setTaskRuns)
+        .then((runs) => {
+          if (focusedTaskIdRef.current === focusedTaskId) setTaskRuns(runs);
+        })
         .catch(() => undefined);
       void fetchTaskProgress(focusedTaskId)
         .then((next) =>
           setTaskProgress((current) =>
-            acceptTaskProgressUpdate(current, next),
+            acceptTaskProgressUpdate(current, next, focusedTaskId),
           ),
         )
         .catch(() => undefined);
@@ -7462,13 +7485,13 @@ function AskVaenyxPanel({
   const wasWorkingRef = useRef<boolean | null>(null);
   useEffect(() => {
     if (view !== "task") return;
-    const working = focusedTaskStatus === "running" || sendingTaskMessage;
+    const working = focusedTaskStatus === "running" || focusedTaskSending;
     const started = working && wasWorkingRef.current === false;
     wasWorkingRef.current = working;
     if (!started) return;
     lastAnchorAtRef.current = Date.now();
     taskEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [focusedTaskStatus, sendingTaskMessage, view]);
+  }, [focusedTaskStatus, focusedTaskSending, view]);
 
   useEffect(() => {
     if (view !== "task") return;
@@ -7501,7 +7524,7 @@ function AskVaenyxPanel({
       // immediate scroll ran against a page whose content had not arrived —
       // requestLanding waits it out.
       const key = `task:${focusedTaskId ?? ""}`;
-      if (openedThreadRef.current !== key && !sendingTaskMessage) {
+      if (openedThreadRef.current !== key && !focusedTaskSending) {
         openedThreadRef.current = key;
         lastAnchorAtRef.current = 0;
         requestLanding(key, () => taskEndRef.current, "end");
@@ -7511,13 +7534,13 @@ function AskVaenyxPanel({
     // Same rule as the chat effect: bottom-follow only while a reply is
     // being written — never as a side effect of a dependency flicker after
     // the opening landed the view where it belongs.
-    if (!sendingTaskMessage && !streamStatus && !streamThinking) return;
+    if (!focusedTaskSending && !streamStatus && !streamThinking) return;
     lastAnchorAtRef.current = Date.now();
     taskEndRef.current?.scrollIntoView({ block: "end" });
   }, [
     focusedTaskId,
     loadingTaskMessages,
-    sendingTaskMessage,
+    focusedTaskSending,
     streamStatus,
     streamThinking,
     taskMessages.length,
@@ -9198,6 +9221,7 @@ This conversation is its home — feed it something to try it, and ask for chang
     setPendingDocument(null);
 
     setSendingTaskMessage(true);
+    setSendingTaskId(taskId);
     setError(null);
     const controller = new AbortController();
     streamControllerRef.current = controller;
@@ -9233,25 +9257,33 @@ This conversation is its home — feed it something to try it, and ask for chang
         trimmed,
         {
           signal: controller.signal,
-          onOwner: (ownerMessage) =>
+          onOwner: (ownerMessage) => {
+            if (focusedTaskIdRef.current !== taskId) return;
             setTaskMessages((current) =>
               current.map((message) =>
                 message.id === tempOwnerId ? ownerMessage : message,
               ),
-            ),
+            );
+          },
           // Same watch-it-work channel the plain chat has — the task thread was
           // missed on the first pass (Oskar, 2026-07-27).
-          onStatus: (code) => setStreamStatus(code),
-          onThinking: (text) =>
-            setStreamThinking((current) => (current + text).slice(-4000)),
-          onDelta: (text) =>
+          onStatus: (code) => {
+            if (focusedTaskIdRef.current === taskId) setStreamStatus(code);
+          },
+          onThinking: (text) => {
+            if (focusedTaskIdRef.current !== taskId) return;
+            setStreamThinking((current) => (current + text).slice(-4000));
+          },
+          onDelta: (text) => {
+            if (focusedTaskIdRef.current !== taskId) return;
             setTaskMessages((current) =>
               current.map((message) =>
                 message.id === tempAssistantId
                   ? { ...message, content: message.content + text }
                   : message,
               ),
-            ),
+            );
+          },
         },
         {
           ...(voiceAudioId ? { voiceAudioId } : {}),
@@ -9270,18 +9302,20 @@ This conversation is its home — feed it something to try it, and ask for chang
             : {}),
         },
       );
-      setTaskMessages((current) => {
-        const responseIds = new Set(response.messages.map((m) => m.id));
-        return [
-          ...current.filter(
-            (message) =>
-              message.id !== tempOwnerId &&
-              message.id !== tempAssistantId &&
-              !responseIds.has(message.id),
-          ),
-          ...response.messages,
-        ];
-      });
+      if (focusedTaskIdRef.current === taskId) {
+        setTaskMessages((current) => {
+          const responseIds = new Set(response.messages.map((m) => m.id));
+          return [
+            ...current.filter(
+              (message) =>
+                message.id !== tempOwnerId &&
+                message.id !== tempAssistantId &&
+                !responseIds.has(message.id),
+            ),
+            ...response.messages,
+          ];
+        });
+      }
       void onWorkspaceRefresh();
       await draftLifecycle?.accepted();
     } catch (nextError) {
@@ -9289,27 +9323,31 @@ This conversation is its home — feed it something to try it, and ask for chang
         nextError instanceof DOMException &&
         nextError.name === "AbortError"
       ) {
-        setTaskMessages((current) =>
-          current.map((message) =>
-            message.id === tempAssistantId
-              ? { ...message, status: "failed" }
-              : message,
-          ),
-        );
+        if (focusedTaskIdRef.current === taskId) {
+          setTaskMessages((current) =>
+            current.map((message) =>
+              message.id === tempAssistantId
+                ? { ...message, status: "failed" }
+                : message,
+            ),
+          );
+        }
         void onWorkspaceRefresh();
         await draftLifecycle?.restore();
       } else {
-        setError(
-          nextError instanceof Error
-            ? nextError.message
-            : "Vaenyx could not send this task message.",
-        );
-        setTaskMessages((current) =>
-          current.filter(
-            (message) =>
-              message.id !== tempOwnerId && message.id !== tempAssistantId,
-          ),
-        );
+        if (focusedTaskIdRef.current === taskId) {
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : "Vaenyx could not send this task message.",
+          );
+          setTaskMessages((current) =>
+            current.filter(
+              (message) =>
+                message.id !== tempOwnerId && message.id !== tempAssistantId,
+            ),
+          );
+        }
         if (draftLifecycle) {
           try {
             const status = await fetchTaskClientMessageStatus(
@@ -9326,8 +9364,11 @@ This conversation is its home — feed it something to try it, and ask for chang
     } finally {
       streamControllerRef.current = null;
       setSendingTaskMessage(false);
-      setStreamStatus(null);
-      setStreamThinking("");
+      setSendingTaskId((current) => (current === taskId ? null : current));
+      if (focusedTaskIdRef.current === taskId) {
+        setStreamStatus(null);
+        setStreamThinking("");
+      }
     }
   }
 
@@ -9384,7 +9425,7 @@ This conversation is its home — feed it something to try it, and ask for chang
     setSending(false);
     setSendingTaskMessage(false);
     const key =
-      sendingTaskMessage && focusedTaskId
+      focusedTaskSending && focusedTaskId
         ? `task:${focusedTaskId}`
         : activeConversationId;
     if (key) void stopTurn(key).catch(() => undefined);
@@ -11677,7 +11718,7 @@ This conversation is its home — feed it something to try it, and ask for chang
             {/* Chatting in the task thread gets the same one-indicator
                 treatment as the plain chat: the orb from the first moment,
                 real status as its label, thinking underneath. */}
-            {sendingTaskMessage &&
+            {focusedTaskSending &&
             !visibleTaskMessages.some(
               (message) => message.role !== "owner" && !message.content,
             ) ? (
@@ -11692,7 +11733,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                 />
               </article>
             ) : null}
-            {sendingTaskMessage && streamThinking ? (
+            {focusedTaskSending && streamThinking ? (
               <div className="thinking-block">
                 <p className="thinking-text">{streamThinking}</p>
               </div>
@@ -12904,13 +12945,6 @@ function SubscriptionDoorPanel() {
   // "6" to 10 and the box snapped back mid-typing (Oskar, 2026-08-30: 等我
   // 600 全部输入完了以后,鼠标点外面再保存).
   const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
-  const [ceiling, setCeiling] = useState<{
-    global: Record<string, boolean>;
-    implemented: Record<string, boolean>;
-    neverViaToken: string[];
-    needsOwnTokenApproval: string[];
-  } | null>(null);
-
   // Which engines each key is signed into, and which the Owner can grant.
   const [logins, setLogins] = useState<RelayLogins | null>(null);
 
@@ -12924,16 +12958,6 @@ function SubscriptionDoorPanel() {
     void fetchRelayLogins()
       .then(setLogins)
       .catch(() => undefined);
-    void fetchCapabilities()
-      .then((result) =>
-        setCeiling({
-          global: result.global,
-          implemented: result.implemented,
-          neverViaToken: result.neverViaToken,
-          needsOwnTokenApproval: result.needsOwnTokenApproval,
-        }),
-      )
-      .catch(() => setCeiling(null));
   }, []);
 
   async function addApp() {
@@ -13007,20 +13031,39 @@ function SubscriptionDoorPanel() {
   // Copy the Owner's own engine login into this app's profile — one click in
   // place of redoing an OAuth ritual that only works on this machine. The
   // profile gets its OWN copy: revoking the app never touches the Owner's.
-  async function grantLogin(
-    profileId: string,
-    engine: "openai-cli" | "claude-cli",
-  ) {
+  async function connectApp(profileId: string) {
     setAppBusy(profileId);
     try {
-      const status = await grantAppLogin(profileId, engine);
+      const engines = (["openai-cli", "claude-cli"] as const).filter(
+        (engine) => logins?.owner[engine],
+      );
+      if (engines.length === 0) {
+        throw new Error(
+          lang === "zh"
+            ? "你自己还没有登录 OpenAI 或 Claude Subscription。"
+            : "Sign in to an OpenAI or Claude subscription first.",
+        );
+      }
+      let status = {
+        "openai-cli": false,
+        "claude-cli": false,
+      };
+      for (const engine of engines) {
+        status = await grantAppLogin(profileId, engine);
+      }
       setLogins((current) =>
         current
           ? {
               ...current,
               apps: [
                 ...current.apps.filter((entry) => entry.id !== profileId),
-                { id: profileId, ...status },
+                {
+                  id: profileId,
+                  ...status,
+                  capabilityStatus:
+                    current.apps.find((entry) => entry.id === profileId)
+                      ?.capabilityStatus ?? [],
+                },
               ],
             }
           : current,
@@ -13038,30 +13081,34 @@ function SubscriptionDoorPanel() {
     }
   }
 
-  async function grantAppCapability(
-    profileId: string,
-    capability: string,
-    on: boolean,
-    approve: string[] = [],
-  ) {
+  async function testAllCapabilities(profileId: string) {
     setAppBusy(profileId);
     try {
-      const { profile } = await updateAppProfileCapabilities(
-        profileId,
-        { [capability]: on },
-        approve,
-        lang,
-      );
-      setApps((current) =>
-        current.map((entry) => (entry.id === profileId ? profile : entry)),
+      const status = await probeRelayApp(profileId);
+      setLogins((current) =>
+        current
+          ? {
+              ...current,
+              apps: current.apps.map((entry) =>
+                entry.id === profileId
+                  ? {
+                      ...entry,
+                      capabilityStatus: status.engines.flatMap(
+                        (engine) => engine.capability_status,
+                      ),
+                    }
+                  : entry,
+              ),
+            }
+          : current,
       );
     } catch (error) {
       showErrorToast(
         error instanceof Error
           ? error.message
           : lang === "zh"
-            ? "改不了。"
-            : "Could not change that.",
+            ? "能力测试失败。"
+            : "Capability test failed.",
       );
     } finally {
       setAppBusy(null);
@@ -13248,13 +13295,42 @@ function SubscriptionDoorPanel() {
           {keyErrors[appProfile.id] ? (
             <p className="form-error">{keyErrors[appProfile.id]}</p>
           ) : null}
-          {/* Each engine's login state for THIS key, with the Owner's
-              one-click grant (Oskar, 2026-08-30): copies the Owner's own
-              login into this app's profile — its own independent copy, so
-              revoking the app never touches the Owner's. Greyed with the
-              reason when the Owner side has nothing to copy. */}
+          {/* One key, one Connect action. Engine identities remain independent:
+              Connect copies whichever Owner subscription logins currently
+              exist, then the probe rows say what each engine really passed. */}
           {logins ? (
             <div className="door-app-caps">
+              <div className="door-app-cap door-engine-row">
+                <span className="door-engine-line">
+                  {lang === "zh"
+                    ? "有效 Model Key 自动获得所有已验证的安全能力"
+                    : "A valid Model Key receives every verified safe capability"}
+                </span>
+                <span>
+                  <button
+                    className="door-copy"
+                    disabled={appBusy === appProfile.id}
+                    onClick={() => void connectApp(appProfile.id)}
+                    type="button"
+                  >
+                    {lang === "zh" ? "连接" : "Connect"}
+                  </button>{" "}
+                  <button
+                    className="door-copy"
+                    disabled={appBusy === appProfile.id}
+                    onClick={() => void testAllCapabilities(appProfile.id)}
+                    type="button"
+                  >
+                    {appBusy === appProfile.id
+                      ? lang === "zh"
+                        ? "测试中…"
+                        : "Testing…"
+                      : lang === "zh"
+                        ? "测试全部能力"
+                        : "Test all capabilities"}
+                  </button>
+                </span>
+              </div>
               {(
                 [
                   { engine: "openai-cli", name: "OpenAI (Codex)" },
@@ -13265,7 +13341,9 @@ function SubscriptionDoorPanel() {
                   (entry) => entry.id === appProfile.id,
                 );
                 const signedIn = appLogin?.[row.engine] === true;
-                const ownerHas = logins.owner[row.engine];
+                const statuses = (appLogin?.capabilityStatus ?? []).filter(
+                  (status) => status.engine === row.engine,
+                );
                 return (
                   <div
                     className="door-app-cap door-engine-row"
@@ -13284,75 +13362,31 @@ function SubscriptionDoorPanel() {
                         "not signed in"
                       )}
                     </span>
-                    <button
-                      className="door-copy"
-                      disabled={appBusy === appProfile.id || !ownerHas}
-                      onClick={() => void grantLogin(appProfile.id, row.engine)}
-                      title={
-                        ownerHas
-                          ? undefined
-                          : lang === "zh"
-                            ? "你自己这边还没有这个引擎的登录,先在 AI Settings 里登录"
-                            : "Your own login for this engine is missing — sign in under AI Settings first"
-                      }
-                      type="button"
-                    >
-                      {ownerHas
-                        ? lang === "zh"
-                          ? signedIn
-                            ? "重新授予我的登录"
-                            : "授予我的登录"
-                          : signedIn
-                            ? "Re-grant my login"
-                            : "Grant my login"
-                        : lang === "zh"
-                          ? "我这边未登录"
-                          : "Owner not signed in"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-          {/* Only what the door actually serves (Oskar, 2026-08-06: 图一大半
-              不需要). Its engines do text + these; hearing, speaking and
-              drawing exist on no door engine, and fetching is not even in the
-              door's request vocabulary. Web joined 2026-08-30: a text call
-              that may search the live internet — a plain toggle like the rest
-              (Oskar: 不要 approve,就是一个 toggle), off for every key until
-              ticked here. The full eight-row grant surface stays where the
-              other kinds of key live, on the Tokens screen. */}
-          {ceiling ? (
-            <div className="door-app-caps">
-              {CAPABILITY_META.filter((meta) =>
-                ["vision", "reading", "ocr", "web"].includes(meta.id),
-              ).map((meta) => {
-                const machineOn = ceiling.global[meta.id] === true;
-                const granted = appProfile.capabilities.includes(meta.id);
-                return (
-                  <div className="door-app-cap" key={meta.id}>
-                    <CapabilityChip id={meta.id} lang={lang} showName />
-                    {!machineOn ? (
-                      <span className="capability-row-pending">
-                        {lang === "zh" ? "整机关着" : "machine off"}
-                      </span>
-                    ) : (
-                      <input
-                        aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
-                        checked={granted}
-                        className="door-toggle"
-                        disabled={appBusy === appProfile.id}
-                        onChange={(event) =>
-                          void grantAppCapability(
-                            appProfile.id,
-                            meta.id,
-                            event.target.checked,
-                          )
-                        }
-                        role="switch"
-                        type="checkbox"
-                      />
-                    )}
+                    <div className="door-capability-results">
+                      {statuses.map((status) => {
+                        const names: Record<string, [string, string]> = {
+                          text_analysis: ["文字分析", "Text analysis"],
+                          structured_output: ["结构化结果", "Structured output"],
+                          vision_analysis: ["图片输入", "Image input"],
+                          document_analysis: ["PDF 输入", "PDF input"],
+                          web_search: ["网页搜索", "Web search"],
+                        };
+                        const label = names[status.capability]?.[lang === "zh" ? 0 : 1] ?? status.capability;
+                        return (
+                          <span
+                            className={status.available ? "" : "capability-row-pending"}
+                            key={status.capability}
+                            title={status.unavailable_reason ?? undefined}
+                          >
+                            {status.available ? "✓" : "○"} {label}
+                            {status.model ? ` · ${status.model}` : ""}
+                            {!status.available && status.unavailable_reason
+                              ? ` — ${status.unavailable_reason}`
+                              : ""}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
@@ -13422,6 +13456,14 @@ function SubscriptionDoorPanel() {
               max: 600,
               current: settings.timeoutSeconds,
               apply: (n: number) => ({ timeoutSeconds: n }),
+            },
+            {
+              key: "maxCallsPerMinute",
+              label: "Calls per minute",
+              min: 1,
+              max: 600,
+              current: settings.maxCallsPerMinute,
+              apply: (n: number) => ({ maxCallsPerMinute: n }),
             },
           ] as const
         ).map((field) => (

@@ -2455,6 +2455,17 @@ textarea::placeholder {
   color: var(--text);
 }
 
+.door-capability-results {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: var(--space-2);
+  padding-left: var(--space-3);
+  font-size: var(--fs-label);
+  color: var(--text-muted, #b5b1a6);
+}
+
 .door-add-input {
   flex: 1;
   min-width: 0;

@@ -69,10 +69,18 @@ export type SdkAssistantBlock =
  * already happened when they were typed in full.
  */
 export type SdkMessage =
-  | { type: "assistant"; message: { content: SdkAssistantBlock[] } }
-  | { type: "result"; subtype: "success"; result: string }
+  | {
+      type: "assistant";
+      message: { content: SdkAssistantBlock[]; model?: string };
+    }
+  | {
+      type: "result";
+      subtype: "success";
+      result: string;
+      modelUsage?: Record<string, unknown>;
+    }
   | { type: "result"; subtype: "error_during_execution" | "error_max_turns" }
-  | { type: "stream_event" | "system" | "user" };
+  | { type: "stream_event" | "system" | "user"; message?: unknown };
 
 export interface ClaudeSdk {
   createSdkMcpServer: (config: {

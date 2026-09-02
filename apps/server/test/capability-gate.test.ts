@@ -15,7 +15,6 @@ import type { AppConfig } from "../src/config.js";
 import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import {
   writeGlobalCapabilities,
-  writeProfileCapabilities,
 } from "../src/modules/core/capabilities.js";
 import { generateImage } from "../src/modules/core/image-gen.js";
 import { runRelay, writeRelayConfig } from "../src/modules/core/relay.js";
@@ -1040,7 +1039,7 @@ describe("the capability ceiling below the routes", () => {
     );
   });
 
-  it("honours an app key's own list at the relay door too", async () => {
+  it("does not require a relay key capability list", async () => {
     const directory = mkdtempSync(resolve(tmpdir(), "vaenyx-capgate-relaykey-"));
     temporaryDirectories.push(directory);
     const database = createDatabase({
@@ -1060,10 +1059,9 @@ describe("the capability ceiling below the routes", () => {
       )
       .run("key-door", "Quote app", "hash-door", "vaenyx_app_");
 
-    // This door accepts an app key as well as its own, and a key that was never
-    // granted `vision` must not be able to get it by knocking here instead of
-    // running a Method. Vision is ON for the whole machine, so the ceiling is
-    // not what refuses this.
+    // Relay v2 has no per-key capability list. Vision is ON for the whole
+    // machine, so an empty legacy list gets past authorization to the host
+    // allowlist without another grant.
     const call = {
       task: "quote-analysis",
       prompt: "What is in this picture?",
@@ -1073,12 +1071,6 @@ describe("the capability ceiling below the routes", () => {
       files: [{ name: "a.png", url: "https://evil.example.net/a.png" }],
       appProfileId: "key-door",
     };
-    await expect(runRelay(database, directory, call)).rejects.toThrow(
-      "RELAY_CAPABILITY_NOT_GRANTED:vision",
-    );
-
-    // Granted, and it gets past the layer to the door's own host check.
-    writeProfileCapabilities(database, "key-door", { vision: true });
     await expect(runRelay(database, directory, call)).rejects.toThrow(
       "RELAY_HOST_NOT_ALLOWED",
     );

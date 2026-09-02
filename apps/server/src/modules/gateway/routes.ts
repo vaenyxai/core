@@ -250,6 +250,7 @@ import {
   type UpdateVaenyxThreadTitleRequest,
   type UpdateVaenyxThreadDetailsRequest,
   RelayHealthSchema,
+  RelayCapabilityStatusSchema,
   RelayPanelSchema,
   RelayRunRequestSchema,
   RelayRunResponseSchema,
@@ -726,6 +727,8 @@ import {
 } from "../core/fetching.js";
 import {
   listRelayCalls,
+  publicRelayError,
+  probeRelayCapabilities,
   readRelayConfig,
   recordRelayCall,
   relayHealth,
@@ -6018,6 +6021,7 @@ export async function registerGatewayRoutes(
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
           403: ErrorResponseSchema,
+          429: ErrorResponseSchema,
           502: ErrorResponseSchema,
           503: ErrorResponseSchema,
         },
@@ -6074,6 +6078,11 @@ export async function registerGatewayRoutes(
             prompt: request.body.prompt,
             engine: request.body.engine,
             capability: request.body.capability,
+            query: request.body.query,
+            allowedDomains: request.body.allowed_domains,
+            maxResults: request.body.max_results,
+            language: request.body.language,
+            region: request.body.region,
             files: request.body.files ?? [],
             appProfileId: knocker.profileId,
             effort: request.body.effort,
@@ -6093,7 +6102,7 @@ export async function registerGatewayRoutes(
       } catch (error) {
         // Every failure carries its own name so the calling app can tell "fall
         // back to your free model" from "tell the user something is wrong".
-        const code = error instanceof Error ? error.message : "RELAY_FAILED";
+        const code = publicRelayError(error, request.body.engine);
         recordRelayCall(context.database, {
           task: request.body.task,
           engine: request.body.engine,
@@ -6118,24 +6127,10 @@ export async function registerGatewayRoutes(
           });
           return reply.code(403).send({ error: code });
         }
-        // Its own code, not the one above: "the machine has this switched off"
-        // and "this key was not given it" have two different fixes, and an app
-        // that cannot tell them apart tells its own user the wrong thing.
-        if (code.startsWith("RELAY_CAPABILITY_NOT_GRANTED")) {
-          recordAudit(context.database, {
-            actorType: "app",
-            actorId: knocker.profileId,
-            actorName: "App Token",
-            action: "capability.refused",
-            decision: "denied",
-            reason: `${request.body.capability} was not granted to this app key, so a relay request was refused.`,
-            resourceType: "capability",
-            resourceId: request.body.capability,
-          });
-          return reply.code(403).send({ error: code });
-        }
         const status =
-          code === "RELAY_NOT_OWNER"
+          code === "RELAY_RATE_LIMITED"
+            ? 429
+            : code === "RELAY_NOT_OWNER"
             ? 403
             : code === "RELAY_OFF" ||
                 code.startsWith("RELAY_NOT_SIGNED_IN") ||
@@ -6152,7 +6147,12 @@ export async function registerGatewayRoutes(
                   code.startsWith("RELAY_EFFORT_INVALID") ||
                   code.startsWith("RELAY_MODEL_INVALID") ||
                   code.includes("TOO_LARGE") ||
-                  code === "RELAY_NO_FILE"
+                  code === "RELAY_NO_FILE" ||
+                  code === "RELAY_IMAGE_REQUIRED" ||
+                  code === "RELAY_PDF_REQUIRED" ||
+                  code === "RELAY_QUERY_REQUIRED" ||
+                  code === "RELAY_PROMPT_REQUIRED" ||
+                  code === "RELAY_STRUCTURED_OUTPUT_INVALID"
                 ? 400
                 : 502;
         return reply.code(status).send({ error: code });
@@ -6187,6 +6187,7 @@ export async function registerGatewayRoutes(
     "/v1/relay/profile/login/complete",
     "/v1/relay/profile/disconnect",
     "/v1/relay/profile/key/rotate",
+    "/v1/relay/profile/probe",
   ]) {
     app.options(path, async (request, reply) => {
       allowRelayOrigin(request, reply);
@@ -6219,10 +6220,62 @@ export async function registerGatewayRoutes(
       }
       const status = relayProfileEngineStatus(context.database, profile.id);
       return {
+        contract_version: status.contract_version,
+        capability_probe_revision: status.capability_probe_revision,
         mode: status.mode,
         engines: status.engines,
         key: appProfileKeyInfo(context.database, profile.id),
-        capabilities: profile.capabilities,
+        capabilities: [
+          ...new Set(status.engines.flatMap((engine) => engine.capabilities)),
+        ],
+      };
+    },
+  );
+
+  app.post(
+    "/v1/relay/profile/probe",
+    {
+      schema: {
+        response: {
+          200: RelayProfileStatusSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          429: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
+      const profile = knockingProfile(request);
+      if (profile === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
+      if (!profile) {
+        return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
+      }
+      let status: Awaited<ReturnType<typeof probeRelayCapabilities>>;
+      try {
+        status = await probeRelayCapabilities(
+          context.database,
+          context.config.secretsDirectory,
+          profile.id,
+        );
+      } catch (error) {
+        const code = publicRelayError(error, "openai-cli");
+        return reply
+          .code(code === "RELAY_RATE_LIMITED" ? 429 : 502)
+          .send({ error: code });
+      }
+      return {
+        ...status,
+        key: appProfileKeyInfo(context.database, profile.id),
+        capabilities: [
+          ...new Set(status.engines.flatMap((engine) => engine.capabilities)),
+        ],
       };
     },
   );
@@ -9098,6 +9151,7 @@ export async function registerGatewayRoutes(
                     id: Type.String(),
                     "openai-cli": Type.Boolean(),
                     "claude-cli": Type.Boolean(),
+                    capabilityStatus: Type.Array(RelayCapabilityStatusSchema),
                   },
                   { additionalProperties: false },
                 ),
@@ -9121,11 +9175,20 @@ export async function registerGatewayRoutes(
         },
         apps: listAppProfiles(context.database)
           .filter((profile) => profile.kind === "relay")
-          .map((profile) => ({
-            id: profile.id,
-            "openai-cli": codexProfileSignedIn(profile.id),
-            "claude-cli": claudeMachineLogin(profile.id),
-          })),
+          .map((profile) => {
+            const status = relayProfileEngineStatus(
+              context.database,
+              profile.id,
+            );
+            return {
+              id: profile.id,
+              "openai-cli": codexProfileSignedIn(profile.id),
+              "claude-cli": claudeMachineLogin(profile.id),
+              capabilityStatus: status.engines.flatMap(
+                (engine) => engine.capability_status,
+              ),
+            };
+          }),
       };
     },
   );
@@ -9211,6 +9274,57 @@ export async function registerGatewayRoutes(
       return {
         "openai-cli": codexProfileSignedIn(profile.id),
         "claude-cli": claudeMachineLogin(profile.id),
+      };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/v1/app-profiles/:id/relay-probe",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: RelayProfileStatusSchema,
+          401: ErrorResponseSchema,
+          429: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const profile = listAppProfiles(context.database).find(
+        (item) => item.id === request.params.id,
+      );
+      if (!profile || profile.kind !== "relay") {
+        return reply.code(404).send({ error: "App Profile not found." });
+      }
+      let status: Awaited<ReturnType<typeof probeRelayCapabilities>>;
+      try {
+        status = await probeRelayCapabilities(
+          context.database,
+          context.config.secretsDirectory,
+          profile.id,
+        );
+      } catch (error) {
+        const code = publicRelayError(error, "openai-cli");
+        return reply
+          .code(code === "RELAY_RATE_LIMITED" ? 429 : 502)
+          .send({ error: code });
+      }
+      return {
+        ...status,
+        key: appProfileKeyInfo(context.database, profile.id),
+        capabilities: [
+          ...new Set(status.engines.flatMap((engine) => engine.capabilities)),
+        ],
       };
     },
   );

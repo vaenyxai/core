@@ -87,7 +87,7 @@ describe("relay profiles", () => {
     };
     // Issued for the door, so it starts with what the door serves.
     expect(body.profile.kind).toBe("relay");
-    expect(body.profile.capabilities).toEqual(["vision", "reading"]);
+    expect(body.profile.capabilities).toEqual([]);
     return { id: body.profile.id, token: body.token };
   }
 
@@ -115,8 +115,11 @@ describe("relay profiles", () => {
     });
     expect(statusOne.statusCode).toBe(200);
     const bodyOne = statusOne.json() as {
+      contract_version: number;
       mode: string;
       key: { hint: string; version: number };
+      capabilities: string[];
+      engines: { capability_status: unknown[] }[];
     };
     // The hint is the key's own prefix — proof the token resolved to ITS
     // profile, since the two profiles' prefixes differ.
@@ -124,6 +127,9 @@ describe("relay profiles", () => {
       true,
     );
     expect(bodyOne.mode).toBe("dedicated");
+    expect(bodyOne.contract_version).toBe(2);
+    expect(bodyOne.capabilities).toContain("web_search");
+    expect(bodyOne.engines.every((engine) => engine.capability_status.length === 5)).toBe(true);
 
     const statusTwo = await app.inject({
       method: "GET",
@@ -199,6 +205,24 @@ describe("relay profiles", () => {
     // The full key appears nowhere; only its 18-character prefix may.
     expect(raw.includes(profile.token)).toBe(false);
     expect(raw.includes(profile.token.slice(20))).toBe(false);
+  });
+
+  it("a relay key cannot use Owner settings or account routes", async () => {
+    const profile = await makeProfile("app-boundary");
+    for (const request of [
+      { method: "GET", url: "/v1/settings" },
+      { method: "GET", url: "/v1/models/providers" },
+      { method: "GET", url: "/v1/app-profiles" },
+    ] as const) {
+      const response = await app.inject({
+        ...request,
+        headers: {
+          "tailscale-user-login": "owner@example.com",
+          authorization: `Bearer ${profile.token}`,
+        },
+      });
+      expect(response.statusCode).toBe(401);
+    }
   });
 
   it("rotate: the new key works, the old key is dead, the version moved", async () => {

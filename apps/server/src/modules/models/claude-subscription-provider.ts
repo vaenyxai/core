@@ -110,7 +110,7 @@ function formatTranscript(messages: ModelChatMessage[]): string {
 // claude-home and NOTHING else — the token parameter must be null for them,
 // because the pasted setup token is the Owner's and would silently bill the
 // Owner's account for an app that lost its own login.
-function cleanChildEnvironment(
+export function cleanChildEnvironment(
   token: string | null,
   profileKey: string = "core",
 ): Record<string, string> {
@@ -212,7 +212,7 @@ export async function claudeSubscriptionRelay(
   // machine-shaped stays denied by name — the same split the Owner's own chat
   // runs under (WEB_TOOLS vs MACHINE_TOOLS), decided per key in relay.ts.
   allowWeb: boolean = false,
-): Promise<string> {
+): Promise<ClaudeRelayResult> {
   // Two identities, never blended (Relay Profiles): "core" is the shared door
   // riding Vaenyx's own login or the Owner's pasted setup token; a profile
   // rides ONLY what its own sign-in wrote to its own claude-home. No token
@@ -288,14 +288,36 @@ export async function claudeSubscriptionRelay(
     },
   });
   let answer = "";
+  let model = "unknown";
+  const searchEvidence: unknown[] = [];
   for await (const message of stream) {
+    if (message.type === "assistant" && message.message.model) {
+      model = message.message.model;
+    }
+    if (allowWeb && message.type === "user") {
+      // WebSearch tool results arrive as user/tool-result messages. Keep the
+      // structured block only; model prose is never accepted as evidence.
+      searchEvidence.push(message);
+    }
     if (message.type === "result") {
       if (message.subtype === "success") answer = message.result;
       else throw new Error(`RELAY_ENGINE_FAILED:claude-cli:${message.subtype}`);
     }
   }
   if (!answer.trim()) throw new Error("RELAY_ENGINE_FAILED:claude-cli:empty");
-  return answer.trim();
+  return {
+    text: answer.trim(),
+    provider: "anthropic",
+    model,
+    searchEvidence,
+  };
+}
+
+export interface ClaudeRelayResult {
+  text: string;
+  provider: string;
+  model: string;
+  searchEvidence: unknown[];
 }
 
 export class ClaudeSubscriptionProvider implements ModelProvider {

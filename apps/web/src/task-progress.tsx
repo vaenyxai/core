@@ -10,7 +10,10 @@ const TERMINAL_STATES = new Set<TaskRunProgress["state"]>([
 export function acceptTaskProgressUpdate(
   current: TaskRunProgress | null,
   next: TaskRunProgress | null,
+  expectedTaskId?: string,
 ): TaskRunProgress | null {
+  if (expectedTaskId && next?.taskId !== expectedTaskId) return current;
+  if (expectedTaskId && current?.taskId !== expectedTaskId) current = null;
   if (!next) return current;
   if (!current) return next;
   if (next.runId === current.runId) {

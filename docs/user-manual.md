@@ -671,16 +671,16 @@ Read this inside the app: **Settings → Manual**.
 - **Who gets in** — only an app holding a **Model Key** you issued here, calling
   from a device on your private network. There is no address list to keep: the
   key is the identity.
-- **What it can do** — text, reading a picture or PDF, and — per app, off
-  until you allow it — **Web**: a text call that may search the live internet
-  for its answer. These two subscriptions do no voice and make no pictures,
-  and **Fetching** never comes through this door at all, whatever is ticked
-  anywhere — so each app's row here shows only the ticks this door can
-  actually serve.
-- **Web is a per-app tick, off by default** — every key starts with nothing,
-  so no app can search the web until you tick Web on its row; untick it to
-  take it back at any time. An app only sees `web` in the door's health
-  answer once its own key has it.
+- **What it can do** — a valid Model Key automatically gets every safe ability
+  that its selected Subscription engine has passed in a real test: text,
+  structured results, image/PDF input and auditable Web Search. There are no
+  per-ability switches on a Model Key. Voice, image creation, shell, local
+  files, browser sessions, settings and account actions never come through
+  this door.
+- **Test all capabilities** — runs real Subscription calls and lists each
+  engine's current result. A failed or unbuilt ability stays grey with the
+  reason; it is never presented as a provider outage. Web Search is green only
+  when the CLI returns structured, verifiable source URLs.
 - **A Token is not a Model Key** — this door takes Model Keys only. A Method or
   Routine Token from Library → Token knocking here is refused with its own
   answer (`RELAY_KEY_WRONG_KIND`), so you always know which of the two an app
@@ -701,11 +701,11 @@ Read this inside the app: **Settings → Manual**.
   in with its own ChatGPT or Claude subscription, from inside that app,
   **before** it works: an engine it has not connected gets a clear "not
   connected", never your account by accident. Each app's row here carries its
-  capability ticks, a Rotate and a Revoke.
-- **Or grant your own login with one click** — each app's row shows both
-  engines' login state (signed in / not), with a **Grant my login** button
-  per engine. It copies your own login into that app's profile, sparing the
-  sign-in ritual that only works at this computer. The copy is independent:
+  tested capability status, a Rotate and a Revoke.
+- **Connect once** — each app's row has one **Connect** button. It copies each
+  Subscription login currently available on your Owner side into that app's
+  profile. OpenAI and Claude stay independent, so one may work while the other
+  is signed out. The copies are independent:
   revoking or disconnecting the app never touches your own login. Every
   grant is written to the audit log, and the button greys out — saying why —
   while your own side has no login to copy.
@@ -889,7 +889,7 @@ the message first.
 | Photo comes back with no marks                         | The Vision row has no engine or is switched off, or the model found nothing to mark.                                                                   |
 | A PDF asks about pages first                           | Over ten pages, on purpose. It is telling you the cost before spending it.                                                                             |
 | Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the app has not signed in to a subscription yet.                                                 |
-| Your app gets `RELAY_CAPABILITY_NOT_GRANTED`           | That capability is not ticked on the app's Model Key. Settings → AI Settings → Subscription Door → that app's row, and tick it.                        |
+| A Relay capability is grey                            | Press **Test all capabilities**. Read `NOT_CONNECTED`, `NOT_PROBED`, the probe failure, or the honest not-implemented reason on that engine.          |
 | A scheduled run failed overnight                       | The computer slept. The failure and its reason stay on the run.                                                                                        |
 | An update banner will not go away                      | Press it, then Restart.                                                                                                                                |
 

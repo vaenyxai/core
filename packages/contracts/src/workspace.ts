@@ -3427,6 +3427,11 @@ export const RelayEngineSchema = Type.Union([
 ]);
 
 export const RelayCapabilitySchema = Type.Union([
+  Type.Literal("text_analysis"),
+  Type.Literal("structured_output"),
+  Type.Literal("vision_analysis"),
+  Type.Literal("document_analysis"),
+  Type.Literal("web_search"),
   Type.Literal("text"),
   // Text that may search the live internet. Off for every key until the Owner
   // grants it per app, with its own approval step — see NEEDS_OWN_TOKEN_APPROVAL.
@@ -3444,9 +3449,16 @@ export const RelayRunRequestSchema = Type.Object(
     // What kind of job this is. Shows up in the door's log so the Owner can see
     // what his apps have been asking for, without any of the content.
     task: Type.String({ minLength: 1, maxLength: 60 }),
-    prompt: Type.String({ minLength: 1, maxLength: 200_000 }),
+    prompt: Type.Optional(Type.String({ minLength: 1, maxLength: 200_000 })),
     engine: RelayEngineSchema,
     capability: RelayCapabilitySchema,
+    query: Type.Optional(Type.String({ minLength: 1, maxLength: 20_000 })),
+    allowed_domains: Type.Optional(
+      Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { maxItems: 20 }),
+    ),
+    max_results: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+    language: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+    region: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
     // The signed-in user of the calling app. Checked against the Owner list —
     // the personal subscriptions are his alone to use.
     // Ignored since phase two (the key is the identity); accepted so a v1
@@ -3482,14 +3494,59 @@ export const RelayRunResponseSchema = Type.Object(
   {
     text: Type.String(),
     engine: RelayEngineSchema,
+    provider: Type.String(),
     model: Type.String(),
     ms: Type.Integer(),
+    searched_at: Type.Union([Type.String(), Type.Null()]),
+    query: Type.Union([Type.String(), Type.Null()]),
+    results: Type.Array(
+      Type.Object(
+        {
+          title: Type.String(),
+          url: Type.String(),
+          snippet: Type.String(),
+          published_at: Type.Union([Type.String(), Type.Null()]),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    citations: Type.Array(Type.String()),
+    fallback_occurred: Type.Literal(false),
+    fallback_disclosure: Type.String(),
+    capability_probe_revision: Type.String(),
+    structured: Type.Optional(Type.Unknown()),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayCapabilityStatusSchema = Type.Object(
+  {
+    engine: RelayEngineSchema,
+    login_status: Type.Union([
+      Type.Literal("connected"),
+      Type.Literal("not_connected"),
+    ]),
+    capability: Type.Union([
+      Type.Literal("text_analysis"),
+      Type.Literal("structured_output"),
+      Type.Literal("vision_analysis"),
+      Type.Literal("document_analysis"),
+      Type.Literal("web_search"),
+    ]),
+    supported: Type.Boolean(),
+    available: Type.Boolean(),
+    unavailable_reason: Type.Union([Type.String(), Type.Null()]),
+    provider: Type.Union([Type.String(), Type.Null()]),
+    model: Type.Union([Type.String(), Type.Null()]),
+    last_probe_at: Type.Union([Type.String(), Type.Null()]),
   },
   { additionalProperties: false },
 );
 
 export const RelayHealthSchema = Type.Object(
   {
+    contract_version: Type.Literal(2),
+    capability_probe_revision: Type.String(),
     on: Type.Boolean(),
     engines: Type.Array(
       Type.Object(
@@ -3497,6 +3554,7 @@ export const RelayHealthSchema = Type.Object(
           id: RelayEngineSchema,
           signedIn: Type.Boolean(),
           capabilities: Type.Array(RelayCapabilitySchema),
+          capability_status: Type.Array(RelayCapabilityStatusSchema),
           // What a call may ask for on this engine (dropdown material).
           // Empty = not selectable here.
           efforts: Type.Array(Type.String()),
@@ -3511,6 +3569,7 @@ export const RelayHealthSchema = Type.Object(
         maxFileBytes: Type.Integer(),
         maxTotalBytes: Type.Integer(),
         timeoutSeconds: Type.Integer(),
+        maxCallsPerMinute: Type.Integer(),
       },
       { additionalProperties: false },
     ),
@@ -3526,6 +3585,7 @@ export const RelaySettingsSchema = Type.Object(
     maxFileBytes: Type.Integer({ minimum: 0 }),
     maxTotalBytes: Type.Integer({ minimum: 0 }),
     timeoutSeconds: Type.Integer({ minimum: 10, maximum: 600 }),
+    maxCallsPerMinute: Type.Integer({ minimum: 1, maximum: 600 }),
   },
   { additionalProperties: false },
 );
@@ -3561,6 +3621,8 @@ export const RelayPanelSchema = Type.Object(
 // version and prefix, nothing a thief could sign in with.
 export const RelayProfileStatusSchema = Type.Object(
   {
+    contract_version: Type.Literal(2),
+    capability_probe_revision: Type.String(),
     // Always "dedicated" since 2026-08-02: a profile rides its own login,
     // never the door's. The field survives so a v1 client's parser does not
     // break; it goes away in v2.
@@ -3572,6 +3634,7 @@ export const RelayProfileStatusSchema = Type.Object(
           connected: Type.Boolean(),
           connectedAt: Type.Union([Type.String(), Type.Null()]),
           capabilities: Type.Array(RelayCapabilitySchema),
+          capability_status: Type.Array(RelayCapabilityStatusSchema),
           efforts: Type.Array(Type.String()),
           models: Type.Array(Type.String()),
         },
@@ -3700,6 +3763,7 @@ export type RelayCapability = Static<typeof RelayCapabilitySchema>;
 export type RelayRunRequest = Static<typeof RelayRunRequestSchema>;
 export type RelayRunResponse = Static<typeof RelayRunResponseSchema>;
 export type RelayHealth = Static<typeof RelayHealthSchema>;
+export type RelayCapabilityStatus = Static<typeof RelayCapabilityStatusSchema>;
 export type RelaySettings = Static<typeof RelaySettingsSchema>;
 export type UpdateRelaySettingsRequest = Static<
   typeof UpdateRelaySettingsRequestSchema

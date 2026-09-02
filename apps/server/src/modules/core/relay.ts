@@ -9,9 +9,8 @@
 //   * It exposes TWO LOGINS, nothing else: openai-cli (Codex) and claude-cli.
 //     The caller names the one it wants. It has no bearing on which model
 //     Vaenyx itself is using, so changing that setting cannot surprise an app.
-//   * It offers TWO of the five capabilities — text and image-in (a picture or
-//     a PDF). Neither subscription does voice or image generation; health says
-//     so plainly rather than letting an app light up a button that will fail.
+//   * One valid key gets every safe capability that this code implements and a
+//     real probe verifies. There is no second list of per-key switches.
 //   * It NEVER falls back to another model. The failure that matters most is
 //     the whole machine being off, and a machine that is off cannot fall back
 //     to anything — so falling back is the caller's job, and this door's job is
@@ -36,23 +35,28 @@ import {
 } from "../models/claude-login.js";
 import { claudeSubscriptionRelay } from "../models/claude-subscription-provider.js";
 
-import {
-  capabilityOff,
-  decideTokenCapabilities,
-  readProfileCapabilities,
-} from "./capabilities.js";
-import { runOcr } from "./ocr.js";
+import { capabilityOff } from "./capabilities.js";
 import { recordEngineUsage } from "./relay-usage.js";
+import {
+  normalizeSearchEvidence,
+  RELAY_CAPABILITY_PROBE_REVISION,
+  RELAY_CONTRACT_VERSION,
+  relaySearchPrompt,
+  type RelaySearchResult,
+} from "./relay-search.js";
 
 export const RELAY_ENGINES = ["openai-cli", "claude-cli"] as const;
 export type RelayEngine = (typeof RELAY_ENGINES)[number];
 
-// The names the whole system uses for what a model can do. The door serves
-// text, web, vision, reading and ocr; the rest belong to engines that are not
-// these two subscriptions (voice runs on Groq or a local Whisper, pictures
-// come out of Cloudflare), so they are reported unsupported rather than
-// quietly missing.
+// Contract v2 uses task-shaped names. The old names remain wire aliases only,
+// so existing text/vision/reading/web clients keep working.
 export const RELAY_CAPABILITIES = [
+  "text_analysis",
+  "structured_output",
+  "vision_analysis",
+  "document_analysis",
+  "web_search",
+  // v1 aliases remain accepted on /v1/ai/run.
   "text",
   "web",
   "hearing",
@@ -64,15 +68,43 @@ export const RELAY_CAPABILITIES = [
 ] as const;
 export type RelayCapability = (typeof RELAY_CAPABILITIES)[number];
 
+export const RELAY_SAFE_CAPABILITIES = [
+  "text_analysis",
+  "structured_output",
+  "vision_analysis",
+  "document_analysis",
+  "web_search",
+] as const;
+export type RelaySafeCapability = (typeof RELAY_SAFE_CAPABILITIES)[number];
+
 // Split now that the vocabulary distinguishes them: Claude reads a PDF itself,
 // Codex takes pictures only — so a caller sending a PDF to Codex must turn its
 // pages into images first, which is what the hand-off prompt already says.
-// `web` is a text call that may search the live internet; both subscriptions
-// can do it, and whether a given KEY may is a per-key grant, not this table.
-const ENGINE_CAPABILITIES: Record<RelayEngine, RelayCapability[]> = {
-  "openai-cli": ["text", "vision", "web"],
-  "claude-cli": ["text", "vision", "reading", "web"],
+// `web_search` is enabled only when its live tool returns structured URLs.
+const ENGINE_CAPABILITIES: Record<RelayEngine, RelaySafeCapability[]> = {
+  "openai-cli": [
+    "text_analysis",
+    "structured_output",
+    "vision_analysis",
+    "web_search",
+  ],
+  "claude-cli": [...RELAY_SAFE_CAPABILITIES],
 };
+
+function canonicalCapability(capability: RelayCapability): RelaySafeCapability | null {
+  const aliases: Partial<Record<RelayCapability, RelaySafeCapability>> = {
+    text: "text_analysis",
+    text_analysis: "text_analysis",
+    structured_output: "structured_output",
+    vision: "vision_analysis",
+    vision_analysis: "vision_analysis",
+    reading: "document_analysis",
+    document_analysis: "document_analysis",
+    web: "web_search",
+    web_search: "web_search",
+  };
+  return aliases[capability] ?? null;
+}
 
 // What a call may ASK FOR, per engine (Oskar, 2026-08-30): a reasoning-effort
 // tier, valid for that one call, enforced at the codex lane's spawn flags.
@@ -96,29 +128,59 @@ function engineModels(engine: RelayEngine): string[] {
   return engine === "openai-cli" ? [...RELAY_CODEX_MODELS] : [];
 }
 
-// The one capability whose presence in health depends on WHO is asking: an
-// engine "supports" web for every key, but a caller reads health to light its
-// own buttons, and a lit button the run would refuse is worse than none — the
-// same reasoning that made `signedIn` per-profile. Same two layers as the run
-// itself: the machine's ceiling, then the key's own grant list.
-function webGranted(database: DatabaseHandle, profileId: string): boolean {
-  return (
-    !capabilityOff(database, "web") &&
-    decideTokenCapabilities(
-      database,
-      ["web"],
-      readProfileCapabilities(database, profileId),
-    ).allowed.includes("web")
-  );
+interface StoredProbe {
+  available: boolean;
+  unavailableReason: string | null;
+  provider: string | null;
+  model: string | null;
+  probedAt: string;
+  revision: string;
 }
 
-function engineCapabilitiesFor(
+type StoredProbes = Partial<Record<RelayEngine, Partial<Record<RelaySafeCapability, StoredProbe>>>>;
+
+function probeKey(profileId: string): string {
+  return `relay.probes.${profileId}`;
+}
+
+function readStoredProbes(database: DatabaseHandle, profileId: string): StoredProbes {
+  const row = database.sqlite
+    .prepare("SELECT value FROM instance_settings WHERE key = ?")
+    .get(probeKey(profileId)) as { value?: string } | undefined;
+  try {
+    return row?.value ? (JSON.parse(row.value) as StoredProbes) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordRelayCapabilityProbe(
+  database: DatabaseHandle,
+  profileId: string,
   engine: RelayEngine,
-  webAllowed: boolean,
-): RelayCapability[] {
-  return webAllowed
-    ? ENGINE_CAPABILITIES[engine]
-    : ENGINE_CAPABILITIES[engine].filter((capability) => capability !== "web");
+  capability: RelaySafeCapability,
+  probe: Omit<StoredProbe, "probedAt" | "revision"> & { probedAt?: string },
+): void {
+  const current = readStoredProbes(database, profileId);
+  const next: StoredProbes = {
+    ...current,
+    [engine]: {
+      ...current[engine],
+      [capability]: {
+        ...probe,
+        probedAt: probe.probedAt ?? new Date().toISOString(),
+        revision: RELAY_CAPABILITY_PROBE_REVISION,
+      },
+    },
+  };
+  database.sqlite
+    .prepare(
+      `INSERT INTO instance_settings (key, value, updated_at)
+       VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                                      updated_at = CURRENT_TIMESTAMP`,
+    )
+    .run(probeKey(profileId), JSON.stringify(next));
 }
 
 export interface RelayConfig {
@@ -130,6 +192,7 @@ export interface RelayConfig {
   maxFileBytes: number;
   maxTotalBytes: number;
   timeoutSeconds: number;
+  maxCallsPerMinute: number;
 }
 
 export const DEFAULT_RELAY_CONFIG: RelayConfig = {
@@ -139,6 +202,7 @@ export const DEFAULT_RELAY_CONFIG: RelayConfig = {
   maxFileBytes: 25 * 1024 * 1024,
   maxTotalBytes: 60 * 1024 * 1024,
   timeoutSeconds: 180,
+  maxCallsPerMinute: 30,
 };
 
 const CONFIG_KEY = "relay.config";
@@ -176,6 +240,10 @@ export function writeRelayConfig(
     Math.max(0, Math.round(next.maxTotalBytes)),
   );
   next.timeoutSeconds = Math.min(600, Math.max(10, Math.round(next.timeoutSeconds)));
+  next.maxCallsPerMinute = Math.min(
+    600,
+    Math.max(1, Math.round(next.maxCallsPerMinute)),
+  );
   database.sqlite
     .prepare(
       `INSERT INTO instance_settings (key, value, updated_at)
@@ -188,11 +256,14 @@ export function writeRelayConfig(
 }
 
 export interface RelayHealth {
+  contract_version: number;
+  capability_probe_revision: string;
   on: boolean;
   engines: {
     id: RelayEngine;
     signedIn: boolean;
-    capabilities: RelayCapability[];
+    capabilities: RelaySafeCapability[];
+    capability_status: RelayCapabilityStatus[];
     // What a call may ask for on this engine, so a caller can build its
     // dropdowns from the door's own answer. Empty = not selectable here.
     efforts: string[];
@@ -203,7 +274,70 @@ export interface RelayHealth {
     maxFileBytes: number;
     maxTotalBytes: number;
     timeoutSeconds: number;
+    maxCallsPerMinute: number;
   };
+}
+
+export interface RelayCapabilityStatus {
+  engine: RelayEngine;
+  login_status: "connected" | "not_connected";
+  capability: RelaySafeCapability;
+  supported: boolean;
+  available: boolean;
+  unavailable_reason: string | null;
+  provider: string | null;
+  model: string | null;
+  last_probe_at: string | null;
+}
+
+function engineSignedIn(engine: RelayEngine, profileId: string): boolean {
+  return engine === "openai-cli"
+    ? codexProfileSignedIn(profileId)
+    : claudeMachineLogin(profileId);
+}
+
+function capabilityStatuses(
+  database: DatabaseHandle,
+  profileId: string,
+  engine: RelayEngine,
+): RelayCapabilityStatus[] {
+  const signedIn = engineSignedIn(engine, profileId);
+  const probes = readStoredProbes(database, profileId)[engine] ?? {};
+  return RELAY_SAFE_CAPABILITIES.map((capability) => {
+    const supported = ENGINE_CAPABILITIES[engine].includes(capability);
+    const probe = probes[capability];
+    const globalOff =
+      (capability === "web_search" && capabilityOff(database, "web")) ||
+      (capability === "vision_analysis" && capabilityOff(database, "vision")) ||
+      (capability === "document_analysis" && capabilityOff(database, "reading"));
+    const currentProbe = probe?.revision === RELAY_CAPABILITY_PROBE_REVISION;
+    const available = Boolean(
+      supported && signedIn && !globalOff && currentProbe && probe?.available,
+    );
+    return {
+      engine,
+      login_status: signedIn ? "connected" : "not_connected",
+      capability,
+      supported,
+      available,
+      unavailable_reason: available
+        ? null
+        : !supported
+          ? capability === "document_analysis" && engine === "openai-cli"
+            ? "FILE_TRANSPORT_NOT_IMPLEMENTED"
+            : "NOT_IMPLEMENTED"
+          : !signedIn
+            ? "NOT_CONNECTED"
+            : globalOff
+              ? "DISABLED_BY_OWNER_SAFETY_CEILING"
+              : !currentProbe
+                ? "NOT_PROBED"
+                : probe?.unavailableReason ?? "PROBE_FAILED",
+      provider: currentProbe ? (probe?.provider ?? null) : null,
+      model: currentProbe ? (probe?.model ?? null) : null,
+      last_probe_at: currentProbe ? (probe?.probedAt ?? null) : null,
+    };
+  });
 }
 
 // Health answers for the CALLING key's own profile (phase two, 2026-08-06):
@@ -216,21 +350,26 @@ export function relayHealth(
   profileId: string,
 ): RelayHealth {
   const config = readRelayConfig(database);
-  const webAllowed = webGranted(database, profileId);
+  const openaiStatus = capabilityStatuses(database, profileId, "openai-cli");
+  const claudeStatus = capabilityStatuses(database, profileId, "claude-cli");
   return {
+    contract_version: RELAY_CONTRACT_VERSION,
+    capability_probe_revision: RELAY_CAPABILITY_PROBE_REVISION,
     on: config.enabled,
     engines: [
       {
         id: "openai-cli",
         signedIn: codexProfileSignedIn(profileId),
-        capabilities: engineCapabilitiesFor("openai-cli", webAllowed),
+        capabilities: [...ENGINE_CAPABILITIES["openai-cli"]],
+        capability_status: openaiStatus,
         efforts: engineEfforts("openai-cli"),
         models: engineModels("openai-cli"),
       },
       {
         id: "claude-cli",
         signedIn: claudeMachineLogin(profileId),
-        capabilities: engineCapabilitiesFor("claude-cli", webAllowed),
+        capabilities: [...ENGINE_CAPABILITIES["claude-cli"]],
+        capability_status: claudeStatus,
         efforts: engineEfforts("claude-cli"),
         models: engineModels("claude-cli"),
       },
@@ -240,6 +379,7 @@ export function relayHealth(
       maxFileBytes: config.maxFileBytes,
       maxTotalBytes: config.maxTotalBytes,
       timeoutSeconds: config.timeoutSeconds,
+      maxCallsPerMinute: config.maxCallsPerMinute,
     },
   };
 }
@@ -251,9 +391,14 @@ export interface RelayFileRequest {
 
 export interface RelayRunRequest {
   task: string;
-  prompt: string;
+  prompt?: string;
   engine: RelayEngine;
   capability: RelayCapability;
+  query?: string;
+  allowedDomains?: string[];
+  maxResults?: number;
+  language?: string;
+  region?: string;
   // Self-declared and IGNORED since phase two: the key is the identity, and a
   // field anyone can type is not. Still accepted on the wire so a v1 client
   // keeps working unchanged.
@@ -272,8 +417,36 @@ export interface RelayRunRequest {
 export interface RelayRunResult {
   text: string;
   engine: RelayEngine;
+  provider: string;
   model: string;
   ms: number;
+  searched_at: string | null;
+  query: string | null;
+  results: RelaySearchResult[];
+  citations: string[];
+  fallback_occurred: false;
+  fallback_disclosure: string;
+  capability_probe_revision: string;
+  structured?: unknown;
+}
+
+const recentRelayCalls = new Map<string, number[]>();
+
+export function assertRelayRateLimit(
+  profileId: string,
+  maxCallsPerMinute: number,
+  now: number = Date.now(),
+): void {
+  const cutoff = now - 60_000;
+  const recent = (recentRelayCalls.get(profileId) ?? []).filter(
+    (timestamp) => timestamp > cutoff,
+  );
+  if (recent.length >= maxCallsPerMinute) {
+    recentRelayCalls.set(profileId, recent);
+    throw new Error("RELAY_RATE_LIMITED");
+  }
+  recent.push(now);
+  recentRelayCalls.set(profileId, recent);
 }
 
 function mediaTypeFor(name: string, headerType: string | null): string {
@@ -359,7 +532,8 @@ export interface RelayProfileEngineStatus {
   id: RelayEngine;
   connected: boolean;
   connectedAt: string | null;
-  capabilities: RelayCapability[];
+  capabilities: RelaySafeCapability[];
+  capability_status: RelayCapabilityStatus[];
   efforts: string[];
   models: string[];
 }
@@ -368,20 +542,22 @@ export function relayProfileEngineStatus(
   database: DatabaseHandle,
   profileId: string,
 ): {
+  contract_version: number;
+  capability_probe_revision: string;
   mode: "dedicated";
   engines: RelayProfileEngineStatus[];
 } {
-  // Same per-key rule as relayHealth: `web` appears only for a key that was
-  // granted it, so the two answers a calling app might read cannot disagree.
-  const webAllowed = webGranted(database, profileId);
   return {
+    contract_version: RELAY_CONTRACT_VERSION,
+    capability_probe_revision: RELAY_CAPABILITY_PROBE_REVISION,
     mode: "dedicated",
     engines: [
       {
         id: "openai-cli",
         connected: codexProfileSignedIn(profileId),
         connectedAt: codexLoginConnectedAt(profileId),
-        capabilities: engineCapabilitiesFor("openai-cli", webAllowed),
+        capabilities: [...ENGINE_CAPABILITIES["openai-cli"]],
+        capability_status: capabilityStatuses(database, profileId, "openai-cli"),
         efforts: engineEfforts("openai-cli"),
         models: engineModels("openai-cli"),
       },
@@ -389,12 +565,189 @@ export function relayProfileEngineStatus(
         id: "claude-cli",
         connected: claudeMachineLogin(profileId),
         connectedAt: claudeLoginConnectedAt(profileId),
-        capabilities: engineCapabilitiesFor("claude-cli", webAllowed),
+        capabilities: [...ENGINE_CAPABILITIES["claude-cli"]],
+        capability_status: capabilityStatuses(database, profileId, "claude-cli"),
         efforts: engineEfforts("claude-cli"),
         models: engineModels("claude-cli"),
       },
     ],
   };
+}
+
+const PROBE_IMAGE_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK9sAAAAASUVORK5CYII=";
+
+function probePdfBase64(): string {
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    "5 0 obj\n<< /Length 49 >>\nstream\nBT /F1 18 Tf 20 50 Td (VAENYX PDF PROBE) Tj ET\nendstream\nendobj\n",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += object;
+  }
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 6\n0000000000 65535 f \n${offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n `)
+    .join("\n")}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf).toString("base64");
+}
+
+export async function probeRelayCapabilities(
+  database: DatabaseHandle,
+  secretsDirectory: string,
+  profileId: string,
+): Promise<ReturnType<typeof relayProfileEngineStatus>> {
+  assertRelayRateLimit(profileId, readRelayConfig(database).maxCallsPerMinute);
+  const scratch = resolve(tmpdir(), "vaenyx-relay-probe", randomUUID());
+  mkdirSync(scratch, { recursive: true });
+  const imagePath = resolve(scratch, "probe.png");
+  writeFileSync(imagePath, Buffer.from(PROBE_IMAGE_BASE64, "base64"));
+
+  const call = async (
+    engine: RelayEngine,
+    prompt: string,
+    options: { web?: boolean; image?: boolean; pdf?: boolean } = {},
+  ) => {
+    recordEngineUsage(database, profileId, engine);
+    return engine === "openai-cli"
+      ? runCodexRelay(
+          prompt,
+          options.image ? imagePath : undefined,
+          profileId,
+          options.web === true,
+        )
+      : claudeSubscriptionRelay(
+          secretsDirectory,
+          prompt,
+          options.pdf
+            ? { base64: probePdfBase64(), mediaType: "application/pdf" }
+            : options.image
+              ? { base64: PROBE_IMAGE_BASE64, mediaType: "image/png" }
+              : undefined,
+          profileId,
+          options.web === true,
+        );
+  };
+
+  const note = (
+    engine: RelayEngine,
+    capability: RelaySafeCapability,
+    available: boolean,
+    detail: { provider?: string; model?: string; reason?: string } = {},
+  ) =>
+    recordRelayCapabilityProbe(database, profileId, engine, capability, {
+      available,
+      unavailableReason: available ? null : detail.reason ?? "PROBE_FAILED",
+      provider: detail.provider ?? null,
+      model: detail.model ?? null,
+    });
+
+  const probeEngine = async (engine: RelayEngine) => {
+    if (!engineSignedIn(engine, profileId)) return;
+    try {
+      const output = await call(
+        engine,
+        'Return exactly this JSON and nothing else: {"vaenyx_probe":"ok"}',
+      );
+      const parsed = JSON.parse(output.text) as { vaenyx_probe?: unknown };
+      const ok = parsed.vaenyx_probe === "ok";
+      for (const capability of ["text_analysis", "structured_output"] as const) {
+        note(engine, capability, ok, {
+          provider: output.provider,
+          model: output.model,
+          reason: "STRUCTURED_PROBE_FAILED",
+        });
+      }
+    } catch (error) {
+      for (const capability of ["text_analysis", "structured_output"] as const) {
+        note(engine, capability, false, {
+          reason: publicRelayError(error, engine),
+        });
+      }
+    }
+
+    try {
+      const output = await call(
+        engine,
+        "Reply exactly VAENYX_VISION_OK if an image is attached and visible.",
+        { image: true },
+      );
+      note(engine, "vision_analysis", output.text.includes("VAENYX_VISION_OK"), {
+        provider: output.provider,
+        model: output.model,
+        reason: "VISION_PROBE_FAILED",
+      });
+    } catch (error) {
+      note(engine, "vision_analysis", false, {
+        reason: publicRelayError(error, engine),
+      });
+    }
+
+    if (engine === "claude-cli") {
+      try {
+        const output = await call(
+          engine,
+          "Read the attached PDF. Reply exactly VAENYX_DOCUMENT_OK if it contains VAENYX PDF PROBE.",
+          { pdf: true },
+        );
+        note(
+          engine,
+          "document_analysis",
+          output.text.includes("VAENYX_DOCUMENT_OK"),
+          {
+            provider: output.provider,
+            model: output.model,
+            reason: "DOCUMENT_PROBE_FAILED",
+          },
+        );
+      } catch (error) {
+        note(engine, "document_analysis", false, {
+          reason: publicRelayError(error, engine),
+        });
+      }
+    }
+
+    if (!capabilityOff(database, "web")) {
+      try {
+        const output = await call(
+          engine,
+          relaySearchPrompt({
+            query: "OpenAI Codex CLI official documentation",
+            allowedDomains: ["openai.com", "chatgpt.com"],
+            maxResults: 3,
+          }),
+          { web: true },
+        );
+        const evidence = normalizeSearchEvidence(output.searchEvidence, {
+          allowedDomains: ["openai.com", "chatgpt.com"],
+          maxResults: 3,
+        });
+        note(engine, "web_search", evidence.length > 0, {
+          provider: output.provider,
+          model: output.model,
+          reason: "VERIFIABLE_SOURCES_NOT_RETURNED",
+        });
+      } catch (error) {
+        note(engine, "web_search", false, {
+          reason: publicRelayError(error, engine),
+        });
+      }
+    }
+  };
+
+  try {
+    await Promise.all(RELAY_ENGINES.map((engine) => probeEngine(engine)));
+    return relayProfileEngineStatus(database, profileId);
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
+  }
 }
 
 export async function runRelay(
@@ -404,46 +757,32 @@ export async function runRelay(
 ): Promise<RelayRunResult> {
   const config = readRelayConfig(database);
   if (!config.enabled) throw new Error("RELAY_OFF");
-
-  // OCR does not ride either subscription: it runs on Vaenyx's dedicated OCR
-  // engine whatever `engine` the caller named, because a chat model used as
-  // OCR invents characters — the engine field still authenticates the caller's
-  // intent, it just is not consulted for this capability.
-  if (
-    request.capability !== "ocr" &&
-    !ENGINE_CAPABILITIES[request.engine].includes(request.capability)
-  ) {
+  assertRelayRateLimit(request.appProfileId, config.maxCallsPerMinute);
+  const capability = canonicalCapability(request.capability);
+  if (!capability || !ENGINE_CAPABILITIES[request.engine].includes(capability)) {
     throw new Error(
       `RELAY_CAPABILITY_UNSUPPORTED:${request.engine}:${request.capability}`,
     );
   }
-  // "Out of reach of every app key" is what the Capabilities card promises,
-  // and an outside app asking this machine to look at a picture is an app key
-  // asking. Refused before the linked file is fetched: a capability that is
-  // switched off should not pull the customer's file onto this disk at all.
-  // `text` is not one of the eight — it is the door itself. `web` IS one of
-  // the eight, and the sternest of them: it can turn this machine into
-  // somebody else's proxy, so it rides the same two-layer check and its grant
-  // additionally required the Owner's own separate approval when it was made.
-  //
-  // Two layers here: the machine's ceiling, then the key's own grant list. No
-  // mode layer, deliberately — a relay call arrives from another program over
-  // the network, not from a browser session, so there is no mode it could be
-  // inside.
-  if (request.capability !== "text") {
-    if (capabilityOff(database, request.capability)) {
-      throw new Error(`RELAY_CAPABILITY_OFF:${request.capability}`);
-    }
-    if (
-      !decideTokenCapabilities(
-        database,
-        [request.capability],
-        readProfileCapabilities(database, request.appProfileId),
-      ).allowed.includes(request.capability)
-    ) {
-      throw new Error(`RELAY_CAPABILITY_NOT_GRANTED:${request.capability}`);
-    }
+  const safetyCeiling =
+    capability === "web_search"
+      ? "web"
+      : capability === "vision_analysis"
+        ? "vision"
+        : capability === "document_analysis"
+          ? "reading"
+          : null;
+  if (safetyCeiling && capabilityOff(database, safetyCeiling)) {
+    throw new Error(`RELAY_CAPABILITY_OFF:${capability}`);
   }
+
+  // One valid relay key gets every implemented safe capability. There is no
+  // per-key capability grant here; the key, Tailnet boundary, engine login and
+  // machine-wide safety ceiling are the complete authorization chain.
+  const prompt = request.prompt?.trim();
+  const query = request.query?.trim() || (capability === "web_search" ? prompt : "");
+  if (capability === "web_search" && !query) throw new Error("RELAY_QUERY_REQUIRED");
+  if (capability !== "web_search" && !prompt) throw new Error("RELAY_PROMPT_REQUIRED");
 
   // Per-call effort/model, validated against the ENGINE's own whitelist and
   // refused echoing the caller's word — never accepted-and-ignored. Claude's
@@ -476,45 +815,40 @@ export async function runRelay(
     const files = await fetchLinkedFiles(request.files, config, scratch);
     const attachment = files[0];
     if (
-      (request.capability === "vision" ||
-        request.capability === "reading" ||
-        request.capability === "ocr") &&
+      (capability === "vision_analysis" || capability === "document_analysis") &&
       !attachment
     ) {
       throw new Error("RELAY_NO_FILE");
     }
-
-    // The OCR lane: the linked picture or scan goes to the dedicated engine
-    // and the words come back — no subscription is touched. Granted per key
-    // like everything else (an app sending a scanned quote to be read is a
-    // legitimate ask, unlike fetching, which no key ever gets).
-    if (request.capability === "ocr" && attachment) {
-      const ocr = await runOcr(secretsDirectory, {
-        base64: attachment.base64,
-        mediaType: attachment.mediaType,
-      });
-      recordEngineUsage(database, request.appProfileId, "mistral-ocr");
-      return {
-        text: ocr.text,
-        engine: request.engine,
-        model: "mistral-ocr",
-        ms: Date.now() - started,
-      };
+    if (capability === "vision_analysis" && !attachment?.mediaType.startsWith("image/")) {
+      throw new Error("RELAY_IMAGE_REQUIRED");
+    }
+    if (capability === "document_analysis" && attachment?.mediaType !== "application/pdf") {
+      throw new Error("RELAY_PDF_REQUIRED");
     }
 
     // Counted before the engine answers: a failed call still hit the
     // subscription, and "which app spent this" must include the failures.
     recordEngineUsage(database, request.appProfileId, request.engine);
 
-    // A `web` call is a text call whose engine child is allowed the ONE extra
+    // A web-search call is a text call whose engine child is allowed the ONE extra
     // tool, live web search — decided here, enforced inside each engine
     // (separate session lane / tool allow-list), never by prompt alone.
-    const allowWeb = request.capability === "web";
-    const text =
+    const allowWeb = capability === "web_search";
+    const enginePrompt = allowWeb
+      ? relaySearchPrompt({
+          query: query!,
+          allowedDomains: request.allowedDomains,
+          maxResults: request.maxResults,
+          language: request.language,
+          region: request.region,
+        })
+      : prompt!;
+    const engineResult =
       request.engine === "claude-cli"
         ? await claudeSubscriptionRelay(
             secretsDirectory,
-            request.prompt,
+            enginePrompt,
             attachment
               ? { base64: attachment.base64, mediaType: attachment.mediaType }
               : undefined,
@@ -522,7 +856,7 @@ export async function runRelay(
             allowWeb,
           )
         : await runCodexRelay(
-            request.prompt,
+            enginePrompt,
             // Codex reads a picture from a path. It has no document channel, so
             // a PDF has to arrive as pictures of its pages — which is exactly
             // what the calling app is asked to send.
@@ -535,14 +869,67 @@ export async function runRelay(
             request.model,
           );
 
+    const results = allowWeb
+      ? normalizeSearchEvidence(engineResult.searchEvidence, {
+          allowedDomains: request.allowedDomains,
+          maxResults: request.maxResults,
+        })
+      : [];
+    if (allowWeb && results.length === 0) {
+      recordRelayCapabilityProbe(
+        database,
+        request.appProfileId,
+        request.engine,
+        capability,
+        {
+          available: false,
+          unavailableReason: "VERIFIABLE_SOURCES_NOT_RETURNED",
+          provider: engineResult.provider,
+          model: engineResult.model,
+        },
+      );
+      throw new Error(
+        `RELAY_CAPABILITY_UNSUPPORTED:${request.engine}:web_search:VERIFIABLE_SOURCES_NOT_RETURNED`,
+      );
+    }
+
+    let structured: unknown;
+    if (capability === "structured_output") {
+      try {
+        structured = JSON.parse(engineResult.text);
+      } catch {
+        throw new Error("RELAY_STRUCTURED_OUTPUT_INVALID");
+      }
+    }
+
+    recordRelayCapabilityProbe(
+      database,
+      request.appProfileId,
+      request.engine,
+      capability,
+      {
+        available: true,
+        unavailableReason: null,
+        provider: engineResult.provider,
+        model: engineResult.model,
+      },
+    );
+
     return {
-      text,
+      text: engineResult.text,
       engine: request.engine,
-      model:
-        request.engine === "claude-cli"
-          ? "claude-subscription"
-          : (request.model ?? "codex"),
+      provider: engineResult.provider,
+      model: engineResult.model,
       ms: Date.now() - started,
+      searched_at: allowWeb ? new Date().toISOString() : null,
+      query: allowWeb ? query! : null,
+      results,
+      citations: results.map((result) => result.url),
+      fallback_occurred: false,
+      fallback_disclosure:
+        "No fallback. This request used only the selected subscription engine.",
+      capability_probe_revision: RELAY_CAPABILITY_PROBE_REVISION,
+      ...(structured === undefined ? {} : { structured }),
     };
   } finally {
     // Whatever happened, the customer's file does not stay on this machine.
@@ -616,3 +1003,34 @@ export function listRelayCalls(database: DatabaseHandle): {
   return rows.map((row) => ({ ...row, ok: row.ok === 1 }));
 }
 
+export function publicRelayError(error: unknown, engine: RelayEngine): string {
+  const raw = error instanceof Error ? error.message : "";
+  const exact = new Set([
+    "RELAY_OFF",
+    "RELAY_TOO_MANY_FILES",
+    "RELAY_FILE_TOO_LARGE",
+    "RELAY_TOTAL_TOO_LARGE",
+    "RELAY_NO_FILE",
+    "RELAY_IMAGE_REQUIRED",
+    "RELAY_PDF_REQUIRED",
+    "RELAY_QUERY_REQUIRED",
+    "RELAY_PROMPT_REQUIRED",
+    "RELAY_STRUCTURED_OUTPUT_INVALID",
+    "RELAY_RATE_LIMITED",
+  ]);
+  if (exact.has(raw)) return raw;
+  const safePrefixes = [
+    "RELAY_CAPABILITY_OFF:",
+    "RELAY_CAPABILITY_UNSUPPORTED:",
+    "RELAY_EFFORT_INVALID:",
+    "RELAY_MODEL_INVALID:",
+    "RELAY_PROFILE_NOT_CONNECTED:",
+    "RELAY_NOT_SIGNED_IN:",
+    "RELAY_HOST_NOT_ALLOWED:",
+    "RELAY_FETCH_FAILED:",
+  ];
+  if (safePrefixes.some((prefix) => raw.startsWith(prefix))) {
+    return raw.slice(0, 240);
+  }
+  return `RELAY_ENGINE_FAILED:${engine}`;
+}

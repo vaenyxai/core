@@ -258,11 +258,10 @@ export function createAppProfile(
   const id = randomUUID();
 
   // ── Relay key: the Subscription Door's own kind. Binds nothing — no Method,
-  // no Routine — because its job is the door, not the Library. It starts with
-  // the two capabilities the door actually serves (vision, reading; text is
-  // the door itself and is not one of the eight), so a freshly issued key
-  // works for what it was issued for instead of failing its first photo.
-  // fetching stays impossible via NEVER_VIA_TOKEN whatever is written here.
+  // no Routine — because its job is the door, not the Library. Its generic
+  // capability list stays empty: Relay v2 grants every implemented safe
+  // Subscription ability automatically, so storing a second permission list
+  // here would recreate the switches the contract removed.
   if (kind === "relay") {
     database.sqlite
       .prepare(
@@ -276,7 +275,7 @@ export function createAppProfile(
         hashAppToken(token),
         tokenPrefix,
         tokenCipher,
-        JSON.stringify(["vision", "reading"]),
+        JSON.stringify([]),
       );
 
     const profile = listAppProfiles(database).find((item) => item.id === id);

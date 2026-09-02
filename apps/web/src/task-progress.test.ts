@@ -8,11 +8,12 @@ function progress(
   runId: string,
   revision: number,
   startedAt = "2026-09-02T00:00:00.000Z",
+  taskId = "task-1",
 ): TaskRunProgress {
   return {
     version: 1,
     runId,
-    taskId: "task-1",
+    taskId,
     conversationId: null,
     revision,
     state: "running",
@@ -58,5 +59,23 @@ describe("durable task progress ordering", () => {
         progress("run-1", 99, "2026-09-02T00:00:00.000Z"),
       ),
     ).toBe(current);
+  });
+
+  it("never accepts another task's transient progress", () => {
+    const current = progress("run-1", 2);
+    expect(
+      acceptTaskProgressUpdate(
+        current,
+        progress("run-2", 99, "2026-09-02T02:00:00.000Z", "task-2"),
+        "task-1",
+      ),
+    ).toBe(current);
+    expect(
+      acceptTaskProgressUpdate(
+        progress("old", 1, "2026-09-02T00:00:00.000Z", "task-2"),
+        progress("new", 1, "2026-09-02T01:00:00.000Z", "task-1"),
+        "task-1",
+      )?.taskId,
+    ).toBe("task-1");
   });
 });

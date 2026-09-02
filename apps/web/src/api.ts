@@ -8,6 +8,8 @@ import type {
   MemoryKind,
   MemoryProvenanceResponse,
   RelayPanel,
+  RelayProfileStatus,
+  RelayCapabilityStatus,
   RelayUsageResponse,
   RelaySettings,
   RelayTestResult,
@@ -1397,7 +1399,12 @@ export function fetchAppProfileToken(
 // can be granted at all) and where every relay key stands.
 export interface RelayLogins {
   owner: { "openai-cli": boolean; "claude-cli": boolean };
-  apps: { id: string; "openai-cli": boolean; "claude-cli": boolean }[];
+  apps: {
+    id: string;
+    "openai-cli": boolean;
+    "claude-cli": boolean;
+    capabilityStatus: RelayCapabilityStatus[];
+  }[];
 }
 
 export function fetchRelayLogins(): Promise<RelayLogins> {
@@ -1411,6 +1418,13 @@ export function grantAppLogin(
   return requestJson<{ "openai-cli": boolean; "claude-cli": boolean }>(
     `/v1/app-profiles/${encodeURIComponent(profileId)}/grant-login`,
     { method: "POST", body: JSON.stringify({ engine }) },
+  );
+}
+
+export function probeRelayApp(profileId: string): Promise<RelayProfileStatus> {
+  return requestJson<RelayProfileStatus>(
+    `/v1/app-profiles/${encodeURIComponent(profileId)}/relay-probe`,
+    { method: "POST", body: JSON.stringify({}) },
   );
 }
 

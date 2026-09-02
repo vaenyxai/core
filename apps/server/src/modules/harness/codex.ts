@@ -306,11 +306,27 @@ export function endCodexRelaySession(profileKey: string): void {
   }
 }
 
-function codexEnvironment(
+export function codexEnvironment(
   base: NodeJS.ProcessEnv = process.env,
   profileKey: string = "core",
 ): NodeJS.ProcessEnv {
-  return { ...base, CODEX_HOME: getCodexHomeDirectory(profileKey) };
+  const environment: NodeJS.ProcessEnv = {
+    ...base,
+    CODEX_HOME: getCodexHomeDirectory(profileKey),
+  };
+  // This process is the ChatGPT Subscription lane. Never let an ambient API
+  // billing credential silently turn it into a metered API request.
+  for (const key of [
+    "OPENAI_API_KEY",
+    "OPENAI_ORGANIZATION",
+    "OPENAI_ORG_ID",
+    "OPENAI_BASE_URL",
+    "AZURE_OPENAI_API_KEY",
+    "CODEX_API_KEY",
+  ]) {
+    delete environment[key];
+  }
+  return environment;
 }
 
 function runCodexCommand(args: string[]): ReturnType<typeof spawnSync> {
@@ -827,11 +843,21 @@ interface PendingRpcCall {
 
 interface PendingChatTurn {
   finalAnswer: string;
+  model: string;
   onDelta?: (text: string) => void;
+  provider: string;
   reject: (reason?: unknown) => void;
-  resolve: (value: string) => void;
+  resolve: (value: CodexRelayResult) => void;
   safetyViolation: Error | undefined;
+  searchEvidence: unknown[];
   timeout: NodeJS.Timeout;
+}
+
+export interface CodexRelayResult {
+  text: string;
+  provider: string;
+  model: string;
+  searchEvidence: unknown[];
 }
 
 interface PendingAskVaenyxTurn {
@@ -944,7 +970,7 @@ class CodexChatSession {
   async run(
     request: string,
     options?: { instructions?: string; imagePath?: string },
-  ): Promise<string> {
+  ): Promise<CodexRelayResult> {
     await this.#initialized;
 
     // ephemeral: every run gets its own thread, so nothing carries over from
@@ -958,7 +984,10 @@ class CodexChatSession {
       ephemeral: true,
       sandbox: "read-only",
     });
-    const thread = threadMessage.result?.thread as { id?: string } | undefined;
+    const threadResult = threadMessage.result as
+      | { model?: string; modelProvider?: string; thread?: { id?: string } }
+      | undefined;
+    const thread = threadResult?.thread;
 
     if (!thread?.id) {
       throw new OwnerDiagnosticError(
@@ -967,7 +996,13 @@ class CodexChatSession {
       );
     }
 
-    return await this.#startTurn(thread.id, request, options?.imagePath);
+    return await this.#startTurn(
+      thread.id,
+      request,
+      options?.imagePath,
+      threadResult?.model ?? "unknown",
+      threadResult?.modelProvider ?? "openai",
+    );
   }
 
   #close(error: Error): void {
@@ -1006,7 +1041,12 @@ class CodexChatSession {
       return;
     }
 
-    turn.resolve(answer);
+    turn.resolve({
+      text: answer,
+      provider: turn.provider,
+      model: turn.model,
+      searchEvidence: turn.searchEvidence,
+    });
   }
 
   #handleLine(line: string): void {
@@ -1051,7 +1091,9 @@ class CodexChatSession {
 
     const item = message.params?.item as
       | {
+          action?: unknown;
           phase?: string | null;
+          results?: unknown;
           text?: string;
           type?: string;
         }
@@ -1065,9 +1107,15 @@ class CodexChatSession {
       // On a web session the ONE admitted tool item is webSearch; on a plain
       // session even that is a violation. Everything else stays fatal on both:
       // allowing search must never soften the wall around files and commands.
-      (item?.type === "webSearch" && !this.#web)
+      ((item?.type === "webSearch" || item?.type === "web_search") &&
+        !this.#web)
     ) {
       this.#turn.safetyViolation = new Error("CODEX_CHAT_BOUNDARY_VIOLATION");
+      return;
+    }
+
+    if (item?.type === "webSearch" || item?.type === "web_search") {
+      this.#turn.searchEvidence.push(item.results, item.action);
       return;
     }
 
@@ -1129,15 +1177,20 @@ class CodexChatSession {
     threadId: string,
     request: string,
     imagePath?: string,
-  ): Promise<string> {
+    model: string = "unknown",
+    provider: string = "openai",
+  ): Promise<CodexRelayResult> {
     if (this.#turn) throw new Error("CODEX_CHAT_SESSION_BUSY");
 
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<CodexRelayResult>((resolve, reject) => {
       this.#turn = {
         finalAnswer: "",
+        model,
+        provider,
         reject,
         resolve,
         safetyViolation: undefined,
+        searchEvidence: [],
         timeout: setTimeout(() => {
           this.#close(new Error("CODEX_TASK_TIMED_OUT"));
         }, 180_000),
@@ -1185,7 +1238,7 @@ export async function runCodexChatTest(request: string): Promise<string> {
       chatSession = new CodexChatSession();
     }
 
-    return await chatSession.run(request);
+    return (await chatSession.run(request)).text;
   } finally {
     releaseQueue();
   }
@@ -1218,7 +1271,7 @@ export async function runCodexRelay(
   allowWeb: boolean = false,
   effort?: string,
   model?: string,
-): Promise<string> {
+): Promise<CodexRelayResult> {
   if (profileKey === "core") {
     const status = getCodexStatus();
     if (!status.installed || !status.loggedIn) {
@@ -1307,10 +1360,12 @@ export async function runCodexMethodOffline(
     // thread, and Stop is handled by the caller abandoning the promise. The
     // signal is still honoured before the turn starts.
     if (signal?.aborted) throw new Error("CODEX_TURN_CANCELLED");
-    return await session.run(request, {
+    return (
+      await session.run(request, {
       instructions:
         "You are running a Vaenyx Method. Follow its recipe and answer with the requested JSON only. You have no tools: no files, no shell, no network. If the recipe needs something you cannot reach, say so plainly instead of guessing.",
-    });
+      })
+    ).text;
   } finally {
     releaseQueue();
   }
