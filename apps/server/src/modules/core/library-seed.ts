@@ -9,6 +9,13 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 import type { AppConfig } from "../../config.js";
 
+const FIRST_PARTY_RESULT_VIEWS_MARKER = ".first-party-result-views-v1";
+const FIRST_PARTY_RESULT_PACKAGES = [
+  "vaenyx-receipt-record",
+  "vaenyx-warranty-manual-record",
+  "vaenyx-material-takeoff",
+] as const;
+
 // Each Method / Routine is a folder, so a non-empty library has >= 1 subfolder.
 function countItemFolders(directory: string): number {
   if (!existsSync(directory)) {
@@ -55,17 +62,17 @@ export function seedLibraryIfEmpty(config: AppConfig): boolean {
 
   const libraryRoot = dirname(config.libraryDirectory);
   const marker = resolve(libraryRoot, ".seeded");
-  if (existsSync(marker)) {
-    return false;
-  }
+  const alreadySeeded = existsSync(marker);
+  const alreadyPopulated = alreadySeeded
+    ? true
+    : countItemFolders(config.libraryDirectory) > 0 ||
+      countItemFolders(config.routinesDirectory) > 0;
+  let copied = false;
 
-  const alreadyPopulated =
-    countItemFolders(config.libraryDirectory) > 0 ||
-    countItemFolders(config.routinesDirectory) > 0;
-
-  if (!alreadyPopulated) {
+  if (!alreadySeeded && !alreadyPopulated) {
     mkdirSync(config.libraryDirectory, { recursive: true });
     cpSync(sampleMethods, config.libraryDirectory, { recursive: true });
+    copied = true;
     if (existsSync(sampleRoutines)) {
       mkdirSync(config.routinesDirectory, { recursive: true });
       cpSync(sampleRoutines, config.routinesDirectory, { recursive: true });
@@ -76,6 +83,43 @@ export function seedLibraryIfEmpty(config: AppConfig): boolean {
   // found the library already populated — so it never runs again on this
   // install.
   mkdirSync(libraryRoot, { recursive: true });
-  writeFileSync(marker, new Date().toISOString());
-  return !alreadyPopulated;
+  if (!alreadySeeded) writeFileSync(marker, new Date().toISOString());
+
+  // H-014 is a product package rather than disposable demo content. Install
+  // each missing first-party folder once for existing owners too, while never
+  // overwriting an Owner/community package that already uses the same id.
+  const firstPartyMarker = resolve(
+    libraryRoot,
+    FIRST_PARTY_RESULT_VIEWS_MARKER,
+  );
+  if (!existsSync(firstPartyMarker)) {
+    for (const id of FIRST_PARTY_RESULT_PACKAGES) {
+      const sourceMethod = resolve(sampleMethods, id);
+      const sourceRoutine = resolve(sampleRoutines, id);
+      const destinationMethod = resolve(config.libraryDirectory, id);
+      const destinationRoutine = resolve(config.routinesDirectory, id);
+      if (!existsSync(sourceMethod) || !existsSync(sourceRoutine)) continue;
+      // A Method/Routine is one dependency pair. If either id is occupied,
+      // skip BOTH: installing half could bind unrelated instructions to a
+      // shipped Routine (or shipped instructions to an Owner's Routine).
+      if (existsSync(destinationMethod) || existsSync(destinationRoutine)) {
+        continue;
+      }
+      mkdirSync(config.libraryDirectory, { recursive: true });
+      mkdirSync(config.routinesDirectory, { recursive: true });
+      cpSync(sourceMethod, destinationMethod, { recursive: true });
+      cpSync(sourceRoutine, destinationRoutine, { recursive: true });
+      copied = true;
+    }
+    if (
+      FIRST_PARTY_RESULT_PACKAGES.some(
+        (id) =>
+          existsSync(resolve(sampleMethods, id)) &&
+          existsSync(resolve(sampleRoutines, id)),
+      )
+    ) {
+      writeFileSync(firstPartyMarker, new Date().toISOString());
+    }
+  }
+  return copied;
 }

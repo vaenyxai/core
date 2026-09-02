@@ -1,7 +1,7 @@
-# Ship only the neutral sample seed. Everything else here — the Methods and
-# Routines you create or install — is local-private. Publish from inside the app
-# to reach the community store; created/installed content never belongs in this
-# framework repo.
+# Ship only the neutral demo and named first-party packages. Everything else
+# here — the Methods and Routines you create or install — is local-private.
+# Publish from inside the app to reach the community store; created/installed
+# content never belongs in this framework repo.
 methods/*
 routines/*
 
@@ -9,3 +9,11 @@ routines/*
 !methods/README.md
 !methods/sample-summary/
 !routines/sample-summary-log/
+
+# H-014 first-party result views (declarative package pairs only):
+!methods/vaenyx-receipt-record/
+!methods/vaenyx-warranty-manual-record/
+!methods/vaenyx-material-takeoff/
+!routines/vaenyx-receipt-record/
+!routines/vaenyx-warranty-manual-record/
+!routines/vaenyx-material-takeoff/

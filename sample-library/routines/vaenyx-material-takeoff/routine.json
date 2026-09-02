@@ -1,0 +1,78 @@
+{
+  "name": "Material Takeoff Check",
+  "description": "Builds a preliminary, evidence-linked material takeoff with a mandatory human-check warning.",
+  "owner": "vaenyx",
+  "version": "1.0.0",
+  "tags": ["first-party", "projects", "takeoff"],
+  "mode": "accumulate",
+  "storage": { "journal": true, "gallery": true },
+  "deps": [{ "methodId": "vaenyx-material-takeoff", "version": "1.0.0" }],
+  "flow": [
+    {
+      "id": "takeoff",
+      "methodId": "vaenyx-material-takeoff",
+      "from": "journal"
+    }
+  ],
+  "view": {
+    "version": 1,
+    "fields": [
+      { "key": "title", "as": "title" },
+      {
+        "key": "quantities",
+        "as": "table",
+        "label": "Quantities",
+        "labelZh": "工程量",
+        "columns": [
+          { "key": "item", "label": "Item", "labelZh": "项目" },
+          {
+            "key": "quantity",
+            "label": "Quantity",
+            "labelZh": "数量",
+            "format": "unit",
+            "unitKey": "unit"
+          },
+          {
+            "key": "evidence",
+            "label": "Source / Calculation",
+            "labelZh": "依据 / 计算"
+          },
+          {
+            "key": "certainty",
+            "label": "Certainty",
+            "labelZh": "确定性",
+            "format": "certainty"
+          }
+        ]
+      },
+      {
+        "key": "assumptions",
+        "as": "table",
+        "label": "Assumptions",
+        "labelZh": "假设",
+        "columns": [
+          { "key": "assumption", "label": "Assumption", "labelZh": "假设" },
+          { "key": "evidence", "label": "Source", "labelZh": "依据" },
+          {
+            "key": "certainty",
+            "label": "Certainty",
+            "labelZh": "确定性",
+            "format": "certainty"
+          }
+        ]
+      },
+      {
+        "key": "warnings",
+        "as": "bullets",
+        "label": "Checks Before Use",
+        "labelZh": "使用前检查"
+      },
+      {
+        "key": "humanCheckRequired",
+        "as": "note",
+        "label": "Human Check Required",
+        "labelZh": "必须人工复核"
+      }
+    ]
+  }
+}

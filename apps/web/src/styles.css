@@ -8123,6 +8123,59 @@ select {
 .routine-result-field p {
   margin: 0;
 }
+.routine-result-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-top: 4px;
+}
+.routine-result-table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+.routine-result-table th,
+.routine-result-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.routine-result-table th {
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+  font-weight: 600;
+}
+.routine-result-table td {
+  white-space: normal;
+}
+.routine-result-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  margin-top: 3px;
+}
+.routine-result-certainty,
+.routine-result-certainty-cell {
+  color: var(--text-muted);
+  font-size: var(--fs-label);
+  font-weight: 600;
+}
+.routine-result-certainty {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.routine-result-actions {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 5px;
+  padding-top: 6px;
+}
 .routine-result-key {
   color: var(--text-muted);
 }

@@ -1,0 +1,58 @@
+{
+  "input": {
+    "sourceLabel": "Manual page 3 and receipt",
+    "product": "Heat pump dryer",
+    "model": "HPD-8",
+    "purchaseDate": "2026-06-12",
+    "warrantyEnds": "2028-06-12",
+    "manualReference": "Laundry folder / dryer-manual.pdf, page 3",
+    "maintenanceNotes": ["Clean the lint filter after every cycle"],
+    "uncertainFields": []
+  },
+  "output": {
+    "title": "Warranty & manual record",
+    "facts": [
+      {
+        "field": "Product",
+        "value": "Heat pump dryer",
+        "evidence": "Manual page 3 and receipt: product",
+        "certainty": "confirmed"
+      },
+      {
+        "field": "Model",
+        "value": "HPD-8",
+        "evidence": "Manual page 3 and receipt: model",
+        "certainty": "confirmed"
+      },
+      {
+        "field": "Purchase date",
+        "value": "2026-06-12",
+        "evidence": "Manual page 3 and receipt: purchaseDate",
+        "certainty": "confirmed"
+      },
+      {
+        "field": "Warranty ends",
+        "value": "2028-06-12",
+        "evidence": "Manual page 3 and receipt: warrantyEnds",
+        "certainty": "confirmed"
+      },
+      {
+        "field": "Manual reference",
+        "value": "Laundry folder / dryer-manual.pdf, page 3",
+        "evidence": "Manual page 3 and receipt: manualReference",
+        "certainty": "confirmed"
+      }
+    ],
+    "maintenance": [
+      {
+        "instruction": "Clean the lint filter after every cycle",
+        "evidence": "Manual page 3 and receipt: instruction 1",
+        "certainty": "confirmed"
+      }
+    ],
+    "warnings": [],
+    "disclaimer": "This record does not determine legal warranty rights; check the original source and manufacturer."
+  },
+  "source": "synthetic",
+  "time": "2026-09-03"
+}

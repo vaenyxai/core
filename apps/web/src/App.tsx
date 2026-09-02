@@ -14,6 +14,11 @@ import { createPortal } from "react-dom";
 import { AnnotatedPhoto, AnnotatedPhotoEditor } from "./photo-marks";
 import { encodeQr, qrSvgPath } from "./qr";
 import { StatusOrb } from "./status-orb";
+import {
+  parseRoutineView,
+  RoutineResultView,
+  spokenResultText,
+} from "./routine-result-view";
 
 import type {
   AgentProfile,
@@ -56,8 +61,6 @@ import type {
   RoutineJournalEntry,
   RoutinePlan,
   RoutineEditSaveRequest,
-  RoutineView,
-  RoutineViewField,
   RunMethodResponse,
   PublishState,
   SystemStatus,
@@ -6342,6 +6345,9 @@ function AskVaenyxPanel({
   const [routineGallery, setRoutineGallery] = useState<RoutineGalleryItem[]>(
     [],
   );
+  const [routineInputFields, setRoutineInputFields] = useState<
+    RoutineInputField[]
+  >([]);
   const [capabilityTab, setCapabilityTab] = useState<
     "chat" | "journal" | "gallery"
   >("chat");
@@ -6357,6 +6363,7 @@ function AskVaenyxPanel({
     if (!conversationId) {
       setRoutineJournal([]);
       setRoutineGallery([]);
+      setRoutineInputFields([]);
       return;
     }
     const thread = workspace.threads.find(
@@ -6367,6 +6374,7 @@ function AskVaenyxPanel({
     if (!thread?.routineId) {
       setRoutineJournal([]);
       setRoutineGallery([]);
+      setRoutineInputFields([]);
       return;
     }
     let active = true;
@@ -6376,6 +6384,7 @@ function AskVaenyxPanel({
         if (active) {
           setRoutineJournal(data.journal);
           setRoutineGallery(data.gallery);
+          setRoutineInputFields(data.inputFields);
         }
       } catch {
         // Best-effort; the panels just stay empty on a transient error.
@@ -7616,6 +7625,7 @@ function AskVaenyxPanel({
           // pairs the parse with its real source.
           content: result.content ?? content,
           typedContent: content,
+          restoreOnClose: true,
           imageId: imageId ?? null,
           speakResult: speakResult ?? false,
           marks,
@@ -7666,6 +7676,7 @@ function AskVaenyxPanel({
       const data = await fetchChatRoutineData(conversationId);
       setRoutineJournal(data.journal);
       setRoutineGallery(data.gallery);
+      setRoutineInputFields(data.inputFields);
       if (speakResult) {
         const newest = [...data.gallery].sort((a, b) =>
           b.createdAt.localeCompare(a.createdAt),
@@ -7693,6 +7704,7 @@ function AskVaenyxPanel({
           if (activeConversationIdRef.current !== conversationId) return;
           setRoutineJournal(data.journal);
           setRoutineGallery(data.gallery);
+          setRoutineInputFields(data.inputFields);
         })
         .catch(() => {});
       const reason =
@@ -7769,7 +7781,7 @@ function AskVaenyxPanel({
       confirm.fields.some((field) =>
         field.type === "boolean"
           ? confirm.checks[field.key] !== confirm.initialChecks[field.key]
-          : field.key !== confirm.primaryKey &&
+          : (!confirm.marks || field.key !== confirm.primaryKey) &&
             (confirm.values[field.key] ?? "") !==
               (confirm.initialValues[field.key] ?? ""),
       ) ||
@@ -7784,6 +7796,85 @@ function AskVaenyxPanel({
       edited,
       confirm.imageId ?? undefined,
       confirm.speakResult,
+    );
+  }
+
+  function sourceForRoutineResult(
+    item: RoutineGalleryItem,
+  ): RoutineJournalEntry | null {
+    if (!item.journalEntryId) return null;
+    return (
+      routineJournal.find((entry) => entry.id === item.journalEntryId) ?? null
+    );
+  }
+
+  // Historical correction uses the same typed confirm card and the same
+  // `learn` flag as a first run. The old Journal/Gallery rows stay immutable;
+  // the corrected input creates a new canonical run beside them.
+  function correctAndRerunRoutineResult(item: RoutineGalleryItem): void {
+    const source = sourceForRoutineResult(item);
+    if (!source?.chatId || routineInputFields.length === 0) return;
+    const input =
+      source.content !== null &&
+      typeof source.content === "object" &&
+      !Array.isArray(source.content)
+        ? (source.content as Record<string, unknown>)
+        : {};
+    const values: Record<string, string> = {};
+    const checks: Record<string, boolean> = {};
+    for (const field of routineInputFields) {
+      const value = input[field.key];
+      if (field.type === "boolean") {
+        checks[field.key] = value === true;
+      } else if (Array.isArray(value)) {
+        values[field.key] = value.map((entry) => String(entry)).join("\n");
+      } else {
+        values[field.key] =
+          value === null || value === undefined ? "" : String(value);
+      }
+    }
+    const content = journalTextRaw(source.content);
+    const marks = source.imageAnnotations ?? null;
+    setRoutineInputConfirm({
+      conversationId: source.chatId,
+      routineId: source.routineId,
+      content,
+      typedContent: content,
+      restoreOnClose: false,
+      imageId: source.imageId ?? null,
+      speakResult: false,
+      marks,
+      initialMarks: JSON.stringify(marks ?? []),
+      photoError: null,
+      primaryKey:
+        routineInputFields.find(
+          (field) => field.required && field.type !== "boolean",
+        )?.key ?? null,
+      fields: routineInputFields,
+      values,
+      checks,
+      initialValues: { ...values },
+      initialChecks: { ...checks },
+    });
+  }
+
+  function rerunRoutineResult(item: RoutineGalleryItem): void {
+    const source = sourceForRoutineResult(item);
+    if (!source || !source.chatId) return;
+    const input =
+      source.content !== null &&
+      typeof source.content === "object" &&
+      !Array.isArray(source.content)
+        ? (source.content as Record<string, unknown>)
+        : undefined;
+    void runRoutineMessage(
+      source.chatId,
+      source.routineId,
+      journalTextRaw(source.content),
+      input,
+      false,
+      source.imageId ?? undefined,
+      false,
     );
   }
 
@@ -10123,6 +10214,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                     className={`library-result ${routineEditChat.tryResult.outputValid ? "valid" : "invalid"}`}
                   >
                     <RoutineResultView
+                      language={lang}
                       output={routineEditChat.tryResult.output}
                       view={routineEditChat.proposal.proposed.view ?? undefined}
                     />
@@ -10308,13 +10400,15 @@ This conversation is its home — feed it something to try it, and ask for chang
             onClose={() => {
               // Closing the card must not eat the words (owner, 2026-08-16):
               // what was about to be fed goes back into the composer.
-              setPrompt(
-                routineInputConfirm.typedContent === "(Photo)"
-                  ? ""
-                  : routineInputConfirm.typedContent,
-              );
-              if (routineInputConfirm.imageId) {
-                setPendingImageId(routineInputConfirm.imageId);
+              if (routineInputConfirm.restoreOnClose) {
+                setPrompt(
+                  routineInputConfirm.typedContent === "(Photo)"
+                    ? ""
+                    : routineInputConfirm.typedContent,
+                );
+                if (routineInputConfirm.imageId) {
+                  setPendingImageId(routineInputConfirm.imageId);
+                }
               }
               setRoutineInputConfirm(null);
             }}
@@ -10501,13 +10595,15 @@ This conversation is its home — feed it something to try it, and ask for chang
                 className="text-button"
                 onClick={() => {
                   // Same as the ×: the typed words AND the photo go back.
-                  setPrompt(
-                    routineInputConfirm.typedContent === "(Photo)"
-                      ? ""
-                      : routineInputConfirm.typedContent,
-                  );
-                  if (routineInputConfirm.imageId) {
-                    setPendingImageId(routineInputConfirm.imageId);
+                  if (routineInputConfirm.restoreOnClose) {
+                    setPrompt(
+                      routineInputConfirm.typedContent === "(Photo)"
+                        ? ""
+                        : routineInputConfirm.typedContent,
+                    );
+                    if (routineInputConfirm.imageId) {
+                      setPendingImageId(routineInputConfirm.imageId);
+                    }
                   }
                   setRoutineInputConfirm(null);
                 }}
@@ -10644,6 +10740,18 @@ This conversation is its home — feed it something to try it, and ask for chang
                           re-dress history. Absent snapshot = made before any
                           view change, so the current view is the right one. */}
                       <RoutineResultView
+                        language={lang}
+                        onCorrectAndRerun={
+                          sourceForRoutineResult(item) &&
+                          routineInputFields.length > 0
+                            ? () => correctAndRerunRoutineResult(item)
+                            : undefined
+                        }
+                        onRerun={
+                          sourceForRoutineResult(item)
+                            ? () => rerunRoutineResult(item)
+                            : undefined
+                        }
                         output={item.output}
                         view={
                           "viewSnapshot" in item
@@ -10737,6 +10845,18 @@ This conversation is its home — feed it something to try it, and ask for chang
                         />
                       ) : null}
                       <RoutineResultView
+                        language={lang}
+                        onCorrectAndRerun={
+                          sourceForRoutineResult(node.item) &&
+                          routineInputFields.length > 0
+                            ? () => correctAndRerunRoutineResult(node.item)
+                            : undefined
+                        }
+                        onRerun={
+                          sourceForRoutineResult(node.item)
+                            ? () => rerunRoutineResult(node.item)
+                            : undefined
+                        }
                         output={node.item.output}
                         view={
                           "viewSnapshot" in node.item
@@ -22026,6 +22146,9 @@ interface RoutineInputConfirmState {
   // The words the Owner actually TYPED (content above may carry the vision
   // extraction too) — closing the card restores THESE, never the dump.
   typedContent: string;
+  // New, not-yet-run words return to the composer on Cancel. Historical
+  // correction is already stored, so its card simply closes.
+  restoreOnClose: boolean;
   imageId: string | null;
   // Spoken in → the eventual result is spoken out, even across the card.
   speakResult: boolean;
@@ -23095,6 +23218,7 @@ function EditRoutinePanel({
         </p>
         <div className="library-result valid">
           <RoutineResultView
+            language={zh ? "zh" : "en"}
             output={sampleOutput}
             view={
               viewFields.some((field) => field.key.trim())
@@ -23176,6 +23300,7 @@ function EditRoutinePanel({
             className={`library-result ${testResult.outputValid ? "valid" : "invalid"}`}
           >
             <RoutineResultView
+              language={zh ? "zh" : "en"}
               output={testResult.output}
               view={
                 viewFields.length > 0
@@ -23682,264 +23807,10 @@ function messageMaybeIntent(
   return messageMentionsRoutine(content, routines);
 }
 
-// Declarative View (Library v2 ④): validate a routine.json `view` slot at
-// render time. Anything that doesn't parse — wrong shape, unknown renderers,
-// older format — yields null and the automatic view ("A") takes over, so a bad
-// view can never break rendering.
-function parseRoutineView(raw: unknown): RoutineView | null {
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw))
-    return null;
-  const fieldsRaw = (raw as Record<string, unknown>).fields;
-  if (!Array.isArray(fieldsRaw)) return null;
-  const fields: RoutineViewField[] = [];
-  for (const entry of fieldsRaw) {
-    if (entry === null || typeof entry !== "object") continue;
-    const candidate = entry as Record<string, unknown>;
-    if (typeof candidate.key !== "string" || candidate.key === "") continue;
-    if (
-      candidate.as !== "title" &&
-      candidate.as !== "text" &&
-      candidate.as !== "bullets" &&
-      candidate.as !== "table" &&
-      candidate.as !== "amount" &&
-      candidate.as !== "note"
-    ) {
-      continue;
-    }
-    fields.push({
-      key: candidate.key,
-      as: candidate.as,
-      ...(typeof candidate.label === "string"
-        ? { label: candidate.label }
-        : {}),
-    });
-  }
-  return fields.length > 0 ? { fields } : null;
-}
-
-// Render a Routine result (a Gallery item's structured output). With a declared
-// View ("B") the fields render in the author's order and style; otherwise the
-// generic "house template" ("A"): a title if one is present, then bullet lists
-// and field:value rows. The SAME component renders results in the chat timeline
-// and in the Gallery panel — one place to define, two to reuse.
-function RoutineResultView({
-  output,
-  view,
-}: {
-  output: unknown;
-  view?: unknown;
-}) {
-  if (output === null || output === undefined) {
-    return <p className="settings-card-copy">No result.</p>;
-  }
-  if (typeof output !== "object") {
-    return <p>{String(output)}</p>;
-  }
-  const record = output as Record<string, unknown>;
-
-  const declared = parseRoutineView(view);
-  if (declared) {
-    return (
-      <div className="routine-result">
-        {declared.fields.map((field) => {
-          const value = record[field.key];
-          if (value === null || value === undefined) return null;
-          if (field.as === "title") {
-            return (
-              <strong className="routine-result-title" key={field.key}>
-                {String(value)}
-              </strong>
-            );
-          }
-          if (field.as === "bullets") {
-            const items = Array.isArray(value) ? value : [value];
-            return (
-              <div className="routine-result-field" key={field.key}>
-                <ul>
-                  {items.map((item, index) => (
-                    <li key={`${field.key}-${index}`}>
-                      {typeof item === "object"
-                        ? JSON.stringify(item)
-                        : String(item)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          }
-          if (field.as === "table") {
-            const rows = (Array.isArray(value) ? value : []).filter(
-              (row): row is Record<string, unknown> =>
-                row !== null && typeof row === "object" && !Array.isArray(row),
-            );
-            if (rows.length === 0) return null;
-            const firstRow = rows[0] as Record<string, unknown>;
-            const columns = Object.keys(firstRow);
-            return (
-              <div className="routine-result-field" key={field.key}>
-                <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                  <thead>
-                    <tr>
-                      {columns.map((column) => (
-                        <th
-                          key={column}
-                          style={{
-                            textAlign: "left",
-                            padding: "4px 8px",
-                            opacity: 0.7,
-                          }}
-                        >
-                          {column}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, index) => (
-                      <tr key={`${field.key}-${index}`}>
-                        {columns.map((column) => (
-                          <td
-                            key={column}
-                            style={{ padding: "4px 8px", verticalAlign: "top" }}
-                          >
-                            {typeof row[column] === "object"
-                              ? JSON.stringify(row[column])
-                              : String(row[column] ?? "")}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          }
-          if (field.as === "amount") {
-            const n = Number(value);
-            if (!Number.isFinite(n)) return null;
-            // Currency-neutral: "$" serves AU and US alike; no locale currency.
-            return (
-              <div className="routine-result-amount" key={field.key}>
-                <span className="routine-result-amount-value">
-                  ${n.toLocaleString()}
-                </span>
-                {field.label ? (
-                  <span className="routine-result-amount-label">
-                    {field.label}
-                  </span>
-                ) : null}
-              </div>
-            );
-          }
-          if (field.as === "note") {
-            const note = String(value).trim();
-            if (note === "") return null;
-            return (
-              <div className="routine-result-note" key={field.key}>
-                {field.label ? (
-                  <span className="routine-result-note-label">
-                    {field.label}
-                  </span>
-                ) : null}
-                <p>{note}</p>
-              </div>
-            );
-          }
-          // "text": a labelled line.
-          return (
-            <div className="routine-result-field" key={field.key}>
-              <p>
-                <span className="routine-result-key">
-                  {field.label ?? field.key}:{" "}
-                </span>
-                {String(value)}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  const entries = Object.entries(record);
-  const titleEntry = entries.find(
-    ([key, value]) =>
-      typeof value === "string" && /title|name|summary|heading/i.test(key),
-  );
-  const rest = entries.filter(([key]) => key !== titleEntry?.[0]);
-  return (
-    <div className="routine-result">
-      {titleEntry ? (
-        <strong className="routine-result-title">
-          {titleEntry[1] as string}
-        </strong>
-      ) : null}
-      {rest.map(([key, value]) => (
-        <div className="routine-result-field" key={key}>
-          {Array.isArray(value) ? (
-            <ul>
-              {value.map((item, index) => (
-                <li key={`${key}-${index}`}>
-                  {typeof item === "object"
-                    ? JSON.stringify(item)
-                    : String(item)}
-                </li>
-              ))}
-            </ul>
-          ) : value !== null && typeof value === "object" ? (
-            <pre>{JSON.stringify(value, null, 2)}</pre>
-          ) : (
-            <p>
-              <span className="routine-result-key">{key}: </span>
-              {String(value)}
-            </p>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // What the family fed into the Journal, as a line for a chat bubble. A single
 // string field (e.g. {text: "..."}) shows its value; a flat multi-field object
 // (a confirmed friendly input) reads as "key: value · key: value"; anything
 // deeper falls back to compact JSON.
-// The spoken form of a routine result: title + the first bullets field, short
-// phrases for the ear — never the raw structured text with its punctuation
-// ("念出来就是念上面的文字…尽量总结", Oskar 2026-07-28).
-function spokenResultText(output: unknown, view?: unknown): string {
-  if (output === null || typeof output !== "object") return "";
-  const record = output as Record<string, unknown>;
-  const declared = parseRoutineView(view);
-  const parts: string[] = [];
-  if (declared) {
-    const titleKey = declared.fields.find((field) => field.as === "title")?.key;
-    const bulletsKey = declared.fields.find(
-      (field) => field.as === "bullets",
-    )?.key;
-    const title = titleKey ? record[titleKey] : undefined;
-    if (typeof title === "string" && title.trim()) parts.push(title.trim());
-    const bullets = bulletsKey ? record[bulletsKey] : undefined;
-    if (Array.isArray(bullets) && bullets.length > 0) {
-      parts.push(
-        bullets
-          .slice(0, 4)
-          .map((item) => String(item))
-          .join(", "),
-      );
-    }
-  }
-  if (parts.length === 0) {
-    for (const value of Object.values(record)) {
-      if (typeof value === "string" && value.trim()) {
-        parts.push(value.trim());
-        if (parts.length >= 2) break;
-      }
-    }
-  }
-  return parts.join(". ").slice(0, 400);
-}
-
 function journalText(content: unknown): string {
   const text = journalTextRaw(content);
   // A photo sent with no words carries the placeholder "(Photo)" so the
@@ -23968,11 +23839,18 @@ function journalTextRaw(content: unknown): string {
       entries.every(
         ([, value]) =>
           value === null ||
-          ["string", "number", "boolean"].includes(typeof value),
+          ["string", "number", "boolean"].includes(typeof value) ||
+          (Array.isArray(value) &&
+            value.every((item) =>
+              ["string", "number", "boolean"].includes(typeof item),
+            )),
       )
     ) {
       return entries
-        .map(([key, value]) => `${key}: ${String(value ?? "")}`)
+        .map(
+          ([key, value]) =>
+            `${key}: ${Array.isArray(value) ? value.join("; ") : String(value ?? "")}`,
+        )
         .join(" · ");
     }
     return JSON.stringify(content);

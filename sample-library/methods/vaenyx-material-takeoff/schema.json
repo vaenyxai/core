@@ -1,0 +1,94 @@
+{
+  "input": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["sourceLabel", "projectName", "measurements"],
+    "properties": {
+      "sourceLabel": {
+        "type": "string",
+        "description": "Drawing, marked photo, schedule, or site-note reference."
+      },
+      "projectName": {
+        "type": "string",
+        "description": "Owner-confirmed project name."
+      },
+      "measurements": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 50,
+        "items": { "type": "string" },
+        "description": "One material/measurement statement per line, including units."
+      },
+      "assumptions": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "type": "string" },
+        "description": "Explicit assumptions only; one per line."
+      },
+      "unitSystem": {
+        "type": "string",
+        "description": "Metric, imperial, or mixed."
+      },
+      "uncertainFields": {
+        "type": "array",
+        "maxItems": 20,
+        "items": { "type": "string" },
+        "description": "Measurements or assumptions that are inferred or unclear."
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "title",
+      "quantities",
+      "assumptions",
+      "warnings",
+      "humanCheckRequired"
+    ],
+    "properties": {
+      "title": { "type": "string" },
+      "quantities": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 50,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["item", "quantity", "unit", "evidence", "certainty"],
+          "properties": {
+            "item": { "type": "string" },
+            "quantity": {
+              "anyOf": [{ "type": "number" }, { "type": "string" }]
+            },
+            "unit": { "type": "string" },
+            "evidence": { "type": "string" },
+            "certainty": { "enum": ["confirmed", "inferred", "uncertain"] }
+          }
+        }
+      },
+      "assumptions": {
+        "type": "array",
+        "maxItems": 30,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["assumption", "evidence", "certainty"],
+          "properties": {
+            "assumption": { "type": "string" },
+            "evidence": { "type": "string" },
+            "certainty": { "enum": ["confirmed", "inferred", "uncertain"] }
+          }
+        }
+      },
+      "warnings": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 15,
+        "items": { "type": "string" }
+      },
+      "humanCheckRequired": { "type": "string" }
+    }
+  }
+}

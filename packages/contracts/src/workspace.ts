@@ -1959,9 +1959,32 @@ export const RoutineStorageSchema = Type.Object(
 // Fields not listed are simply not shown. The wire type stays Unknown (below) so
 // an unrecognised/older shape never breaks loading — the client validates at
 // render time and falls back to the automatic view ("A") when it doesn't parse.
+export const RoutineViewFormatSchema = Type.Union([
+  Type.Literal("text"),
+  Type.Literal("date"),
+  Type.Literal("number"),
+  Type.Literal("currency"),
+  Type.Literal("unit"),
+  Type.Literal("certainty"),
+]);
+
+export const RoutineViewColumnSchema = Type.Object(
+  {
+    key: Type.String({ minLength: 1, maxLength: 80 }),
+    label: Type.Optional(Type.String({ maxLength: 120 })),
+    labelZh: Type.Optional(Type.String({ maxLength: 120 })),
+    format: Type.Optional(RoutineViewFormatSchema),
+    currency: Type.Optional(Type.String({ minLength: 3, maxLength: 3 })),
+    currencyKey: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+    unit: Type.Optional(Type.String({ minLength: 1, maxLength: 30 })),
+    unitKey: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+  },
+  { additionalProperties: false },
+);
+
 export const RoutineViewFieldSchema = Type.Object(
   {
-    key: Type.String(),
+    key: Type.String({ minLength: 1, maxLength: 80 }),
     as: Type.Union([
       Type.Literal("title"),
       Type.Literal("text"),
@@ -1970,14 +1993,30 @@ export const RoutineViewFieldSchema = Type.Object(
       Type.Literal("amount"),
       Type.Literal("note"),
     ]),
-    label: Type.Optional(Type.String()),
+    label: Type.Optional(Type.String({ maxLength: 120 })),
+    labelZh: Type.Optional(Type.String({ maxLength: 120 })),
+    format: Type.Optional(RoutineViewFormatSchema),
+    currency: Type.Optional(Type.String({ minLength: 3, maxLength: 3 })),
+    currencyKey: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+    unit: Type.Optional(Type.String({ minLength: 1, maxLength: 30 })),
+    unitKey: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+    evidenceKey: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+    certaintyKey: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+    showWhenMissing: Type.Optional(Type.Boolean()),
+    columns: Type.Optional(
+      Type.Array(RoutineViewColumnSchema, { minItems: 1, maxItems: 10 }),
+    ),
   },
   { additionalProperties: false },
 );
 
 export const RoutineViewSchema = Type.Object(
   {
-    fields: Type.Array(RoutineViewFieldSchema),
+    // Version 1 adds locale-safe formatting, explicit table columns and plain
+    // evidence/certainty references. Omitted remains the original compatible
+    // shape; an unknown future version falls back to the automatic view.
+    version: Type.Optional(Type.Literal(1)),
+    fields: Type.Array(RoutineViewFieldSchema, { minItems: 1, maxItems: 24 }),
   },
   { additionalProperties: false },
 );
@@ -2090,6 +2129,8 @@ export const RoutineGalleryItemSchema = Type.Object(
     // this result renders with, whatever the routine's view says today.
     viewSnapshot: Type.Optional(Type.Unknown()),
     routineHash: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // Exact source row for Correct & Rerun. Older results have null/absent.
+    journalEntryId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     // Visual-first (owner rule, 2026-08-16): the photo this run was fed and
     // its stored marks — the result card leads with it.
     imageId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
@@ -3242,6 +3283,8 @@ export type RoutineMode = Static<typeof RoutineModeSchema>;
 export type RoutineDep = Static<typeof RoutineDepSchema>;
 export type RoutineStep = Static<typeof RoutineStepSchema>;
 export type RoutineStorage = Static<typeof RoutineStorageSchema>;
+export type RoutineViewFormat = Static<typeof RoutineViewFormatSchema>;
+export type RoutineViewColumn = Static<typeof RoutineViewColumnSchema>;
 export type RoutineViewField = Static<typeof RoutineViewFieldSchema>;
 export type RoutineView = Static<typeof RoutineViewSchema>;
 export type LibraryRoutineSummary = Static<typeof LibraryRoutineSummarySchema>;

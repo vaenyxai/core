@@ -21,6 +21,7 @@ import {
   DeleteConversationRequestSchema,
   MemoryProvenanceResponseSchema,
   ResolveStructuredQuestionRequestSchema,
+  RoutineViewSchema,
   RejectVaenyxMeCandidateRequestSchema,
   TaskRunProgressSchema,
   UpdateVaenyxThreadProjectRequestSchema,
@@ -32,6 +33,38 @@ import {
 } from "./workspace.js";
 
 describe("M1 contracts", () => {
+  it("accepts the bounded Routine View v1 presentation contract", () => {
+    expect(
+      Value.Check(RoutineViewSchema, {
+        version: 1,
+        fields: [
+          {
+            key: "total",
+            as: "amount",
+            label: "Total",
+            labelZh: "总额",
+            format: "currency",
+            currencyKey: "currency",
+            evidenceKey: "totalEvidence",
+            certaintyKey: "totalCertainty",
+            showWhenMissing: true,
+          },
+          {
+            key: "facts",
+            as: "table",
+            columns: [
+              { key: "value", label: "Value", labelZh: "内容" },
+              { key: "certainty", format: "certainty" },
+            ],
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(Value.Check(RoutineViewSchema, { version: 2, fields: [] })).toBe(
+      false,
+    );
+  });
+
   it("accepts a simple owner task request", () => {
     expect(
       Value.Check(CreateTaskRequestSchema, {

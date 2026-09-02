@@ -299,6 +299,17 @@ Read this inside the app: **Settings → Manual**.
   (or just say so in its chat). Every run then leads with a freshly generated
   picture. It needs a drawing model connected; without one the result simply
   arrives as it always did, and nothing ever waits on a picture.
+- **Ready-made household results** — Vaenyx includes **Receipt Record**,
+  **Warranty & Manual Record**, and **Material Takeoff Check**. Their tables keep
+  each important value beside its source and certainty. Receipt records are for
+  organisation, not tax/accounting advice; warranty records do not decide your
+  legal rights; takeoffs are preliminary and must be checked by a competent
+  person before ordering or building.
+- **Fix or repeat a result** — on a result made by the current version, press
+  **Correct & Rerun** to reopen its original confirmed fields, or **Rerun** to
+  repeat the exact input. A correction makes a new Journal entry and Gallery
+  result; the old record stays unchanged. Corrections teach only that Routine's
+  local input parser and never rewrite its Method.
 - **Make one** — describe the steps in chat. One step becomes a Method, several
   become a Routine. Vaenyx drafts it and offers a test run before saving.
 - **Improve one** — just say so. In the Routine's own chat, say what should

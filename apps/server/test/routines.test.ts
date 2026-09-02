@@ -24,7 +24,12 @@ import {
   readProfileCapabilities,
   writeProfileCapabilities,
 } from "../src/modules/core/capabilities.js";
-import { createMethod, loadMethod } from "../src/modules/core/methods.js";
+import {
+  createMethod,
+  loadMethod,
+  loadMethodExamples,
+  validateAgainstSchema,
+} from "../src/modules/core/methods.js";
 import {
   createRoutineFromPlan,
   listRoutineSummaries,
@@ -70,6 +75,36 @@ describe("library routine loader", () => {
     expect(sample?.stepCount).toBe(1);
   });
 
+  it("loads all first-party result routines with resolved declarative views", () => {
+    for (const id of [
+      "vaenyx-receipt-record",
+      "vaenyx-warranty-manual-record",
+      "vaenyx-material-takeoff",
+    ]) {
+      const routine = loadRoutine(routinesDirectory, libraryDirectory, id);
+      expect(routine?.resolved, id).toBe(true);
+      expect(routine?.owner, id).toBe("vaenyx");
+      expect(routine?.view, id).toMatchObject({ version: 1 });
+      expect(routine?.exampleCount, id).toBeGreaterThan(0);
+      const method = loadMethod(libraryDirectory, id);
+      const examples = loadMethodExamples(libraryDirectory, id);
+      expect(method, id).not.toBeNull();
+      expect(examples.length, id).toBeGreaterThan(0);
+      if (method) {
+        for (const example of examples) {
+          expect(
+            validateAgainstSchema(method.inputSchema, example.input),
+            id,
+          ).toMatchObject({ valid: true });
+          expect(
+            validateAgainstSchema(method.outputSchema, example.output),
+            id,
+          ).toMatchObject({ valid: true });
+        }
+      }
+    }
+  });
+
   it("loads the full routine, resolves its deps, and pins a content hash", () => {
     const routine = loadRoutine(
       routinesDirectory,
@@ -90,7 +125,11 @@ describe("library routine loader", () => {
     expect(routine.missingDeps).toEqual([]);
     expect(routine.contentHash).toMatch(/^[a-f0-9]{64}$/);
     // Stable: loading again hashes the same.
-    const again = loadRoutine(routinesDirectory, libraryDirectory, "sample-summary-log");
+    const again = loadRoutine(
+      routinesDirectory,
+      libraryDirectory,
+      "sample-summary-log",
+    );
     expect(again?.contentHash).toBe(routine.contentHash);
   });
 
@@ -114,7 +153,11 @@ describe("library routine loader", () => {
   });
 
   it("produces a serializable LibraryRoutine", () => {
-    const routine = loadRoutine(routinesDirectory, libraryDirectory, "sample-summary-log");
+    const routine = loadRoutine(
+      routinesDirectory,
+      libraryDirectory,
+      "sample-summary-log",
+    );
     expect(routine).not.toBeNull();
     if (!routine) return;
 
@@ -139,13 +182,20 @@ describe("routine local storage (Journal + Gallery)", () => {
       const item = addGalleryItem(database, {
         routineId: "sample-summary-log",
         stepId: "summarise",
-        output: { summary: "Quote for hot water replacement.", keyPoints: ["$1,200"] },
+        output: {
+          summary: "Quote for hot water replacement.",
+          keyPoints: ["$1,200"],
+        },
         outputValid: true,
       });
       expect(item.outputValid).toBe(true);
-      expect((item.output as { summary: string }).summary).toContain("hot water");
+      expect((item.output as { summary: string }).summary).toContain(
+        "hot water",
+      );
 
-      expect(listJournalEntries(database, "sample-summary-log")).toHaveLength(1);
+      expect(listJournalEntries(database, "sample-summary-log")).toHaveLength(
+        1,
+      );
       expect(listGalleryItems(database, "sample-summary-log")).toHaveLength(1);
       // A different routine id sees nothing — stores are per-Routine.
       expect(listJournalEntries(database, "other")).toHaveLength(0);
@@ -252,6 +302,7 @@ describe("routine run engine", () => {
       const gallery = listGalleryItems(database, id);
       expect(gallery).toHaveLength(1);
       expect(gallery[0]?.output).toEqual({ text: "s:s:hello" });
+      expect(gallery[0]?.journalEntryId).toBe(journal[0]?.id);
     } finally {
       database.close();
     }
@@ -452,7 +503,11 @@ describe("declarative routine view", () => {
 describe("friendly routine input (AI parse + confirm)", () => {
   // A routine whose first Method needs several fields — the case
   // buildChatRoutineInput cannot fill.
-  function writeExpenseFixture(): { rouDir: string; libDir: string; id: string } {
+  function writeExpenseFixture(): {
+    rouDir: string;
+    libDir: string;
+    id: string;
+  } {
     const libDir = mkdtempSync(resolve(tmpdir(), "vaenyx-parse-lib-"));
     tempDirectories.push(libDir);
     const method = createMethod(libDir, {

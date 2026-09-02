@@ -63,6 +63,29 @@ snapshot or its API. Reads and actions use the authenticated session's exact
 Mode, and clients discard older revisions so delayed polling cannot move the
 card backwards.
 
+## First-party Routine results stay declarative and source-linked
+
+Receipt, warranty/manual and material-takeoff results use Routine View v1, the
+same renderer and stored structured output as every other Routine. A view may
+declare bounded fields, table columns, EN/ZH labels, locale-safe date/number/
+currency/unit formatting, and plain-text evidence/certainty references. It may
+not supply HTML, CSS, JavaScript, executable render code, or network origins;
+unknown view versions fall back to the automatic text renderer. The canonical
+record is always the Gallery JSON, never rendered markup.
+
+Every new Gallery row points to the exact Journal row that produced it. **Rerun**
+uses that immutable source; **Correct & Rerun** reopens the existing Routine
+confirmation card, writes a new Journal/Gallery pair, and records a local parse
+example only when the Owner changes the confirmed fields. It never rewrites old
+results or mutates a Method. The shipped first-party packages are installed once
+when missing and never overwrite an Owner/community folder with the same id.
+
+Receipt output is organisational only, warranty output does not determine legal
+rights, and takeoff output always requires competent human checking before
+ordering or construction. Material values must carry a source/calculation and a
+`confirmed`, `inferred`, or `uncertain` marker; missing values render as unknown,
+not as invented zeroes.
+
 ## Model-visible means persisted
 
 **Anything that entered a model request must be reconstructable from the

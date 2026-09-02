@@ -1,0 +1,55 @@
+{
+  "input": {
+    "sourceLabel": "Receipt photo, line 1-5",
+    "merchant": "Harbour Hardware",
+    "purchaseDate": "2026-08-30",
+    "currency": "AUD",
+    "total": 47.5,
+    "category": "Home maintenance",
+    "items": ["Sealant — 12.50", "Shelf brackets — 35.00"],
+    "uncertainFields": []
+  },
+  "output": {
+    "title": "Receipt record",
+    "currency": "AUD",
+    "total": 47.5,
+    "totalEvidence": "Receipt photo, line 1-5: total",
+    "totalCertainty": "confirmed",
+    "facts": [
+      {
+        "field": "Merchant",
+        "value": "Harbour Hardware",
+        "evidence": "Receipt photo, line 1-5: merchant",
+        "certainty": "confirmed"
+      },
+      {
+        "field": "Purchase date",
+        "value": "2026-08-30",
+        "evidence": "Receipt photo, line 1-5: purchaseDate",
+        "certainty": "confirmed"
+      },
+      {
+        "field": "Category",
+        "value": "Home maintenance",
+        "evidence": "Receipt photo, line 1-5: category",
+        "certainty": "confirmed"
+      }
+    ],
+    "items": [
+      {
+        "item": "Sealant — 12.50",
+        "evidence": "Receipt photo, line 1-5: item 1",
+        "certainty": "confirmed"
+      },
+      {
+        "item": "Shelf brackets — 35.00",
+        "evidence": "Receipt photo, line 1-5: item 2",
+        "certainty": "confirmed"
+      }
+    ],
+    "warnings": [],
+    "disclaimer": "Organisational record only; not tax or accounting advice."
+  },
+  "source": "synthetic",
+  "time": "2026-09-03"
+}

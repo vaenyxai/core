@@ -1,0 +1,6 @@
+{
+  "name": "Material Takeoff Check",
+  "description": "Turns confirmed measurements into a traceable preliminary material takeoff that stays visibly subject to human checking.",
+  "version": "1.0.0",
+  "category": "projects"
+}

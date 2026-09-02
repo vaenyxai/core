@@ -206,6 +206,7 @@ export async function runRoutine(
           // view it was made under, whatever a later edit does to the view.
           viewSnapshot: routine.view ?? null,
           routineHash: routine.executionHash,
+          journalEntryId: journalEntry?.id ?? null,
           // Visual-first (owner rule): the result card leads with the photo
           // this run was fed, marks and all.
           imageId: options.imageId ?? null,

@@ -126,12 +126,11 @@ export async function buildApp(
   // database handle, so the sink is bound here once.
   bindUsageDatabase(database);
 
-  // Fresh install: copy the shipped demo seed into the runtime library so a new
-  // user does not open an empty "Library". First-run only (marker-guarded);
-  // a seed failure must never block boot.
+  // Populate a fresh Library and install missing versioned first-party product
+  // packages for existing owners without overwriting their own content.
   try {
     if (seedLibraryIfEmpty(config)) {
-      app.log.info("Populated the library from the sample-library seed.");
+      app.log.info("Installed shipped Library packages.");
     }
   } catch (error) {
     app.log.error(error, "Library seed on boot failed; continuing without it.");
@@ -400,11 +399,7 @@ export async function buildApp(
     }
 
     const statusCode = error.statusCode ?? 500;
-    const safe = ownerSafeErrorResponse(
-      error,
-      "request",
-      pushLanguage(),
-    );
+    const safe = ownerSafeErrorResponse(error, "request", pushLanguage());
     request.log.error(
       {
         diagnosticId: safe.ownerError.diagnosticId,

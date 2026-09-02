@@ -67,6 +67,7 @@ import type {
   SetDeviceModeRequest,
   Project,
   RoutineGalleryItem,
+  RoutineInputField,
   RoutineJournalEntry,
   RoutinePlan,
   RoutineEditSaveRequest,
@@ -743,12 +744,15 @@ export function searchConversations(
 
 // Library v2 (Routine in Chat): the Journal + Gallery for a routine chat, scoped
 // to this conversation.
-export function fetchChatRoutineData(
-  conversationId: string,
-): Promise<{ journal: RoutineJournalEntry[]; gallery: RoutineGalleryItem[] }> {
+export function fetchChatRoutineData(conversationId: string): Promise<{
+  journal: RoutineJournalEntry[];
+  gallery: RoutineGalleryItem[];
+  inputFields: RoutineInputField[];
+}> {
   return requestJson<{
     journal: RoutineJournalEntry[];
     gallery: RoutineGalleryItem[];
+    inputFields: RoutineInputField[];
   }>(`/v1/ask-vaenyx/conversations/${conversationId}/routine-data`);
 }
 

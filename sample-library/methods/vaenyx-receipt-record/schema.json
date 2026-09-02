@@ -1,0 +1,102 @@
+{
+  "input": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["sourceLabel", "merchant"],
+    "properties": {
+      "sourceLabel": {
+        "type": "string",
+        "description": "Plain source reference, for example Receipt photo or emailed invoice."
+      },
+      "merchant": {
+        "type": "string",
+        "description": "Merchant exactly as shown; use Unknown if absent."
+      },
+      "purchaseDate": {
+        "type": "string",
+        "description": "Purchase date as YYYY-MM-DD, or Unknown."
+      },
+      "currency": {
+        "type": "string",
+        "description": "Three-letter currency code such as AUD, or Unknown."
+      },
+      "total": {
+        "type": "number",
+        "description": "Displayed total only; leave blank when absent."
+      },
+      "category": {
+        "type": "string",
+        "description": "Owner-confirmed household category, or Uncategorised."
+      },
+      "items": {
+        "type": "array",
+        "maxItems": 50,
+        "items": { "type": "string" },
+        "description": "One receipt line per line; keep wording and amounts together."
+      },
+      "uncertainFields": {
+        "type": "array",
+        "maxItems": 20,
+        "items": { "type": "string" },
+        "description": "Field names or line items that are inferred or unclear; one per line."
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "title",
+      "currency",
+      "total",
+      "totalEvidence",
+      "totalCertainty",
+      "facts",
+      "items",
+      "warnings",
+      "disclaimer"
+    ],
+    "properties": {
+      "title": { "type": "string" },
+      "currency": { "type": "string" },
+      "total": { "anyOf": [{ "type": "number" }, { "type": "null" }] },
+      "totalEvidence": { "type": "string" },
+      "totalCertainty": { "enum": ["confirmed", "inferred", "uncertain"] },
+      "facts": {
+        "type": "array",
+        "maxItems": 12,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["field", "value", "evidence", "certainty"],
+          "properties": {
+            "field": { "type": "string" },
+            "value": { "type": "string" },
+            "evidence": { "type": "string" },
+            "certainty": { "enum": ["confirmed", "inferred", "uncertain"] }
+          }
+        }
+      },
+      "items": {
+        "type": "array",
+        "maxItems": 50,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["item", "evidence", "certainty"],
+          "properties": {
+            "item": { "type": "string" },
+            "evidence": { "type": "string" },
+            "certainty": { "enum": ["confirmed", "inferred", "uncertain"] }
+          }
+        }
+      },
+      "warnings": {
+        "type": "array",
+        "maxItems": 10,
+        "items": { "type": "string" }
+      },
+      "disclaimer": { "type": "string" }
+    }
+  }
+}

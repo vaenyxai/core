@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -22,7 +23,7 @@ afterEach(() => {
 });
 
 // A throwaway repo root shipping a sample-library seed (one method, one routine).
-function makeSampleRepo(): string {
+function makeSampleRepo(firstParty = false): string {
   const repo = mkdtempSync(resolve(tmpdir(), "vaenyx-seed-repo-"));
   temporaryDirectories.push(repo);
   const method = resolve(repo, "sample-library", "methods", "demo-method");
@@ -31,6 +32,26 @@ function makeSampleRepo(): string {
   const routine = resolve(repo, "sample-library", "routines", "demo-routine");
   mkdirSync(routine, { recursive: true });
   writeFileSync(resolve(routine, "routine.json"), "{}");
+  if (firstParty) {
+    for (const id of [
+      "vaenyx-receipt-record",
+      "vaenyx-warranty-manual-record",
+      "vaenyx-material-takeoff",
+    ]) {
+      const firstPartyMethod = resolve(repo, "sample-library", "methods", id);
+      mkdirSync(firstPartyMethod, { recursive: true });
+      writeFileSync(
+        resolve(firstPartyMethod, "method.json"),
+        `{ "id": "${id}" }`,
+      );
+      const firstPartyRoutine = resolve(repo, "sample-library", "routines", id);
+      mkdirSync(firstPartyRoutine, { recursive: true });
+      writeFileSync(
+        resolve(firstPartyRoutine, "routine.json"),
+        `{ "id": "${id}" }`,
+      );
+    }
+  }
   return repo;
 }
 
@@ -41,7 +62,10 @@ function makeUserdata(): string {
 }
 
 // Only the three fields seedLibraryIfEmpty reads.
-function config(repositoryRoot: string | undefined, userdata: string): AppConfig {
+function config(
+  repositoryRoot: string | undefined,
+  userdata: string,
+): AppConfig {
   return {
     repositoryRoot,
     libraryDirectory: resolve(userdata, "library", "methods"),
@@ -60,7 +84,9 @@ describe("seedLibraryIfEmpty", () => {
       existsSync(resolve(cfg.libraryDirectory, "demo-method", "method.json")),
     ).toBe(true);
     expect(
-      existsSync(resolve(cfg.routinesDirectory, "demo-routine", "routine.json")),
+      existsSync(
+        resolve(cfg.routinesDirectory, "demo-routine", "routine.json"),
+      ),
     ).toBe(true);
     expect(existsSync(resolve(userdata, "library", ".seeded"))).toBe(true);
   });
@@ -75,7 +101,9 @@ describe("seedLibraryIfEmpty", () => {
     rmSync(cfg.routinesDirectory, { force: true, recursive: true });
 
     expect(seedLibraryIfEmpty(cfg)).toBe(false);
-    expect(existsSync(resolve(cfg.libraryDirectory, "demo-method"))).toBe(false);
+    expect(existsSync(resolve(cfg.libraryDirectory, "demo-method"))).toBe(
+      false,
+    );
   });
 
   it("marks but does not copy when the library already has content", () => {
@@ -87,7 +115,9 @@ describe("seedLibraryIfEmpty", () => {
     });
 
     expect(seedLibraryIfEmpty(cfg)).toBe(false);
-    expect(existsSync(resolve(cfg.libraryDirectory, "demo-method"))).toBe(false);
+    expect(existsSync(resolve(cfg.libraryDirectory, "demo-method"))).toBe(
+      false,
+    );
     expect(existsSync(resolve(userdata, "library", ".seeded"))).toBe(true);
   });
 
@@ -107,5 +137,42 @@ describe("seedLibraryIfEmpty", () => {
 
     expect(seedLibraryIfEmpty(cfg)).toBe(false);
     expect(existsSync(resolve(repo, "sample-library", ".seeded"))).toBe(false);
+  });
+
+  it("adds missing first-party packages once without replacing owner content", () => {
+    const repo = makeSampleRepo(true);
+    const userdata = makeUserdata();
+    const cfg = config(repo, userdata);
+    mkdirSync(resolve(cfg.libraryDirectory, "my-own-method"), {
+      recursive: true,
+    });
+    mkdirSync(resolve(cfg.libraryDirectory, "vaenyx-receipt-record"), {
+      recursive: true,
+    });
+    writeFileSync(
+      resolve(cfg.libraryDirectory, "vaenyx-receipt-record", "method.json"),
+      "owner copy",
+    );
+
+    expect(seedLibraryIfEmpty(cfg)).toBe(true);
+    expect(
+      existsSync(
+        resolve(
+          cfg.libraryDirectory,
+          "vaenyx-warranty-manual-record",
+          "method.json",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      readFileSync(
+        resolve(cfg.libraryDirectory, "vaenyx-receipt-record", "method.json"),
+        "utf8",
+      ),
+    ).toBe("owner copy");
+    expect(
+      existsSync(resolve(cfg.routinesDirectory, "vaenyx-receipt-record")),
+    ).toBe(false);
+    expect(seedLibraryIfEmpty(cfg)).toBe(false);
   });
 });

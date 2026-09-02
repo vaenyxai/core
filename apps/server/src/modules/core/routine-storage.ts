@@ -57,6 +57,7 @@ interface GalleryRow {
   // the routine revision that produced it.
   view_snapshot: string | null;
   routine_hash: string | null;
+  journal_entry_id: string | null;
   // Visual-first (owner rule, 2026-08-16): the photo the run was fed, so the
   // result card can lead with it. Marks ride via the LEFT JOIN below.
   image_id: string | null;
@@ -134,6 +135,7 @@ function toGalleryItem(row: GalleryRow): RoutineGalleryItem {
     createdAt: isoTimestamp(row.created_at),
     ...(viewSnapshot !== undefined ? { viewSnapshot } : {}),
     routineHash: row.routine_hash ?? null,
+    journalEntryId: row.journal_entry_id ?? null,
     imageId: row.image_id ?? null,
     imageAnnotations,
     resultImageId: row.result_image_id ?? null,
@@ -328,6 +330,8 @@ export function addGalleryItem(
     // made under, so a later edit cannot re-dress old results.
     viewSnapshot?: unknown;
     routineHash?: string | null;
+    // Exact Journal source for Correct & Rerun. Null for stateless/legacy rows.
+    journalEntryId?: string | null;
     // Visual-first: the photo the run was fed, so the card can lead with it.
     imageId?: string | null;
     // The marks as confirmed for THIS run, frozen onto the row.
@@ -337,8 +341,8 @@ export function addGalleryItem(
   const id = randomUUID();
   database.sqlite
     .prepare(
-      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid, view_snapshot, routine_hash, image_id, annotations_snapshot)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO routine_gallery (id, routine_id, chat_id, step_id, output, output_valid, view_snapshot, routine_hash, journal_entry_id, image_id, annotations_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -351,6 +355,7 @@ export function addGalleryItem(
         ? JSON.stringify(input.viewSnapshot ?? null)
         : null,
       input.routineHash ?? null,
+      input.journalEntryId ?? null,
       input.imageId ?? null,
       input.imageAnnotations ? JSON.stringify(input.imageAnnotations) : null,
     );

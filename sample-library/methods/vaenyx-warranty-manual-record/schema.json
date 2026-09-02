@@ -1,0 +1,85 @@
+{
+  "input": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["sourceLabel", "product"],
+    "properties": {
+      "sourceLabel": {
+        "type": "string",
+        "description": "Manual, warranty card, receipt, or photo reference."
+      },
+      "product": {
+        "type": "string",
+        "description": "Product name exactly as confirmed."
+      },
+      "model": { "type": "string", "description": "Model number, or Unknown." },
+      "purchaseDate": {
+        "type": "string",
+        "description": "YYYY-MM-DD, or Unknown."
+      },
+      "warrantyEnds": {
+        "type": "string",
+        "description": "Explicit warranty end date YYYY-MM-DD, or Unknown; do not calculate unless requested."
+      },
+      "manualReference": {
+        "type": "string",
+        "description": "Local document name/page or physical manual location; no invented URL."
+      },
+      "maintenanceNotes": {
+        "type": "array",
+        "maxItems": 30,
+        "items": { "type": "string" },
+        "description": "One source-backed maintenance instruction per line."
+      },
+      "uncertainFields": {
+        "type": "array",
+        "maxItems": 20,
+        "items": { "type": "string" },
+        "description": "Unclear or inferred field names/instructions."
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["title", "facts", "maintenance", "warnings", "disclaimer"],
+    "properties": {
+      "title": { "type": "string" },
+      "facts": {
+        "type": "array",
+        "maxItems": 12,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["field", "value", "evidence", "certainty"],
+          "properties": {
+            "field": { "type": "string" },
+            "value": { "type": "string" },
+            "evidence": { "type": "string" },
+            "certainty": { "enum": ["confirmed", "inferred", "uncertain"] }
+          }
+        }
+      },
+      "maintenance": {
+        "type": "array",
+        "maxItems": 30,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["instruction", "evidence", "certainty"],
+          "properties": {
+            "instruction": { "type": "string" },
+            "evidence": { "type": "string" },
+            "certainty": { "enum": ["confirmed", "inferred", "uncertain"] }
+          }
+        }
+      },
+      "warnings": {
+        "type": "array",
+        "maxItems": 10,
+        "items": { "type": "string" }
+      },
+      "disclaimer": { "type": "string" }
+    }
+  }
+}

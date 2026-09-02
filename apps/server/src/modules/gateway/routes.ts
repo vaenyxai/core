@@ -3383,7 +3383,7 @@ export async function registerGatewayRoutes(
         return reply.code(404).send({ error: "Chat not found." });
       }
       if (!thread.routineId) {
-        return { journal: [], gallery: [] };
+        return { journal: [], gallery: [], inputFields: [] };
       }
       return {
         journal: listJournalEntries(
@@ -3396,6 +3396,12 @@ export async function registerGatewayRoutes(
           thread.routineId,
           request.params.id,
         ),
+        inputFields:
+          describeRoutineInputFields(
+            context.config.routinesDirectory,
+            context.config.libraryDirectory,
+            thread.routineId,
+          )?.fields ?? [],
       };
     },
   );

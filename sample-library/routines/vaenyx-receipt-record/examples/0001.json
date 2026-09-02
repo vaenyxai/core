@@ -1,0 +1,25 @@
+{
+  "journal": {
+    "sourceLabel": "Receipt photo",
+    "merchant": "Harbour Hardware",
+    "purchaseDate": "2026-08-30",
+    "currency": "AUD",
+    "total": 47.5,
+    "category": "Home maintenance",
+    "items": ["Sealant — 12.50", "Shelf brackets — 35.00"],
+    "uncertainFields": []
+  },
+  "gallery": {
+    "title": "Receipt record",
+    "currency": "AUD",
+    "total": 47.5,
+    "totalEvidence": "Receipt photo: total",
+    "totalCertainty": "confirmed",
+    "facts": [],
+    "items": [],
+    "warnings": [],
+    "disclaimer": "Organisational record only; not tax or accounting advice."
+  },
+  "source": "synthetic",
+  "time": "2026-09-03"
+}
