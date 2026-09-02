@@ -1,5 +1,5 @@
 export const RELAY_CONTRACT_VERSION = 2;
-export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.1";
+export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.2";
 
 export interface RelaySearchResult {
   title: string;
@@ -60,7 +60,16 @@ export function normalizeSearchEvidence(
     if (seen.has(value)) return;
     seen.add(value);
     const record = value as Record<string, unknown>;
-    const rawUrl = firstString(record, ["url", "link", "source_url", "sourceUrl"]);
+    // Codex CLI reports an opened search result as an absolute URL in the
+    // web_search action's `query` field. Ordinary search phrases fail URL
+    // parsing below, so only an actual HTTP(S) source is admitted.
+    const rawUrl = firstString(record, [
+      "url",
+      "link",
+      "source_url",
+      "sourceUrl",
+      "query",
+    ]);
     if (rawUrl) {
       try {
         const parsed = new URL(rawUrl);

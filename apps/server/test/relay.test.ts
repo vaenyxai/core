@@ -323,6 +323,13 @@ describe("the subscription door", () => {
             { title: "Wrong", url: "https://example.net/private" },
             { title: "Broken", url: "file:///C:/secret.txt" },
           ],
+          actions: [
+            {
+              type: "other",
+              query: "https://developers.openai.com/codex/cli/reference",
+            },
+            { type: "search", query: "untrusted search phrase" },
+          ],
         },
         { allowedDomains: ["openai.com"], maxResults: 5 },
       ),
@@ -331,6 +338,12 @@ describe("the subscription door", () => {
         title: "OpenAI docs",
         url: "https://openai.com/index/codex/",
         snippet: "Codex",
+        published_at: null,
+      },
+      {
+        title: "developers.openai.com",
+        url: "https://developers.openai.com/codex/cli/reference",
+        snippet: "",
         published_at: null,
       },
     ]);
