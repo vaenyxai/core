@@ -273,18 +273,19 @@ function readRoutineMeta(
 // at all, so after the words were renamed a Routine and a Method could describe
 // the same ability with two different words — the exact thing "所有地方用词统一"
 // forbids. An old word migrates through the same rename table the manifest uses;
-// a word nobody has ever used is dropped here rather than refused, because this
-// list only draws chips. (The manifest, which ENFORCES, refuses instead — the
-// asymmetry is deliberate and explained in capabilities.ts.)
+// a word nobody has ever used is retained here because this list only draws
+// chips. The manifest, which ENFORCES, refuses instead — the asymmetry is
+// deliberate and explained in capabilities.ts.
 function readCapabilities(source: unknown): string[] {
   if (!Array.isArray(source)) return [];
   const capabilities: string[] = [];
   for (const entry of source.slice(0, 10)) {
-    const current = currentCapabilityName(
-      typeof entry === "string" ? entry.trim() : entry,
-    );
-    if (current && !capabilities.includes(current)) {
-      capabilities.push(current);
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!/^[a-zA-Z][a-zA-Z0-9._-]{0,79}$/.test(trimmed)) continue;
+    const disclosed = currentCapabilityName(trimmed) ?? trimmed;
+    if (!capabilities.includes(disclosed)) {
+      capabilities.push(disclosed);
     }
   }
   return capabilities;

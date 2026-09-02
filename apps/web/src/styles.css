@@ -8159,6 +8159,115 @@ body {
   padding-left: var(--space-3);
 }
 
+/* Point-of-action Community disclosure. Facts stay compact; capabilities get
+   one row each so an unavailable requirement and a newly requested one cannot
+   disappear inside a paragraph. */
+.install-disclosure {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-2) 0;
+}
+
+.install-disclosure-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.install-disclosure-facts div {
+  min-width: 0;
+  padding: var(--space-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+}
+
+.install-disclosure-facts dt {
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+
+.install-disclosure-facts dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.install-capabilities {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.install-capabilities-list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.install-capability-row {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.install-capability-name {
+  min-width: 0;
+  flex: 1;
+}
+
+.install-capability-status,
+.install-capability-new {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+
+.install-capability-status {
+  border: 0.5px solid var(--border);
+  color: var(--text-muted);
+}
+
+.install-capability-status.disabled,
+.install-capability-status.unsupported {
+  color: var(--warning, #d9a441);
+}
+
+.install-capability-new {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.install-none {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.install-disclosure-warning {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .install-disclosure-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .install-capability-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
 /* TWO KINDS OF BADGE, deliberately different weights.
 
    Origin is a permanent property with nothing to do about it, so it recedes.

@@ -108,6 +108,8 @@ import {
   PlanRoutineRequestSchema,
   RoutinePlanSchema,
   CatalogueIndexSchema,
+  CatalogueInstallPreviewRequestSchema,
+  CatalogueInstallPreviewSchema,
   InstallRoutineRequestSchema,
   InstallMethodRequestSchema,
   LegalAcknowledgeRequestSchema,
@@ -195,6 +197,7 @@ import {
   type RoutineEditTestRequest,
   type InstallRoutineRequest,
   type InstallMethodRequest,
+  type CatalogueInstallPreviewRequest,
   type LegalAcknowledgeRequest,
   type SetSharingPreferenceRequest,
   type DraftRecipeEditRequest,
@@ -454,7 +457,9 @@ import { getFreePicks, refreshFreePicks } from "../core/free-picks.js";
 import { getDefaultProvider, initModelRegistry } from "../models/registry.js";
 import type { ModelProvider } from "../models/provider.js";
 import {
+  disclosedCapabilities,
   fetchCatalogue,
+  fetchCatalogueInstallMetadata,
   installRoutine,
   installMethod,
 } from "../core/catalogue.js";
@@ -1174,6 +1179,100 @@ export async function registerGatewayRoutes(
       },
     },
     async () => ({ status: "ok" as const }),
+  );
+
+  // The Owner sees this immediately before every Community install/update.
+  // It is a read-only disclosure, not a grant: the global ceiling, Mode and
+  // runtime enforcement remain exactly where they were.
+  app.get<{ Querystring: CatalogueInstallPreviewRequest }>(
+    "/v1/library/catalogue/install-preview",
+    {
+      schema: {
+        querystring: CatalogueInstallPreviewRequestSchema,
+        response: {
+          200: CatalogueInstallPreviewSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          502: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+      try {
+        const metadata = await fetchCatalogueInstallMetadata(
+          context.config.catalogueBaseUrl,
+          request.query.id,
+          request.query.kind,
+          controller.signal,
+        );
+        const installedMethod =
+          request.query.kind === "method"
+            ? loadMethod(context.config.libraryDirectory, request.query.id)
+            : null;
+        const installedRoutine =
+          request.query.kind === "routine"
+            ? loadRoutine(
+                context.config.routinesDirectory,
+                context.config.libraryDirectory,
+                request.query.id,
+              )
+            : null;
+        const currentCapabilities: string[] = [];
+        const addCurrent = (values: string[]) => {
+          for (const value of values) {
+            if (!currentCapabilities.includes(value)) {
+              currentCapabilities.push(value);
+            }
+          }
+        };
+        if (installedMethod) {
+          addCurrent(disclosedCapabilities(installedMethod.manifest));
+        }
+        if (installedRoutine) {
+          addCurrent(installedRoutine.capabilities ?? []);
+          for (const dep of installedRoutine.deps) {
+            const method = loadMethod(
+              context.config.libraryDirectory,
+              dep.methodId,
+            );
+            if (method) addCurrent(disclosedCapabilities(method.manifest));
+          }
+        }
+        const currentVersion =
+          installedMethod?.version ?? installedRoutine?.version ?? null;
+        const globalCapabilities = readGlobalCapabilities(context.database);
+        return {
+          ...metadata,
+          isUpdate: currentVersion !== null,
+          currentVersion,
+          capabilities: metadata.capabilities.map((id) => ({
+            id,
+            state:
+              !isCapability(id) || missingCapabilities([id]).length > 0
+                ? ("unsupported" as const)
+                : globalCapabilities[id]
+                  ? ("available" as const)
+                  : ("disabled" as const),
+            newlyRequested: !currentCapabilities.includes(id),
+          })),
+          declarative: true as const,
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("BAD_ID")) {
+          return reply.code(400).send({ error: "Invalid item id." });
+        }
+        return reply.code(502).send({
+          error: "Could not load the Community install review.",
+        });
+      }
+    },
   );
 
   app.get(
@@ -3242,9 +3341,7 @@ export async function registerGatewayRoutes(
               ...(photoBackupNote ? { engineNote: photoBackupNote } : {}),
             };
           } catch (error) {
-            return reply
-              .code(502)
-              .send(getMethodRunErrorResponse(error));
+            return reply.code(502).send(getMethodRunErrorResponse(error));
           }
         }
       }
@@ -9588,6 +9685,8 @@ export async function registerGatewayRoutes(
           context.config.libraryDirectory,
           request.body.routineId,
           controller.signal,
+          undefined,
+          request.body.version,
         );
         recordAudit(context.database, {
           actorType: "owner",
@@ -9609,6 +9708,12 @@ export async function registerGatewayRoutes(
             return reply
               .code(409)
               .send({ error: "That Routine is already installed." });
+          }
+          if (error.message.startsWith("CATALOGUE_VERSION_CHANGED")) {
+            return reply.code(409).send({
+              error:
+                "This Community item changed after you reviewed it. Reopen the review before installing.",
+            });
           }
           if (
             error.message.startsWith("MISSING_FILE") ||
@@ -9658,6 +9763,8 @@ export async function registerGatewayRoutes(
           context.config.libraryDirectory,
           request.body.methodId,
           controller.signal,
+          undefined,
+          request.body.version,
         );
         recordInstall(context.database, {
           hash: methodContentHash(
@@ -9689,6 +9796,12 @@ export async function registerGatewayRoutes(
             return reply
               .code(409)
               .send({ error: "That Method is already installed." });
+          }
+          if (error.message.startsWith("CATALOGUE_VERSION_CHANGED")) {
+            return reply.code(409).send({
+              error:
+                "This Community item changed after you reviewed it. Reopen the review before installing.",
+            });
           }
           if (error.message.startsWith("MISSING_FILE")) {
             return reply.code(502).send({
@@ -10013,17 +10126,23 @@ export async function registerGatewayRoutes(
     },
   );
 
-  app.post<{ Body: { methodId: string } }>(
+  app.post<{ Body: { methodId: string; version?: string } }>(
     "/v1/library/methods/update",
     {
       schema: {
         body: Type.Object(
-          { methodId: Type.String({ minLength: 1 }) },
+          {
+            methodId: Type.String({ minLength: 1 }),
+            version: Type.Optional(
+              Type.String({ minLength: 1, maxLength: 60 }),
+            ),
+          },
           { additionalProperties: false },
         ),
         response: {
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
       },
@@ -10055,6 +10174,7 @@ export async function registerGatewayRoutes(
                 version: before?.installedVersion ?? "0.0.0",
               }),
             signal: controller.signal,
+            expectedVersion: request.body.version,
           },
         );
         recordInstall(context.database, {
@@ -10089,6 +10209,12 @@ export async function registerGatewayRoutes(
             .code(404)
             .send({ error: "That Method is not installed." });
         }
+        if (message.startsWith("CATALOGUE_VERSION_CHANGED")) {
+          return reply.code(409).send({
+            error:
+              "This Community item changed after you reviewed it. Reopen the review before updating.",
+          });
+        }
         return reply.code(502).send({
           error: "Could not update from the community catalogue.",
         });
@@ -10096,17 +10222,23 @@ export async function registerGatewayRoutes(
     },
   );
 
-  app.post<{ Body: { routineId: string } }>(
+  app.post<{ Body: { routineId: string; version?: string } }>(
     "/v1/library/routines/update",
     {
       schema: {
         body: Type.Object(
-          { routineId: Type.String({ minLength: 1 }) },
+          {
+            routineId: Type.String({ minLength: 1 }),
+            version: Type.Optional(
+              Type.String({ minLength: 1, maxLength: 60 }),
+            ),
+          },
           { additionalProperties: false },
         ),
         response: {
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
           502: ErrorResponseSchema,
         },
       },
@@ -10139,6 +10271,7 @@ export async function registerGatewayRoutes(
                 version: before?.installedVersion ?? "0.0.0",
               }),
             signal: controller.signal,
+            expectedVersion: request.body.version,
           },
         );
         recordInstall(context.database, {
@@ -10164,6 +10297,12 @@ export async function registerGatewayRoutes(
           return reply
             .code(404)
             .send({ error: "That Routine is not installed." });
+        }
+        if (message.startsWith("CATALOGUE_VERSION_CHANGED")) {
+          return reply.code(409).send({
+            error:
+              "This Community item changed after you reviewed it. Reopen the review before updating.",
+          });
         }
         return reply.code(502).send({
           error: "Could not update from the community catalogue.",
@@ -13538,7 +13677,7 @@ export async function registerGatewayRoutes(
           decision: passed ? "allowed" : "denied",
           reason: passed
             ? "Forge connection test completed through ChatGPT Subscription Auth."
-            : failure?.text ?? "Forge result verification failed.",
+            : (failure?.text ?? "Forge result verification failed."),
           resourceType: "provider_connection",
         });
 
@@ -13652,7 +13791,7 @@ export async function registerGatewayRoutes(
           decision: passed ? "allowed" : "denied",
           reason: passed
             ? "Chat test completed through ChatGPT Subscription Auth without exposing tokens."
-            : failure?.text ?? "Chat test returned no visible answer.",
+            : (failure?.text ?? "Chat test returned no visible answer."),
           resourceType: "provider_connection",
         });
 

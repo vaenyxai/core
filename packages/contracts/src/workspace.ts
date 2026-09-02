@@ -1996,11 +1996,61 @@ export const CatalogueIndexSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// Point-of-action disclosure shown before a Community install or update. The
+// capability id is intentionally an open string: a newer catalogue may name a
+// capability an older Vaenyx build does not understand, and the safe result is
+// to show it as unsupported rather than hiding it or crashing.
+export const CatalogueInstallCapabilitySchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1, maxLength: 80 }),
+    state: Type.Union([
+      Type.Literal("available"),
+      Type.Literal("disabled"),
+      Type.Literal("unsupported"),
+    ]),
+    newlyRequested: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export const CatalogueInstallPreviewRequestSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    kind: Type.Union([Type.Literal("method"), Type.Literal("routine")]),
+  },
+  { additionalProperties: false },
+);
+
+export const CatalogueInstallPreviewSchema = Type.Object(
+  {
+    id: Type.String(),
+    kind: Type.Union([Type.Literal("method"), Type.Literal("routine")]),
+    name: Type.String(),
+    creator: Type.String(),
+    version: Type.String(),
+    source: Type.Object(
+      {
+        label: Type.String(),
+        url: Type.String(),
+      },
+      { additionalProperties: false },
+    ),
+    isUpdate: Type.Boolean(),
+    currentVersion: Type.Union([Type.String(), Type.Null()]),
+    capabilities: Type.Array(CatalogueInstallCapabilitySchema),
+    declarative: Type.Literal(true),
+  },
+  { additionalProperties: false },
+);
+
 // Install one catalogue Routine (with its Method dependencies) into the local
 // library, by id — the app already holds the summary from the index.
 export const InstallRoutineRequestSchema = Type.Object(
   {
     routineId: Type.String({ minLength: 1 }),
+    // Optional for old-client compatibility. New clients send the exact version
+    // the Owner reviewed; a changed package is rejected before anything is written.
+    version: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
   },
   { additionalProperties: false },
 );
@@ -2009,6 +2059,7 @@ export const InstallRoutineRequestSchema = Type.Object(
 export const InstallMethodRequestSchema = Type.Object(
   {
     methodId: Type.String({ minLength: 1 }),
+    version: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
   },
   { additionalProperties: false },
 );
@@ -2914,6 +2965,15 @@ export type PlanRoutineRequest = Static<typeof PlanRoutineRequestSchema>;
 export type RoutinePlanStep = Static<typeof RoutinePlanStepSchema>;
 export type RoutinePlan = Static<typeof RoutinePlanSchema>;
 export type CatalogueIndex = Static<typeof CatalogueIndexSchema>;
+export type CatalogueInstallCapability = Static<
+  typeof CatalogueInstallCapabilitySchema
+>;
+export type CatalogueInstallPreviewRequest = Static<
+  typeof CatalogueInstallPreviewRequestSchema
+>;
+export type CatalogueInstallPreview = Static<
+  typeof CatalogueInstallPreviewSchema
+>;
 export type InstallRoutineRequest = Static<typeof InstallRoutineRequestSchema>;
 export type InstallMethodRequest = Static<typeof InstallMethodRequestSchema>;
 export type LegalAcknowledgeRequest = Static<

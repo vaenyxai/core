@@ -14,6 +14,7 @@ import {
   CreateAppProfileRequestSchema,
   CreateTaskRequestSchema,
   CreateVaenyxMeCandidateRequestSchema,
+  CatalogueInstallPreviewSchema,
   RejectVaenyxMeCandidateRequestSchema,
   UpdateVaenyxThreadProjectRequestSchema,
   UpdateVaenyxThreadStatusRequestSchema,
@@ -123,7 +124,9 @@ describe("M1 contracts", () => {
         title: "First live chat",
       }),
     ).toBe(true);
-    expect(Value.Check(CreateAskVaenyxConversationRequestSchema, {})).toBe(true);
+    expect(Value.Check(CreateAskVaenyxConversationRequestSchema, {})).toBe(
+      true,
+    );
     expect(
       Value.Check(CreateAskVaenyxMessageRequestSchema, {
         content: "What is the weather today?",
@@ -210,7 +213,8 @@ describe("M1 contracts", () => {
         category: "communication",
         title: "Communication style",
         proposedSummary: "The Owner prefers concise explanations.",
-        proposedEvidence: "The Owner explicitly requested clear and simple answers.",
+        proposedEvidence:
+          "The Owner explicitly requested clear and simple answers.",
         confidence: 80,
       }),
     ).toBe(true);
@@ -223,5 +227,31 @@ describe("M1 contracts", () => {
       }),
     ).toBe(true);
     expect(Value.Check(RejectVaenyxMeCandidateRequestSchema, {})).toBe(true);
+  });
+});
+
+describe("Community install disclosure contracts", () => {
+  it("accepts known, disabled and unknown capability disclosures", () => {
+    expect(
+      Value.Check(CatalogueInstallPreviewSchema, {
+        id: "photo-notes",
+        kind: "routine",
+        name: "Photo Notes",
+        creator: "Ava",
+        version: "2.1.0",
+        source: {
+          label: "Vaenyx Community",
+          url: "https://community.test/routines/photo-notes",
+        },
+        isUpdate: true,
+        currentVersion: "2.0.0",
+        capabilities: [
+          { id: "vision", state: "available", newlyRequested: false },
+          { id: "fetching", state: "disabled", newlyRequested: true },
+          { id: "future-sense", state: "unsupported", newlyRequested: true },
+        ],
+        declarative: true,
+      }),
+    ).toBe(true);
   });
 });

@@ -30,6 +30,7 @@ import type {
   LibraryRoutineSummary,
 } from "@vaenyx/contracts";
 
+import { currentCapabilityName } from "./capabilities.js";
 import { loadMethod, toLibraryMethod } from "./methods.js";
 import { loadRoutine, toLibraryRoutine } from "./routines.js";
 
@@ -48,6 +49,76 @@ function assertSafeId(id: string): void {
   if (!SAFE_ID.test(id)) {
     throw new Error(`BAD_ID:${id}`);
   }
+}
+
+function parseRecord(raw: string, label: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("expected an object");
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(`CATALOGUE_PREVIEW_MALFORMED:${label}`, { cause: error });
+  }
+}
+
+function assertExpectedVersion(
+  meta: Record<string, unknown>,
+  expectedVersion?: string,
+): void {
+  if (
+    expectedVersion &&
+    (typeof meta.version !== "string" || meta.version !== expectedVersion)
+  ) {
+    throw new Error(`CATALOGUE_VERSION_CHANGED:${expectedVersion}`);
+  }
+}
+
+// Disclosure parsing is deliberately more tolerant than execution parsing.
+// Unknown future names remain visible and will be labelled unsupported by the
+// gateway. The Method loader still refuses to run them, so visibility never
+// weakens enforcement.
+export function disclosedCapabilities(manifest: unknown): string[] {
+  const record =
+    manifest && typeof manifest === "object" && !Array.isArray(manifest)
+      ? (manifest as Record<string, unknown>)
+      : {};
+  const capabilities: string[] = [];
+  const add = (entry: unknown) => {
+    if (typeof entry !== "string") return;
+    const trimmed = entry.trim();
+    if (!/^[a-zA-Z][a-zA-Z0-9._-]{0,79}$/.test(trimmed)) return;
+    const normalized = currentCapabilityName(trimmed) ?? trimmed;
+    if (!capabilities.includes(normalized)) capabilities.push(normalized);
+  };
+  if (Array.isArray(record.capabilities)) {
+    for (const entry of record.capabilities.slice(0, 50)) add(entry);
+  } else {
+    const permissions =
+      record.permissions && typeof record.permissions === "object"
+        ? (record.permissions as Record<string, unknown>)
+        : {};
+    if (permissions.network === true) add("network");
+    if (permissions.readFiles === true) add("readFiles");
+  }
+  return capabilities;
+}
+
+function mergeCapabilities(target: string[], source: string[]): void {
+  for (const capability of source) {
+    if (!target.includes(capability)) target.push(capability);
+  }
+}
+
+export interface CatalogueInstallMetadata {
+  id: string;
+  kind: "method" | "routine";
+  name: string;
+  creator: string;
+  version: string;
+  source: { label: string; url: string };
+  capabilities: string[];
 }
 
 // Stamp "community" provenance onto an installed item's identity file
@@ -119,6 +190,85 @@ export async function fetchCatalogue(
   };
 }
 
+// Read only the declarative identity and capability manifests required for the
+// point-of-action review. Recipes, schemas and executable content are never
+// loaded here, and nothing is written to the local Library.
+export async function fetchCatalogueInstallMetadata(
+  baseUrl: string,
+  id: string,
+  kind: "method" | "routine",
+  signal?: AbortSignal,
+  fetchImpl: FetchLike = fetch,
+): Promise<CatalogueInstallMetadata> {
+  assertSafeId(id);
+  const itemBase = `${baseUrl}/${kind === "method" ? "methods" : "routines"}/${id}`;
+  const identityFile = kind === "method" ? "method.json" : "routine.json";
+  const identityRaw = await fetchFile(
+    fetchImpl,
+    `${itemBase}/${identityFile}`,
+    true,
+    signal,
+  );
+  const identity = parseRecord(identityRaw as string, `${id}/${identityFile}`);
+  const capabilities: string[] = [];
+
+  if (kind === "method") {
+    const manifestRaw = await fetchFile(
+      fetchImpl,
+      `${itemBase}/manifest.json`,
+      false,
+      signal,
+    );
+    if (manifestRaw !== null) {
+      mergeCapabilities(
+        capabilities,
+        disclosedCapabilities(parseRecord(manifestRaw, `${id}/manifest.json`)),
+      );
+    }
+  } else {
+    mergeCapabilities(capabilities, disclosedCapabilities(identity));
+    const deps = Array.isArray(identity.deps) ? identity.deps.slice(0, 50) : [];
+    for (const dep of deps) {
+      const methodId =
+        dep && typeof dep === "object"
+          ? (dep as Record<string, unknown>).methodId
+          : undefined;
+      if (typeof methodId !== "string") continue;
+      assertSafeId(methodId);
+      const manifestRaw = await fetchFile(
+        fetchImpl,
+        `${baseUrl}/methods/${methodId}/manifest.json`,
+        false,
+        signal,
+      );
+      if (manifestRaw !== null) {
+        mergeCapabilities(
+          capabilities,
+          disclosedCapabilities(
+            parseRecord(manifestRaw, `${methodId}/manifest.json`),
+          ),
+        );
+      }
+    }
+  }
+
+  return {
+    id,
+    kind,
+    name:
+      typeof identity.name === "string" && identity.name.trim()
+        ? identity.name.trim()
+        : id,
+    creator: typeof identity.owner === "string" ? identity.owner.trim() : "",
+    version:
+      typeof identity.version === "string" && identity.version.trim()
+        ? identity.version.trim()
+        : "0.0.0",
+    source: { label: "Vaenyx Community", url: itemBase },
+    capabilities,
+  };
+}
+
 // Download one Method's fixed files from the catalogue and write them into the
 // local library, community provenance stamped onto the identity file. Assumes the
 // id is validated and the Method is not already installed. Shared by the Routine
@@ -133,6 +283,7 @@ async function downloadMethod(
   // failure part way through cannot leave a half-replaced Method on disk —
   // the shape that loads fine and then behaves like neither version.
   targetDirectory?: string,
+  expectedVersion?: string,
 ): Promise<void> {
   const files: Record<string, string> = {};
   for (const file of METHOD_REQUIRED) {
@@ -151,10 +302,20 @@ async function downloadMethod(
   );
   if (manifest !== null) files["manifest.json"] = manifest;
 
+  const identity = parseRecord(
+    files["method.json"] as string,
+    `${methodId}/method.json`,
+  );
+  assertExpectedVersion(identity, expectedVersion);
+
   const methodDir = targetDirectory ?? join(libraryDirectory, methodId);
   mkdirSync(methodDir, { recursive: true });
   for (const [file, text] of Object.entries(files)) {
-    writeFileSync(join(methodDir, file), stampCommunityOrigin(file, text), "utf8");
+    writeFileSync(
+      join(methodDir, file),
+      stampCommunityOrigin(file, text),
+      "utf8",
+    );
   }
 }
 
@@ -176,6 +337,7 @@ export async function installMethod(
   methodId: string,
   signal?: AbortSignal,
   fetchImpl: FetchLike = fetch,
+  expectedVersion?: string,
 ): Promise<LibraryMethod> {
   assertSafeId(methodId);
 
@@ -184,7 +346,15 @@ export async function installMethod(
     throw new Error(`METHOD_EXISTS:${methodId}`);
   }
 
-  await downloadMethod(fetchImpl, baseUrl, libraryDirectory, methodId, signal);
+  await downloadMethod(
+    fetchImpl,
+    baseUrl,
+    libraryDirectory,
+    methodId,
+    signal,
+    undefined,
+    expectedVersion,
+  );
 
   const method = loadMethod(libraryDirectory, methodId);
   if (!method) {
@@ -203,6 +373,7 @@ export async function installRoutine(
   routineId: string,
   signal?: AbortSignal,
   fetchImpl: FetchLike = fetch,
+  expectedVersion?: string,
 ): Promise<InstallRoutineResponse> {
   assertSafeId(routineId);
 
@@ -232,6 +403,7 @@ export async function installRoutine(
   } catch (error) {
     throw new Error(`ROUTINE_PARSE_FAILED:${routineId}`, { cause: error });
   }
+  assertExpectedVersion(meta, expectedVersion);
   const deps = Array.isArray(meta.deps) ? meta.deps : [];
 
   // 2. Download each dependency Method not already installed (reuse local ones).
@@ -250,7 +422,19 @@ export async function installRoutine(
       continue;
     }
 
-    await downloadMethod(fetchImpl, baseUrl, libraryDirectory, methodId, signal);
+    const pinnedVersion =
+      dep && typeof dep === "object"
+        ? (dep as Record<string, unknown>).version
+        : undefined;
+    await downloadMethod(
+      fetchImpl,
+      baseUrl,
+      libraryDirectory,
+      methodId,
+      signal,
+      undefined,
+      typeof pinnedVersion === "string" ? pinnedVersion : undefined,
+    );
     installedMethods.push(methodId);
   }
 
@@ -300,6 +484,7 @@ export async function updateMethod(
      *  keep a way back. Separated out because catalogue.ts has no database. */
     keepRollback: (folder: string) => void;
     signal?: AbortSignal;
+    expectedVersion?: string;
   },
   fetchImpl: FetchLike = fetch,
 ): Promise<LibraryMethod> {
@@ -309,17 +494,24 @@ export async function updateMethod(
     throw new Error(`METHOD_MISSING:${methodId}`);
   }
 
-  // A way back FIRST. If the download fails half way, the copy on disk is
-  // still the one that was working.
-  options.keepRollback(folder);
-
   // Downloaded into a scratch folder and moved into place, so a failure part
   // way through cannot leave a half-updated Method behind — the shape that
   // would pass the loader and fail at run time.
   const staging = join(libraryDirectory, `.updating-${methodId}`);
   rmSync(staging, { force: true, recursive: true });
   try {
-    await downloadMethod(fetchImpl, baseUrl, libraryDirectory, methodId, options.signal, staging);
+    await downloadMethod(
+      fetchImpl,
+      baseUrl,
+      libraryDirectory,
+      methodId,
+      options.signal,
+      staging,
+      options.expectedVersion,
+    );
+    // Keep a way back only after the reviewed version has been fetched and
+    // verified. A stale review must not change even rollback metadata.
+    options.keepRollback(folder);
     // The Owner's examples stay: they are theirs, they are not in the author's
     // package, and they are the regression suite the new version has to pass.
     const examples = join(folder, "examples");
@@ -367,6 +559,7 @@ export async function updateRoutine(
   options: {
     keepRollback: (folder: string) => void;
     signal?: AbortSignal;
+    expectedVersion?: string;
   },
   fetchImpl: FetchLike = fetch,
 ): Promise<InstallRoutineResponse> {
@@ -375,10 +568,6 @@ export async function updateRoutine(
   if (!existsSync(routineDir)) {
     throw new Error(`ROUTINE_MISSING:${routineId}`);
   }
-
-  // A way back FIRST: if the download dies half way, what is on disk is still
-  // the version that was working.
-  options.keepRollback(routineDir);
 
   const routineJson = await fetchFile(
     fetchImpl,
@@ -399,6 +588,11 @@ export async function updateRoutine(
   } catch (error) {
     throw new Error(`ROUTINE_PARSE_FAILED:${routineId}`, { cause: error });
   }
+  assertExpectedVersion(meta, options.expectedVersion);
+
+  // The reviewed version is now known to be exact. Keep a way back before any
+  // live Routine file is replaced.
+  options.keepRollback(routineDir);
 
   const installedMethods: string[] = [];
   const skippedMethods: string[] = [];
@@ -415,7 +609,19 @@ export async function updateRoutine(
       skippedMethods.push(methodId);
       continue;
     }
-    await downloadMethod(fetchImpl, baseUrl, libraryDirectory, methodId, options.signal);
+    const pinnedVersion =
+      dep && typeof dep === "object"
+        ? (dep as Record<string, unknown>).version
+        : undefined;
+    await downloadMethod(
+      fetchImpl,
+      baseUrl,
+      libraryDirectory,
+      methodId,
+      options.signal,
+      undefined,
+      typeof pinnedVersion === "string" ? pinnedVersion : undefined,
+    );
     installedMethods.push(methodId);
   }
 

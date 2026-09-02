@@ -336,7 +336,22 @@ Read this inside the app: **Settings → Manual**.
 ## 7. Community
 
 - **Browse what others made** — the **Community** screen.
-- **Install** — the Install button on any item. It lands in your Library.
+- **Install** — choose **Install**, review the item, then confirm. The review
+  names the Method or Routine, its creator and source, and the exact version
+  that will be installed. If the package changes after that review, Vaenyx
+  stops and asks you to reopen it instead of installing a different version.
+- **Check capabilities before you install or update.** The same review lists
+  every capability the item requests. **Ready** means this Vaenyx can provide
+  it, **Off in Settings** means you switched it off, and **Unsupported** means
+  this build cannot provide it. An update marks capabilities it requests for
+  the first time. Installing does not switch anything on, loosen the current
+  Mode, or add a missing model connection.
+- **Community items do not bring executable Tools or code.** They are
+  declarative recipes and orchestration. They can only ask for Tools built or
+  reviewed into Vaenyx, and the existing global, Mode and runtime limits still
+  decide what happens. **No Capabilities requested** only describes that
+  capability list; the ordinary text or other input you supply to the recipe
+  is still used when it runs.
 - **Publish your own** — the Publish button on one of your items. Needs a Google
   or GitHub sign-in, because your name goes on it.
 - **If it needs something Vaenyx cannot do yet** — publishing is refused, and the

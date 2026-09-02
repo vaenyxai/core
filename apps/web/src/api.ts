@@ -41,6 +41,7 @@ import type {
   CreateTaskRequest,
   CreateVaenyxMeCandidateRequest,
   CatalogueIndex,
+  CatalogueInstallPreview,
   InstallRoutineResponse,
   LegalAcknowledgement,
   LegalAcknowledgementsResponse,
@@ -98,10 +99,7 @@ import type {
   RegressionListResponse,
   RegressionResult,
 } from "@vaenyx/contracts";
-import {
-  formatOwnerSafeError,
-  type OwnerSafeError,
-} from "@vaenyx/contracts";
+import { formatOwnerSafeError, type OwnerSafeError } from "@vaenyx/contracts";
 
 export type {
   Mode,
@@ -129,10 +127,7 @@ function currentLanguage(): "en" | "zh" {
   }
 }
 
-function responseErrorMessage(
-  body: ErrorResponse,
-  fallback: string,
-): string {
+function responseErrorMessage(body: ErrorResponse, fallback: string): string {
   return body.ownerError
     ? formatOwnerSafeError(body.ownerError, currentLanguage())
     : (body.error ?? fallback);
@@ -353,19 +348,32 @@ export function fetchRegressionChecks(): Promise<RegressionListResponse> {
   return requestJson<RegressionListResponse>("/v1/library/checks");
 }
 
-export function updateMethodFromCommunity(methodId: string): Promise<unknown> {
+export function previewCatalogueInstall(
+  id: string,
+  kind: "method" | "routine",
+): Promise<CatalogueInstallPreview> {
+  return requestJson<CatalogueInstallPreview>(
+    `/v1/library/catalogue/install-preview?id=${encodeURIComponent(id)}&kind=${kind}`,
+  );
+}
+
+export function updateMethodFromCommunity(
+  methodId: string,
+  version: string,
+): Promise<unknown> {
   return requestJson("/v1/library/methods/update", {
     method: "POST",
-    body: JSON.stringify({ methodId }),
+    body: JSON.stringify({ methodId, version }),
   });
 }
 
 export function updateRoutineFromCommunity(
   routineId: string,
+  version: string,
 ): Promise<unknown> {
   return requestJson("/v1/library/routines/update", {
     method: "POST",
-    body: JSON.stringify({ routineId }),
+    body: JSON.stringify({ routineId, version }),
   });
 }
 
@@ -1901,19 +1909,21 @@ export function fetchCatalogue(): Promise<CatalogueIndex> {
 
 export function installRoutineFromCatalogue(
   routineId: string,
+  version: string,
 ): Promise<InstallRoutineResponse> {
   return requestJson<InstallRoutineResponse>("/v1/library/catalogue/install", {
     method: "POST",
-    body: JSON.stringify({ routineId }),
+    body: JSON.stringify({ routineId, version }),
   });
 }
 
 export function installMethodFromCatalogue(
   methodId: string,
+  version: string,
 ): Promise<LibraryMethod> {
   return requestJson<LibraryMethod>("/v1/library/catalogue/install-method", {
     method: "POST",
-    body: JSON.stringify({ methodId }),
+    body: JSON.stringify({ methodId, version }),
   });
 }
 

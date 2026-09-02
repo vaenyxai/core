@@ -4,7 +4,12 @@ import { join, resolve } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { fetchCatalogue, installRoutine } from "../src/modules/core/catalogue.js";
+import {
+  fetchCatalogue,
+  fetchCatalogueInstallMetadata,
+  installMethod,
+  installRoutine,
+} from "../src/modules/core/catalogue.js";
 import { createMethod, loadMethod } from "../src/modules/core/methods.js";
 
 const CDN = "https://cdn.test";
@@ -52,12 +57,24 @@ const indexObj = {
 // A fake CDN: every published file keyed by its full URL; anything else is a 404.
 const FILES: Record<string, string> = {
   [`${CDN}/index.json`]: JSON.stringify(indexObj, null, 2),
-  [`${CDN}/routines/echo-routine/routine.json`]: JSON.stringify(routineObj, null, 2),
-  [`${CDN}/routines/echo-routine/manifest.json`]: JSON.stringify(manifestObj, null, 2),
+  [`${CDN}/routines/echo-routine/routine.json`]: JSON.stringify(
+    routineObj,
+    null,
+    2,
+  ),
+  [`${CDN}/routines/echo-routine/manifest.json`]: JSON.stringify(
+    manifestObj,
+    null,
+    2,
+  ),
   [`${CDN}/methods/echo-test/method.json`]: JSON.stringify(methodMeta, null, 2),
   [`${CDN}/methods/echo-test/recipe.md`]: "Echo the input.\n",
   [`${CDN}/methods/echo-test/schema.json`]: JSON.stringify(schemaObj, null, 2),
-  [`${CDN}/methods/echo-test/manifest.json`]: JSON.stringify(manifestObj, null, 2),
+  [`${CDN}/methods/echo-test/manifest.json`]: JSON.stringify(
+    manifestObj,
+    null,
+    2,
+  ),
 };
 
 function makeFetch(files: Record<string, string>): typeof fetch {
@@ -102,6 +119,69 @@ describe("catalogue reader (④ distribution)", () => {
     );
     expect(index.methods).toEqual([]);
     expect(index.routines).toEqual([]);
+  });
+
+  it("previews normalized Method capabilities and keeps unknown future names visible", async () => {
+    const files = {
+      ...FILES,
+      [`${CDN}/methods/echo-test/manifest.json`]: JSON.stringify({
+        capabilities: ["vision", "network", "future-sense"],
+      }),
+    };
+    const preview = await fetchCatalogueInstallMetadata(
+      CDN,
+      "echo-test",
+      "method",
+      undefined,
+      makeFetch(files),
+    );
+
+    expect(preview).toMatchObject({
+      id: "echo-test",
+      kind: "method",
+      name: "Echo Test",
+      version: "1.0.0",
+    });
+    expect(preview.capabilities).toEqual(["vision", "web", "future-sense"]);
+  });
+
+  it("previews a Routine's own and dependency capabilities without recipes", async () => {
+    const requested: string[] = [];
+    const files = {
+      ...FILES,
+      [`${CDN}/routines/echo-routine/routine.json`]: JSON.stringify({
+        ...routineObj,
+        capabilities: ["drawing", "future-routine"],
+      }),
+      [`${CDN}/methods/echo-test/manifest.json`]: JSON.stringify({
+        capabilities: ["vision", "network", "future-sense"],
+      }),
+    };
+    const recordingFetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      requested.push(url);
+      const body = files[url as keyof typeof files];
+      if (body === undefined) return new Response("not found", { status: 404 });
+      return new Response(body, { status: 200 });
+    }) as typeof fetch;
+
+    const preview = await fetchCatalogueInstallMetadata(
+      CDN,
+      "echo-routine",
+      "routine",
+      undefined,
+      recordingFetch,
+    );
+
+    expect(preview.capabilities).toEqual([
+      "drawing",
+      "future-routine",
+      "vision",
+      "web",
+      "future-sense",
+    ]);
+    expect(requested.some((url) => url.endsWith("recipe.md"))).toBe(false);
+    expect(requested.some((url) => url.endsWith("schema.json"))).toBe(false);
   });
 
   it("installs a Routine + its Method dependency, resolvable, marked community", async () => {
@@ -160,7 +240,14 @@ describe("catalogue reader (④ distribution)", () => {
 
   it("refuses to overwrite a Routine that is already installed", async () => {
     const { libDir, rouDir } = freshDirs();
-    await installRoutine(CDN, rouDir, libDir, "echo-routine", undefined, fakeFetch);
+    await installRoutine(
+      CDN,
+      rouDir,
+      libDir,
+      "echo-routine",
+      undefined,
+      fakeFetch,
+    );
 
     await expect(
       installRoutine(CDN, rouDir, libDir, "echo-routine", undefined, fakeFetch),
@@ -172,5 +259,30 @@ describe("catalogue reader (④ distribution)", () => {
     await expect(
       installRoutine(CDN, rouDir, libDir, "../evil", undefined, fakeFetch),
     ).rejects.toThrow(/BAD_ID/);
+  });
+
+  it("rejects a Method version changed after review before writing it", async () => {
+    const { libDir } = freshDirs();
+    await expect(
+      installMethod(CDN, libDir, "echo-test", undefined, fakeFetch, "2.0.0"),
+    ).rejects.toThrow(/CATALOGUE_VERSION_CHANGED/);
+    expect(existsSync(join(libDir, "echo-test"))).toBe(false);
+  });
+
+  it("rejects a Routine version changed after review before writing it", async () => {
+    const { libDir, rouDir } = freshDirs();
+    await expect(
+      installRoutine(
+        CDN,
+        rouDir,
+        libDir,
+        "echo-routine",
+        undefined,
+        fakeFetch,
+        "2.0.0",
+      ),
+    ).rejects.toThrow(/CATALOGUE_VERSION_CHANGED/);
+    expect(existsSync(join(rouDir, "echo-routine"))).toBe(false);
+    expect(existsSync(join(libDir, "echo-test"))).toBe(false);
   });
 });

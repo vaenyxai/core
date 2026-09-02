@@ -41,6 +41,7 @@ import type {
   LibraryRoutineSummary,
   ModelProviderInfo,
   CatalogueIndex,
+  CatalogueInstallPreview,
   MethodDraft,
   Project,
   ProjectMemory,
@@ -101,6 +102,7 @@ import {
   fetchLibraryRoutine,
   deleteAskVaenyxConversation,
   fetchCatalogue,
+  previewCatalogueInstall,
   installRoutineFromCatalogue,
   installMethodFromCatalogue,
   recordLegalAck,
@@ -4618,9 +4620,7 @@ function ModesPanel() {
         : `active ${minutes} min ago`;
     const hours = Math.floor(minutes / 60);
     if (hours < 48)
-      return lang === "zh"
-        ? `${hours} 小时前用过`
-        : `active ${hours} h ago`;
+      return lang === "zh" ? `${hours} 小时前用过` : `active ${hours} h ago`;
     const days = Math.floor(hours / 24);
     if (days < 30)
       return lang === "zh" ? `${days} 天前用过` : `active ${days} days ago`;
@@ -11941,13 +11941,19 @@ function codexSignInError(code: string, zh: boolean): string {
     // A second press is worth trying, but somebody stuck on a fresh machine
     // needs the way round it as well — and there is one, it takes two
     // minutes, and it does not involve installing anything.
-    return (zh
-      ? "ChatGPT 登录组件没装上。检查网络后再点一次,它会重新安装。装不上也没关系:在 Models 里连一个免费的 Gemini 或 Groq key,Vaenyx 一样能用,而且不需要装任何东西。"
-      : "The ChatGPT sign-in component could not be installed. Check the internet connection and press the button again — it retries. If it still will not install, you are not stuck: connect a free Gemini or Groq key under Models instead. Nothing to install, and Vaenyx works the same.") + reference;
+    return (
+      (zh
+        ? "ChatGPT 登录组件没装上。检查网络后再点一次,它会重新安装。装不上也没关系:在 Models 里连一个免费的 Gemini 或 Groq key,Vaenyx 一样能用,而且不需要装任何东西。"
+        : "The ChatGPT sign-in component could not be installed. Check the internet connection and press the button again — it retries. If it still will not install, you are not stuck: connect a free Gemini or Groq key under Models instead. Nothing to install, and Vaenyx works the same.") +
+      reference
+    );
   }
-  return (zh
-    ? "ChatGPT 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"
-    : "The ChatGPT sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.") + reference;
+  return (
+    (zh
+      ? "ChatGPT 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"
+      : "The ChatGPT sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.") +
+    reference
+  );
 }
 
 // Same idea for the Claude subscription, whose component is far larger: the
@@ -11965,13 +11971,19 @@ function claudeSignInError(message: string, zh: boolean): string {
   const code = message.split(":")[0];
   const reference = safeErrorReference(message, zh);
   if (code === "CLAUDE_COMPONENT_FAILED") {
-    return (zh
-      ? "Claude 订阅组件没装上(约 250 MB,第一次连接时下载)。检查网络后再点一次,它会重新下载。装不上也不影响别的:Vaenyx 其余功能照常,也可以在 Models 里连一个免费的 Gemini 或 Groq key。"
-      : "The Claude subscription component could not be installed (about 250 MB, downloaded the first time you connect). Check the internet connection and press the button again — it retries. Nothing else is affected: the rest of Vaenyx works as normal, and a free Gemini or Groq key under Models is always an option.") + reference;
+    return (
+      (zh
+        ? "Claude 订阅组件没装上(约 250 MB,第一次连接时下载)。检查网络后再点一次,它会重新下载。装不上也不影响别的:Vaenyx 其余功能照常,也可以在 Models 里连一个免费的 Gemini 或 Groq key。"
+        : "The Claude subscription component could not be installed (about 250 MB, downloaded the first time you connect). Check the internet connection and press the button again — it retries. Nothing else is affected: the rest of Vaenyx works as normal, and a free Gemini or Groq key under Models is always an option.") +
+      reference
+    );
   }
-  return (zh
-    ? "Claude 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"
-    : "The Claude sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.") + reference;
+  return (
+    (zh
+      ? "Claude 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"
+      : "The Claude sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.") +
+    reference
+  );
 }
 
 function SubscriptionDoorPanel() {
@@ -12439,12 +12451,17 @@ function SubscriptionDoorPanel() {
                 const signedIn = appLogin?.[row.engine] === true;
                 const ownerHas = logins.owner[row.engine];
                 return (
-                  <div className="door-app-cap door-engine-row" key={row.engine}>
+                  <div
+                    className="door-app-cap door-engine-row"
+                    key={row.engine}
+                  >
                     <span className="door-engine-line">
                       {row.name}
                       {" — "}
                       {signedIn ? (
-                        <strong>{lang === "zh" ? "已登录" : "signed in"}</strong>
+                        <strong>
+                          {lang === "zh" ? "已登录" : "signed in"}
+                        </strong>
                       ) : lang === "zh" ? (
                         "未登录"
                       ) : (
@@ -12454,9 +12471,7 @@ function SubscriptionDoorPanel() {
                     <button
                       className="door-copy"
                       disabled={appBusy === appProfile.id || !ownerHas}
-                      onClick={() =>
-                        void grantLogin(appProfile.id, row.engine)
-                      }
+                      onClick={() => void grantLogin(appProfile.id, row.engine)}
                       title={
                         ownerHas
                           ? undefined
@@ -19859,6 +19874,113 @@ function isLaterVersion(candidate: string, installed: string): boolean {
   return false;
 }
 
+function InstallCapabilityDisclosure({
+  preview,
+}: {
+  preview: CatalogueInstallPreview;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  return (
+    <section className="install-disclosure">
+      <dl className="install-disclosure-facts">
+        <div>
+          <dt>{zh ? "类型" : "Item type"}</dt>
+          <dd>{preview.kind === "method" ? "Method" : "Routine"}</dd>
+        </div>
+        <div>
+          <dt>{zh ? "名称" : "Name"}</dt>
+          <dd>{preview.name}</dd>
+        </div>
+        <div>
+          <dt>{zh ? "作者" : "Creator"}</dt>
+          <dd>{preview.creator || (zh ? "未标明" : "Not listed")}</dd>
+        </div>
+        <div>
+          <dt>{zh ? "准确版本" : "Exact version"}</dt>
+          <dd>v{preview.version}</dd>
+        </div>
+        <div>
+          <dt>{zh ? "来源" : "Source"}</dt>
+          <dd>
+            <a href={preview.source.url} rel="noreferrer" target="_blank">
+              {preview.source.label}
+            </a>
+          </dd>
+        </div>
+      </dl>
+
+      <div className="install-capabilities">
+        <strong>{zh ? "请求的能力" : "Capabilities requested"}</strong>
+        {preview.capabilities.length === 0 ? (
+          <>
+            <p className="install-none">
+              {zh
+                ? "未请求任何能力（No Capabilities requested）"
+                : "No Capabilities requested"}
+            </p>
+            <p className="context-disclaimer">
+              {zh
+                ? "这不表示它不接收内容；你交给配方的普通文字和其他输入仍会用于运行。"
+                : "This does not mean it receives no content. Ordinary text and other input you supply to the recipe are still used when it runs."}
+            </p>
+          </>
+        ) : (
+          <ul className="install-capabilities-list">
+            {preview.capabilities.map((capability) => {
+              const known = capabilityMeta(capability.id);
+              const status =
+                capability.state === "available"
+                  ? zh
+                    ? "可用"
+                    : "Ready"
+                  : capability.state === "disabled"
+                    ? zh
+                      ? "设置中已关闭"
+                      : "Off in Settings"
+                    : zh
+                      ? "不支持"
+                      : "Unsupported";
+              return (
+                <li className="install-capability-row" key={capability.id}>
+                  <span className="install-capability-name">
+                    {known ? (
+                      <CapabilityChip
+                        available={capability.state === "available"}
+                        id={capability.id}
+                        lang={lang}
+                        showName
+                      />
+                    ) : (
+                      <code>{capability.id}</code>
+                    )}
+                  </span>
+                  <span
+                    className={`install-capability-status ${capability.state}`}
+                  >
+                    {status}
+                  </span>
+                  {preview.isUpdate && capability.newlyRequested ? (
+                    <span className="install-capability-new">
+                      {zh ? "本次更新新增" : "New in this update"}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <p className="context-disclaimer install-disclosure-warning">
+        {zh
+          ? "安装不会开启任何能力、放宽当前 Mode，也不会补上缺少的连接。Community 项目只是声明式配方和编排，不能自带可执行 Tool 或代码；它只能调用 Vaenyx 内置或审核过的 Tool，并继续受全局设置、Mode 和运行时限制。"
+          : "Installing does not turn on a capability, loosen the current Mode, or add a missing connection. Community items are declarative recipes and orchestration: they cannot ship executable Tools or code. They can only call Vaenyx-built or reviewed Tools, within the existing global, Mode and runtime limits."}
+      </p>
+    </section>
+  );
+}
+
 // THE UPDATE DIALOG — consequences, not a version number.
 //
 // "v1.2.0 -> v1.4.0" tells somebody nothing they can act on. Three things do,
@@ -19893,6 +20015,9 @@ function UpdateDialog({
   const { lang, t } = useI18n();
   const zh = lang === "zh";
   const [offer, setOffer] = useState<UpdateOffer | null>(null);
+  const [disclosure, setDisclosure] = useState<CatalogueInstallPreview | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19905,18 +20030,32 @@ function UpdateDialog({
 
   useEffect(() => {
     let active = true;
-    void previewUpdate(id, kind, latest.version)
-      .then((result) => {
-        if (active) setOffer(result.offer);
+    void previewCatalogueInstall(id, kind)
+      .then(async (nextDisclosure) => {
+        const result = await previewUpdate(id, kind, nextDisclosure.version);
+        if (active) {
+          setDisclosure(nextDisclosure);
+          setOffer(result.offer);
+        }
       })
-      .catch(() => undefined)
+      .catch((nextError) => {
+        if (active) {
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : zh
+                ? "没能载入更新说明。"
+                : "The update review could not be loaded.",
+          );
+        }
+      })
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [id, kind, latest.version]);
+  }, [id, kind, zh]);
 
   async function run(action: () => Promise<unknown>, stayOpen = false) {
     setBusy(true);
@@ -19960,8 +20099,8 @@ function UpdateDialog({
         <>
           <p className="settings-card-copy">
             {zh
-              ? `已经更新到 v${latest.version}。`
-              : `Updated to v${latest.version}.`}
+              ? `已经更新到 v${disclosure?.version ?? latest.version}。`
+              : `Updated to v${disclosure?.version ?? latest.version}.`}
           </p>
           {!check ? (
             <>
@@ -20060,9 +20199,13 @@ function UpdateDialog({
           {error ? <p className="form-error">{error}</p> : null}
         </>
       ) : !offer ? (
-        <p className="library-note">
-          {zh ? "已经是最新的了。" : "This is already the current version."}
-        </p>
+        error ? (
+          <p className="form-error">{error}</p>
+        ) : (
+          <p className="library-note">
+            {zh ? "已经是最新的了。" : "This is already the current version."}
+          </p>
+        )
       ) : (
         <>
           <p className="settings-card-copy">
@@ -20106,6 +20249,10 @@ function UpdateDialog({
             {t("legal.notice.community.updateAvailable")}
           </p>
 
+          {disclosure ? (
+            <InstallCapabilityDisclosure preview={disclosure} />
+          ) : null}
+
           <div className="model-card-actions">
             <button
               className={
@@ -20113,13 +20260,16 @@ function UpdateDialog({
                   ? "primary-button"
                   : "secondary-button"
               }
-              disabled={busy}
+              disabled={busy || !disclosure}
               onClick={() =>
                 void run(
                   () =>
                     kind === "method"
-                      ? updateMethodFromCommunity(id)
-                      : updateRoutineFromCommunity(id),
+                      ? updateMethodFromCommunity(id, disclosure?.version ?? "")
+                      : updateRoutineFromCommunity(
+                          id,
+                          disclosure?.version ?? "",
+                        ),
                   // A Method can be re-run against the examples; a Routine has
                   // no single answer to compare, so that dialog just closes.
                   kind === "method" && offer.examplesKept > 0,
@@ -23154,6 +23304,90 @@ function CommunityReportLink({
   );
 }
 
+function CommunityInstallDialog({
+  id,
+  kind,
+  onClose,
+  onInstall,
+}: {
+  id: string;
+  kind: "method" | "routine";
+  onClose: () => void;
+  onInstall: (version: string) => void;
+}) {
+  const { lang, t } = useI18n();
+  const zh = lang === "zh";
+  const [preview, setPreview] = useState<CatalogueInstallPreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setPreview(null);
+    setError(null);
+    void previewCatalogueInstall(id, kind)
+      .then((result) => {
+        if (active) setPreview(result);
+      })
+      .catch((nextError) => {
+        if (active) {
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : zh
+                ? "没能载入安装说明。"
+                : "The install review could not be loaded.",
+          );
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [attempt, id, kind, zh]);
+
+  return (
+    <Modal
+      onClose={onClose}
+      title={zh ? "安装前请看" : "Review before installing"}
+    >
+      {!preview && !error ? (
+        <p className="library-note">
+          {zh
+            ? "正在读取准确版本和能力…"
+            : "Loading the exact version and capabilities…"}
+        </p>
+      ) : null}
+      {preview ? <InstallCapabilityDisclosure preview={preview} /> : null}
+      {error ? <p className="form-error">{error}</p> : null}
+      <div className="modal-actions">
+        {error ? (
+          <button
+            className="secondary-button"
+            onClick={() => setAttempt((value) => value + 1)}
+            type="button"
+          >
+            {zh ? "重试" : "Retry"}
+          </button>
+        ) : null}
+        <button
+          className="primary-button"
+          disabled={!preview}
+          onClick={() => {
+            if (!preview) return;
+            onInstall(preview.version);
+          }}
+          type="button"
+        >
+          {zh ? "安装" : "Install"}
+        </button>
+        <button className="secondary-button" onClick={onClose} type="button">
+          {t("routine.confirm.cancel")}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function CataloguePanel({
   kind,
   installedIds,
@@ -23165,7 +23399,6 @@ function CataloguePanel({
   onMethodsRefresh: () => void;
   onRoutinesRefresh: () => void;
 }) {
-  const { t } = useI18n();
   const [catalogue, setCatalogue] = useState<CatalogueIndex | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -23176,7 +23409,6 @@ function CataloguePanel({
   const [confirmingInstall, setConfirmingInstall] = useState<{
     id: string;
     kind: "routine" | "method";
-    name: string;
   } | null>(null);
 
   useEffect(() => {
@@ -23200,15 +23432,19 @@ function CataloguePanel({
     };
   }, []);
 
-  async function install(id: string, kind: "routine" | "method") {
+  async function install(
+    id: string,
+    kind: "routine" | "method",
+    version: string,
+  ) {
     setActionError(null);
     setInstalling(id);
     try {
       if (kind === "method") {
-        await installMethodFromCatalogue(id);
+        await installMethodFromCatalogue(id, version);
         onMethodsRefresh();
       } else {
-        await installRoutineFromCatalogue(id);
+        await installRoutineFromCatalogue(id, version);
         onRoutinesRefresh();
       }
       setInstalled((prev) => [...new Set([...prev, id])]);
@@ -23305,7 +23541,6 @@ function CataloguePanel({
                       setConfirmingInstall({
                         id: routine.id,
                         kind: "routine",
-                        name: routine.name,
                       })
                     }
                     type="button"
@@ -23359,7 +23594,6 @@ function CataloguePanel({
                       setConfirmingInstall({
                         id: method.id,
                         kind: "method",
-                        name: method.name,
                       })
                     }
                     type="button"
@@ -23382,34 +23616,16 @@ function CataloguePanel({
         </div>
       ) : null}
       {confirmingInstall ? (
-        <Modal
+        <CommunityInstallDialog
+          id={confirmingInstall.id}
+          kind={confirmingInstall.kind}
           onClose={() => setConfirmingInstall(null)}
-          title={confirmingInstall.name}
-        >
-          <p className="settings-card-copy">
-            {t("legal.disclaimer.community.install")}
-          </p>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button
-              className="primary-button"
-              onClick={() => {
-                const target = confirmingInstall;
-                setConfirmingInstall(null);
-                void install(target.id, target.kind);
-              }}
-              type="button"
-            >
-              Install
-            </button>
-            <button
-              className="secondary-button"
-              onClick={() => setConfirmingInstall(null)}
-              type="button"
-            >
-              {t("routine.confirm.cancel")}
-            </button>
-          </div>
-        </Modal>
+          onInstall={(version) => {
+            const target = confirmingInstall;
+            setConfirmingInstall(null);
+            void install(target.id, target.kind, version);
+          }}
+        />
       ) : null}
     </div>
   );
@@ -26329,8 +26545,9 @@ function VaenyxWorkspace({
           }
         ).userAgentData;
         if (data?.getHighEntropyValues) {
-          model = ((await data.getHighEntropyValues(["model"])).model ?? "")
-            .trim();
+          model = (
+            (await data.getHighEntropyValues(["model"])).model ?? ""
+          ).trim();
         }
       } catch {
         // Unknown stays unknown.
