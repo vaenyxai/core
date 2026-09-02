@@ -1,4 +1,5 @@
 import type {
+  UpdateVaenyxThreadDetailsRequest,
   UpdateVaenyxThreadProjectRequest,
   UpdateVaenyxThreadStatusRequest,
   UpdateVaenyxThreadTitleRequest,
@@ -38,7 +39,7 @@ function toThread(row: VaenyxThreadRow): VaenyxThread {
     conversationId: row.conversation_id,
     taskId: row.task_id,
     routineId: row.routine_id,
-    summary: row.summary,
+    purpose: row.summary,
     messageCount: row.message_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -270,7 +271,30 @@ export function updateVaenyxThreadTitle(
   ownerId: string,
   input: UpdateVaenyxThreadTitleRequest,
 ): VaenyxThread {
-  const title = input.title.trim();
+  const current = getThreadRow(database, threadId, ownerId);
+  return updateVaenyxThreadDetails(database, threadId, ownerId, {
+    title: input.title,
+    purpose: current.summary ?? "",
+  });
+}
+
+function oneLine(value: string): string {
+  let safe = "";
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    safe += code < 32 || code === 127 ? " " : character;
+  }
+  return safe.replace(/\s+/g, " ").trim();
+}
+
+export function updateVaenyxThreadDetails(
+  database: DatabaseHandle,
+  threadId: string,
+  ownerId: string,
+  input: UpdateVaenyxThreadDetailsRequest,
+): VaenyxThread {
+  const title = oneLine(input.title);
+  const purpose = oneLine(input.purpose) || null;
 
   if (!title) {
     throw new Error("VAENYX_THREAD_TITLE_REQUIRED");
@@ -278,31 +302,42 @@ export function updateVaenyxThreadTitle(
 
   const thread = getThreadRow(database, threadId, ownerId);
   const now = new Date().toISOString();
+  let transactionOpen = false;
 
-  database.sqlite
-    .prepare(
-      `UPDATE vaenyx_threads
-       SET title = ?, updated_at = ?
-       WHERE id = ?
-         AND (owner_id = ? OR owner_id IS NULL)`,
-    )
-    .run(title, now, threadId, ownerId);
-
-  if (thread.conversation_id) {
+  try {
+    database.sqlite.exec("BEGIN IMMEDIATE;");
+    transactionOpen = true;
     database.sqlite
       .prepare(
-        `UPDATE ask_vaenyx_conversations
-         SET title = ?, updated_at = ?
+        `UPDATE vaenyx_threads
+         SET title = ?, summary = ?, updated_at = ?
          WHERE id = ?
-           AND owner_id = ?`,
+           AND (owner_id = ? OR owner_id IS NULL)`,
       )
-      .run(title, now, thread.conversation_id, ownerId);
-  }
+      .run(title, purpose, now, threadId, ownerId);
 
-  if (thread.task_id) {
-    database.sqlite
-      .prepare("UPDATE tasks SET title = ? WHERE id = ?")
-      .run(title, thread.task_id);
+    if (thread.conversation_id) {
+      database.sqlite
+        .prepare(
+          `UPDATE ask_vaenyx_conversations
+           SET title = ?, updated_at = ?
+           WHERE id = ?
+             AND owner_id = ?`,
+        )
+        .run(title, now, thread.conversation_id, ownerId);
+    }
+
+    if (thread.task_id) {
+      database.sqlite
+        .prepare("UPDATE tasks SET title = ? WHERE id = ?")
+        .run(title, thread.task_id);
+    }
+
+    database.sqlite.exec("COMMIT;");
+    transactionOpen = false;
+  } catch (error) {
+    if (transactionOpen) database.sqlite.exec("ROLLBACK;");
+    throw error;
   }
 
   return toThread(getThreadRow(database, threadId, ownerId));

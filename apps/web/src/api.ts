@@ -86,6 +86,7 @@ import type {
   UpdateInstanceSettingsRequest,
   UpdateProjectInstructionsRequest,
   UpdateProjectRequest,
+  UpdateVaenyxThreadDetailsRequest,
   UpdateVaenyxThreadProjectRequest,
   UpdateVaenyxThreadStatusRequest,
   UpdateStatus,
@@ -1175,6 +1176,16 @@ export function updateVaenyxThreadTitle(
   input: UpdateVaenyxThreadTitleRequest,
 ): Promise<VaenyxThread> {
   return requestJson<VaenyxThread>(`/v1/threads/${threadId}/title`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateVaenyxThreadDetails(
+  threadId: string,
+  input: UpdateVaenyxThreadDetailsRequest,
+): Promise<VaenyxThread> {
+  return requestJson<VaenyxThread>(`/v1/threads/${threadId}/details`, {
     method: "PUT",
     body: JSON.stringify(input),
   });

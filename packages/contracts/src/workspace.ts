@@ -411,6 +411,12 @@ export const ConversationSearchResultSchema = Type.Object(
     ]),
     taskId: Type.Union([Type.String(), Type.Null()]),
     title: Type.String(),
+    purpose: Type.Union([Type.String(), Type.Null()]),
+    matchField: Type.Union([
+      Type.Literal("message"),
+      Type.Literal("title"),
+      Type.Literal("purpose"),
+    ]),
     role: Type.Union([Type.Literal("owner"), Type.Literal("assistant")]),
     messageCreatedAt: Type.String(),
     excerpt: Type.String(),
@@ -664,7 +670,9 @@ export const VaenyxThreadSchema = Type.Object(
     // Library v2: when set, this chat is a routine chat (capability bar +
     // Journal/Gallery; messages run the Routine). Null = an ordinary chat.
     routineId: Type.Union([Type.String(), Type.Null()]),
-    summary: Type.Union([Type.String(), Type.Null()]),
+    // One-line Owner-authored identity metadata. It is for recognition,
+    // organization and local search only; it is never model context.
+    purpose: Type.Union([Type.String(), Type.Null()]),
     messageCount: Type.Integer({ minimum: 0 }),
     createdAt: Type.String(),
     updatedAt: Type.String(),
@@ -693,6 +701,15 @@ export const UpdateVaenyxThreadStatusRequestSchema = Type.Object(
 export const UpdateVaenyxThreadTitleRequestSchema = Type.Object(
   {
     title: Type.String({ minLength: 1, maxLength: 120 }),
+  },
+  { additionalProperties: false },
+);
+
+export const UpdateVaenyxThreadDetailsRequestSchema = Type.Object(
+  {
+    title: Type.String({ minLength: 1, maxLength: 120 }),
+    // Empty clears the optional purpose.
+    purpose: Type.String({ maxLength: 240 }),
   },
   { additionalProperties: false },
 );
@@ -3171,6 +3188,9 @@ export type UpdateVaenyxThreadStatusRequest = Static<
 >;
 export type UpdateVaenyxThreadTitleRequest = Static<
   typeof UpdateVaenyxThreadTitleRequestSchema
+>;
+export type UpdateVaenyxThreadDetailsRequest = Static<
+  typeof UpdateVaenyxThreadDetailsRequestSchema
 >;
 export type UpdateAgentProfileNameRequest = Static<
   typeof UpdateAgentProfileNameRequestSchema

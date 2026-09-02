@@ -39,6 +39,7 @@ function addConversation(input: {
   ownerId?: string;
   status?: "active" | "archived" | "pinned";
   title?: string;
+  purpose?: string | null;
   kind?: "chat" | "inbox" | "task";
 }): void {
   const now = "2026-08-01T00:00:00.000Z";
@@ -59,14 +60,15 @@ function addConversation(input: {
   database.sqlite
     .prepare(
       `INSERT INTO vaenyx_threads
-       (id, owner_id, kind, title, status, conversation_id, created_at, updated_at, mode_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, owner_id, kind, title, summary, status, conversation_id, created_at, updated_at, mode_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       `thread-${input.id}`,
       input.ownerId ?? "owner",
       input.kind ?? "chat",
       input.title ?? input.id,
+      input.purpose ?? null,
       input.status ?? "active",
       input.id,
       now,
@@ -119,6 +121,37 @@ describe("local conversation search", () => {
     expect(parseConversationSearchQuery('fresh "corner market"').match).toBe(
       '("fresh") AND ("corner market")',
     );
+  });
+
+  it("finds Owner-authored titles and purposes without treating them as messages", () => {
+    addConversation({
+      id: "identity",
+      title: "Kitchen renovation",
+      purpose: "Track cabinet quotes and finish decisions.",
+    });
+
+    const [title] = searchConversations(database, "owner", null, "renovation");
+    expect(title).toMatchObject({
+      conversationId: "identity",
+      title: "Kitchen renovation",
+      purpose: "Track cabinet quotes and finish decisions.",
+      matchField: "title",
+      before: null,
+      after: null,
+    });
+    expect(title?.messageId).toBe("metadata:identity");
+
+    const [purpose] = searchConversations(
+      database,
+      "owner",
+      null,
+      '"cabinet quotes"',
+    );
+    expect(purpose).toMatchObject({
+      conversationId: "identity",
+      matchField: "purpose",
+      excerpt: expect.stringContaining("cabinet quotes"),
+    });
   });
 
   it("enforces Owner and Mode scope in the MATCH statement", () => {
@@ -209,7 +242,7 @@ describe("local conversation search", () => {
   });
 
   it("repairs a damaged index from canonical messages", () => {
-    addConversation({ id: "repair" });
+    addConversation({ id: "repair", title: "Maintenance" });
     addMessage("message", "repair", "repair this local index");
     database.sqlite
       .prepare("DELETE FROM conversation_message_search WHERE message_id = ?")

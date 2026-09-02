@@ -292,7 +292,7 @@ import {
   updateSettings,
   updateVaenyxThreadProject,
   updateVaenyxThreadStatus,
-  updateVaenyxThreadTitle,
+  updateVaenyxThreadDetails,
   markVaenyxThreadSeen,
   fetchComponentProgress,
   type ComponentBootProgress,
@@ -6003,7 +6003,7 @@ function ProjectsPanel({
 function goTargetLabel(target: string, zh: boolean): string {
   const labels: Record<string, [string, string]> = {
     settings: ["Settings", "设置"],
-    projects: ["Projects", "Projects"],
+    projects: ["Settings · Organization", "设置 · 整理"],
     scheduled: ["Scheduled", "定时任务"],
     library: ["Library", "资源库"],
     "library-methods": ["Library · Methods", "资源库 · Methods"],
@@ -6380,12 +6380,8 @@ function AskVaenyxPanel({
   const [prompt, setPrompt] = useState("");
   const [taskPrompt, setTaskPrompt] = useState("");
   const [startWorkPrompt, setStartWorkPrompt] = useState("");
-  const generalProjectId =
-    workspace.projects.find(isGeneralProject)?.id ??
-    workspace.projects[0]?.id ??
-    GENERAL_PROJECT_ID;
   const [composeProjectId, setComposeProjectId] = useState<string>(
-    requestedProjectId ?? generalProjectId,
+    requestedProjectId ?? "",
   );
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingTaskMessages, setLoadingTaskMessages] = useState(false);
@@ -6586,8 +6582,8 @@ function AskVaenyxPanel({
     setTaskPrompt("");
     setStartWorkPrompt("");
     setError(null);
-    setComposeProjectId(requestedProjectId ?? generalProjectId);
-  }, [composeKey, generalProjectId, requestedProjectId, view]);
+    setComposeProjectId(requestedProjectId ?? "");
+  }, [composeKey, requestedProjectId, view]);
 
   useEffect(() => {
     if (view !== "task" || !focusedTaskId) {
@@ -7975,7 +7971,7 @@ This conversation is its home — feed it something to try it, and ask for chang
     ) {
       try {
         const conversation = await createAskVaenyxConversation({
-          projectId: composeProjectId || generalProjectId,
+          projectId: composeProjectId || null,
         });
         preCreatedConversationId = conversation.id;
         onConversationsChange(upsertConversation(conversations, conversation));
@@ -8310,7 +8306,7 @@ This conversation is its home — feed it something to try it, and ask for chang
 
       if (!conversationId) {
         const conversation = await createAskVaenyxConversation({
-          projectId: composeProjectId || generalProjectId,
+          projectId: composeProjectId || null,
         });
         conversationId = conversation.id;
         nextConversations = upsertConversation(conversations, conversation);
@@ -8845,15 +8841,25 @@ This conversation is its home — feed it something to try it, and ask for chang
     );
   }
 
-  async function renameThread(thread: VaenyxThread, title: string) {
-    const nextTitle = title.trim();
-    if (!nextTitle || nextTitle === thread.title) return;
+  async function updateThreadDetails(
+    thread: VaenyxThread,
+    details: { title: string; purpose: string },
+  ) {
+    const nextTitle = details.title.trim();
+    const nextPurpose = details.purpose.trim();
+    if (
+      !nextTitle ||
+      (nextTitle === thread.title && nextPurpose === (thread.purpose ?? ""))
+    ) {
+      return;
+    }
 
     setError(null);
 
     try {
-      const updatedThread = await updateVaenyxThreadTitle(thread.id, {
+      const updatedThread = await updateVaenyxThreadDetails(thread.id, {
         title: nextTitle,
+        purpose: nextPurpose,
       });
       updateConversationTitleFromThread(updatedThread);
       await onWorkspaceRefresh();
@@ -8861,7 +8867,7 @@ This conversation is its home — feed it something to try it, and ask for chang
       setError(
         nextError instanceof Error
           ? nextError.message
-          : "Vaenyx could not rename this item.",
+          : "Vaenyx could not update this Conversation.",
       );
     }
   }
@@ -9162,8 +9168,8 @@ This conversation is its home — feed it something to try it, and ask for chang
         onMoveThreadProject={(nextThread, nextProjectId) =>
           void moveThreadProject(nextThread, nextProjectId)
         }
-        onRenameThread={(nextThread, nextTitle) =>
-          void renameThread(nextThread, nextTitle)
+        onUpdateThreadDetails={(nextThread, details) =>
+          void updateThreadDetails(nextThread, details)
         }
         onSetThreadStatus={(nextThread, status) =>
           void setThreadStatus(nextThread, status)
@@ -9362,6 +9368,9 @@ This conversation is its home — feed it something to try it, and ask for chang
               {renderThreadHeaderMenu(activeThread)}
             </div>
           </div>
+          {!isInboxChat && activeThread?.purpose ? (
+            <p className="conversation-purpose">{activeThread.purpose}</p>
+          ) : null}
           {isRoutine ? (
             <div className="capability-bar">
               {(["chat", "journal", "gallery"] as const).map((tab) => (
@@ -10696,6 +10705,11 @@ This conversation is its home — feed it something to try it, and ask for chang
                   {renderThreadHeaderMenu(focusedTaskThread)}
                 </div>
               </div>
+              {focusedTaskThread?.purpose ? (
+                <p className="conversation-purpose">
+                  {focusedTaskThread.purpose}
+                </p>
+              ) : null}
               {focusedTask.harness === "codex-harness" ? (
                 <div className="task-toolbar">
                   <Picker
@@ -16935,10 +16949,14 @@ function SettingsPanel({
   settings,
   onUpdate,
   sessionMode,
+  projectsPanel,
+  initialTab,
 }: {
   settings: InstanceSettings;
   systemStatus: SystemStatus | null;
   onUpdate: (settings: InstanceSettings) => void;
+  projectsPanel: ReactNode;
+  initialTab?: "projects";
   // Custom Mode M3: the mode this session is in (null = User Mode); with
   // lockSettings the whole page is replaced by a locked notice (the server
   // enforces the same rule — this is the honest UI on top of it).
@@ -16994,16 +17012,19 @@ function SettingsPanel({
     | "notifications"
     | "backup"
     | "sharing"
+    | "projects"
     | "modes"
     | "manual"
     | "legal"
     // A sign-in-page model button parked a connect intent: open on AI Settings
     // so the chosen provider's card is front and centre.
-  >(() =>
-    localStorage.getItem(CONNECT_MODEL_INTENT) ||
-    localStorage.getItem("vaenyx.toolsIntent")
-      ? "ai"
-      : "user",
+  >(
+    () =>
+      initialTab ??
+      (localStorage.getItem(CONNECT_MODEL_INTENT) ||
+      localStorage.getItem("vaenyx.toolsIntent")
+        ? "ai"
+        : "user"),
   );
   const [stoppingVaenyx, setStoppingVaenyx] = useState(false);
   const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
@@ -17240,6 +17261,13 @@ function SettingsPanel({
               Tools
             </button>
             <button
+              className={activeTab === "projects" ? "active" : ""}
+              onClick={() => setSettingsTab("projects")}
+              type="button"
+            >
+              {t("settings.projects.tab")}
+            </button>
+            <button
               className={activeTab === "notifications" ? "active" : ""}
               onClick={() => setSettingsTab("notifications")}
               type="button"
@@ -17300,6 +17328,7 @@ function SettingsPanel({
           <HelpContent document="manual" />
         </section>
       ) : null}
+      {activeTab === "projects" ? projectsPanel : null}
       {activeTab === "user" ? (
         <section className="settings-card">
           <p className="eyebrow">Personal</p>
@@ -25114,30 +25143,36 @@ function ThreadActionsMenu({
   projects,
   thread,
   onMoveThreadProject,
-  onRenameThread,
+  onUpdateThreadDetails,
   onSetThreadStatus,
 }: {
   projects: Project[];
   thread: VaenyxThread;
   onMoveThreadProject: (thread: VaenyxThread, projectId: string | null) => void;
-  onRenameThread: (thread: VaenyxThread, title: string) => void;
+  onUpdateThreadDetails: (
+    thread: VaenyxThread,
+    details: { title: string; purpose: string },
+  ) => void;
   onSetThreadStatus: (
     thread: VaenyxThread,
     status: VaenyxThread["status"],
   ) => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState(thread.title);
-  const [renaming, setRenaming] = useState(false);
+  const [draftPurpose, setDraftPurpose] = useState(thread.purpose ?? "");
+  const [editingDetails, setEditingDetails] = useState(false);
   const isArchived = thread.status === "archived";
 
   useEffect(() => {
     setDraftTitle(thread.title);
-    setRenaming(false);
-  }, [thread.id, thread.title]);
+    setDraftPurpose(thread.purpose ?? "");
+    setEditingDetails(false);
+  }, [thread.id, thread.purpose, thread.title]);
 
   useEffect(() => {
-    if (!open) setRenaming(false);
+    if (!open) setEditingDetails(false);
   }, [open]);
 
   function pinToggle() {
@@ -25150,10 +25185,10 @@ function ThreadActionsMenu({
     setOpen(false);
   }
 
-  // Claude-Code-style shortcuts while the menu is open: R / P / A, Esc to close.
-  // Disabled while renaming so typing in the field isn't hijacked.
+  // Claude-Code-style shortcuts while the menu is open: E / P / A, Esc to close.
+  // Disabled while editing so typing in the fields isn't hijacked.
   useEffect(() => {
-    if (!open || renaming) return undefined;
+    if (!open || editingDetails) return undefined;
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setOpen(false);
@@ -25162,9 +25197,9 @@ function ThreadActionsMenu({
       const tag = (event.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       const key = event.key.toLowerCase();
-      if (key === "r") {
+      if (key === "e") {
         event.preventDefault();
-        setRenaming(true);
+        setEditingDetails(true);
       } else if (key === "p" && !isArchived) {
         event.preventDefault();
         onSetThreadStatus(
@@ -25180,7 +25215,7 @@ function ThreadActionsMenu({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, renaming, isArchived, thread, onSetThreadStatus]);
+  }, [open, editingDetails, isArchived, thread, onSetThreadStatus]);
 
   const menuRef = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
@@ -25194,13 +25229,22 @@ function ThreadActionsMenu({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
-  function renameFromMenu(event: FormEvent<HTMLFormElement>) {
+  function updateDetailsFromMenu(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextTitle = draftTitle.trim();
-    if (!nextTitle || nextTitle === thread.title) return;
+    const nextPurpose = draftPurpose.trim();
+    if (
+      !nextTitle ||
+      (nextTitle === thread.title && nextPurpose === (thread.purpose ?? ""))
+    ) {
+      return;
+    }
 
-    onRenameThread(thread, nextTitle);
-    setRenaming(false);
+    onUpdateThreadDetails(thread, {
+      title: nextTitle,
+      purpose: nextPurpose,
+    });
+    setEditingDetails(false);
     setOpen(false);
   }
 
@@ -25211,14 +25255,16 @@ function ThreadActionsMenu({
       open={open}
       ref={menuRef}
     >
-      <summary aria-label={`Actions for ${thread.title}`}>
+      <summary
+        aria-label={t("threads.actions").replace("{title}", thread.title)}
+      >
         <span aria-hidden="true">⋮</span>
       </summary>
       <div className="thread-action-popover">
-        {renaming ? (
-          <form className="thread-rename-form" onSubmit={renameFromMenu}>
+        {editingDetails ? (
+          <form className="thread-rename-form" onSubmit={updateDetailsFromMenu}>
             <label>
-              <span>Rename</span>
+              <span>{t("threads.details.title")}</span>
               <input
                 autoFocus
                 maxLength={120}
@@ -25226,31 +25272,44 @@ function ThreadActionsMenu({
                 value={draftTitle}
               />
             </label>
+            <label>
+              <span>{t("threads.details.purpose")}</span>
+              <textarea
+                maxLength={240}
+                onChange={(event) => setDraftPurpose(event.target.value)}
+                placeholder={t("threads.details.purposePlaceholder")}
+                rows={3}
+                value={draftPurpose}
+              />
+            </label>
             <div className="thread-rename-actions">
               <button
                 disabled={
-                  !draftTitle.trim() || draftTitle.trim() === thread.title
+                  !draftTitle.trim() ||
+                  (draftTitle.trim() === thread.title &&
+                    draftPurpose.trim() === (thread.purpose ?? ""))
                 }
                 type="submit"
               >
-                Save
+                {t("threads.details.save")}
               </button>
               <button
                 onClick={() => {
                   setDraftTitle(thread.title);
-                  setRenaming(false);
+                  setDraftPurpose(thread.purpose ?? "");
+                  setEditingDetails(false);
                 }}
                 type="button"
               >
-                Cancel
+                {t("threads.details.cancel")}
               </button>
             </div>
           </form>
         ) : (
           <>
-            <button onClick={() => setRenaming(true)} type="button">
-              <span>Rename</span>
-              <kbd>R</kbd>
+            <button onClick={() => setEditingDetails(true)} type="button">
+              <span>{t("threads.details.edit")}</span>
+              <kbd>E</kbd>
             </button>
             {!isArchived ? (
               <button onClick={pinToggle} type="button">
@@ -25260,7 +25319,9 @@ function ThreadActionsMenu({
             ) : null}
             <div className="menu-divider" />
             <div className="thread-move-group">
-              <span className="thread-menu-label">Move to group</span>
+              <span className="thread-menu-label">
+                {t("threads.moveGroup")}
+              </span>
               {sortProjectsForSidebar(projects).map((project) => {
                 const current =
                   (thread.projectId ?? GENERAL_PROJECT_ID) === project.id;
@@ -25278,7 +25339,9 @@ function ThreadActionsMenu({
                     }}
                     type="button"
                   >
-                    {getSidebarProjectName(project)}
+                    {isGeneralProject(project)
+                      ? t("threads.unsorted")
+                      : getSidebarProjectName(project)}
                     {current ? <span aria-hidden="true">✓</span> : null}
                   </button>
                 );
@@ -25558,12 +25621,28 @@ function ConversationSearch({
                     ) : null}
                     {result.modeName ? <em>{result.modeName}</em> : null}
                   </span>
+                  {result.purpose && result.matchField !== "purpose" ? (
+                    <span className="conversation-search-purpose">
+                      {result.purpose}
+                    </span>
+                  ) : null}
                   {result.before ? (
                     <span className="conversation-search-context">
                       {result.before.content}
                     </span>
                   ) : null}
                   <span className="conversation-search-excerpt">
+                    {result.matchField !== "message" ? (
+                      <em className="conversation-search-match-field">
+                        {result.matchField === "title"
+                          ? zh
+                            ? "标题"
+                            : "Title"
+                          : zh
+                            ? "用途"
+                            : "Purpose"}
+                      </em>
+                    ) : null}
                     <HighlightedSearchExcerpt
                       highlights={result.highlights}
                       text={result.excerpt}
@@ -25606,7 +25685,7 @@ function ThreadList({
   onOpenChat,
   onOpenTask,
   onMoveThreadProject,
-  onRenameThread,
+  onUpdateThreadDetails,
   onSetThreadStatus,
   onBulkArchive,
   onBulkDelete,
@@ -25620,7 +25699,10 @@ function ThreadList({
   onOpenChat: (conversationId: string, threadId: string) => void;
   onOpenTask: (taskId: string, threadId: string) => void;
   onMoveThreadProject: (thread: VaenyxThread, projectId: string | null) => void;
-  onRenameThread: (thread: VaenyxThread, title: string) => void;
+  onUpdateThreadDetails: (
+    thread: VaenyxThread,
+    details: { title: string; purpose: string },
+  ) => void;
   onSetThreadStatus: (
     thread: VaenyxThread,
     status: VaenyxThread["status"],
@@ -25770,7 +25852,7 @@ function ThreadList({
               projects={projects}
               thread={thread}
               onMoveThreadProject={onMoveThreadProject}
-              onRenameThread={onRenameThread}
+              onUpdateThreadDetails={onUpdateThreadDetails}
               onSetThreadStatus={onSetThreadStatus}
             />
           </div>
@@ -25868,7 +25950,7 @@ function SidebarThreadTree({
   onOpenChat,
   onOpenTask,
   onMoveThreadProject,
-  onRenameThread,
+  onUpdateThreadDetails,
   onSetThreadStatus,
   onBulkArchive,
   onBulkDelete,
@@ -25881,7 +25963,10 @@ function SidebarThreadTree({
   onOpenChat: (conversationId: string, threadId: string) => void;
   onOpenTask: (taskId: string, threadId: string) => void;
   onMoveThreadProject: (thread: VaenyxThread, projectId: string | null) => void;
-  onRenameThread: (thread: VaenyxThread, title: string) => void;
+  onUpdateThreadDetails: (
+    thread: VaenyxThread,
+    details: { title: string; purpose: string },
+  ) => void;
   onSetThreadStatus: (
     thread: VaenyxThread,
     status: VaenyxThread["status"],
@@ -25975,7 +26060,7 @@ function SidebarThreadTree({
         onMoveThreadProject={onMoveThreadProject}
         onOpenChat={onOpenChat}
         onOpenTask={onOpenTask}
-        onRenameThread={onRenameThread}
+        onUpdateThreadDetails={onUpdateThreadDetails}
         onSetThreadStatus={onSetThreadStatus}
         onBulkArchive={onBulkArchive}
         onBulkDelete={onBulkDelete}
@@ -26046,7 +26131,7 @@ function SidebarThreadTree({
                 key={project.id}
                 label={getSidebarProjectName(project)}
               >
-                {renderThreadItems(projectThreads, "No chats yet")}
+                {renderThreadItems(projectThreads, t("threads.noChats"))}
               </SidebarDetails>
             );
           })}
@@ -26057,9 +26142,9 @@ function SidebarThreadTree({
           className="project-thread-folder"
           count={unsortedThreads.length}
           initiallyOpen
-          label="Unsorted"
+          label={t("threads.unsorted")}
         >
-          {renderThreadItems(unsortedThreads, "No chats yet")}
+          {renderThreadItems(unsortedThreads, t("threads.noChats"))}
         </SidebarDetails>
       </div>
       {/* The archive is one button and one window (Oskar, 2026-07-27): the
@@ -26662,15 +26747,25 @@ function VaenyxWorkspace({
     return task;
   }
 
-  async function renameWorkspaceThread(thread: VaenyxThread, title: string) {
-    const nextTitle = title.trim();
-    if (!nextTitle || nextTitle === thread.title) return;
+  async function updateWorkspaceThreadDetails(
+    thread: VaenyxThread,
+    details: { title: string; purpose: string },
+  ) {
+    const nextTitle = details.title.trim();
+    const nextPurpose = details.purpose.trim();
+    if (
+      !nextTitle ||
+      (nextTitle === thread.title && nextPurpose === (thread.purpose ?? ""))
+    ) {
+      return;
+    }
 
     setError(null);
 
     try {
-      const updatedThread = await updateVaenyxThreadTitle(thread.id, {
+      const updatedThread = await updateVaenyxThreadDetails(thread.id, {
         title: nextTitle,
+        purpose: nextPurpose,
       });
 
       if (updatedThread.conversationId) {
@@ -26692,7 +26787,7 @@ function VaenyxWorkspace({
       setError(
         nextError instanceof Error
           ? nextError.message
-          : "Vaenyx could not rename this item.",
+          : "Vaenyx could not update this Conversation.",
       );
     }
   }
@@ -26886,7 +26981,7 @@ function VaenyxWorkspace({
       openThreadTask(
         result.taskId,
         result.threadId ?? undefined,
-        result.messageId,
+        result.matchField === "message" ? result.messageId : undefined,
       );
       return;
     }
@@ -26914,11 +27009,12 @@ function VaenyxWorkspace({
     openSourceConversation(
       result.conversationId,
       result.threadId ?? undefined,
-      result.messageId,
+      result.matchField === "message" ? result.messageId : undefined,
     );
   }
 
-  const screenTitle = (value: Screen): string => t(`title.${value}`);
+  const screenTitle = (value: Screen): string =>
+    t(value === "projects" ? "title.settings" : `title.${value}`);
   const appShellStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
   } as CSSProperties;
@@ -26993,6 +27089,66 @@ function VaenyxWorkspace({
       })
       .catch(() => undefined);
   }, [workspace.mode]);
+
+  const projectsSettingsPanel = (
+    <ProjectsPanel
+      memories={memories}
+      onCreate={(project) =>
+        onWorkspaceChange({
+          ...workspace,
+          projects: sortProjectsForSidebar([...workspace.projects, project]),
+        })
+      }
+      onCreateMemory={(memory) => {
+        setMemories((current) => [memory, ...current]);
+        onWorkspaceChange({
+          ...workspace,
+          projects: workspace.projects.map((project) =>
+            project.id === memory.projectId
+              ? { ...project, memoryCount: project.memoryCount + 1 }
+              : project,
+          ),
+        });
+      }}
+      onDeleteMemory={(memoryId) => {
+        const deleted = memories.find((memory) => memory.id === memoryId);
+        setMemories((current) =>
+          current.filter((memory) => memory.id !== memoryId),
+        );
+        if (deleted) {
+          onWorkspaceChange({
+            ...workspace,
+            projects: workspace.projects.map((project) =>
+              project.id === deleted.projectId
+                ? {
+                    ...project,
+                    memoryCount: Math.max(0, project.memoryCount - 1),
+                  }
+                : project,
+            ),
+          });
+        }
+      }}
+      onUpdate={(updated) =>
+        onWorkspaceChange({
+          ...workspace,
+          projects: sortProjectsForSidebar(
+            workspace.projects.map((project) =>
+              project.id === updated.id ? updated : project,
+            ),
+          ),
+        })
+      }
+      onUpdateMemory={(updated) =>
+        setMemories((current) =>
+          current.map((memory) =>
+            memory.id === updated.id ? updated : memory,
+          ),
+        )
+      }
+      workspace={workspace}
+    />
+  );
 
   return (
     <main className="app-shell" style={appShellStyle}>
@@ -27074,8 +27230,8 @@ function VaenyxWorkspace({
             }
             onOpenChat={openSourceConversation}
             onOpenTask={openThreadTask}
-            onRenameThread={(thread, nextTitle) =>
-              void renameWorkspaceThread(thread, nextTitle)
+            onUpdateThreadDetails={(thread, details) =>
+              void updateWorkspaceThreadDetails(thread, details)
             }
             onSetThreadStatus={(thread, status) =>
               void setWorkspaceThreadStatus(thread, status)
@@ -27178,13 +27334,6 @@ function VaenyxWorkspace({
                 {t("title.settings")}
               </button>
               <button
-                className={screen === "projects" ? "active" : ""}
-                onClick={() => openScreen("projects")}
-                type="button"
-              >
-                {t("title.projects")}
-              </button>
-              <button
                 className={screen === "scheduled" ? "active" : ""}
                 onClick={() => openScreen("scheduled")}
                 type="button"
@@ -27256,66 +27405,14 @@ function VaenyxWorkspace({
             focusedTaskId={focusedTaskId}
             workspace={workspace}
           />
-        ) : screen === "projects" ? (
-          <ProjectsPanel
-            memories={memories}
-            onCreate={(project) =>
-              onWorkspaceChange({
-                ...workspace,
-                projects: sortProjectsForSidebar([
-                  ...workspace.projects,
-                  project,
-                ]),
-              })
-            }
-            onCreateMemory={(memory) => {
-              setMemories((current) => [memory, ...current]);
-              onWorkspaceChange({
-                ...workspace,
-                projects: workspace.projects.map((project) =>
-                  project.id === memory.projectId
-                    ? { ...project, memoryCount: project.memoryCount + 1 }
-                    : project,
-                ),
-              });
-            }}
-            onDeleteMemory={(memoryId) => {
-              const deleted = memories.find((memory) => memory.id === memoryId);
-              setMemories((current) =>
-                current.filter((memory) => memory.id !== memoryId),
-              );
-              if (deleted) {
-                onWorkspaceChange({
-                  ...workspace,
-                  projects: workspace.projects.map((project) =>
-                    project.id === deleted.projectId
-                      ? {
-                          ...project,
-                          memoryCount: Math.max(0, project.memoryCount - 1),
-                        }
-                      : project,
-                  ),
-                });
-              }
-            }}
-            onUpdate={(updated) =>
-              onWorkspaceChange({
-                ...workspace,
-                projects: sortProjectsForSidebar(
-                  workspace.projects.map((project) =>
-                    project.id === updated.id ? updated : project,
-                  ),
-                ),
-              })
-            }
-            onUpdateMemory={(updated) =>
-              setMemories((current) =>
-                current.map((memory) =>
-                  memory.id === updated.id ? updated : memory,
-                ),
-              )
-            }
-            workspace={workspace}
+        ) : screen === "projects" && settings ? (
+          <SettingsPanel
+            initialTab="projects"
+            onUpdate={setSettings}
+            projectsPanel={projectsSettingsPanel}
+            sessionMode={workspace.mode ?? null}
+            settings={settings}
+            systemStatus={systemStatus}
           />
         ) : screen === "library" ? (
           <LibraryArea
@@ -27394,6 +27491,7 @@ function VaenyxWorkspace({
         ) : screen === "settings" && settings ? (
           <SettingsPanel
             onUpdate={setSettings}
+            projectsPanel={projectsSettingsPanel}
             sessionMode={workspace.mode ?? null}
             settings={settings}
             systemStatus={systemStatus}

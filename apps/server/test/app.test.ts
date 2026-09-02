@@ -153,11 +153,13 @@ lines.on("line", (line) => {
       });
     }
 
-    const answer = text.includes("Need structured choice") && !text.includes("Scenic")
-      ? 'I need one decision.\\n\\n<!--VAENYX_QUESTION_V1:{"prompt":"Which route should I use?","helpText":"You can also type another route.","options":["Scenic","Fast"]}-->'
-      : text.includes("First question") && text.includes("Follow up")
-        ? "Follow-up saw earlier context."
-        : "Vaenyx Chat answered with live context.";
+    const answer = text.includes("PURPOSE_METADATA_MUST_NOT_REACH_MODEL")
+      ? "Conversation purpose leaked into model context."
+      : text.includes("Need structured choice") && !text.includes("Scenic")
+        ? 'I need one decision.\\n\\n<!--VAENYX_QUESTION_V1:{"prompt":"Which route should I use?","helpText":"You can also type another route.","options":["Scenic","Fast"]}-->'
+        : text.includes("First question") && text.includes("Follow up")
+          ? "Follow-up saw earlier context."
+          : "Vaenyx Chat answered with live context.";
 
     for (const piece of answer.split(" ")) {
       send({
@@ -1104,6 +1106,104 @@ describe("Vaenyx Gateway foundation", () => {
       kind: "choice",
       optionId: "option-1",
       displayText: "Scenic",
+    });
+    await app.close();
+  });
+
+  it("keeps Conversation identity searchable, persistent, and out of model context", async () => {
+    process.env.VAENYX_CODEX_COMMAND = createFakeCodexCommand();
+    const config = createTestConfig();
+    let app = await buildApp(config);
+    const sessionCookie = await createOwnerAndSession(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/ask-vaenyx/conversations",
+      headers: { cookie: sessionCookie },
+      payload: {},
+    });
+    const conversationId = created.json().id;
+
+    const unauthorized = await app.inject({
+      method: "PUT",
+      url: `/v1/threads/${conversationId}/details`,
+      payload: { title: "Private planning", purpose: "Not yours" },
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/v1/threads/${conversationId}/details`,
+      headers: { cookie: sessionCookie },
+      payload: {
+        title: "  Kitchen   decisions  ",
+        purpose:
+          "PURPOSE_METADATA_MUST_NOT_REACH_MODEL — compare cabinet quotes.",
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      title: "Kitchen decisions",
+      purpose:
+        "PURPOSE_METADATA_MUST_NOT_REACH_MODEL — compare cabinet quotes.",
+      projectId: null,
+    });
+
+    const answered = await app.inject({
+      method: "POST",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+      headers: { cookie: sessionCookie },
+      payload: { content: "Confirm that ordinary chat still works." },
+    });
+    expect(answered.statusCode).toBe(200);
+    expect(answered.json().messages.at(-1).content).toBe(
+      "Vaenyx Chat answered with live context.",
+    );
+    expect(answered.json().conversation.title).toBe("Kitchen decisions");
+
+    const purposeSearch = await app.inject({
+      method: "GET",
+      url: `/v1/ask-vaenyx/search?q=${encodeURIComponent('"cabinet quotes"')}`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(purposeSearch.statusCode).toBe(200);
+    expect(purposeSearch.json().results[0]).toMatchObject({
+      conversationId,
+      title: "Kitchen decisions",
+      matchField: "purpose",
+      purpose:
+        "PURPOSE_METADATA_MUST_NOT_REACH_MODEL — compare cabinet quotes.",
+    });
+
+    await app.close();
+    app = await buildApp(config);
+    const workspace = await app.inject({
+      method: "GET",
+      url: "/v1/workspace",
+      headers: { cookie: sessionCookie },
+    });
+    expect(workspace.statusCode).toBe(200);
+    expect(workspace.json().threads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          conversationId,
+          title: "Kitchen decisions",
+          purpose:
+            "PURPOSE_METADATA_MUST_NOT_REACH_MODEL — compare cabinet quotes.",
+          projectId: null,
+        }),
+      ]),
+    );
+
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/v1/threads/${conversationId}/details`,
+      headers: { cookie: sessionCookie },
+      payload: { title: "Kitchen decisions", purpose: "" },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json()).toMatchObject({
+      title: "Kitchen decisions",
+      purpose: null,
     });
     await app.close();
   });

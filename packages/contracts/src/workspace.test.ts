@@ -21,6 +21,7 @@ import {
   UpdateVaenyxThreadProjectRequestSchema,
   UpdateVaenyxThreadStatusRequestSchema,
   UpdateVaenyxThreadTitleRequestSchema,
+  UpdateVaenyxThreadDetailsRequestSchema,
   VaenyxThreadSchema,
   WorkspaceSchema,
 } from "./workspace.js";
@@ -210,6 +211,8 @@ describe("M1 contracts", () => {
             threadKind: "chat",
             taskId: null,
             title: "Groceries",
+            purpose: null,
+            matchField: "message",
             role: "owner",
             messageCreatedAt: "2026-08-01T00:00:00.000Z",
             excerpt: "Bought fresh milk",
@@ -243,7 +246,7 @@ describe("M1 contracts", () => {
         conversationId: "conversation-id",
         taskId: null,
         routineId: null,
-        summary: null,
+        purpose: null,
         messageCount: 2,
         createdAt: "2026-06-09T00:00:00.000Z",
         updatedAt: "2026-06-09T00:00:01.000Z",
@@ -267,6 +270,18 @@ describe("M1 contracts", () => {
     expect(
       Value.Check(UpdateVaenyxThreadTitleRequestSchema, {
         title: "Renamed thread",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(UpdateVaenyxThreadDetailsRequestSchema, {
+        title: "Renamed conversation",
+        purpose: "Keep the renovation decisions easy to find.",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(UpdateVaenyxThreadDetailsRequestSchema, {
+        title: "Renamed conversation",
+        purpose: "",
       }),
     ).toBe(true);
   });

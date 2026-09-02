@@ -171,6 +171,7 @@ import {
   UpdateVaenyxThreadProjectRequestSchema,
   UpdateVaenyxThreadStatusRequestSchema,
   UpdateVaenyxThreadTitleRequestSchema,
+  UpdateVaenyxThreadDetailsRequestSchema,
   VaenyxMeCandidateSchema,
   VaenyxThreadSchema,
   WorkspaceSchema,
@@ -235,6 +236,7 @@ import {
   type UpdateVaenyxThreadProjectRequest,
   type UpdateVaenyxThreadStatusRequest,
   type UpdateVaenyxThreadTitleRequest,
+  type UpdateVaenyxThreadDetailsRequest,
   RelayHealthSchema,
   RelayPanelSchema,
   RelayRunRequestSchema,
@@ -604,6 +606,7 @@ import {
   markVaenyxThreadSeen,
   setThreadRoutine,
   touchChatThread,
+  updateVaenyxThreadDetails,
   updateVaenyxThreadProject,
   updateVaenyxThreadStatus,
   updateVaenyxThreadTitle,
@@ -2661,7 +2664,7 @@ export async function registerGatewayRoutes(
 
       if (request.body.projectId !== null && !request.body.projectId.trim()) {
         return reply.code(400).send({
-          error: "Project is required, or choose Inbox.",
+          error: "Project is required, or choose Unsorted.",
         });
       }
 
@@ -2861,6 +2864,77 @@ export async function registerGatewayRoutes(
           error.message === "VAENYX_THREAD_NOT_FOUND"
         ) {
           return reply.code(404).send({ error: "Vaenyx Thread not found." });
+        }
+
+        throw error;
+      }
+    },
+  );
+
+  app.put<{
+    Body: UpdateVaenyxThreadDetailsRequest;
+    Params: { id: string };
+  }>(
+    "/v1/threads/:id/details",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        body: UpdateVaenyxThreadDetailsRequestSchema,
+        response: {
+          200: VaenyxThreadSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+
+      if (!request.body.title.trim()) {
+        return reply
+          .code(400)
+          .send({ error: "Conversation title is required." });
+      }
+
+      try {
+        const thread = updateVaenyxThreadDetails(
+          context.database,
+          request.params.id,
+          owner.id,
+          request.body,
+        );
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "thread.details.update",
+          decision: "allowed",
+          reason: "Owner edited Conversation identity metadata.",
+          projectId: thread.projectId,
+          resourceType: "vaenyx_thread",
+          resourceId: thread.id,
+        });
+        return thread;
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "VAENYX_THREAD_TITLE_REQUIRED"
+        ) {
+          return reply
+            .code(400)
+            .send({ error: "Conversation title is required." });
+        }
+
+        if (
+          error instanceof Error &&
+          error.message === "VAENYX_THREAD_NOT_FOUND"
+        ) {
+          return reply.code(404).send({ error: "Conversation not found." });
         }
 
         throw error;

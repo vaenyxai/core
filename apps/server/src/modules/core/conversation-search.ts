@@ -37,6 +37,7 @@ interface SearchRow {
   message_id: string;
   mode_id: string | null;
   mode_name: string | null;
+  purpose: string | null;
   rank: number;
   role: "assistant" | "owner";
   status: "active" | "archived" | "pinned" | null;
@@ -45,6 +46,18 @@ interface SearchRow {
   thread_kind: "chat" | "inbox" | "task" | null;
   title: string;
   content: string;
+}
+
+interface MetadataRow {
+  conversation_id: string;
+  mode_id: string | null;
+  mode_name: string | null;
+  purpose: string | null;
+  status: "active" | "archived" | "pinned";
+  thread_id: string;
+  thread_kind: "chat" | "inbox";
+  title: string;
+  updated_at: string;
 }
 
 interface ContextRow {
@@ -226,6 +239,19 @@ function compactText(value: unknown): string {
   return redactConversationSearchText(value).replace(/\s+/g, " ").trim();
 }
 
+function metadataNeedles(parsed: ParsedSearchQuery): string[] {
+  return parsed.components.flatMap((component) =>
+    component.phrase ? [component.display] : component.words,
+  );
+}
+
+function metadataMatches(value: unknown, parsed: ParsedSearchQuery): boolean {
+  const haystack = conversationSearchIndexText(value).toLocaleLowerCase();
+  return metadataNeedles(parsed).every((needle) =>
+    haystack.includes(conversationSearchIndexText(needle).toLocaleLowerCase()),
+  );
+}
+
 function mergeHighlights(
   highlights: ConversationSearchHighlight[],
 ): ConversationSearchHighlight[] {
@@ -353,6 +379,7 @@ export function searchConversations(
          threads.id AS thread_id,
          threads.kind AS thread_kind,
          threads.status,
+         threads.summary AS purpose,
          threads.task_id,
          bm25(conversation_message_search) AS rank
        FROM conversation_message_search
@@ -377,7 +404,7 @@ export function searchConversations(
       limit,
     ) as unknown as SearchRow[];
 
-  return rows.map((row) => {
+  const messageResults = rows.map((row) => {
     const excerpt = excerptFor(row.content, parsed);
     return {
       messageId: row.message_id,
@@ -386,6 +413,8 @@ export function searchConversations(
       threadKind: row.thread_kind,
       taskId: row.task_id,
       title: row.title,
+      purpose: row.purpose,
+      matchField: "message" as const,
       role: row.role,
       messageCreatedAt: row.created_at,
       excerpt: excerpt.excerpt,
@@ -397,4 +426,75 @@ export function searchConversations(
       modeName: row.mode_name,
     };
   });
+
+  // Conversation identity is intentionally outside the message FTS: title and
+  // purpose are Owner-authored organization metadata, not model-visible chat
+  // content. Search that canonical metadata locally and merge it into the same
+  // result shape without manufacturing a chat message.
+  const needles = metadataNeedles(parsed);
+  const metadataWhere = needles
+    .map(
+      () =>
+        "instr(vaenyx_conversation_search_text(threads.title || ' ' || COALESCE(threads.summary, '')), vaenyx_conversation_search_text(?)) > 0",
+    )
+    .join(" AND ");
+  const metadataRows = database.sqlite
+    .prepare(
+      `SELECT conversations.id AS conversation_id,
+              conversations.mode_id, modes.name AS mode_name,
+              threads.id AS thread_id, threads.kind AS thread_kind,
+              threads.title, threads.summary AS purpose, threads.status,
+              threads.updated_at
+       FROM vaenyx_threads AS threads
+       JOIN ask_vaenyx_conversations AS conversations
+         ON conversations.id = threads.conversation_id
+       LEFT JOIN modes ON modes.id = conversations.mode_id
+       WHERE conversations.owner_id = ?
+         AND (? IS NULL OR conversations.mode_id = ?)
+         AND threads.kind IN ('chat', 'inbox')
+         AND ${metadataWhere}
+       ORDER BY threads.updated_at DESC, threads.id ASC
+       LIMIT ?`,
+    )
+    .all(
+      ownerId,
+      modeId,
+      modeId,
+      ...needles,
+      limit,
+    ) as unknown as MetadataRow[];
+
+  const conversationsWithMessageMatches = new Set(
+    messageResults.map((result) => result.conversationId),
+  );
+  const metadataResults: ConversationSearchResult[] = metadataRows
+    .filter((row) => !conversationsWithMessageMatches.has(row.conversation_id))
+    .map((row) => {
+      const matchField = metadataMatches(row.title, parsed)
+        ? ("title" as const)
+        : ("purpose" as const);
+      const source = matchField === "title" ? row.title : (row.purpose ?? "");
+      const excerpt = excerptFor(source, parsed);
+      return {
+        messageId: `metadata:${row.conversation_id}`,
+        conversationId: row.conversation_id,
+        threadId: row.thread_id,
+        threadKind: row.thread_kind,
+        taskId: null,
+        title: row.title,
+        purpose: row.purpose,
+        matchField,
+        role: "owner" as const,
+        messageCreatedAt: row.updated_at,
+        excerpt: excerpt.excerpt,
+        highlights: excerpt.highlights,
+        before: null,
+        after: null,
+        archived: row.status === "archived",
+        modeId: row.mode_id,
+        modeName: row.mode_name,
+      };
+    });
+
+  return [...metadataResults, ...messageResults].slice(0, limit);
 }

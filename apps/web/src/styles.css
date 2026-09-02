@@ -848,6 +848,21 @@ textarea::placeholder {
   gap: 5px;
 }
 
+.conversation-search-purpose {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.conversation-search-match-field {
+  margin-right: 7px;
+  color: var(--accent);
+  font-size: var(--fs-label);
+  font-style: normal;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .conversation-search-badges:empty {
   display: none;
 }
@@ -3066,8 +3081,8 @@ textarea::placeholder {
 
 .thread-action-menu summary {
   display: flex;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -3099,7 +3114,7 @@ textarea::placeholder {
   top: 31px;
   right: 0;
   display: grid;
-  width: 200px;
+  width: 280px;
   gap: 2px;
   padding: 6px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -3116,7 +3131,7 @@ textarea::placeholder {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  min-height: 32px;
+  min-height: 44px;
   padding: 0 10px;
   border: 0;
   border-radius: 8px;
@@ -3160,16 +3175,22 @@ textarea::placeholder {
   padding: 0 !important;
 }
 
-.thread-rename-form input {
+.thread-rename-form input,
+.thread-rename-form textarea {
   width: 100%;
-  min-height: 34px;
-  padding: 0 9px;
+  min-height: 44px;
+  padding: 9px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   color: #eeebe2;
   background: rgba(255, 255, 255, 0.045);
   font: inherit;
   font-size: 12px;
+}
+
+.thread-rename-form textarea {
+  resize: vertical;
+  line-height: 1.4;
 }
 
 .thread-rename-actions {
@@ -3686,6 +3707,14 @@ select {
 
 .focused-title-line .thread-action-menu {
   flex: 0 0 auto;
+}
+
+.conversation-purpose {
+  max-width: 70ch;
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
 }
 
 /* The header ⋮ sits at the row's right edge, so the popover hangs LEFT from
@@ -7609,13 +7638,18 @@ select {
     justify-content: space-between;
   }
 
+  .sidebar nav .thread-action-popover button {
+    min-height: 44px;
+    padding: 0 10px;
+  }
+
   .sidebar nav .thread-item {
     min-height: 32px;
     justify-content: stretch;
   }
 
   .thread-item-row {
-    grid-template-columns: minmax(0, 1fr) 36px;
+    grid-template-columns: minmax(0, 1fr) 44px;
   }
 
   .thread-item-row .thread-action-menu {
@@ -7623,8 +7657,8 @@ select {
   }
 
   .thread-action-menu summary {
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
   }
 
   .workspace-header {

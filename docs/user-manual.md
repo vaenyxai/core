@@ -164,7 +164,11 @@ Read this inside the app: **Settings → Manual**.
 - **Stop a reply** — the **Stop** button while it is answering. It stops at once.
 - **Switch model or thinking level** — the two pickers under the message box.
   They apply to this conversation only.
-- **Rename, archive, delete a chat** — the ⋮ menu at the top of the chat.
+- **Name and describe a Conversation** — open its ⋮ menu → **Edit details**.
+  The title is required; the optional one-line purpose helps you recognize and
+  search for it. Purpose is organization text only — it is never a hidden
+  instruction to the model. Clear the purpose field to remove it.
+- **Archive or delete a chat** — the ⋮ menu at the top of the chat.
 - **Archive makes a conversation quiet without erasing it.** Its history,
   Project, Routine and memory scope stay attached. If it has an active
   Schedule, the confirmation says so and Archive pauses future runs at once
@@ -175,10 +179,11 @@ Read this inside the app: **Settings → Manual**.
   deletes a shared Routine or an Owner connection.
 - **Search old Conversations** — press **Search Conversations** under **New**
   (or `Ctrl/Cmd + K`), type keywords, or put an exact phrase in double quotes.
-  Results include active, pinned, Inbox and Archived Conversations; tap one to
-  open the matching message. Search stays on this computer and uses no model or
-  cloud service. User Mode can search the Modes it supervises; a Custom Mode
-  can search only itself. Opening an Archived result does not restore it.
+  Search checks titles, purposes and messages. Results include active, pinned,
+  Inbox and Archived Conversations; tap one to open the match. Search stays on
+  this computer and uses no model or cloud service. User Mode can search the
+  Modes it supervises; a Custom Mode can search only itself. Opening an
+  Archived result does not restore it.
 - **Unread** — the coloured dot beside a conversation breathes when there is
   something new in it. Read is read everywhere: open it on the phone and the
   dot goes out on the computer too (the computer notices within a minute, or
@@ -206,12 +211,18 @@ Read this inside the app: **Settings → Manual**.
 
 ## 4. Projects
 
-- **What a project is** — a folder for related chats, with its own standing
-  instructions.
-- **Make one** — Projects → **New project**.
-- **Standing instructions** — Projects → pick one → **Instructions**. Every chat
-  in that project starts with them.
-- **Put a chat in a project** — the ⋮ menu in the chat → **Move to project**.
+- **Projects are optional organization** — start chatting without making or
+  choosing one. Every ordinary new Conversation starts in **Unsorted**, which
+  has no shared Project Memory or instructions.
+- **What a Project is** — a shared context boundary for related Conversations,
+  with its own Memory, standing instructions and files. It is not another kind
+  of work item.
+- **Manage Projects** — Settings → **Organization**. Creation, names,
+  instructions and Memory all live there; Vaenyx never creates or renames one
+  without your explicit confirmation.
+- **Organize an existing Conversation** — its ⋮ menu → **Move to group**.
+- **Inbox is separate** — the protected Conversation under **New** is not
+  Unsorted and is never filed into a Project.
 
 ## 4a. The conversation Vaenyx speaks from
 
