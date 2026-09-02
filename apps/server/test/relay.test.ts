@@ -371,6 +371,9 @@ describe("the subscription door", () => {
 
   it("never returns engine paths or credentials in public errors", () => {
     expect(
+      publicRelayError(new Error("CLAUDE_SDK_NOT_INSTALLED"), "claude-cli"),
+    ).toBe("CLAUDE_SDK_NOT_INSTALLED");
+    expect(
       publicRelayError(
         new Error("spawn failed at C:\\Users\\Owner\\.claude token=secret"),
         "claude-cli",

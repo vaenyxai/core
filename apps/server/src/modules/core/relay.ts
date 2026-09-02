@@ -1021,6 +1021,7 @@ export function publicRelayError(error: unknown, engine: RelayEngine): string {
     "RELAY_PROMPT_REQUIRED",
     "RELAY_STRUCTURED_OUTPUT_INVALID",
     "RELAY_RATE_LIMITED",
+    "CLAUDE_SDK_NOT_INSTALLED",
   ]);
   if (exact.has(raw)) return raw;
   const safePrefixes = [
