@@ -48,6 +48,21 @@ the canonical acceptance status before restoring or clearing the draft. An
 already uploaded attachment keeps its server id, while an attachment that only
 exists locally is uploaded on Send, preventing duplicate files and messages.
 
+## Long-running tasks expose one durable progress snapshot
+
+Each `task_runs` row owns one versioned progress snapshot. Its monotonic
+revision, state, current step, bounded completed-step list, safe status copy,
+timestamps and optional Conversation outcome link update in place; there is no
+second event log to reconcile. Completion or failure is committed with the run
+and task outcome in one SQLite transaction. A process restart converts any
+unsettled run to explicit `interrupted` state, and the Owner can retry it.
+
+Progress copy is an application-owned status boundary. Provider thinking,
+chain-of-thought, raw errors, command output and secrets must never enter the
+snapshot or its API. Reads and actions use the authenticated session's exact
+Mode, and clients discard older revisions so delayed polling cannot move the
+card backwards.
+
 ## Model-visible means persisted
 
 **Anything that entered a model request must be reconstructable from the

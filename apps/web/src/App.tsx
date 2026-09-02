@@ -63,6 +63,7 @@ import type {
   SystemStatus,
   Task,
   TaskRun,
+  TaskRunProgress,
   VaenyxMeCandidate,
   VaenyxThread,
   Workspace,
@@ -276,7 +277,7 @@ import {
   streamTaskMessage,
   fetchChatClientMessageStatus,
   fetchTaskClientMessageStatus,
-  fetchTaskLive,
+  fetchTaskProgress,
   retryTask,
   setTaskSchedule,
   setupOwner,
@@ -323,6 +324,10 @@ import {
   type DraftScope,
 } from "./draft-recovery.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
+import {
+  acceptTaskProgressUpdate,
+  TaskProgressCard,
+} from "./task-progress.js";
 import {
   StructuredQuestionCard,
   questionPart,
@@ -6424,6 +6429,7 @@ function AskVaenyxPanel({
   }, []);
   const [taskMessages, setTaskMessages] = useState<AskVaenyxMessage[]>([]);
   const [taskRuns, setTaskRuns] = useState<TaskRun[]>([]);
+  const [taskProgress, setTaskProgress] = useState<TaskRunProgress | null>(null);
   const [prompt, setPrompt] = useState("");
   const [taskPrompt, setTaskPrompt] = useState("");
   const [startWorkPrompt, setStartWorkPrompt] = useState("");
@@ -6555,9 +6561,6 @@ function AskVaenyxPanel({
   // lands, Claude-Code style: the workings are watchable, the record is clean.
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [streamThinking, setStreamThinking] = useState("");
-  // A task RUN's thinking arrives by poll, not stream (runs are detached).
-  const [runThinking, setRunThinking] = useState("");
-
   function statusLabel(code: string): string {
     const zh = lang === "zh";
     if (code === "classifying") {
@@ -6636,6 +6639,7 @@ function AskVaenyxPanel({
     if (view !== "task" || !focusedTaskId) {
       setTaskMessages([]);
       setTaskRuns([]);
+      setTaskProgress(null);
       setTaskPrompt("");
       setLoadingTaskMessages(false);
       return;
@@ -6643,6 +6647,7 @@ function AskVaenyxPanel({
 
     let cancelled = false;
     setLoadingTaskMessages(true);
+    setTaskProgress(null);
     setTaskPrompt("");
     setError(null);
 
@@ -6674,6 +6679,18 @@ function AskVaenyxPanel({
       })
       .catch(() => {
         // Run history is best-effort.
+      });
+
+    fetchTaskProgress(focusedTaskId)
+      .then((next) => {
+        if (!cancelled) {
+          setTaskProgress((current) =>
+            acceptTaskProgressUpdate(current, next),
+          );
+        }
+      })
+      .catch(() => {
+        // The conversation still works if its progress card cannot refresh.
       });
 
     return () => {
@@ -7063,6 +7080,13 @@ function AskVaenyxPanel({
         // The header (Last run / Next / chips) reads the workspace — a PWA
         // waking from the background otherwise shows yesterday's values.
         void onWorkspaceRefresh();
+        void fetchTaskProgress(focusedTaskId)
+          .then((next) =>
+            setTaskProgress((current) =>
+              acceptTaskProgressUpdate(current, next),
+            ),
+          )
+          .catch(() => undefined);
       }
     };
     const reconcile = () => {
@@ -7080,9 +7104,9 @@ function AskVaenyxPanel({
     onWorkspaceRefresh,
   ]);
 
-  // A run finishes server-side without the UI knowing (no push channel), so
-  // "Working" used to stick until a manual refresh. Poll while the open task is
-  // waiting/running; the interval dissolves as soon as the status settles.
+  // The server owns one compact, durable progress snapshot. Poll that card
+  // while work is active; revision ordering prevents a slow response from
+  // replacing newer state.
   const focusedTaskStatus = focusedTaskId
     ? (workspace.tasks.find((task) => task.id === focusedTaskId)?.status ??
       null)
@@ -7090,21 +7114,21 @@ function AskVaenyxPanel({
   useEffect(() => {
     if (!focusedTaskId) return undefined;
     if (focusedTaskStatus !== "running" && focusedTaskStatus !== "waiting") {
-      // The run is over; its workings go with it.
-      setRunThinking("");
       return undefined;
     }
     const timer = window.setInterval(() => {
       void onWorkspaceRefresh();
-      // A run executes detached on the server (a locked phone still gets its
-      // reply), so its thinking cannot stream here — the open view polls it.
-      void fetchTaskLive(focusedTaskId)
-        .then((live) => setRunThinking(live.thinking))
+      void fetchTaskProgress(focusedTaskId)
+        .then((next) =>
+          setTaskProgress((current) =>
+            acceptTaskProgressUpdate(current, next),
+          ),
+        )
         .catch(() => undefined);
       void fetchTaskRuns(focusedTaskId)
         .then(setTaskRuns)
         .catch(() => undefined);
-    }, 5000);
+    }, 2000);
     return () => window.clearInterval(timer);
   }, [focusedTaskId, focusedTaskStatus, onWorkspaceRefresh]);
 
@@ -7125,6 +7149,13 @@ function AskVaenyxPanel({
         .catch(() => undefined);
       void fetchTaskRuns(focusedTaskId)
         .then(setTaskRuns)
+        .catch(() => undefined);
+      void fetchTaskProgress(focusedTaskId)
+        .then((next) =>
+          setTaskProgress((current) =>
+            acceptTaskProgressUpdate(current, next),
+          ),
+        )
         .catch(() => undefined);
     }
   }, [focusedTaskId, focusedTaskStatus, view]);
@@ -9434,6 +9465,10 @@ This conversation is its home — feed it something to try it, and ask for chang
       await onWorkspaceRefresh();
       const runs = await fetchTaskRuns(taskId);
       setTaskRuns(runs);
+      const progress = await fetchTaskProgress(taskId);
+      setTaskProgress((current) =>
+        acceptTaskProgressUpdate(current, progress),
+      );
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -9450,6 +9485,10 @@ This conversation is its home — feed it something to try it, and ask for chang
       await onWorkspaceRefresh();
       const runs = await fetchTaskRuns(taskId);
       setTaskRuns(runs);
+      const progress = await fetchTaskProgress(taskId);
+      setTaskProgress((current) =>
+        acceptTaskProgressUpdate(current, progress),
+      );
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -11496,21 +11535,24 @@ This conversation is its home — feed it something to try it, and ask for chang
                 </article>
               ))
             )}
-            {focusedTask.status === "running" ? (
-              <article className="ask-vaenyx-message assistant completed">
-                <div className="ask-vaenyx-message-head">
-                  <strong>{agentName}</strong>
-                </div>
-                <ThinkingIndicator
-                  status={streamStatus}
-                  thinking={Boolean(streamThinking)}
-                />
-                {/* The run's live thinking, polled while it works — a run is
-                    detached from any one screen, so it cannot stream. */}
-                {runThinking ? (
-                  <p className="thinking-text">{runThinking}</p>
-                ) : null}
-              </article>
+            {taskProgress?.taskId === focusedTask.id ? (
+              <TaskProgressCard
+                lang={lang}
+                onOutcome={(messageId) =>
+                  document
+                    .getElementById(`message-${messageId}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                onReply={() =>
+                  document
+                    .querySelector<HTMLTextAreaElement>(
+                      ".focused-task-panel textarea",
+                    )
+                    ?.focus()
+                }
+                onRetry={() => void retryFocusedTask(focusedTask.id)}
+                progress={taskProgress}
+              />
             ) : null}
             {/* Chatting in the task thread gets the same one-indicator
                 treatment as the plain chat: the orb from the first moment,

@@ -174,6 +174,7 @@ import {
   SystemStatusSchema,
   TaskSchema,
   TaskRunSchema,
+  TaskRunProgressSchema,
   UpdateProjectMemoryRequestSchema,
   UpdateAgentProfileNameRequestSchema,
   UpdateInstanceSettingsRequestSchema,
@@ -615,7 +616,7 @@ import {
   listTaskRuns,
   listTasks,
   retryTask,
-  getRunThinking,
+  getLatestTaskRunProgress,
   setTaskSchedule,
   stampTaskMode,
 } from "../core/tasks.js";
@@ -5297,6 +5298,7 @@ export async function registerGatewayRoutes(
         response: {
           200: Type.Array(TaskRunSchema),
           401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
         },
       },
     },
@@ -5305,7 +5307,18 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return listTaskRuns(context.database, request.params.id);
+      try {
+        return listTaskRuns(
+          context.database,
+          request.params.id,
+          owner.modeId ?? null,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "TASK_NOT_FOUND") {
+          return reply.code(404).send({ error: "Task not found." });
+        }
+        throw error;
+      }
     },
   );
 
@@ -5330,7 +5343,11 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       try {
-        const task = cancelTask(context.database, request.params.id);
+        const task = cancelTask(
+          context.database,
+          request.params.id,
+          owner.modeId ?? null,
+        );
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
@@ -5353,15 +5370,37 @@ export async function registerGatewayRoutes(
   );
 
   app.get<{ Params: { id: string } }>(
-    "/v1/tasks/:id/live",
+    "/v1/tasks/:id/progress",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: Type.Union([TaskRunProgressSchema, Type.Null()]),
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
     async (request, reply) => {
       const owner = requireOwner(request);
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      // The in-flight run's thinking, for the open task view to watch. Empty
-      // when nothing is running (or the backend has no reasoning channel).
-      return { thinking: getRunThinking(request.params.id) };
+      try {
+        return getLatestTaskRunProgress(
+          context.database,
+          request.params.id,
+          owner.modeId ?? null,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "TASK_NOT_FOUND") {
+          return reply.code(404).send({ error: "Task not found." });
+        }
+        throw error;
+      }
     },
   );
 
@@ -5387,7 +5426,11 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       try {
-        const task = retryTask(context.database, request.params.id);
+        const task = retryTask(
+          context.database,
+          request.params.id,
+          owner.modeId ?? null,
+        );
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,

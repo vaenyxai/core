@@ -1086,6 +1086,35 @@ export const TaskSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const TaskRunProgressStateSchema = Type.Union([
+  Type.Literal("queued"),
+  Type.Literal("running"),
+  Type.Literal("waiting_for_owner"),
+  Type.Literal("completed"),
+  Type.Literal("failed"),
+  Type.Literal("cancelled"),
+  Type.Literal("interrupted"),
+]);
+
+export const TaskRunProgressSchema = Type.Object(
+  {
+    version: Type.Literal(1),
+    runId: Type.String(),
+    taskId: Type.String(),
+    conversationId: Type.Union([Type.String(), Type.Null()]),
+    revision: Type.Integer({ minimum: 1 }),
+    state: TaskRunProgressStateSchema,
+    currentStep: Type.Union([Type.String(), Type.Null()]),
+    completedSteps: Type.Array(Type.String(), { maxItems: 12 }),
+    statusText: Type.String(),
+    startedAt: Type.String(),
+    updatedAt: Type.String(),
+    finishedAt: Type.Union([Type.String(), Type.Null()]),
+    outcomeMessageId: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
 export const TaskRunSchema = Type.Object(
   {
     id: Type.String(),
@@ -1099,6 +1128,7 @@ export const TaskRunSchema = Type.Object(
     trigger: Type.Union([Type.Literal("manual"), Type.Literal("schedule")]),
     startedAt: Type.String(),
     finishedAt: Type.Union([Type.String(), Type.Null()]),
+    progress: TaskRunProgressSchema,
   },
   { additionalProperties: false },
 );
@@ -3282,6 +3312,8 @@ export type SetupOwnerRequest = Static<typeof SetupOwnerRequestSchema>;
 export type Skill = Static<typeof SkillSchema>;
 export type Task = Static<typeof TaskSchema>;
 export type TaskRun = Static<typeof TaskRunSchema>;
+export type TaskRunProgress = Static<typeof TaskRunProgressSchema>;
+export type TaskRunProgressState = Static<typeof TaskRunProgressStateSchema>;
 export type UpdateVaenyxThreadProjectRequest = Static<
   typeof UpdateVaenyxThreadProjectRequestSchema
 >;

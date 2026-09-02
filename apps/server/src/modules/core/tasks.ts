@@ -9,6 +9,7 @@ import type {
   Skill,
   Task,
   TaskRun,
+  TaskRunProgress,
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
@@ -73,6 +74,90 @@ interface TaskConversationSeedRow {
   completed_at: string | null;
   thread_id: string | null;
   conversation_id: string | null;
+}
+
+interface TaskRunRow {
+  id: string;
+  task_id: string;
+  status: "running" | "completed" | "failed";
+  result: string;
+  trigger: "manual" | "schedule";
+  started_at: string;
+  finished_at: string | null;
+  progress_version: 1;
+  progress_revision: number;
+  progress_state: TaskRunProgress["state"];
+  progress_current_step: string | null;
+  progress_completed_steps_json: string;
+  progress_status_text: string;
+  progress_conversation_id: string | null;
+  progress_outcome_message_id: string | null;
+  progress_updated_at: string | null;
+}
+
+const TERMINAL_PROGRESS_REVISION = 100;
+const MAX_PROGRESS_STEPS = 12;
+
+function safeProgressText(text: string, fallback: string): string {
+  const clean = [...text]
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 32 || code === 127 ? " " : character;
+    })
+    .join("")
+    .trim();
+  return (clean || fallback).slice(0, 240);
+}
+
+function safeProgressSteps(steps: string[]): string[] {
+  return steps
+    .map((step) => safeProgressText(step, ""))
+    .filter(Boolean)
+    .slice(-MAX_PROGRESS_STEPS);
+}
+
+function parseProgressSteps(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? safeProgressSteps(
+          parsed.filter((item): item is string => typeof item === "string"),
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function toTaskRunProgress(row: TaskRunRow): TaskRunProgress {
+  return {
+    version: 1,
+    runId: row.id,
+    taskId: row.task_id,
+    conversationId: row.progress_conversation_id,
+    revision: Math.max(1, row.progress_revision),
+    state: row.progress_state,
+    currentStep: row.progress_current_step,
+    completedSteps: parseProgressSteps(row.progress_completed_steps_json),
+    statusText: row.progress_status_text,
+    startedAt: row.started_at,
+    updatedAt: row.progress_updated_at ?? row.started_at,
+    finishedAt: row.finished_at,
+    outcomeMessageId: row.progress_outcome_message_id,
+  };
+}
+
+function taskConversationId(
+  database: DatabaseHandle,
+  taskId: string,
+): string | null {
+  const row = database.sqlite
+    .prepare(
+      `SELECT conversation_id FROM vaenyx_threads
+       WHERE task_id = ? AND kind = 'task' LIMIT 1`,
+    )
+    .get(taskId) as { conversation_id: string | null } | undefined;
+  return row?.conversation_id ?? null;
 }
 
 function createTaskBriefResult({
@@ -160,6 +245,20 @@ function ensureTaskConversation(
   }
 
   if (task.conversation_id) {
+    database.sqlite
+      .prepare(
+        `UPDATE task_runs
+         SET progress_conversation_id = ?,
+             progress_revision = progress_revision + 1,
+             progress_updated_at = ?
+         WHERE id = (
+           SELECT id FROM task_runs
+           WHERE task_id = ?
+           ORDER BY started_at DESC, id DESC LIMIT 1
+         )
+           AND progress_conversation_id IS NULL`,
+      )
+      .run(task.conversation_id, new Date().toISOString(), task.id);
     return task.conversation_id;
   }
 
@@ -168,6 +267,7 @@ function ensureTaskConversation(
   const completedAt = task.completed_at ?? now;
   const seedResult = createTaskSeedResult(task);
   const assistantStatus = task.status === "failed" ? "failed" : "completed";
+  const assistantMessageId = randomUUID();
 
   database.sqlite
     .prepare(
@@ -192,7 +292,7 @@ function ensureTaskConversation(
       ) VALUES (?, ?, 'assistant', ?, ?, 0, ?)`,
     )
     .run(
-      randomUUID(),
+      assistantMessageId,
       conversationId,
       seedResult,
       assistantStatus,
@@ -216,6 +316,25 @@ function ensureTaskConversation(
          AND kind = 'task'`,
     )
     .run(conversationId, completedAt, task.id);
+
+  database.sqlite
+    .prepare(
+      `UPDATE task_runs
+       SET progress_conversation_id = ?,
+           progress_outcome_message_id = CASE
+             WHEN progress_state IN ('completed', 'failed', 'cancelled', 'interrupted')
+               THEN ?
+             ELSE progress_outcome_message_id
+           END,
+           progress_revision = progress_revision + 1,
+           progress_updated_at = ?
+       WHERE id = (
+         SELECT id FROM task_runs
+         WHERE task_id = ?
+         ORDER BY started_at DESC, id DESC LIMIT 1
+       )`,
+    )
+    .run(conversationId, assistantMessageId, now, task.id);
 
   return conversationId;
 }
@@ -712,18 +831,98 @@ export function createResearchTask(
 // In-flight task executions, keyed by task id, so the Owner can cancel them.
 const runningTasks = new Map<string, AbortController>();
 
-// The model's live thinking for a run in flight, so the open task view can
-// watch it work (Oskar, 2026-07-27). In-memory only: it exists while the run
-// does and vanishes with it — the durable record is the run's result.
-const liveRunThinking = new Map<string, string>();
-
-export function appendRunThinking(taskId: string, text: string): void {
-  const current = liveRunThinking.get(taskId) ?? "";
-  liveRunThinking.set(taskId, (current + text).slice(-4000));
+/**
+ * Replace the one durable snapshot only when the incoming revision is newer.
+ * Providers never supply these strings: callers use short, reviewed status
+ * copy, so chain-of-thought, stderr and secrets have no path into this row.
+ */
+export function advanceTaskRunProgress(
+  database: DatabaseHandle,
+  runId: string,
+  revision: number,
+  update: {
+    state: TaskRunProgress["state"];
+    currentStep: string | null;
+    completedSteps: string[];
+    statusText: string;
+    finishedAt?: string | null;
+    outcomeMessageId?: string | null;
+    conversationId?: string | null;
+  },
+): TaskRunProgress | null {
+  const now = new Date().toISOString();
+  database.sqlite
+    .prepare(
+      `UPDATE task_runs
+       SET progress_revision = ?, progress_state = ?,
+           progress_current_step = ?, progress_completed_steps_json = ?,
+           progress_status_text = ?, progress_updated_at = ?,
+           finished_at = COALESCE(?, finished_at),
+           progress_outcome_message_id = COALESCE(?, progress_outcome_message_id),
+           progress_conversation_id = COALESCE(?, progress_conversation_id)
+       WHERE id = ? AND progress_revision < ?`,
+    )
+    .run(
+      Math.max(1, Math.trunc(revision)),
+      update.state,
+      update.currentStep
+        ? safeProgressText(update.currentStep, "Working")
+        : null,
+      JSON.stringify(safeProgressSteps(update.completedSteps)),
+      safeProgressText(update.statusText, "Progress updated."),
+      now,
+      update.finishedAt ?? null,
+      update.outcomeMessageId ?? null,
+      update.conversationId ?? null,
+      runId,
+      Math.max(1, Math.trunc(revision)),
+    );
+  const row = database.sqlite
+    .prepare(
+      `SELECT id, task_id, status, result, trigger, started_at, finished_at,
+              progress_version, progress_revision, progress_state,
+              progress_current_step, progress_completed_steps_json,
+              progress_status_text, progress_conversation_id,
+              progress_outcome_message_id, progress_updated_at
+       FROM task_runs WHERE id = ?`,
+    )
+    .get(runId) as TaskRunRow | undefined;
+  return row ? toTaskRunProgress(row) : null;
 }
 
-export function getRunThinking(taskId: string): string {
-  return liveRunThinking.get(taskId) ?? "";
+function assertTaskInMode(
+  database: DatabaseHandle,
+  taskId: string,
+  modeId: string | null,
+): void {
+  const row = database.sqlite
+    .prepare(
+      `SELECT id FROM tasks
+       WHERE id = ?
+         AND ((? IS NULL AND mode_id IS NULL) OR mode_id = ?)`,
+    )
+    .get(taskId, modeId, modeId) as { id: string } | undefined;
+  if (!row) throw new Error("TASK_NOT_FOUND");
+}
+
+export function getLatestTaskRunProgress(
+  database: DatabaseHandle,
+  taskId: string,
+  modeId: string | null,
+): TaskRunProgress | null {
+  assertTaskInMode(database, taskId, modeId);
+  const row = database.sqlite
+    .prepare(
+      `SELECT id, task_id, status, result, trigger, started_at, finished_at,
+              progress_version, progress_revision, progress_state,
+              progress_current_step, progress_completed_steps_json,
+              progress_status_text, progress_conversation_id,
+              progress_outcome_message_id, progress_updated_at
+       FROM task_runs WHERE task_id = ?
+       ORDER BY started_at DESC, id DESC LIMIT 1`,
+    )
+    .get(taskId) as TaskRunRow | undefined;
+  return row ? toTaskRunProgress(row) : null;
 }
 
 // Every run's result also lands in the task's conversation as a new assistant
@@ -737,8 +936,8 @@ function appendRunResultToConversation(
   result: string,
   status: "completed" | "failed",
   finishedAt: string,
-): void {
-  if (!result.trim()) return;
+): { conversationId: string; messageId: string } | null {
+  if (!result.trim()) return null;
   try {
     // The thread rises in the sidebar the moment a run lands, whether or not
     // its conversation was ever opened (Oskar, 2026-08-12: a scheduled task
@@ -757,21 +956,24 @@ function appendRunResultToConversation(
          WHERE task_id = ? AND kind = 'task' AND conversation_id IS NOT NULL`,
       )
       .get(taskId) as { conversation_id: string } | undefined;
-    if (!row) return;
+    if (!row) return null;
+    const messageId = randomUUID();
     database.sqlite
       .prepare(
         `INSERT INTO ask_vaenyx_messages (
           id, conversation_id, role, content, status, web_search_used, created_at
         ) VALUES (?, ?, 'assistant', ?, ?, 0, ?)`,
       )
-      .run(randomUUID(), row.conversation_id, result, status, finishedAt);
+      .run(messageId, row.conversation_id, result, status, finishedAt);
     database.sqlite
       .prepare(
         `UPDATE ask_vaenyx_conversations SET updated_at = ? WHERE id = ?`,
       )
       .run(finishedAt, row.conversation_id);
+    return { conversationId: row.conversation_id, messageId };
   } catch {
     // Best-effort: a missed append never fails the run itself.
+    return null;
   }
 }
 
@@ -786,13 +988,35 @@ async function executeTaskRun(
 ): Promise<void> {
   // Each execution is a durable run; the task keeps the latest result/status.
   const runId = randomUUID();
+  const startedAt = new Date().toISOString();
   try {
     database.sqlite
       .prepare(
-        `INSERT INTO task_runs (id, task_id, status, result, trigger, started_at, finished_at)
-         VALUES (?, ?, 'running', '', ?, ?, NULL)`,
+        `INSERT INTO task_runs (
+           id, task_id, status, result, trigger, started_at, finished_at,
+           progress_version, progress_revision, progress_state,
+           progress_current_step, progress_completed_steps_json,
+           progress_status_text, progress_conversation_id,
+           progress_outcome_message_id, progress_updated_at
+         ) VALUES (
+           ?, ?, 'running', '', ?, ?, NULL,
+           1, 1, 'queued', 'Preparing task', '[]', 'Queued to start.', ?, NULL, ?
+         )`,
       )
-      .run(runId, id, trigger, new Date().toISOString());
+      .run(
+        runId,
+        id,
+        trigger,
+        startedAt,
+        taskConversationId(database, id),
+        startedAt,
+      );
+    advanceTaskRunProgress(database, runId, 2, {
+      state: "running",
+      currentStep: "Working on your task",
+      completedSteps: ["Started"],
+      statusText: "Task is running.",
+    });
   } catch {
     // Database closed; nothing to record.
   }
@@ -818,6 +1042,12 @@ async function executeTaskRun(
       !controller.signal.aborted
     ) {
       try {
+        advanceTaskRunProgress(database, runId, 3, {
+          state: "running",
+          currentStep: "Retrying the model request",
+          completedSteps: ["Started", "Prepared a safe retry"],
+          statusText: "The first attempt could not continue. Retrying once.",
+        });
         result = await run(controller.signal);
         status = "completed";
         runningTasks.delete(id);
@@ -841,7 +1071,6 @@ async function executeTaskRun(
     status = "failed";
   } finally {
     runningTasks.delete(id);
-    liveRunThinking.delete(id);
   }
 
   await finishTaskRun(database, id, runId, trigger, result, status);
@@ -858,17 +1087,84 @@ function finishTaskRun(
 ): Promise<void> {
   const finishedAt = new Date().toISOString();
   try {
-    database.sqlite
+    const current = database.sqlite
       .prepare(
-        `UPDATE task_runs SET status = ?, result = ?, finished_at = ? WHERE id = ?`,
+        "SELECT progress_state, progress_revision FROM task_runs WHERE id = ?",
       )
-      .run(status, result, finishedAt, runId);
-    database.sqlite
-      .prepare(
-        `UPDATE tasks SET result = ?, status = ?, completed_at = ? WHERE id = ?`,
-      )
-      .run(result, status, finishedAt, id);
-    appendRunResultToConversation(database, id, result, status, finishedAt);
+      .get(runId) as
+      | {
+          progress_state: TaskRunProgress["state"];
+          progress_revision: number;
+        }
+      | undefined;
+    if (current?.progress_state === "cancelled") return Promise.resolve();
+    const terminalRevision = Math.max(
+      TERMINAL_PROGRESS_REVISION,
+      (current?.progress_revision ?? 0) + 1,
+    );
+
+    const progressState = status === "completed" ? "completed" : "failed";
+    const completedSteps =
+      status === "completed"
+        ? ["Started", "Worked on task", "Result saved"]
+        : ["Started"];
+    const statusText =
+      status === "completed"
+        ? "Task completed. The result is ready."
+        : "Task failed. Review the safe error and retry when ready.";
+
+    database.sqlite.exec("BEGIN IMMEDIATE");
+    try {
+      database.sqlite
+        .prepare(
+          `UPDATE task_runs
+           SET status = ?, result = ?, finished_at = ?,
+               progress_revision = ?, progress_state = ?,
+               progress_current_step = NULL,
+               progress_completed_steps_json = ?,
+               progress_status_text = ?, progress_updated_at = ?
+           WHERE id = ? AND progress_state != 'cancelled'`,
+        )
+        .run(
+          status,
+          result,
+          finishedAt,
+          terminalRevision,
+          progressState,
+          JSON.stringify(completedSteps),
+          statusText,
+          finishedAt,
+          runId,
+        );
+      database.sqlite
+        .prepare(
+          `UPDATE tasks SET result = ?, status = ?, completed_at = ? WHERE id = ?`,
+        )
+        .run(result, status, finishedAt, id);
+      database.sqlite.exec("COMMIT");
+    } catch (error) {
+      database.sqlite.exec("ROLLBACK");
+      throw error;
+    }
+
+    const outcome = appendRunResultToConversation(
+      database,
+      id,
+      result,
+      status,
+      finishedAt,
+    );
+    if (outcome) {
+      advanceTaskRunProgress(database, runId, terminalRevision + 1, {
+        state: progressState,
+        currentStep: null,
+        completedSteps,
+        statusText,
+        finishedAt,
+        conversationId: outcome.conversationId,
+        outcomeMessageId: outcome.messageId,
+      });
+    }
     // Scheduled runs notify subscribed devices — but only if the result stays
     // unseen for ~30s (a device viewing the app counts as seen; see
     // schedulePresenceAwarePush). Manual runs never push: the Owner just
@@ -964,10 +1260,22 @@ export function reconcileInterruptedTasks(database: DatabaseHandle): number {
     .prepare(
       `UPDATE task_runs
        SET status = 'failed', finished_at = ?,
-           result = CASE WHEN result = '' THEN ? ELSE result END
+           result = CASE WHEN result = '' THEN ? ELSE result END,
+           progress_revision = CASE
+             WHEN progress_revision < ? THEN ? ELSE progress_revision + 1 END,
+           progress_state = 'interrupted', progress_current_step = NULL,
+           progress_completed_steps_json = '["Started"]',
+           progress_status_text = 'Task was interrupted by a restart. Retry when ready.',
+           progress_updated_at = ?
        WHERE status = 'running'`,
     )
-    .run(now, message);
+    .run(
+      now,
+      message,
+      TERMINAL_PROGRESS_REVISION,
+      TERMINAL_PROGRESS_REVISION,
+      now,
+    );
 
   const result = database.sqlite
     .prepare(
@@ -1322,7 +1630,6 @@ function runTaskById(
       getDefaultProvider()
         .sendChat([{ content: task.request, role: "owner" }], context, {
           signal,
-          onThinking: (text) => appendRunThinking(task.id, text),
         })
         .then((reply) => reply.answer);
   }
@@ -1419,7 +1726,12 @@ export function runDueTasks(
 }
 
 // Manually re-run a failed/completed Forge task. Returns the now-running task.
-export function retryTask(database: DatabaseHandle, taskId: string): Task {
+export function retryTask(
+  database: DatabaseHandle,
+  taskId: string,
+  modeId?: string | null,
+): Task {
+  if (modeId !== undefined) assertTaskInMode(database, taskId, modeId);
   const existing = database.sqlite
     .prepare("SELECT id, status, harness FROM tasks WHERE id = ?")
     .get(taskId) as { id: string; status: string; harness: string } | undefined;
@@ -1431,17 +1743,29 @@ export function retryTask(database: DatabaseHandle, taskId: string): Task {
 
   runTaskById(database, taskId, "manual");
 
-  const updated = listTasks(database).find((task) => task.id === taskId);
+  const updated = listTasks(database, modeId).find((task) => task.id === taskId);
   if (!updated) throw new Error("TASK_NOT_FOUND");
   return updated;
 }
 
 // Cancel a running task: abort the Codex child and mark the task/run failed.
-export function cancelTask(database: DatabaseHandle, taskId: string): Task {
+export function cancelTask(
+  database: DatabaseHandle,
+  taskId: string,
+  modeId?: string | null,
+): Task {
+  if (modeId !== undefined) assertTaskInMode(database, taskId, modeId);
   runningTasks.get(taskId)?.abort();
 
   const now = new Date().toISOString();
   const message = "This task was cancelled.";
+  const runningRun = database.sqlite
+    .prepare(
+      `SELECT id, progress_revision FROM task_runs
+       WHERE task_id = ? AND status = 'running'
+       ORDER BY started_at DESC, id DESC LIMIT 1`,
+    )
+    .get(taskId) as { id: string; progress_revision: number } | undefined;
   database.sqlite
     .prepare(
       `UPDATE task_runs SET status = 'failed', finished_at = ?,
@@ -1449,13 +1773,27 @@ export function cancelTask(database: DatabaseHandle, taskId: string): Task {
        WHERE task_id = ? AND status = 'running'`,
     )
     .run(now, message, taskId);
+  if (runningRun) {
+    advanceTaskRunProgress(
+      database,
+      runningRun.id,
+      Math.max(TERMINAL_PROGRESS_REVISION, runningRun.progress_revision + 1),
+      {
+        state: "cancelled",
+        currentStep: null,
+        completedSteps: ["Started"],
+        statusText: "Task was cancelled. Retry when ready.",
+        finishedAt: now,
+      },
+    );
+  }
   database.sqlite
     .prepare(
       "UPDATE tasks SET status = 'failed', completed_at = ?, result = ? WHERE id = ? AND status = 'running'",
     )
     .run(now, message, taskId);
 
-  const updated = listTasks(database).find((task) => task.id === taskId);
+  const updated = listTasks(database, modeId).find((task) => task.id === taskId);
   if (!updated) throw new Error("TASK_NOT_FOUND");
   return updated;
 }
@@ -1463,21 +1801,19 @@ export function cancelTask(database: DatabaseHandle, taskId: string): Task {
 export function listTaskRuns(
   database: DatabaseHandle,
   taskId: string,
+  modeId?: string | null,
 ): TaskRun[] {
+  if (modeId !== undefined) assertTaskInMode(database, taskId, modeId);
   const rows = database.sqlite
     .prepare(
-      `SELECT id, task_id, status, result, trigger, started_at, finished_at
+      `SELECT id, task_id, status, result, trigger, started_at, finished_at,
+              progress_version, progress_revision, progress_state,
+              progress_current_step, progress_completed_steps_json,
+              progress_status_text, progress_conversation_id,
+              progress_outcome_message_id, progress_updated_at
        FROM task_runs WHERE task_id = ? ORDER BY started_at DESC`,
     )
-    .all(taskId) as {
-    id: string;
-    task_id: string;
-    status: "running" | "completed" | "failed";
-    result: string;
-    trigger: "manual" | "schedule";
-    started_at: string;
-    finished_at: string | null;
-  }[];
+    .all(taskId) as unknown as TaskRunRow[];
 
   return rows.map((row) => ({
     id: row.id,
@@ -1487,6 +1823,7 @@ export function listTaskRuns(
     trigger: row.trigger,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
+    progress: toTaskRunProgress(row),
   }));
 }
 

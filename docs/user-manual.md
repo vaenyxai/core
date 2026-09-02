@@ -431,6 +431,13 @@ Read this inside the app: **Settings → Manual**.
   you.
 - **See what ran** — the same screen: each run, its result, and how long it took.
 - **Cancel or retry** — buttons on the run itself.
+- **Follow long work without keeping the screen open** — the task Conversation
+  has one progress card. It shows queued, running, waiting for you, completed,
+  failed, cancelled, or interrupted, plus the current and completed steps. The
+  same card survives a refresh, restart, or another signed-in device; older
+  delayed updates cannot move it backwards. Failed or interrupted work offers
+  **Retry**, and completed work can jump to its saved result. The card contains
+  short status text only, never private model reasoning or raw logs.
 - **Talk to a task** — the box at the bottom of a task takes everything the chat
   box takes: a photo, a PDF, something spoken. It is the same conversation
   underneath, so every task already has this, however long ago you made it.

@@ -1517,6 +1517,98 @@ describe("Vaenyx Gateway foundation", () => {
     await app.close();
   });
 
+  it("serves one authenticated durable progress card and links its outcome", async () => {
+    process.env.VAENYX_CODEX_COMMAND = createFakeCodexCommand();
+    const app = await buildApp(createTestConfig());
+    const sessionCookie = await createOwnerAndSession(app);
+
+    const task = await app.inject({
+      method: "POST",
+      url: "/v1/tasks",
+      headers: { cookie: sessionCookie },
+      payload: {
+        request: "Inspect Vaenyx and return a safe summary.",
+        projectId: "vaenyx",
+        skillId: "forge-readonly",
+        executionMode: "forge-readonly",
+      },
+    });
+    expect(task.statusCode).toBe(200);
+    const taskId = task.json().id as string;
+
+    const unauthorized = await app.inject({
+      method: "GET",
+      url: `/v1/tasks/${taskId}/progress`,
+    });
+    expect(unauthorized.statusCode).toBe(401);
+
+    const removedThinkingFeed = await app.inject({
+      method: "GET",
+      url: `/v1/tasks/${taskId}/live`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(removedThinkingFeed.statusCode).toBe(404);
+
+    let progress: Record<string, unknown> | null = null;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/v1/tasks/${taskId}/progress`,
+        headers: { cookie: sessionCookie },
+      });
+      expect(response.statusCode).toBe(200);
+      progress = response.json() as Record<string, unknown>;
+      if (progress.state === "completed" || progress.state === "failed") break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(progress).toMatchObject({
+      version: 1,
+      taskId,
+      revision: 100,
+      currentStep: null,
+    });
+    expect(["completed", "failed"]).toContain(progress?.state);
+    expect(progress?.statusText).toMatch(
+      /^Task (completed|failed)\./,
+    );
+
+    const messages = await app.inject({
+      method: "GET",
+      url: `/v1/tasks/${taskId}/messages`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(messages.statusCode).toBe(200);
+    const outcome = messages
+      .json()
+      .find((message: { role: string }) => message.role === "assistant");
+
+    const linked = await app.inject({
+      method: "GET",
+      url: `/v1/tasks/${taskId}/progress`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(linked.json()).toMatchObject({
+      conversationId: outcome.conversationId,
+      outcomeMessageId: outcome.id,
+      revision: 101,
+    });
+
+    const runs = await app.inject({
+      method: "GET",
+      url: `/v1/tasks/${taskId}/runs`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(runs.statusCode).toBe(200);
+    expect(runs.json()).toEqual([
+      expect.objectContaining({
+        id: linked.json().runId,
+        progress: expect.objectContaining({ outcomeMessageId: outcome.id }),
+      }),
+    ]);
+
+    await app.close();
+  });
+
   it("fails closed when Forge cannot use a ChatGPT-authenticated Codex CLI", async () => {
     const app = await buildApp(createTestConfig());
     const sessionCookie = await createOwnerAndSession(app);

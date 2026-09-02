@@ -22,6 +22,7 @@ import {
   MemoryProvenanceResponseSchema,
   ResolveStructuredQuestionRequestSchema,
   RejectVaenyxMeCandidateRequestSchema,
+  TaskRunProgressSchema,
   UpdateVaenyxThreadProjectRequestSchema,
   UpdateVaenyxThreadStatusRequestSchema,
   UpdateVaenyxThreadTitleRequestSchema,
@@ -51,6 +52,26 @@ describe("M1 contracts", () => {
         request: "Turn this chat into a task.",
         projectId: "vaenyx",
         sourceChatId: "conversation-id",
+      }),
+    ).toBe(true);
+  });
+
+  it("accepts bounded, versioned task progress without hidden workings", () => {
+    expect(
+      Value.Check(TaskRunProgressSchema, {
+        version: 1,
+        runId: "run-1",
+        taskId: "task-1",
+        conversationId: "conversation-1",
+        revision: 7,
+        state: "waiting_for_owner",
+        currentStep: "Waiting for your choice",
+        completedSteps: ["Started", "Checked the available options"],
+        statusText: "Choose one option below to continue.",
+        startedAt: "2026-09-02T00:00:00.000Z",
+        updatedAt: "2026-09-02T00:01:00.000Z",
+        finishedAt: null,
+        outcomeMessageId: null,
       }),
     ).toBe(true);
   });

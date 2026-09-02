@@ -3915,6 +3915,154 @@ select {
   font-size: 11px;
 }
 
+/* One durable card per task Conversation. It is deliberately compact and
+   stores only reviewed progress copy — never model reasoning or raw logs. */
+.task-progress-card {
+  width: min(760px, 100%);
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: rgba(240, 238, 229, 0.035);
+}
+
+.task-progress-card > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 14px;
+  min-height: 28px;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.task-progress-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.task-progress-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.task-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d5af68;
+  box-shadow: 0 0 0 3px rgba(213, 175, 104, 0.12);
+}
+
+.task-progress-card--completed .task-progress-dot {
+  background: #75b094;
+  box-shadow: 0 0 0 3px rgba(117, 176, 148, 0.12);
+}
+
+.task-progress-card--failed .task-progress-dot,
+.task-progress-card--interrupted .task-progress-dot,
+.task-progress-card--cancelled .task-progress-dot {
+  background: #df938a;
+  box-shadow: 0 0 0 3px rgba(223, 147, 138, 0.12);
+}
+
+.task-progress-card--waiting_for_owner .task-progress-dot {
+  background: #8aaedf;
+  box-shadow: 0 0 0 3px rgba(138, 174, 223, 0.12);
+}
+
+.task-progress-summary {
+  min-width: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.task-progress-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--border);
+}
+
+.task-progress-current {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.task-progress-current strong,
+.task-progress-completed > strong {
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.task-progress-completed {
+  display: grid;
+  gap: 6px;
+}
+
+.task-progress-completed ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 22px;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+.task-progress-time {
+  margin: 0;
+  color: #6b685f;
+  font-size: var(--fs-label);
+}
+
+.task-progress-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.task-progress-actions button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.task-progress-actions button:hover {
+  background: var(--accent-soft);
+}
+
+@media (max-width: 720px) {
+  .task-progress-card > summary {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .task-progress-current {
+    display: grid;
+    gap: 4px;
+  }
+
+  .task-progress-actions button {
+    flex: 1 1 auto;
+  }
+}
+
 .focused-task-title {
   display: grid;
   min-width: 0;
