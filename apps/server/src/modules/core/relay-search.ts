@@ -1,5 +1,5 @@
 export const RELAY_CONTRACT_VERSION = 2;
-export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.4";
+export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.5";
 
 export interface RelaySearchResult {
   title: string;
@@ -79,27 +79,39 @@ export function normalizeSearchEvidence(
         ) {
           parsed.hash = "";
           const url = parsed.toString();
-          if (!found.has(url)) {
-            found.set(url, {
-              title:
-                firstString(record, ["title", "name", "page_title", "pageTitle"]) ||
-                parsed.hostname,
-              url,
-              snippet: firstString(record, [
+          const candidate = {
+            title:
+              firstString(record, ["title", "name", "page_title", "pageTitle"]) ||
+              parsed.hostname,
+            url,
+            snippet: firstString(record, [
                 "snippet",
                 "description",
                 "text",
                 "content",
                 "summary",
               ]).slice(0, 2_000),
-              published_at:
-                firstString(record, [
-                  "published_at",
-                  "publishedAt",
-                  "page_age",
-                  "pageAge",
-                  "date",
-                ]) || null,
+            published_at:
+              firstString(record, [
+                "published_at",
+                "publishedAt",
+                "page_age",
+                "pageAge",
+                "date",
+              ]) || null,
+          };
+          const existing = found.get(url);
+          if (!existing) {
+            found.set(url, candidate);
+          } else {
+            found.set(url, {
+              title:
+                existing.title === parsed.hostname && candidate.title !== parsed.hostname
+                  ? candidate.title
+                  : existing.title,
+              url,
+              snippet: existing.snippet || candidate.snippet,
+              published_at: existing.published_at || candidate.published_at,
             });
           }
         }

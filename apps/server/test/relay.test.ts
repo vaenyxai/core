@@ -365,8 +365,23 @@ describe("the subscription door", () => {
     });
     expect(normalizeSearchRunEvidence([], finalText)).toEqual([]);
     expect(
-      normalizeSearchRunEvidence([{ type: "search", query: "Codex CLI" }], finalText),
-    ).toHaveLength(1);
+      normalizeSearchRunEvidence(
+        [
+          {
+            type: "open",
+            query: "https://developers.openai.com/codex/cli/reference",
+          },
+        ],
+        finalText,
+      ),
+    ).toEqual([
+      {
+        title: "Codex CLI reference",
+        url: "https://developers.openai.com/codex/cli/reference",
+        snippet: "Live search uses --search.",
+        published_at: null,
+      },
+    ]);
   });
 
   it("never returns engine paths or credentials in public errors", () => {
