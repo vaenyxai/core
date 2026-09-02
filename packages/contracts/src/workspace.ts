@@ -1,5 +1,7 @@
 import { type Static, Type } from "@sinclair/typebox";
 
+import { OwnerSafeErrorSchema } from "./owner-safe-error.js";
+
 export const OwnerSchema = Type.Object(
   {
     id: Type.String(),
@@ -183,6 +185,7 @@ export const ForgeConnectionTestResultSchema = Type.Object(
     check: Type.String(),
     durationMs: Type.Integer({ minimum: 0 }),
     message: Type.String(),
+    ownerError: Type.Optional(OwnerSafeErrorSchema),
     output: Type.Union([Type.String(), Type.Null()]),
     timestamp: Type.String(),
   },
@@ -206,6 +209,7 @@ export const ChatConnectionTestResultSchema = Type.Object(
     check: Type.String(),
     durationMs: Type.Integer({ minimum: 0 }),
     message: Type.String(),
+    ownerError: Type.Optional(OwnerSafeErrorSchema),
     output: Type.Union([Type.String(), Type.Null()]),
     timestamp: Type.String(),
   },

@@ -782,6 +782,17 @@ Read this inside the app: **Settings → Manual**.
 
 ## When something goes wrong
 
+Vaenyx now keeps technical failures behind an owner-safe boundary. What you
+see names what failed, says whether your existing data is safe, and gives the
+next useful action — Retry, reconnect the model, open Settings, or check the
+local log. Every such message includes a stable error code and a diagnostic
+number. If the problem repeats, note those two values; the matching bounded,
+redacted detail is stored only on this computer in
+`userdata/logs/owner-errors.log`. Raw command output, local paths, access
+tokens, terminal control codes, and stack traces are never shown in the app or
+sent through its API. You do not need PowerShell to recover: use the action in
+the message first.
+
 | What you see                                           | What to do                                                                                                                                             |
 | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Nothing loads at all                                   | The computer is off or asleep. Wake it.                                                                                                                |
@@ -791,6 +802,7 @@ Read this inside the app: **Settings → Manual**.
 | The browser console says `ERR_NAME_NOT_RESOLVED`       | This device could not look the address up. It is DNS, not Vaenyx. Set this device's DNS to `8.8.8.8` — see below.                                      |
 | "Not signed in" on a subscription                      | Settings → AI Settings → sign in to that one again.                                                                                                    |
 | An engine fails and nothing else happens               | By design. Read which one failed, then pick another engine on that row.                                                                                |
+| An error shows `VX-…` and a diagnostic number          | Follow the action in the message. If it repeats, note both values; redacted local detail is in `userdata/logs/owner-errors.log`.                       |
 | Voice button does nothing                              | The Hearing row has no engine, or Hearing is switched off. Settings → AI Settings → Capabilities → Hearing.                                            |
 | The ▶ button is missing from replies                   | Speaking is switched off. Settings → AI Settings → Capabilities → Speaking.                                                                            |
 | "You have that switched off"                           | You did, on that capability's row. Settings → AI Settings → Capabilities, and turn the row back on.                                                    |
@@ -858,5 +870,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.11** · last updated 2026-09-01.
+Manual for **v0.4.12** · last updated 2026-09-02.
 Keep this file up to date whenever a feature changes.

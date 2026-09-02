@@ -94,6 +94,7 @@ import {
   ConnectModelProviderRequestSchema,
   InstanceSettingsSchema,
   ModelProvidersResponseSchema,
+  OwnerSafeErrorSchema,
   LibraryMethodSummarySchema,
   LibraryRoutineSummarySchema,
   RoutineRunChatRequestSchema,
@@ -249,6 +250,11 @@ import {
   type RelayRunRequest,
   type UpdateRelaySettingsRequest,
 } from "@vaenyx/contracts";
+import {
+  OwnerDiagnosticError,
+  ownerSafeErrorResponse,
+  ownerSafeErrorText,
+} from "../../runtime/owner-safe-errors.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import type { AppConfig } from "../../config.js";
@@ -719,6 +725,7 @@ const HealthSchema = Type.Object(
 const ErrorResponseSchema = Type.Object(
   {
     error: Type.String(),
+    ownerError: Type.Optional(OwnerSafeErrorSchema),
   },
   {
     additionalProperties: false,
@@ -745,76 +752,20 @@ const PublishRefusedResponseSchema = Type.Object(
 
 // Friendly copy for the model-backend failures a Method run can surface to a
 // calling app (the backend is the same Codex CLI the rest of Vaenyx uses).
-const METHOD_RUN_ERROR_COPY: Record<string, string> = {
-  CODEX_NOT_INSTALLED: "The model backend (Codex CLI) is not installed.",
-  CODEX_NOT_LOGGED_IN: "The model backend is not signed in.",
-  CODEX_CHATGPT_REQUIRED:
-    "The model backend must be signed in with ChatGPT Subscription Auth.",
-  CODEX_TURN_CANCELLED: "The method run was cancelled.",
-};
-
 // How many examples to hand an app in a Type B recipe fetch (few-shot for its
 // own model). Bounded so a method with many flywheel examples stays reasonable.
 const FETCH_RECIPE_EXAMPLE_LIMIT = 10;
 
-function getMethodRunErrorMessage(error: unknown): string {
-  const code = error instanceof Error ? error.message : "UNKNOWN";
-  return (
-    METHOD_RUN_ERROR_COPY[code] ??
-    "Vaenyx could not complete that method run. Check the local logs."
-  );
+function getMethodRunErrorResponse(error: unknown) {
+  return ownerSafeErrorResponse(error, "model-response", pushLanguage());
 }
 
-function getForgeTestFailureMessage(error: unknown): string {
-  const code = error instanceof Error ? error.message : "CODEX_UNKNOWN_ERROR";
-
-  if (code === "CODEX_NOT_INSTALLED") {
-    return "Forge could not start because the independent Codex CLI is not installed.";
-  }
-
-  if (code === "CODEX_NOT_LOGGED_IN") {
-    return "Forge could not start because Codex is not signed in.";
-  }
-
-  if (code === "CODEX_CHATGPT_REQUIRED") {
-    return "Forge requires Codex to be signed in with ChatGPT Subscription Auth.";
-  }
-
-  if (code === "CODEX_DID_NOT_INSPECT_REPOSITORY") {
-    return "Forge started, but Vaenyx rejected the result because it did not inspect the repository.";
-  }
-
-  if (code === "CODEX_READ_ONLY_BOUNDARY_VIOLATION") {
-    return "Forge attempted an action outside its read-only safety boundary.";
-  }
-
-  if (code === "CODEX_REPOSITORY_BOUNDARY_VIOLATION") {
-    return "Forge attempted to inspect outside the Vaenyx repository.";
-  }
-
-  return `Forge connection test failed locally: ${code}`;
+function getForgeTestFailure(error: unknown) {
+  return ownerSafeErrorText(error, "forge-test", pushLanguage());
 }
 
-function getChatTestFailureMessage(error: unknown): string {
-  const code = error instanceof Error ? error.message : "CODEX_UNKNOWN_ERROR";
-
-  if (code === "CODEX_NOT_INSTALLED") {
-    return "Chat test could not start because the independent Codex CLI is not installed.";
-  }
-
-  if (code === "CODEX_NOT_LOGGED_IN") {
-    return "Chat test could not start because Codex is not signed in.";
-  }
-
-  if (code === "CODEX_CHATGPT_REQUIRED") {
-    return "Chat test requires Codex to be signed in with ChatGPT Subscription Auth.";
-  }
-
-  if (code === "CODEX_CHAT_BOUNDARY_VIOLATION") {
-    return "This quick chat test is connected, but it does not browse or use tools. Live prices, weather, news, and other current-data questions are blocked here.";
-  }
-
-  return `Chat test failed locally: ${code}`;
+function getChatTestFailure(error: unknown) {
+  return ownerSafeErrorText(error, "model-response", pushLanguage());
 }
 
 function isLiveDataPrompt(prompt: string): boolean {
@@ -1188,14 +1139,19 @@ export async function registerGatewayRoutes(
       audit(response);
       send("done", response);
     } catch (error) {
-      const message =
+      if (
         error instanceof Error &&
         error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
-          ? "Vaenyx Chat conversation not found."
-          : error instanceof Error && error.message === "TASK_NOT_FOUND"
-            ? "Task not found."
-            : "Vaenyx could not complete this reply.";
-      send("error", { error: message });
+      ) {
+        send("error", { error: "Vaenyx Chat conversation not found." });
+      } else if (error instanceof Error && error.message === "TASK_NOT_FOUND") {
+        send("error", { error: "Task not found." });
+      } else {
+        send(
+          "error",
+          ownerSafeErrorResponse(error, "model-response", pushLanguage()),
+        );
+      }
     } finally {
       if (inFlightTurns.get(turnKey) === controller) {
         inFlightTurns.delete(turnKey);
@@ -1850,6 +1806,13 @@ export async function registerGatewayRoutes(
       }
 
       const result = createBackupNow(context.config);
+      const failure = result.ok
+        ? null
+        : ownerSafeErrorResponse(
+            new OwnerDiagnosticError("BACKUP_FAILED", result.output),
+            "request",
+            pushLanguage(),
+          );
       recordAudit(context.database, {
         actorType: "owner",
         actorId: owner.id,
@@ -1858,14 +1821,12 @@ export async function registerGatewayRoutes(
         decision: result.ok ? "allowed" : "denied",
         reason: result.ok
           ? "Owner created a local backup from Settings."
-          : `Backup failed: ${result.output.slice(0, 300)}`,
+          : (failure?.error ?? "Backup failed."),
         resourceType: "system",
       });
 
       if (!result.ok) {
-        return reply
-          .code(500)
-          .send({ error: "Backup failed. Check the server logs." });
+        return reply.code(500).send(failure);
       }
       return { message: "Backup created." };
     },
@@ -1935,16 +1896,30 @@ export async function registerGatewayRoutes(
       // detail field carries codes the UI turns into sentences, and the raw
       // line goes to the server log where it belongs.
       const ensured = await ensureCodexInstalled();
-      if (ensured === "install-failed") {
-        return { url: null, detail: "CODEX_INSTALL_FAILED" };
+      if (ensured.status === "install-failed") {
+        return {
+          url: null,
+          detail: `CODEX_INSTALL_FAILED:${ensured.ownerError.code}:${ensured.ownerError.diagnosticId}`,
+        };
       }
       const result = await startCodexLogin();
       if (result.detail) {
-        request.log.warn(
-          { codexDetail: result.detail },
-          "codex login could not start",
+        const failure = ownerSafeErrorText(
+          new OwnerDiagnosticError("CODEX_LOGIN_FAILED", result.detail),
+          "model-login",
+          pushLanguage(),
         );
-        return { url: result.url, detail: "CODEX_LOGIN_FAILED" };
+        request.log.warn(
+          {
+            diagnosticId: failure.ownerError.diagnosticId,
+            ownerErrorCode: failure.ownerError.code,
+          },
+          "codex login could not start; redacted detail is in the owner error log",
+        );
+        return {
+          url: result.url,
+          detail: `CODEX_LOGIN_FAILED:${failure.ownerError.code}:${failure.ownerError.diagnosticId}`,
+        };
       }
       return result;
     },
@@ -2095,10 +2070,10 @@ export async function registerGatewayRoutes(
       const ready = await ensureClaudeSdkInstalled(
         context.config.dataDirectory,
       );
-      if (ready === "install-failed") {
+      if (ready.status === "install-failed") {
         return reply.code(502).send({
-          error:
-            "CLAUDE_COMPONENT_FAILED:The Claude sign-in component could not be installed.",
+          error: `CLAUDE_COMPONENT_FAILED:${ready.ownerError.code}:${ready.ownerError.diagnosticId}`,
+          ownerError: ready.ownerError,
         });
       }
       try {
@@ -2113,10 +2088,16 @@ export async function registerGatewayRoutes(
           resourceType: "system",
         });
         return { url };
-      } catch {
+      } catch (error) {
         cancelClaudeLogin();
+        const failure = ownerSafeErrorText(
+          error,
+          "model-login",
+          pushLanguage(),
+        );
         return reply.code(502).send({
-          error: "CLAUDE_LOGIN_FAILED:The Claude sign-in could not start.",
+          error: `CLAUDE_LOGIN_FAILED:${failure.ownerError.code}:${failure.ownerError.diagnosticId}`,
+          ownerError: failure.ownerError,
         });
       }
     },
@@ -3263,7 +3244,7 @@ export async function registerGatewayRoutes(
           } catch (error) {
             return reply
               .code(502)
-              .send({ error: getMethodRunErrorMessage(error) });
+              .send(getMethodRunErrorResponse(error));
           }
         }
       }
@@ -3374,7 +3355,7 @@ export async function registerGatewayRoutes(
             error: "Vaenyx could not turn that into the routine's input.",
           });
         }
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -8986,7 +8967,7 @@ export async function registerGatewayRoutes(
           controller.signal,
         );
       } catch (error) {
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -9032,7 +9013,7 @@ export async function registerGatewayRoutes(
           controller.signal,
         );
       } catch (error) {
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -9157,7 +9138,7 @@ export async function registerGatewayRoutes(
           controller.signal,
         );
       } catch (error) {
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -9332,7 +9313,7 @@ export async function registerGatewayRoutes(
         ) {
           return reply.code(404).send({ error: "Routine not found." });
         }
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -9454,7 +9435,7 @@ export async function registerGatewayRoutes(
         ) {
           return reply.code(400).send({ error: error.message });
         }
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -11508,7 +11489,7 @@ export async function registerGatewayRoutes(
         };
         return response;
       } catch (error) {
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -11718,7 +11699,7 @@ export async function registerGatewayRoutes(
           resourceType: "method",
           resourceId: methodId,
         });
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -12950,7 +12931,7 @@ export async function registerGatewayRoutes(
           resourceType: "routine",
           resourceId: routineId,
         });
-        return reply.code(502).send({ error: getMethodRunErrorMessage(error) });
+        return reply.code(502).send(getMethodRunErrorResponse(error));
       }
     },
   );
@@ -13542,6 +13523,13 @@ export async function registerGatewayRoutes(
           "Inspect the root package.json in the current repository and answer only with the package name.",
         );
         const passed = /\bvaenyx\b/i.test(output);
+        const failure = passed
+          ? null
+          : ownerSafeErrorText(
+              new Error("FORGE_VERIFY_FAILED"),
+              "forge-test",
+              pushLanguage(),
+            );
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
@@ -13550,7 +13538,7 @@ export async function registerGatewayRoutes(
           decision: passed ? "allowed" : "denied",
           reason: passed
             ? "Forge connection test completed through ChatGPT Subscription Auth."
-            : "Forge responded, but Vaenyx could not verify the expected repository result.",
+            : failure?.text ?? "Forge result verification failed.",
           resourceType: "provider_connection",
         });
 
@@ -13560,19 +13548,20 @@ export async function registerGatewayRoutes(
           durationMs: Date.now() - startedAt,
           message: passed
             ? "Forge is connected. It used ChatGPT / Codex Auth and inspected the Vaenyx repository in read-only mode."
-            : "Forge responded, but Vaenyx could not verify the expected repository result.",
-          output,
+            : (failure?.text ?? "Forge result verification failed."),
+          ...(failure ? { ownerError: failure.ownerError } : {}),
+          output: passed ? output : null,
           timestamp,
         };
       } catch (error) {
-        const message = getForgeTestFailureMessage(error);
+        const failure = getForgeTestFailure(error);
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
           actorName: owner.name,
           action: "provider.forge_test",
           decision: "denied",
-          reason: message,
+          reason: failure.text,
           resourceType: "provider_connection",
         });
 
@@ -13580,7 +13569,8 @@ export async function registerGatewayRoutes(
           status: "failed",
           check,
           durationMs: Date.now() - startedAt,
-          message,
+          message: failure.text,
+          ownerError: failure.ownerError,
           output: null,
           timestamp,
         };
@@ -13618,15 +13608,18 @@ export async function registerGatewayRoutes(
       const timestamp = new Date().toISOString();
 
       if (isLiveDataPrompt(prompt)) {
-        const message =
-          "This quick chat test is connected, but it does not browse or use tools. Live prices, weather, news, and other current-data questions are blocked here.";
+        const failure = ownerSafeErrorText(
+          new Error("CODEX_CHAT_BOUNDARY_VIOLATION"),
+          "model-response",
+          pushLanguage(),
+        );
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
           actorName: owner.name,
           action: "provider.chat_test",
           decision: "denied",
-          reason: message,
+          reason: failure.text,
           resourceType: "provider_connection",
         });
 
@@ -13634,7 +13627,8 @@ export async function registerGatewayRoutes(
           status: "blocked",
           check,
           durationMs: Date.now() - startedAt,
-          message,
+          message: failure.text,
+          ownerError: failure.ownerError,
           output: null,
           timestamp,
         };
@@ -13643,6 +13637,13 @@ export async function registerGatewayRoutes(
       try {
         const output = await runCodexChatTest(prompt);
         const passed = output.trim().length > 0;
+        const failure = passed
+          ? null
+          : ownerSafeErrorText(
+              new Error("MODEL_EMPTY_RESPONSE"),
+              "model-response",
+              pushLanguage(),
+            );
         recordAudit(context.database, {
           actorType: "owner",
           actorId: owner.id,
@@ -13651,7 +13652,7 @@ export async function registerGatewayRoutes(
           decision: passed ? "allowed" : "denied",
           reason: passed
             ? "Chat test completed through ChatGPT Subscription Auth without exposing tokens."
-            : "Chat test returned no visible answer.",
+            : failure?.text ?? "Chat test returned no visible answer.",
           resourceType: "provider_connection",
         });
 
@@ -13661,12 +13662,13 @@ export async function registerGatewayRoutes(
           durationMs: Date.now() - startedAt,
           message: passed
             ? "Chat test passed. Vaenyx can send a simple prompt through your ChatGPT / Codex account."
-            : "Chat test returned no visible answer.",
-          output,
+            : (failure?.text ?? "Chat test returned no visible answer."),
+          ...(failure ? { ownerError: failure.ownerError } : {}),
+          output: passed ? output : null,
           timestamp,
         };
       } catch (error) {
-        const message = getChatTestFailureMessage(error);
+        const failure = getChatTestFailure(error);
         const blocked =
           error instanceof Error &&
           error.message === "CODEX_CHAT_BOUNDARY_VIOLATION";
@@ -13676,7 +13678,7 @@ export async function registerGatewayRoutes(
           actorName: owner.name,
           action: "provider.chat_test",
           decision: "denied",
-          reason: message,
+          reason: failure.text,
           resourceType: "provider_connection",
         });
 
@@ -13684,7 +13686,8 @@ export async function registerGatewayRoutes(
           status: blocked ? "blocked" : "failed",
           check,
           durationMs: Date.now() - startedAt,
-          message,
+          message: failure.text,
+          ownerError: failure.ownerError,
           output: null,
           timestamp,
         };

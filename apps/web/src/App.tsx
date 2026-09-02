@@ -65,6 +65,7 @@ import type {
   InboxSummary,
   RegressionResult,
 } from "@vaenyx/contracts";
+import { formatOwnerSafeError } from "@vaenyx/contracts";
 
 import {
   approveVaenyxMeCandidate,
@@ -11925,33 +11926,52 @@ function localBackendNoticeKey(
 // a clean machine used to print Windows' raw "'codex' is not recognized" into
 // the first-run wizard). The server sends codes; this is where they become
 // words a household can act on.
+function safeErrorReference(message: string, zh: boolean): string {
+  const [, publicCode, diagnosticId] = message.split(":");
+  if (!publicCode || !diagnosticId) return "";
+  return zh
+    ? ` 错误 ${publicCode} · 诊断编号 ${diagnosticId}`
+    : ` Error ${publicCode} · Diagnostic ${diagnosticId}`;
+}
+
 function codexSignInError(code: string, zh: boolean): string {
-  if (code === "CODEX_INSTALL_FAILED") {
+  const reference = safeErrorReference(code, zh);
+  const internalCode = code.split(":")[0];
+  if (internalCode === "CODEX_INSTALL_FAILED") {
     // A second press is worth trying, but somebody stuck on a fresh machine
     // needs the way round it as well — and there is one, it takes two
     // minutes, and it does not involve installing anything.
-    return zh
+    return (zh
       ? "ChatGPT 登录组件没装上。检查网络后再点一次,它会重新安装。装不上也没关系:在 Models 里连一个免费的 Gemini 或 Groq key,Vaenyx 一样能用,而且不需要装任何东西。"
-      : "The ChatGPT sign-in component could not be installed. Check the internet connection and press the button again — it retries. If it still will not install, you are not stuck: connect a free Gemini or Groq key under Models instead. Nothing to install, and Vaenyx works the same.";
+      : "The ChatGPT sign-in component could not be installed. Check the internet connection and press the button again — it retries. If it still will not install, you are not stuck: connect a free Gemini or Groq key under Models instead. Nothing to install, and Vaenyx works the same.") + reference;
   }
-  return zh
+  return (zh
     ? "ChatGPT 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"
-    : "The ChatGPT sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.";
+    : "The ChatGPT sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.") + reference;
 }
 
 // Same idea for the Claude subscription, whose component is far larger: the
 // Agent SDK is fetched on the first connect rather than shipped, so a failure
 // here is a download that did not finish, not a broken Vaenyx.
 function claudeSignInError(message: string, zh: boolean): string {
-  const code = message.split(":")[0];
-  if (code === "CLAUDE_COMPONENT_FAILED") {
-    return zh
-      ? "Claude 订阅组件没装上(约 250 MB,第一次连接时下载)。检查网络后再点一次,它会重新下载。装不上也不影响别的:Vaenyx 其余功能照常,也可以在 Models 里连一个免费的 Gemini 或 Groq key。"
-      : "The Claude subscription component could not be installed (about 250 MB, downloaded the first time you connect). Check the internet connection and press the button again — it retries. Nothing else is affected: the rest of Vaenyx works as normal, and a free Gemini or Groq key under Models is always an option.";
+  // Structured owner-safe failures have already been localised by the API
+  // client. Preserve their remedy, stable public code and diagnostic ID.
+  if (
+    /VX-[A-Z-]+/.test(message) &&
+    /(?:Diagnostic|诊断编号)\s+vx-/.test(message)
+  ) {
+    return message;
   }
-  return zh
+  const code = message.split(":")[0];
+  const reference = safeErrorReference(message, zh);
+  if (code === "CLAUDE_COMPONENT_FAILED") {
+    return (zh
+      ? "Claude 订阅组件没装上(约 250 MB,第一次连接时下载)。检查网络后再点一次,它会重新下载。装不上也不影响别的:Vaenyx 其余功能照常,也可以在 Models 里连一个免费的 Gemini 或 Groq key。"
+      : "The Claude subscription component could not be installed (about 250 MB, downloaded the first time you connect). Check the internet connection and press the button again — it retries. Nothing else is affected: the rest of Vaenyx works as normal, and a free Gemini or Groq key under Models is always an option.") + reference;
+  }
+  return (zh
     ? "Claude 登录没能开始。再试一次;还不行就重启 Vaenyx 再试。"
-    : "The Claude sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.";
+    : "The Claude sign-in could not start. Try again; if it keeps failing, restart Vaenyx and try once more.") + reference;
 }
 
 function SubscriptionDoorPanel() {
@@ -27058,9 +27078,13 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
         (entry.id === "codex" || entry.id === "claude"),
     );
     if (failed.length > 0) {
-      return zhNote
+      const base = zhNote
         ? "安装时勾选的登录组件没下载成功 —— 点下面的登录按钮会重新下载一次。"
         : "A sign-in component you ticked during install did not download - the sign-in button below retries it.";
+      const ownerError = failed[0]?.ownerError;
+      return ownerError
+        ? `${base} ${formatOwnerSafeError(ownerError, zhNote ? "zh" : "en")}`
+        : base;
     }
     return null;
   })();

@@ -905,7 +905,7 @@ describe("Vaenyx Gateway foundation", () => {
       webSearchUsed: false,
     });
     expect(reply.json().messages[1].content).toContain(
-      "outside this chat boundary",
+      "Error VX-SAFETY-BOUNDARY · Diagnostic vx-",
     );
 
     await app.close();
@@ -1208,7 +1208,7 @@ describe("Vaenyx Gateway foundation", () => {
       harness: "codex-harness",
       agent: "Forge",
     });
-    expect(settled.result).toContain("Codex CLI is not installed");
+    expect(settled.result).toContain("Error VX-MODEL-INSTALL · Diagnostic vx-");
     await app.close();
   });
 
@@ -2010,8 +2010,14 @@ describe("Vaenyx Gateway foundation", () => {
       status: "failed",
       check: "Forge read-only repository inspection",
       output: null,
+      ownerError: {
+        code: "VX-MODEL-INSTALL",
+        dataSafe: true,
+      },
     });
-    expect(test.json().message).toContain("Codex CLI is not installed");
+    expect(test.json().message).toContain(
+      "Error VX-MODEL-INSTALL · Diagnostic vx-",
+    );
 
     const unauthorizedChat = await app.inject({
       method: "POST",
@@ -2046,8 +2052,14 @@ describe("Vaenyx Gateway foundation", () => {
       status: "failed",
       check: "ChatGPT Subscription Auth quick chat",
       output: null,
+      ownerError: {
+        code: "VX-MODEL-INSTALL",
+        dataSafe: true,
+      },
     });
-    expect(chat.json().message).toContain("Codex CLI is not installed");
+    expect(chat.json().message).toContain(
+      "Error VX-MODEL-INSTALL · Diagnostic vx-",
+    );
 
     const liveDataChat = await app.inject({
       method: "POST",
@@ -2063,9 +2075,13 @@ describe("Vaenyx Gateway foundation", () => {
       status: "blocked",
       check: "ChatGPT Subscription Auth quick chat",
       output: null,
+      ownerError: {
+        code: "VX-SAFETY-BOUNDARY",
+        dataSafe: true,
+      },
     });
     expect(liveDataChat.json().message).toContain(
-      "does not browse or use tools",
+      "Error VX-SAFETY-BOUNDARY · Diagnostic vx-",
     );
 
     const audit = await app.inject({

@@ -26,6 +26,8 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import type { UpdateStatus } from "@vaenyx/contracts";
+import { ownerSafeErrorText } from "../../runtime/owner-safe-errors.js";
+import { pushLanguage } from "./push.js";
 
 // Overridable so the whole update path (check, download, checksum, unpack,
 // stage) can be rehearsed against a local stand-in release before a real one
@@ -190,7 +192,11 @@ export async function checkForUpdate(
       state.detail = "No published release to update to yet.";
     } else {
       state.phase = "error";
-      state.detail = "Could not reach GitHub to check for updates.";
+      state.detail = ownerSafeErrorText(
+        error,
+        "update-launch",
+        pushLanguage(),
+      ).text;
     }
   }
   return getUpdateStatus(currentVersion, repositoryRoot, dataDirectory);
@@ -335,16 +341,12 @@ export async function stageUpdate(config: {
       "Ready to install. Vaenyx will restart and finish the update.";
   } catch (error) {
     rmSync(updatesRoot, { recursive: true, force: true });
-    const message = error instanceof Error ? error.message : "";
     state.phase = "error";
-    state.detail =
-      message === "UPDATE_HASH_MISMATCH"
-        ? "The download did not match its published checksum, so it was discarded."
-        : message === "UPDATE_NO_ASSET" || message === "UPDATE_NO_HASH"
-          ? "That release has no installable package."
-          : message.startsWith("UPDATE_INCOMPLETE")
-            ? "The downloaded package was incomplete, so it was discarded."
-            : "The update could not be downloaded.";
+    state.detail = ownerSafeErrorText(
+      error,
+      "update-launch",
+      pushLanguage(),
+    ).text;
   }
   return getUpdateStatus(
     config.version,

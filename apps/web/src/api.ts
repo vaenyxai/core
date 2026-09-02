@@ -98,6 +98,10 @@ import type {
   RegressionListResponse,
   RegressionResult,
 } from "@vaenyx/contracts";
+import {
+  formatOwnerSafeError,
+  type OwnerSafeError,
+} from "@vaenyx/contracts";
 
 export type {
   Mode,
@@ -114,6 +118,24 @@ import { showErrorToast, showSavedToast } from "./toast.js";
 
 interface ErrorResponse {
   error?: string;
+  ownerError?: OwnerSafeError;
+}
+
+function currentLanguage(): "en" | "zh" {
+  try {
+    return localStorage.getItem("vaenyx.lang") === "zh" ? "zh" : "en";
+  } catch {
+    return "en";
+  }
+}
+
+function responseErrorMessage(
+  body: ErrorResponse,
+  fallback: string,
+): string {
+  return body.ownerError
+    ? formatOwnerSafeError(body.ownerError, currentLanguage())
+    : (body.error ?? fallback);
 }
 
 // A refusal that carries more than a sentence. Most do not, and every existing
@@ -148,8 +170,10 @@ async function requestJson<T>(
 
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ErrorResponse;
-    const message =
-      body.error ?? `Vaenyx request failed with ${response.status}.`;
+    const message = responseErrorMessage(
+      body,
+      `Vaenyx request failed with ${response.status}.`,
+    );
     // Failed ACTIONS pop a global toast (Oskar, dev.169). Reads and auth
     // checks stay quiet — background polls and the login flow handle their
     // own states.
@@ -863,7 +887,7 @@ async function streamMessageRequest(
   const decoder = new TextDecoder();
   let buffer = "";
   let result: CreateAskVaenyxMessageResponse | null = null;
-  let streamError: string | null = null;
+  let streamError: ErrorResponse | null = null;
 
   const handleEvent = (block: string): void => {
     let event = "message";
@@ -891,7 +915,7 @@ async function streamMessageRequest(
     } else if (event === "done") {
       result = data as CreateAskVaenyxMessageResponse;
     } else if (event === "error") {
-      streamError = (data as { error: string }).error;
+      streamError = data as ErrorResponse;
     }
   };
 
@@ -909,7 +933,17 @@ async function streamMessageRequest(
   }
   if (buffer.trim()) handleEvent(buffer);
 
-  if (streamError) throw new Error(streamError);
+  if (streamError) {
+    const message = responseErrorMessage(
+      streamError,
+      "Vaenyx Chat could not complete this reply.",
+    );
+    throw new VaenyxRequestError(
+      message,
+      502,
+      streamError as Record<string, unknown>,
+    );
+  }
   if (!result) throw new Error("Vaenyx Chat stream ended unexpectedly.");
   return result;
 }
@@ -1084,7 +1118,11 @@ export function updateVaenyxThreadStatus(
 // shows this so a ticked 250 MB download is visible work, not a dead wait.
 export interface ComponentBootProgress {
   current: string | null;
-  done: { id: string; outcome: "installed" | "failed" | "skipped" }[];
+  done: {
+    id: string;
+    outcome: "installed" | "failed" | "skipped";
+    ownerError?: OwnerSafeError;
+  }[];
   wanted: string[];
 }
 

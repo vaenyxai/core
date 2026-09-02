@@ -32,15 +32,19 @@ import type {
   PhoneLoginResponse,
   PhoneTunnelResponse,
 } from "@vaenyx/contracts";
+import {
+  appendBoundedDiagnostic,
+  OwnerDiagnosticError,
+  ownerSafeErrorText,
+} from "../../runtime/owner-safe-errors.js";
 
 // The port the funnel forwards to — Vaenyx's own local port.
 const LOCAL_PORT = 3000;
 
 // The fixed sentences these flows produce are read by the Owner in the panel,
 // so they follow the app's bilingual rule; the routes pass the language the
-// Owner is reading the app in. Raw CLI output (winget's last line, a
-// tailscale error with its admin-console link) still travels verbatim —
-// translating a tool's own words would hide what actually happened.
+// Owner is reading the app in. Raw CLI output is retained only in the bounded,
+// redacted local diagnostic log; the UI receives safe copy and a diagnostic ID.
 export type PhoneLang = "en" | "zh";
 
 // ── Locating the CLI ──────────────────────────────────────────────────────
@@ -284,6 +288,15 @@ interface InstallState {
 
 const installState: InstallState = { phase: "idle", detail: null };
 
+function setInstallFailure(error: unknown, lang: PhoneLang): void {
+  installState.phase = "failed";
+  installState.detail = ownerSafeErrorText(
+    new OwnerDiagnosticError("TAILSCALE_INSTALL_FAILED", error),
+    "component-install",
+    lang,
+  ).text;
+}
+
 // INSTALLING TAILSCALE, from Tailscale's own MSI.
 //
 // It used to shell out to `winget install --id tailscale.tailscale`, and on
@@ -332,11 +345,7 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
       }
       await writeFile(target, Buffer.from(await response.arrayBuffer()));
     } catch (error) {
-      installState.phase = "failed";
-      installState.detail =
-        lang === "zh"
-          ? `没能下载 Tailscale 安装包(${String(error).slice(0, 100)})。`
-          : `Could not download the Tailscale installer (${String(error).slice(0, 100)}).`;
+      setInstallFailure(error, lang);
       return;
     }
 
@@ -349,11 +358,7 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
       windowsHide: true,
     });
     child.once("error", (error) => {
-      installState.phase = "failed";
-      installState.detail =
-        lang === "zh"
-          ? `没能运行安装程序(${error.message.slice(0, 120)})。`
-          : `Could not run the installer (${error.message.slice(0, 120)}).`;
+      setInstallFailure(error, lang);
     });
     child.once("exit", (code) => {
       void rm(target, { force: true });
@@ -393,15 +398,15 @@ export function installTailscale(lang: PhoneLang = "en"): InstallState {
         void ensureTailscaleServiceRunning();
         return;
       }
-      installState.phase = "failed";
-      installState.detail =
-        code === 1603 || code === 1625
-          ? lang === "zh"
+      if (code === 1603 || code === 1625) {
+        installState.phase = "failed";
+        installState.detail =
+          lang === "zh"
             ? "安装需要管理员权限。请用下面的链接自己装一次,然后回来点「再查一次」。"
-            : "Installing it needs administrator rights. Use the link below to install it yourself, then press Check Again."
-          : lang === "zh"
-            ? `安装程序退出,代码 ${code}。`
-            : `The installer exited with code ${code}.`;
+            : "Installing it needs administrator rights. Use the link below to install it yourself, then press Check Again.";
+        return;
+      }
+      setInstallFailure(`msiexec exit=${code ?? "UNKNOWN"}`, lang);
     });
   })();
 
@@ -683,15 +688,17 @@ export async function startTailscaleLogin(
       () =>
         settle(
           null,
-          lang === "zh"
-            ? "Tailscale 没有及时给出登录链接。"
-            : "Tailscale did not print a sign-in link in time.",
+          ownerSafeErrorText(
+            new OwnerDiagnosticError("TAILSCALE_LOGIN_TIMEOUT", output),
+            "phone-setup",
+            lang,
+          ).text,
         ),
       15_000,
     );
     timer.unref();
     const scan = (chunk: unknown) => {
-      output += String(chunk);
+      output = appendBoundedDiagnostic(output, chunk);
       const match = output.match(/https:\/\/[^\s"']+/);
       if (match) {
         clearTimeout(timer);
@@ -704,7 +711,14 @@ export async function startTailscaleLogin(
     child.once("error", (error) => {
       clearTimeout(timer);
       loginInFlight = false;
-      settle(null, error.message.slice(0, 200));
+      settle(
+        null,
+        ownerSafeErrorText(
+          new OwnerDiagnosticError("TAILSCALE_LOGIN_START_FAILED", error),
+          "phone-setup",
+          lang,
+        ).text,
+      );
     });
     child.once("exit", (code) => {
       clearTimeout(timer);
@@ -715,15 +729,17 @@ export async function startTailscaleLogin(
         settle(null);
         return;
       }
-      const firstLine =
-        output
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)[0] ??
-        (lang === "zh"
-          ? "Tailscale 没能开始登录。"
-          : "Tailscale could not start the sign-in.");
-      settle(null, firstLine.slice(0, 200));
+      settle(
+        null,
+        ownerSafeErrorText(
+          new OwnerDiagnosticError(
+            `TAILSCALE_LOGIN_EXITED_${code ?? "UNKNOWN"}`,
+            output,
+          ),
+          "phone-setup",
+          lang,
+        ).text,
+      );
     });
     child.unref();
   });
@@ -733,8 +749,8 @@ export async function startTailscaleLogin(
 
 // `tailscale funnel --bg 3000` persists the exact serve shape the status
 // check looks for. When the tailnet has Funnel disabled the CLI prints an
-// admin-console link and fails — that output goes back to the owner verbatim
-// enough to act on.
+// admin-console link and fails. The link is parsed separately; raw CLI output
+// remains in the redacted diagnostic log and never becomes UI copy.
 export async function enablePhoneTunnel(
   lang: PhoneLang = "en",
 ): Promise<PhoneTunnelResponse> {
@@ -772,10 +788,10 @@ export async function enablePhoneTunnel(
   return {
     tunnelUp: false,
     phoneUrl: null,
-    detail:
-      combined ||
-      (lang === "zh"
-        ? "Tailscale Funnel 没能打开。"
-        : "Tailscale Funnel could not be turned on."),
+    detail: ownerSafeErrorText(
+      new OwnerDiagnosticError("TAILSCALE_FUNNEL_FAILED", combined),
+      "phone-setup",
+      lang,
+    ).text,
   };
 }

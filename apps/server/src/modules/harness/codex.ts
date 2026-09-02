@@ -14,7 +14,15 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "../../config.js";
-import { npmRunner } from "../core/component-install.js";
+import {
+  appendBoundedDiagnostic,
+  captureOwnerSafeError,
+  OwnerDiagnosticError,
+} from "../../runtime/owner-safe-errors.js";
+import {
+  installComponent,
+  type ComponentEnsureResult,
+} from "../core/component-install.js";
 import type { DocumentSpillAccess } from "../core/document-spill.js";
 import type { FetchAccess } from "../core/fetching.js";
 
@@ -430,13 +438,9 @@ function probeCodexStatus(): CodexStatus {
 // sign-in button share no lock, and two concurrent `npm install -g` runs
 // into the same prefix can corrupt the tree. A second caller simply awaits
 // the first's promise and gets the same answer.
-let codexInstallInFlight: Promise<
-  "ready" | "installed" | "install-failed"
-> | null = null;
+let codexInstallInFlight: Promise<ComponentEnsureResult> | null = null;
 
-export function ensureCodexInstalled(): Promise<
-  "ready" | "installed" | "install-failed"
-> {
+export function ensureCodexInstalled(): Promise<ComponentEnsureResult> {
   if (codexInstallInFlight) return codexInstallInFlight;
   codexInstallInFlight = installCodexOnce().finally(() => {
     codexInstallInFlight = null;
@@ -444,11 +448,8 @@ export function ensureCodexInstalled(): Promise<
   return codexInstallInFlight;
 }
 
-async function installCodexOnce(): Promise<
-  "ready" | "installed" | "install-failed"
-> {
-  if (getCodexStatus().installed) return "ready";
-  const npm = npmRunner();
+async function installCodexOnce(): Promise<ComponentEnsureResult> {
+  if (getCodexStatus().installed) return { status: "ready" };
   // --prefix, so the component lands in userdata/tools rather than in the
   // profile of whichever account happens to be running the server. Without
   // it, a SYSTEM-run install goes somewhere the next lookup may not reach,
@@ -459,52 +460,30 @@ async function installCodexOnce(): Promise<
   } catch {
     // If this cannot be created the install below fails and says so.
   }
-  const exitCode = await new Promise<number | null>((resolveExit) => {
-    const child = spawn(
-      npm.command,
-      [
-        ...npm.args,
-        "install",
-        "-g",
-        "@openai/codex",
-        "--prefix",
-        prefix,
-        "--no-audit",
-        "--no-fund",
-      ],
-      {
-        env: codexEnvironment(),
-        shell: npm.shell,
-        stdio: ["ignore", "ignore", "ignore"],
-        windowsHide: true,
-      },
-    );
-    const timer = setTimeout(() => {
-      try {
-        child.kill();
-      } catch {
-        // Already gone.
-      }
-      resolveExit(null);
-    }, 5 * 60_000);
-    timer.unref?.();
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      resolveExit(code);
-    });
-    child.once("error", () => {
-      clearTimeout(timer);
-      resolveExit(null);
-    });
+  const result = await installComponent({
+    dataDirectory: loadConfig().dataDirectory,
+    environment: codexEnvironment(),
+    packageName: "@openai/codex",
+    prefix,
+    timeoutMs: 5 * 60_000,
   });
-  if (exitCode !== 0) return "install-failed";
+  if (!result.ok) {
+    return { status: "install-failed", ownerError: result.ownerError };
+  }
   // A fresh install must be seen NOW, not when the cache ages out; the
   // status check proves the binary actually answers.
   // The new copy is under a path the lookup has never scanned, so the cached
   // answer has to go as well as the status.
   cachedCodexScript = null;
   invalidateCodexStatus();
-  return getCodexStatus().installed ? "installed" : "install-failed";
+  if (getCodexStatus().installed) return { status: "installed" };
+  return {
+    status: "install-failed",
+    ownerError: captureOwnerSafeError(
+      new OwnerDiagnosticError("CODEX_COMPONENT_MISSING_AFTER_INSTALL"),
+      "component-install",
+    ),
+  };
 }
 
 // One codex login at a time, across ALL profiles — not a style choice: the
@@ -565,7 +544,7 @@ export function startCodexLogin(profileKey: string = "core"): Promise<{
     const timer = setTimeout(() => settle(null), 8000);
     timer.unref();
     const scan = (chunk: unknown) => {
-      output += String(chunk);
+      output = appendBoundedDiagnostic(output, chunk);
       const match = output.match(/https:\/\/[^\s"']+/);
       if (match) {
         clearTimeout(timer);
@@ -645,7 +624,7 @@ export async function runForgeReadOnly(
   let timeout: NodeJS.Timeout;
 
   child.stderr.on("data", (chunk: Buffer) => {
-    stderr += chunk.toString();
+    stderr = appendBoundedDiagnostic(stderr, chunk);
   });
 
   const send = (message: JsonRpcMessage) => {
@@ -702,8 +681,9 @@ export async function runForgeReadOnly(
         finish(
           resolvePromise,
           rejectPromise,
-          new Error(
-            `CODEX_EXITED_${code ?? "UNKNOWN"}${stderr ? `: ${stderr.trim()}` : ""}`,
+          new OwnerDiagnosticError(
+            `CODEX_EXITED_${code ?? "UNKNOWN"}`,
+            stderr,
           ),
         );
       }
@@ -740,7 +720,10 @@ export async function runForgeReadOnly(
           finish(
             resolvePromise,
             rejectPromise,
-            new Error(message.error?.message ?? "CODEX_THREAD_START_FAILED"),
+            new OwnerDiagnosticError(
+              "CODEX_THREAD_START_FAILED",
+              message.error?.message,
+            ),
           );
           return;
         }
@@ -921,7 +904,7 @@ class CodexChatSession {
     this.#initialized = this.#initialize();
 
     this.#child.stderr.on("data", (chunk: Buffer) => {
-      this.#stderr += chunk.toString();
+      this.#stderr = appendBoundedDiagnostic(this.#stderr, chunk);
     });
 
     this.#child.on("error", () => {
@@ -930,10 +913,9 @@ class CodexChatSession {
 
     this.#child.on("exit", (code) => {
       this.#close(
-        new Error(
-          `CODEX_EXITED_${code ?? "UNKNOWN"}${
-            this.#stderr ? `: ${this.#stderr.trim()}` : ""
-          }`,
+        new OwnerDiagnosticError(
+          `CODEX_EXITED_${code ?? "UNKNOWN"}`,
+          this.#stderr,
         ),
       );
     });
@@ -979,8 +961,9 @@ class CodexChatSession {
     const thread = threadMessage.result?.thread as { id?: string } | undefined;
 
     if (!thread?.id) {
-      throw new Error(
-        threadMessage.error?.message ?? "CODEX_THREAD_START_FAILED",
+      throw new OwnerDiagnosticError(
+        "CODEX_THREAD_START_FAILED",
+        threadMessage.error?.message,
       );
     }
 
@@ -1390,7 +1373,7 @@ class CodexAskVaenyxSession {
     this.#initialized = this.#initialize();
 
     this.#child.stderr.on("data", (chunk: Buffer) => {
-      this.#stderr += chunk.toString();
+      this.#stderr = appendBoundedDiagnostic(this.#stderr, chunk);
     });
 
     this.#child.on("error", () => {
@@ -1399,10 +1382,9 @@ class CodexAskVaenyxSession {
 
     this.#child.on("exit", (code) => {
       this.#close(
-        new Error(
-          `CODEX_EXITED_${code ?? "UNKNOWN"}${
-            this.#stderr ? `: ${this.#stderr.trim()}` : ""
-          }`,
+        new OwnerDiagnosticError(
+          `CODEX_EXITED_${code ?? "UNKNOWN"}`,
+          this.#stderr,
         ),
       );
     });
@@ -1440,8 +1422,9 @@ class CodexAskVaenyxSession {
     const thread = threadMessage.result?.thread as { id?: string } | undefined;
 
     if (!thread?.id) {
-      throw new Error(
-        threadMessage.error?.message ?? "CODEX_THREAD_START_FAILED",
+      throw new OwnerDiagnosticError(
+        "CODEX_THREAD_START_FAILED",
+        threadMessage.error?.message,
       );
     }
 

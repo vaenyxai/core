@@ -1,5 +1,16 @@
 export { SystemStatusSchema, type SystemStatus } from "./system-status.js";
 export {
+  OWNER_SAFE_ERROR_CODES,
+  OwnerSafeErrorActionSchema,
+  OwnerSafeErrorCodeSchema,
+  OwnerSafeErrorSchema,
+  formatOwnerSafeError,
+  ownerSafeErrorCopy,
+  type OwnerSafeError,
+  type OwnerSafeErrorAction,
+  type OwnerSafeErrorCode,
+} from "./owner-safe-error.js";
+export {
   PhoneAccessStatusSchema,
   PhoneLoginResponseSchema,
   PhoneTunnelResponseSchema,

@@ -4,6 +4,7 @@
 // the manual button, so destination/retention/encryption all apply) and
 // records the outcome for the Settings page.
 import type { AppConfig } from "../../config.js";
+import { redactDiagnosticText } from "../../runtime/owner-safe-errors.js";
 
 import {
   readBackupAutoState,
@@ -47,7 +48,9 @@ export function runScheduledBackupIfDue(
     if (result.ok) {
       log.info("Scheduled backup completed.");
     } else {
-      log.error(`Scheduled backup failed: ${result.output.slice(0, 300)}`);
+      log.error(
+        `Scheduled backup failed: ${redactDiagnosticText(result.output).slice(-300)}`,
+      );
     }
   } finally {
     running = false;

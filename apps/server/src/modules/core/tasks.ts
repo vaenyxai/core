@@ -23,6 +23,7 @@ import { listProjectMemories } from "./memory.js";
 import { schedulePresenceAwarePush } from "./push.js";
 import { pushLanguage } from "./push.js";
 import { ensureTaskThread } from "./threads.js";
+import { ownerSafeErrorText } from "../../runtime/owner-safe-errors.js";
 
 const GENERAL_PROJECT_ID = "general";
 
@@ -725,21 +726,6 @@ export function getRunThinking(taskId: string): string {
   return liveRunThinking.get(taskId) ?? "";
 }
 
-const TASK_ERROR_COPY: Record<string, string> = {
-  CODEX_TASK_CANCELLED: "This task was cancelled.",
-  CODEX_NOT_INSTALLED:
-    "Forge could not start because the independent Codex CLI is not installed.",
-  CODEX_NOT_LOGGED_IN: "Forge could not start because Codex is not signed in.",
-  CODEX_CHATGPT_REQUIRED:
-    "Forge requires Codex to be signed in with ChatGPT Subscription Auth.",
-  CODEX_DID_NOT_INSPECT_REPOSITORY:
-    "Forge did not inspect the Vaenyx repository before answering, so Vaenyx rejected the result.",
-  CODEX_READ_ONLY_BOUNDARY_VIOLATION:
-    "Forge attempted an action outside its read-only safety boundary, so Vaenyx stopped the task.",
-  CODEX_REPOSITORY_BOUNDARY_VIOLATION:
-    "Forge attempted to inspect outside the Vaenyx repository, so Vaenyx stopped the task.",
-};
-
 // Every run's result also lands in the task's conversation as a new assistant
 // message (Owner decision 2026-07-22): the task page reads like received
 // deliveries — newest at the bottom — while History keeps the per-run copies.
@@ -820,7 +806,8 @@ async function executeTaskRun(
     result = await run(controller.signal);
     status = "completed";
   } catch (error) {
-    let code = error instanceof Error ? error.message : "CODEX_UNKNOWN_ERROR";
+    let failure: unknown = error;
+    const code = error instanceof Error ? error.message : "CODEX_UNKNOWN_ERROR";
     // A boundary trip is the model deciding, on this one turn, to reach for a
     // tool it is not allowed. Nothing ran — the turn was refused — and the
     // same prompt usually goes straight through on the next attempt. A daily
@@ -843,15 +830,14 @@ async function executeTaskRun(
           status,
         );
       } catch (retryError) {
-        code =
-          retryError instanceof Error
-            ? retryError.message
-            : "CODEX_UNKNOWN_ERROR";
+        failure = retryError;
       }
     }
-    result =
-      TASK_ERROR_COPY[code] ??
-      `This task could not complete. Local error: ${code}`;
+    result = ownerSafeErrorText(
+      failure,
+      trigger === "schedule" ? "scheduled-run" : "model-response",
+      pushLanguage(),
+    ).text;
     status = "failed";
   } finally {
     runningTasks.delete(id);
@@ -897,6 +883,7 @@ function finishTaskRun(
       // In the app's language, not English under a Chinese title (Oskar,
       // 2026-08-22: 改成跟 app 语言走).
       const zh = pushLanguage() === "zh";
+      const safeCode = result.match(/VX-[A-Z-]+/)?.[0] ?? "VX-REQUEST";
       schedulePresenceAwarePush(
         database,
         {
@@ -907,8 +894,8 @@ function finishTaskRun(
                 ? "有新结果了。"
                 : "New result is ready."
               : zh
-                ? "这次定时运行失败了。"
-                : "The scheduled run failed.",
+                ? `这次定时运行失败了(${safeCode})。打开这项任务查看原因并点重试。`
+                : `The scheduled run failed (${safeCode}). Open this task for the safe reason and press Retry.`,
           // Open the task itself, not the home screen: a notification that
           // announces a result should land on that result.
           url: `/?task=${encodeURIComponent(id)}`,
@@ -962,9 +949,16 @@ function scheduledResultStillNotifiable(
 // On startup, any task left "running" was interrupted by a restart/crash. Mark
 // it failed so it is no longer stuck and the Owner can retry it.
 export function reconcileInterruptedTasks(database: DatabaseHandle): number {
+  const interrupted = database.sqlite
+    .prepare("SELECT COUNT(*) AS total FROM tasks WHERE status = 'running'")
+    .get() as { total: number };
+  if (interrupted.total === 0) return 0;
   const now = new Date().toISOString();
-  const message =
-    "This task was interrupted when Vaenyx restarted. Run it again to retry.";
+  const message = ownerSafeErrorText(
+    new Error("TASK_INTERRUPTED_BY_RESTART"),
+    "scheduled-run",
+    pushLanguage(),
+  ).text;
 
   database.sqlite
     .prepare(

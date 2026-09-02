@@ -23,6 +23,14 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
+import type { OwnerSafeError } from "@vaenyx/contracts";
+
+import {
+  appendBoundedDiagnostic,
+  captureOwnerSafeError,
+  OwnerDiagnosticError,
+} from "../../runtime/owner-safe-errors.js";
+
 export interface NpmRunner {
   args: string[];
   command: string;
@@ -59,11 +67,18 @@ export function componentsRoot(dataDirectory: string): string {
   return resolve(dataDirectory, "..", "tools");
 }
 
-export interface InstallResult {
-  ok: boolean;
-  /** npm's own last words, for the log — never for a user's screen. */
-  detail: string;
-}
+export type InstallResult =
+  | { detail: string; ok: true; ownerError?: never }
+  | {
+      /** Stable code only. Raw output is retained in the redacted local log. */
+      detail: string;
+      ok: false;
+      ownerError: OwnerSafeError;
+    };
+
+export type ComponentEnsureResult =
+  | { status: "installed" | "ready"; ownerError?: never }
+  | { status: "install-failed"; ownerError: OwnerSafeError };
 
 /**
  * Install one package into the components folder. Resolves with ok:false
@@ -74,20 +89,40 @@ export function installComponent(options: {
   dataDirectory: string;
   environment?: NodeJS.ProcessEnv;
   packageName: string;
+  prefix?: string;
   timeoutMs?: number;
 }): Promise<InstallResult> {
-  const prefix = componentsRoot(options.dataDirectory);
+  const prefix = options.prefix ?? componentsRoot(options.dataDirectory);
   try {
     mkdirSync(prefix, { recursive: true });
   } catch (error) {
+    const ownerError = captureOwnerSafeError(
+      new OwnerDiagnosticError("COMPONENT_DIRECTORY_FAILED", error),
+      "component-install",
+    );
     return Promise.resolve({
       ok: false,
-      detail: `Could not create ${prefix}: ${String(error)}`,
+      detail: ownerError.code,
+      ownerError,
     });
   }
   const npm = npmRunner();
   return new Promise<InstallResult>((done) => {
     let output = "";
+    let settled = false;
+    const finish = (ok: boolean, diagnostic?: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (ok) {
+        done({ ok: true, detail: "installed" });
+        return;
+      }
+      const ownerError = captureOwnerSafeError(
+        new OwnerDiagnosticError("COMPONENT_INSTALL_FAILED", diagnostic),
+        "component-install",
+      );
+      done({ ok: false, detail: ownerError.code, ownerError });
+    };
     const child = spawn(
       npm.command,
       [
@@ -108,10 +143,10 @@ export function installComponent(options: {
       },
     );
     child.stdout?.on("data", (chunk) => {
-      output = `${output}${String(chunk)}`.slice(-4000);
+      output = appendBoundedDiagnostic(output, chunk);
     });
     child.stderr?.on("data", (chunk) => {
-      output = `${output}${String(chunk)}`.slice(-4000);
+      output = appendBoundedDiagnostic(output, chunk);
     });
     const timer = setTimeout(
       () => {
@@ -120,18 +155,18 @@ export function installComponent(options: {
         } catch {
           // Already gone.
         }
-        done({ ok: false, detail: "The download did not finish in time." });
+        finish(false, `${output}\nCOMPONENT_INSTALL_TIMEOUT`);
       },
       options.timeoutMs ?? 15 * 60_000,
     );
     timer.unref?.();
     child.once("error", (error) => {
       clearTimeout(timer);
-      done({ ok: false, detail: String(error) });
+      finish(false, `${output}\n${String(error)}`);
     });
     child.once("exit", (code) => {
       clearTimeout(timer);
-      done({ ok: code === 0, detail: output.trim() });
+      finish(code === 0, `${output}\nexit=${code ?? "UNKNOWN"}`);
     });
   });
 }

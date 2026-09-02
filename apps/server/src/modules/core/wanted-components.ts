@@ -25,6 +25,13 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import type { OwnerSafeError } from "@vaenyx/contracts";
+
+import {
+  captureOwnerSafeError,
+  OwnerDiagnosticError,
+} from "../../runtime/owner-safe-errors.js";
+
 export const COMPONENT_IDS = [
   "claude",
   "codex",
@@ -36,11 +43,18 @@ export const COMPONENT_IDS = [
 export type ComponentId = (typeof COMPONENT_IDS)[number];
 
 export type ComponentOutcome = "installed" | "failed" | "skipped";
+export type ComponentInstallReport =
+  | ComponentOutcome
+  | { outcome: ComponentOutcome; ownerError?: OwnerSafeError };
 
 export interface ComponentProgress {
   /** What is happening right now, for the first-run screen. */
   current: ComponentId | null;
-  done: { id: ComponentId; outcome: ComponentOutcome }[];
+  done: {
+    id: ComponentId;
+    outcome: ComponentOutcome;
+    ownerError?: OwnerSafeError;
+  }[];
   wanted: ComponentId[];
 }
 
@@ -105,7 +119,7 @@ export function writeWantedComponents(
  */
 export function startWantedComponents(options: {
   dataDirectory: string;
-  install: (id: ComponentId) => Promise<ComponentOutcome>;
+  install: (id: ComponentId) => Promise<ComponentInstallReport>;
   onDone?: (results: ComponentProgress) => void;
 }): ComponentId[] {
   const file = wantedComponentsFile(options.dataDirectory);
@@ -130,14 +144,38 @@ export function startWantedComponents(options: {
     for (const id of wanted) {
       progress.current = id;
       let outcome: ComponentOutcome;
+      let diagnostic: unknown;
+      let reportedOwnerError: OwnerSafeError | undefined;
       try {
-        outcome = await options.install(id);
-      } catch {
+        const report = await options.install(id);
+        if (typeof report === "string") {
+          outcome = report;
+        } else {
+          outcome = report.outcome;
+          reportedOwnerError = report.ownerError;
+        }
+      } catch (error) {
         // A component that throws is a component that did not arrive, and
         // that is all the rest of the list needs to know.
         outcome = "failed";
+        diagnostic = error;
       }
-      progress.done.push({ id, outcome });
+      const ownerError =
+        reportedOwnerError ??
+        (outcome === "failed"
+          ? captureOwnerSafeError(
+              new OwnerDiagnosticError(
+                "COMPONENT_INSTALL_FAILED",
+                diagnostic ?? `component=${id}`,
+              ),
+              "component-install",
+            )
+          : undefined);
+      progress.done.push({
+        id,
+        outcome,
+        ...(ownerError ? { ownerError } : {}),
+      });
     }
     progress.current = null;
     options.onDone?.(componentProgress());

@@ -41,10 +41,16 @@ import { bindUsageDatabase } from "./modules/core/relay-usage.js";
 import { sweepFlywheel } from "./modules/core/flywheel-send.js";
 import { registerGatewayRoutes } from "./modules/gateway/routes.js";
 import { renewSessionOnUse } from "./modules/guard/auth.js";
+import {
+  configureOwnerErrorLog,
+  ownerSafeErrorResponse,
+} from "./runtime/owner-safe-errors.js";
+import { pushLanguage } from "./modules/core/push.js";
 
 export async function buildApp(
   config: AppConfig = loadConfig(),
 ): Promise<FastifyInstance> {
+  configureOwnerErrorLog(config.dataDirectory);
   const app = Fastify({
     logger: {
       level: config.logLevel,
@@ -394,17 +400,19 @@ export async function buildApp(
     }
 
     const statusCode = error.statusCode ?? 500;
-
-    if (statusCode >= 500) {
-      request.log.error(error);
-      return reply.code(500).send({
-        error: "Vaenyx could not complete that request. Check the local logs.",
-      });
-    }
-
-    return reply.code(statusCode).send({
-      error: error.message,
-    });
+    const safe = ownerSafeErrorResponse(
+      error,
+      "request",
+      pushLanguage(),
+    );
+    request.log.error(
+      {
+        diagnosticId: safe.ownerError.diagnosticId,
+        ownerErrorCode: safe.ownerError.code,
+      },
+      "request failed; redacted detail is in the owner error log",
+    );
+    return reply.code(statusCode >= 500 ? 500 : statusCode).send(safe);
   });
 
   if (config.corsOrigins.length > 0) {

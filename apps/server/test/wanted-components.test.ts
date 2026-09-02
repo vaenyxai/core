@@ -107,11 +107,16 @@ describe("working through the list", () => {
     });
     await settled();
     expect(seen).toEqual(["codex", "claude", "tailscale"]);
-    expect(finished).toEqual([
+    expect(finished.map(({ id, outcome }) => ({ id, outcome }))).toEqual([
       { id: "codex", outcome: "installed" },
       { id: "claude", outcome: "failed" },
       { id: "tailscale", outcome: "installed" },
     ]);
+    expect(finished[1]).toHaveProperty(
+      "ownerError.code",
+      "VX-COMPONENT-INSTALL",
+    );
+    expect(finished[1]).toHaveProperty("ownerError.dataSafe", true);
   });
 
   it("ignores a request that names nothing we know", () => {

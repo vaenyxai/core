@@ -25,6 +25,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 
 import { loadConfig } from "../../config.js";
+import { appendBoundedDiagnostic } from "../../runtime/owner-safe-errors.js";
 import { claudeComponentRoots } from "./claude-sdk.js";
 
 const require = createRequire(import.meta.url);
@@ -256,7 +257,7 @@ export function startClaudeLogin(
     }, 30_000);
 
     const onData = (chunk: Buffer) => {
-      next.buffer += chunk.toString();
+      next.buffer = appendBoundedDiagnostic(next.buffer, chunk);
       const match = next.buffer.match(
         /https:\/\/claude\.com\/[^\s"'>\]]*oauth[^\s"'>\]]+/,
       );

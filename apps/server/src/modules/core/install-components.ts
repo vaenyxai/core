@@ -9,7 +9,11 @@ import { ensureCodexInstalled } from "../harness/codex.js";
 import { ensureClaudeSdkInstalled } from "../models/claude-sdk.js";
 import { findTailscaleCommand, installTailscale } from "./phone-access.js";
 import { getLocalTtsStatus, startLocalTtsInstall } from "./voice-local.js";
-import type { ComponentId, ComponentOutcome } from "./wanted-components.js";
+import type {
+  ComponentId,
+  ComponentInstallReport,
+  ComponentOutcome,
+} from "./wanted-components.js";
 
 /**
  * Two of these start the work and report it through a state object rather than
@@ -38,17 +42,21 @@ const HALF_AN_HOUR = 30 * 60_000;
 export async function installWantedComponent(
   id: ComponentId,
   dataDirectory: string,
-): Promise<ComponentOutcome> {
+): Promise<ComponentInstallReport> {
   if (id === "codex") {
     const result = await ensureCodexInstalled();
-    if (result === "ready") return "skipped";
-    return result === "installed" ? "installed" : "failed";
+    if (result.status === "ready") return "skipped";
+    return result.status === "installed"
+      ? "installed"
+      : { outcome: "failed", ownerError: result.ownerError };
   }
 
   if (id === "claude") {
     const result = await ensureClaudeSdkInstalled(dataDirectory);
-    if (result === "ready") return "skipped";
-    return result === "installed" ? "installed" : "failed";
+    if (result.status === "ready") return "skipped";
+    return result.status === "installed"
+      ? "installed"
+      : { outcome: "failed", ownerError: result.ownerError };
   }
 
   if (id === "tailscale") {

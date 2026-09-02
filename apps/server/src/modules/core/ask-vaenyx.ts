@@ -12,6 +12,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import { ownerSafeErrorText } from "../../runtime/owner-safe-errors.js";
 import { isProtectedThread, postInboxNote } from "./inbox-thread.js";
 import type { ModelProvider } from "../models/provider.js";
 import { getModelRegistry, resolveProvider } from "../models/registry.js";
@@ -454,37 +455,11 @@ function parseAnnotations(
   }
 }
 
-function getAskVaenyxFailureMessage(error: unknown): string {
-  const code = error instanceof Error ? error.message : "CODEX_UNKNOWN_ERROR";
-
-  if (code === "MODE_LOCAL_ONLY_UNAVAILABLE") {
-    return "This mode allows the local model only, and no local model is connected. The account owner can connect one under Models (Local model), or relax this mode's restriction.";
-  }
-
-  if (code === "CODEX_NOT_INSTALLED") {
-    return "Vaenyx Chat could not start because the independent Codex CLI is not installed. Run Vaenyx-Connect-Codex.cmd, then try again.";
-  }
-
-  if (code === "CODEX_NOT_LOGGED_IN") {
-    return "Vaenyx Chat could not start because Codex is not signed in. Run Vaenyx-Connect-Codex.cmd and sign in with ChatGPT.";
-  }
-
-  if (code === "CODEX_CHATGPT_REQUIRED") {
-    return "Vaenyx Chat requires Codex to be signed in with ChatGPT Subscription Auth.";
-  }
-
-  if (code.startsWith("CODEX_ASK_VAENYX_BOUNDARY_VIOLATION")) {
-    const what = code.split(":")[1];
-    return `Vaenyx Chat tried to use something outside this chat boundary, so Vaenyx stopped the reply${
-      what ? ` (${what})` : ""
-    }. Chat may use web search, but not local commands, file changes, MCP tools, or permission requests.`;
-  }
-
-  if (code === "CODEX_RETURNED_NO_ANSWER") {
-    return "Vaenyx Chat connected, but did not return a visible answer.";
-  }
-
-  return `Vaenyx Chat could not complete this reply. Local error: ${code}`;
+function getAskVaenyxFailureMessage(
+  error: unknown,
+  language: "en" | "zh",
+): string {
+  return ownerSafeErrorText(error, "model-response", language).text;
 }
 
 function getConversationRow(
@@ -1913,7 +1888,10 @@ export async function createAskVaenyxMessage(
     const partial = streamed.trim();
     assistantContent = partial
       ? `${partial}\n\n_(stopped)_`
-      : getAskVaenyxFailureMessage(error);
+      : getAskVaenyxFailureMessage(
+          error,
+          /[一-鿿]/.test(trimmedContent) ? "zh" : "en",
+        );
     assistantStatus = "failed";
   }
 

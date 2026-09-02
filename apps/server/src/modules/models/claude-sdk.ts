@@ -19,10 +19,17 @@
 // else. If a future change needs more of the SDK's surface, add it here, not
 // by reaching for the package's own types.
 import { createRequire } from "node:module";
-import { installComponent } from "../core/component-install.js";
+import {
+  installComponent,
+  type ComponentEnsureResult,
+} from "../core/component-install.js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  captureOwnerSafeError,
+  OwnerDiagnosticError,
+} from "../../runtime/owner-safe-errors.js";
 
 export const CLAUDE_SDK_PACKAGE = "@anthropic-ai/claude-agent-sdk";
 
@@ -201,13 +208,11 @@ export async function loadClaudeSdk(): Promise<ClaudeSdk> {
 // ONE install at a time (sweep, 2026-08-16): the boot installer and the
 // sign-in button share no lock, and two concurrent npm installs into the
 // same prefix can corrupt the tree. A second caller awaits the first's.
-let claudeInstallInFlight: Promise<
-  "ready" | "installed" | "install-failed"
-> | null = null;
+let claudeInstallInFlight: Promise<ComponentEnsureResult> | null = null;
 
 export function ensureClaudeSdkInstalled(
   dataDirectory: string,
-): Promise<"ready" | "installed" | "install-failed"> {
+): Promise<ComponentEnsureResult> {
   if (claudeInstallInFlight) return claudeInstallInFlight;
   claudeInstallInFlight = installClaudeSdkOnce(dataDirectory).finally(() => {
     claudeInstallInFlight = null;
@@ -217,16 +222,25 @@ export function ensureClaudeSdkInstalled(
 
 async function installClaudeSdkOnce(
   dataDirectory: string,
-): Promise<"ready" | "installed" | "install-failed"> {
-  if (isClaudeSdkInstalled()) return "ready";
+): Promise<ComponentEnsureResult> {
+  if (isClaudeSdkInstalled()) return { status: "ready" };
   const result = await installComponent({
     dataDirectory,
     packageName: CLAUDE_SDK_PACKAGE,
   });
-  if (!result.ok) return "install-failed";
+  if (!result.ok) {
+    return { status: "install-failed", ownerError: result.ownerError };
+  }
   // A fresh copy sits somewhere nothing has looked yet.
   cached = null;
-  return isClaudeSdkInstalled() ? "installed" : "install-failed";
+  if (isClaudeSdkInstalled()) return { status: "installed" };
+  return {
+    status: "install-failed",
+    ownerError: captureOwnerSafeError(
+      new OwnerDiagnosticError("CLAUDE_COMPONENT_MISSING_AFTER_INSTALL"),
+      "component-install",
+    ),
+  };
 }
 
 /**
@@ -251,8 +265,8 @@ export function restoreClaudeSdkForConnectedInstance(options: {
     // "ready" cannot happen here — it was checked a line ago — and "installed"
     // is the good ending, not a problem to report. Both outcomes are passed on
     // and it is the caller that decides what deserves a log line.
-    (outcome) => {
-      if (outcome !== "ready") options.onDone?.(outcome);
+    (result) => {
+      if (result.status !== "ready") options.onDone?.(result.status);
     },
     () => options.onDone?.("install-failed"),
   );

@@ -13,6 +13,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import type { AppConfig } from "../config.js";
 import { assertInstanceLock } from "../runtime/instance-lock.js";
+import { redactDiagnosticText } from "../runtime/owner-safe-errors.js";
 
 const PENDING_RESTORE_FLAG = "pending-restore.flag";
 
@@ -102,7 +103,7 @@ function applyPendingRestore(config: AppConfig): void {
     try {
       writeFileSync(
         resolve(config.dataDirectory, "pending-restore.failed.log"),
-        `${result.stdout ?? ""}${result.stderr ?? ""}`,
+        redactDiagnosticText(`${result.stdout ?? ""}${result.stderr ?? ""}`),
       );
     } catch {
       // Best-effort breadcrumb only.
