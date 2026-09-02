@@ -52,6 +52,18 @@ function freshDatabase(): DatabaseHandle {
     CREATE VIRTUAL TABLE fact_search USING fts5(
       fact_id UNINDEXED, mode_id UNINDEXED, body, tokenize = 'unicode61'
     );
+    CREATE TABLE memory_provenance (
+      id TEXT PRIMARY KEY NOT NULL, memory_kind TEXT NOT NULL,
+      memory_id TEXT NOT NULL, source_kind TEXT NOT NULL, source_id TEXT,
+      source_message_id TEXT, mode_id TEXT, project_id TEXT,
+      admission_event_id TEXT NOT NULL, admitted_at TEXT NOT NULL,
+      removed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX memory_provenance_identity_index ON memory_provenance (
+      memory_kind, memory_id, source_kind, COALESCE(source_id, ''),
+      COALESCE(source_message_id, ''), admission_event_id
+    );
   `);
   return { close: () => sqlite.close(), ping: () => true, sqlite };
 }
@@ -132,8 +144,13 @@ describe("what is true now", () => {
   });
 
   it("retires a fact without deleting it", () => {
-    const fact = recordFact(database, { slot: "pet", value: "a cat called Mo" });
-    expect(retireFact(database, fact.id, "2026-08-08T00:00:00.000Z")).toBe(true);
+    const fact = recordFact(database, {
+      slot: "pet",
+      value: "a cat called Mo",
+    });
+    expect(retireFact(database, fact.id, "2026-08-08T00:00:00.000Z")).toBe(
+      true,
+    );
     expect(listCurrentFacts(database)).toHaveLength(0);
     expect(listFactHistory(database, "pet")).toHaveLength(1);
     expect(searchFacts(database, "cat")).toHaveLength(0);

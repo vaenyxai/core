@@ -871,8 +871,8 @@ describe("Vaenyx Gateway foundation", () => {
     });
 
     const deleteBeforeArchive = await app.inject({
-      method: "DELETE",
-      url: `/v1/ask-vaenyx/conversations/${created.json().id}`,
+      method: "GET",
+      url: `/v1/ask-vaenyx/conversations/${created.json().id}/delete-preview`,
       headers: { cookie: sessionCookie },
     });
     expect(deleteBeforeArchive.statusCode).toBe(409);
@@ -894,10 +894,21 @@ describe("Vaenyx Gateway foundation", () => {
       expect.arrayContaining([expect.objectContaining({ archived: true })]),
     );
 
+    const deletePreview = await app.inject({
+      method: "GET",
+      url: `/v1/ask-vaenyx/conversations/${created.json().id}/delete-preview`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(deletePreview.statusCode).toBe(200);
+
     const deleted = await app.inject({
       method: "DELETE",
       url: `/v1/ask-vaenyx/conversations/${created.json().id}`,
       headers: { cookie: sessionCookie },
+      payload: {
+        memoryAction: "keep",
+        previewRevision: deletePreview.json().revision,
+      },
     });
     expect(deleted.statusCode).toBe(200);
 

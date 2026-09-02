@@ -75,6 +75,11 @@ import {
 } from "./document-spill.js";
 import { removeUnreferencedDocuments } from "./document-gc.js";
 import {
+  type ConversationForgetPreview,
+  forgetMemoryFromConversation,
+  previewConversationForget,
+} from "./memory-provenance.js";
+import {
   annotateImage,
   describeImage,
   imageDataUrl,
@@ -785,6 +790,52 @@ export function deleteAskVaenyxConversation(
   // one that reclaims the files, a day later instead of now.
   dataDirectory?: string | null,
 ): AskVaenyxConversation {
+  getConversationRow(database, conversationId, ownerId);
+  // Preserve the permanent-inbox invariant before asking for a deletion
+  // preview. An inbox is active by design, but "not archived" must never hide
+  // the stronger fact that it cannot be deleted at all.
+  if (isProtectedThread(database, conversationId)) {
+    throw new Error("CONVERSATION_PROTECTED");
+  }
+  const mode = database.sqlite
+    .prepare(
+      `SELECT mode_id FROM ask_vaenyx_conversations
+       WHERE id = ? AND owner_id = ?`,
+    )
+    .get(conversationId, ownerId) as { mode_id: string | null };
+  const preview = previewConversationForget(database, {
+    conversationId,
+    ownerId,
+    modeId: mode.mode_id,
+    requireArchived: true,
+  });
+  return deleteAskVaenyxConversationWithMemory(
+    database,
+    conversationId,
+    ownerId,
+    {
+      memoryAction: "keep",
+      modeId: mode.mode_id,
+      previewRevision: preview.revision,
+    },
+    dataDirectory,
+  ).conversation;
+}
+
+export function deleteAskVaenyxConversationWithMemory(
+  database: DatabaseHandle,
+  conversationId: string,
+  ownerId: string,
+  options: {
+    memoryAction: "forget" | "keep";
+    modeId: string | null;
+    previewRevision: string;
+  },
+  dataDirectory?: string | null,
+): {
+  conversation: AskVaenyxConversation;
+  memoryPreview: ConversationForgetPreview;
+} {
   const conversation = toConversation(
     getConversationRow(database, conversationId, ownerId),
   );
@@ -827,19 +878,48 @@ export function deleteAskVaenyxConversation(
       ).map((row) => row.document_id)
     : [];
 
-  database.sqlite
-    .prepare(
-      `DELETE FROM ask_vaenyx_conversations
-       WHERE id = ?
-         AND owner_id = ?`,
-    )
-    .run(conversationId, ownerId);
+  database.sqlite.exec("BEGIN IMMEDIATE;");
+  let memoryPreview: ConversationForgetPreview;
+  try {
+    memoryPreview =
+      options.memoryAction === "forget"
+        ? forgetMemoryFromConversation(database, {
+            action: "conversation_delete_forget",
+            conversationId,
+            modeId: options.modeId,
+            ownerId,
+            previewRevision: options.previewRevision,
+            requireArchived: true,
+            withinTransaction: true,
+          })
+        : previewConversationForget(database, {
+            conversationId,
+            ownerId,
+            modeId: options.modeId,
+            requireArchived: true,
+          });
+    if (memoryPreview.revision !== options.previewRevision) {
+      throw new Error("MEMORY_PREVIEW_CHANGED");
+    }
+
+    database.sqlite
+      .prepare(
+        `DELETE FROM ask_vaenyx_conversations
+         WHERE id = ?
+           AND owner_id = ?`,
+      )
+      .run(conversationId, ownerId);
+    database.sqlite.exec("COMMIT;");
+  } catch (error) {
+    database.sqlite.exec("ROLLBACK;");
+    throw error;
+  }
 
   if (dataDirectory && documentIds.length > 0) {
     removeUnreferencedDocuments(database, dataDirectory, documentIds);
   }
 
-  return conversation;
+  return { conversation, memoryPreview };
 }
 
 export function listAskVaenyxMessages(

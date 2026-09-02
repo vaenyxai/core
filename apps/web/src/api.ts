@@ -3,6 +3,10 @@ import type {
   AskVaenyxConversation,
   AskVaenyxMessage,
   ConversationSearchResponse,
+  ConversationForgetPreview,
+  DeleteConversationRequest,
+  MemoryKind,
+  MemoryProvenanceResponse,
   RelayPanel,
   RelayUsageResponse,
   RelaySettings,
@@ -294,6 +298,44 @@ export function approveFactCandidate(
     method: "POST",
     body: JSON.stringify({}),
   });
+}
+
+export function fetchMemoryProvenance(
+  kind: MemoryKind,
+  id: string,
+): Promise<MemoryProvenanceResponse> {
+  return requestJson(`/v1/memory/${kind}/${encodeURIComponent(id)}/provenance`);
+}
+
+export async function setConversationMemoryExcluded(
+  conversationId: string,
+  excluded: boolean,
+): Promise<void> {
+  await requestJson(
+    `/v1/memory/sources/conversation/${encodeURIComponent(conversationId)}`,
+    { method: "PUT", body: JSON.stringify({ excluded }) },
+  );
+}
+
+export function previewMemoryFromConversation(
+  conversationId: string,
+): Promise<ConversationForgetPreview> {
+  return requestJson(
+    `/v1/memory/sources/conversation/${encodeURIComponent(conversationId)}/forget-preview`,
+  );
+}
+
+export function forgetMemoryFromConversation(
+  conversationId: string,
+  previewRevision: string,
+): Promise<ConversationForgetPreview> {
+  return requestJson(
+    `/v1/memory/sources/conversation/${encodeURIComponent(conversationId)}/forget`,
+    {
+      method: "POST",
+      body: JSON.stringify({ previewRevision }),
+    },
+  );
 }
 
 // UPDATING A COMMUNITY ITEM. The dialog asks what it would cost BEFORE
@@ -649,12 +691,22 @@ export function setChatModel(
 
 export async function deleteAskVaenyxConversation(
   conversationId: string,
+  input: DeleteConversationRequest,
 ): Promise<void> {
   await requestJson<{ message: string }>(
     `/v1/ask-vaenyx/conversations/${conversationId}`,
     {
       method: "DELETE",
+      body: JSON.stringify(input),
     },
+  );
+}
+
+export function previewAskVaenyxConversationDelete(
+  conversationId: string,
+): Promise<ConversationForgetPreview> {
+  return requestJson(
+    `/v1/ask-vaenyx/conversations/${encodeURIComponent(conversationId)}/delete-preview`,
   );
 }
 

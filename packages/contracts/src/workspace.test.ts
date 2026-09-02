@@ -16,6 +16,9 @@ import {
   CreateVaenyxMeCandidateRequestSchema,
   CatalogueInstallPreviewSchema,
   ConversationSearchResponseSchema,
+  ConversationForgetPreviewSchema,
+  DeleteConversationRequestSchema,
+  MemoryProvenanceResponseSchema,
   ResolveStructuredQuestionRequestSchema,
   RejectVaenyxMeCandidateRequestSchema,
   UpdateVaenyxThreadProjectRequestSchema,
@@ -315,6 +318,49 @@ describe("M1 contracts", () => {
       }),
     ).toBe(true);
     expect(Value.Check(RejectVaenyxMeCandidateRequestSchema, {})).toBe(true);
+  });
+
+  it("requires explicit Conversation deletion Memory choices", () => {
+    const revision = "a".repeat(64);
+    expect(
+      Value.Check(DeleteConversationRequestSchema, {
+        memoryAction: "forget",
+        previewRevision: revision,
+      }),
+    ).toBe(true);
+    expect(Value.Check(DeleteConversationRequestSchema, {})).toBe(false);
+    expect(
+      Value.Check(MemoryProvenanceResponseSchema, {
+        memoryKind: "fact",
+        memoryId: "fact-1",
+        sources: [
+          {
+            id: "source-1",
+            sourceKind: "conversation",
+            sourceId: "conversation-1",
+            sourceMessageId: "message-1",
+            sourceTitle: "Kitchen decisions",
+            modeId: null,
+            projectId: null,
+            admissionEventId: "candidate-1",
+            admittedAt: "2026-09-02T00:00:00.000Z",
+            available: true,
+            excluded: false,
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ConversationForgetPreviewSchema, {
+        conversationId: "conversation-1",
+        conversationTitle: "Kitchen decisions",
+        items: [],
+        forgettableCount: 0,
+        retainedCount: 0,
+        legacyUnknownCount: 0,
+        revision,
+      }),
+    ).toBe(true);
   });
 });
 

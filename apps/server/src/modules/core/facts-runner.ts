@@ -71,7 +71,11 @@ export async function runFactExtractionPass(
       lastSeen?.lastMessageId ?? null,
     );
     if (messages.length === 0) {
-      markExtractionRun(database, conversation.conversationId, conversation.lastMessageId);
+      markExtractionRun(
+        database,
+        conversation.conversationId,
+        conversation.lastMessageId,
+      );
       continue;
     }
 
@@ -95,6 +99,7 @@ export async function runFactExtractionPass(
         modeId: conversation.modeId,
         ownerId,
         proposals,
+        sourceMessages: messages,
       });
       result.conversations += 1;
       markExtractionRun(

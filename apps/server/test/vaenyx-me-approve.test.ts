@@ -59,6 +59,18 @@ function freshDatabase(): DatabaseHandle {
       source_id TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE memory_provenance (
+      id TEXT PRIMARY KEY NOT NULL, memory_kind TEXT NOT NULL,
+      memory_id TEXT NOT NULL, source_kind TEXT NOT NULL, source_id TEXT,
+      source_message_id TEXT, mode_id TEXT, project_id TEXT,
+      admission_event_id TEXT NOT NULL, admitted_at TEXT NOT NULL,
+      removed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX memory_provenance_identity_index ON memory_provenance (
+      memory_kind, memory_id, source_kind, COALESCE(source_id, ''),
+      COALESCE(source_message_id, ''), admission_event_id
+    );
   `);
   // The shipped starting shape: one placeholder per category, unlearned.
   sqlite

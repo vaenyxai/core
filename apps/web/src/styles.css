@@ -8260,6 +8260,69 @@ select {
   gap: var(--space-2);
   justify-content: flex-end;
 }
+
+.conversation-delete-choice,
+.conversation-delete-options,
+.conversation-delete-impact {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.conversation-delete-choice {
+  max-width: 620px;
+}
+
+.conversation-delete-options label {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 2px var(--space-2);
+  min-height: 64px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-raised);
+  cursor: pointer;
+}
+
+.conversation-delete-options label.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.conversation-delete-options input {
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 20px;
+  height: 20px;
+}
+
+.conversation-delete-options span,
+.conversation-delete-impact small {
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+.conversation-delete-impact {
+  max-height: 34vh;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.conversation-delete-impact ul,
+.memory-forget-preview ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-3);
+}
+
+.conversation-delete-impact li,
+.memory-forget-preview li {
+  display: grid;
+  gap: 2px;
+}
 /* Key/token fields: masked by CSS, NOT type="password" - a model key is not a
    login, and password inputs make the browser offer to store them. (Chromium
    and WebKit mask via text-security; Firefox shows the text plainly.) */
@@ -8483,6 +8546,55 @@ body {
 .fact-actions {
   display: flex;
   gap: var(--space-2);
+}
+
+.memory-provenance {
+  margin-top: var(--space-1);
+}
+
+.memory-provenance-panel {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.memory-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.memory-source-row > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: min(260px, 100%);
+}
+
+.memory-source-row small {
+  color: var(--text-faint);
+}
+
+.memory-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.memory-source-actions button {
+  min-height: 44px;
+}
+
+.memory-forget-preview {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid rgba(239, 154, 154, 0.4);
+  border-radius: var(--r-sm);
+  background: rgba(239, 154, 154, 0.06);
 }
 
 .fact-history {

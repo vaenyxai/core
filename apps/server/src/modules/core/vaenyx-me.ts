@@ -10,6 +10,12 @@ import type {
 
 import type { DatabaseHandle } from "../../db/database.js";
 import {
+  addMemoryProvenance,
+  assertAdmissionSourcesAllowed,
+  candidateAdmissionSources,
+  isMemorySourceExcluded,
+} from "./memory-provenance.js";
+import {
   applyCondensed,
   applyTraitMergeGroups,
   approvedDupPrompt,
@@ -105,17 +111,24 @@ interface FactCandidateColumns {
 /** The card's citations. Stored rows carry them as JSON; rows from before
  *  0070 synthesize one entry per evidence line, all pointing at the row's
  *  single source conversation — nothing legacy renders blank. */
-function candidateSources(
-  row: FactCandidateColumns & VaenyxMeCandidateRow,
-): { quote: string; conversationId: string | null }[] {
+function candidateSources(row: FactCandidateColumns & VaenyxMeCandidateRow): {
+  quote: string;
+  conversationId: string | null;
+  messageId: string | null;
+}[] {
   if (row.sources_json) {
     try {
       const parsed = JSON.parse(row.sources_json) as unknown;
       if (Array.isArray(parsed)) {
         return parsed
           .filter(
-            (entry): entry is { quote: string; conversationId?: unknown } =>
-              typeof (entry as { quote?: unknown }).quote === "string",
+            (
+              entry,
+            ): entry is {
+              quote: string;
+              conversationId?: unknown;
+              messageId?: unknown;
+            } => typeof (entry as { quote?: unknown }).quote === "string",
           )
           .map((entry) => ({
             quote: entry.quote,
@@ -123,6 +136,8 @@ function candidateSources(
               typeof entry.conversationId === "string"
                 ? entry.conversationId
                 : null,
+            messageId:
+              typeof entry.messageId === "string" ? entry.messageId : null,
           }));
       }
     } catch {
@@ -135,7 +150,7 @@ function candidateSources(
     .split(/\n+/)
     .map((line) => line.replace(/^[-•*]\s*/, "").trim())
     .filter(Boolean)
-    .map((quote) => ({ quote, conversationId }));
+    .map((quote) => ({ quote, conversationId, messageId: null }));
 }
 
 function mapCandidate(
@@ -177,7 +192,9 @@ function getCandidateRow(
   candidateId: string,
 ): (VaenyxMeCandidateRow & FactCandidateColumns) | null {
   return (
-    (database.sqlite.prepare(`${candidateSelect} WHERE id = ?`).get(candidateId) as
+    (database.sqlite
+      .prepare(`${candidateSelect} WHERE id = ?`)
+      .get(candidateId) as
       | (VaenyxMeCandidateRow & FactCandidateColumns)
       | undefined) ?? null
   );
@@ -260,9 +277,21 @@ export function listVaenyxMeCandidates(
 
 export function createVaenyxMeCandidate(
   database: DatabaseHandle,
-  input: CreateVaenyxMeCandidateRequest,
+  input: CreateVaenyxMeCandidateRequest & { sourceMessageId?: string | null },
   ownerId: string,
 ): VaenyxMeCandidate {
+  if (
+    input.sourceType === "chat_history" &&
+    input.sourceId &&
+    isMemorySourceExcluded(
+      database,
+      "conversation",
+      input.sourceId,
+      input.modeId ?? null,
+    )
+  ) {
+    throw new Error("MEMORY_SOURCE_EXCLUDED");
+  }
   const id = randomUUID();
 
   database.sqlite
@@ -294,6 +323,7 @@ export function createVaenyxMeCandidate(
             (input.sourceType ?? "owner_manual") === "chat_history"
               ? (input.sourceId ?? null)
               : null,
+          messageId: input.sourceMessageId ?? null,
         },
       ]),
     );
@@ -483,6 +513,13 @@ export async function scanVaenyxMeFromChats(
            SELECT source_id FROM vaenyx_me_candidates
            WHERE source_type = 'chat_history' AND source_id IS NOT NULL
          )
+         AND NOT EXISTS (
+           SELECT 1 FROM memory_source_exclusions AS exclusions
+           WHERE exclusions.source_kind = 'conversation'
+             AND exclusions.source_id = c.id
+             AND exclusions.mode_id IS c.mode_id
+             AND exclusions.cleared_at IS NULL
+         )
          AND (
            SELECT COUNT(*) FROM ask_vaenyx_messages m
            WHERE m.conversation_id = c.id AND m.role = 'owner'
@@ -497,12 +534,12 @@ export async function scanVaenyxMeFromChats(
     if (signal?.aborted) break;
     const lines = database.sqlite
       .prepare(
-        `SELECT content FROM ask_vaenyx_messages
+        `SELECT id, content FROM ask_vaenyx_messages
          WHERE conversation_id = ? AND role = 'owner'
          ORDER BY created_at
          LIMIT 12`,
       )
-      .all(conversation.id) as unknown as { content: string }[];
+      .all(conversation.id) as unknown as { content: string; id: string }[];
     const transcript = lines
       .map((line) => line.content)
       .join("\n")
@@ -523,6 +560,10 @@ export async function scanVaenyxMeFromChats(
         proposedEvidence: trait.evidence,
         sourceType: "chat_history",
         sourceId: conversation.id,
+        sourceMessageId: trait.evidence.trim()
+          ? (lines.find((line) => line.content.includes(trait.evidence.trim()))
+              ?.id ?? null)
+          : null,
         confidence: 40,
         modeId,
       },
@@ -743,6 +784,12 @@ export function approveVaenyxMeCandidate(
 
   const now = new Date().toISOString();
   let itemId: string;
+  const provenance = candidateAdmissionSources(database, candidateId);
+  assertAdmissionSourcesAllowed(
+    database,
+    provenance.sources,
+    candidate.mode_id ?? null,
+  );
 
   database.sqlite.exec("BEGIN IMMEDIATE;");
 
@@ -827,6 +874,15 @@ export function approveVaenyxMeCandidate(
         now,
         candidateId,
       );
+
+    addMemoryProvenance(database, {
+      memoryKind: "profile",
+      memoryId: itemId,
+      modeId: candidate.mode_id ?? null,
+      sources: provenance.sources,
+      admissionEventId: `candidate:${candidateId}:approved`,
+      admittedAt: now,
+    });
 
     database.sqlite.exec("COMMIT;");
   } catch (error) {

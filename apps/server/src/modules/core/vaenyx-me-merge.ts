@@ -67,6 +67,7 @@ export function dominantLanguage(text: string): "zh" | "en" {
 export interface CandidateSource {
   quote: string;
   conversationId: string | null;
+  messageId?: string | null;
 }
 
 export function readCandidateSources(
@@ -93,8 +94,13 @@ export function readCandidateSources(
       if (Array.isArray(parsed)) {
         return parsed
           .filter(
-            (entry): entry is { quote: string; conversationId?: unknown } =>
-              typeof (entry as { quote?: unknown }).quote === "string",
+            (
+              entry,
+            ): entry is {
+              quote: string;
+              conversationId?: unknown;
+              messageId?: unknown;
+            } => typeof (entry as { quote?: unknown }).quote === "string",
           )
           .map((entry) => ({
             quote: entry.quote,
@@ -102,6 +108,8 @@ export function readCandidateSources(
               typeof entry.conversationId === "string"
                 ? entry.conversationId
                 : null,
+            messageId:
+              typeof entry.messageId === "string" ? entry.messageId : null,
           }));
       }
     } catch {
@@ -126,9 +134,14 @@ export function unionSources(
   for (const list of lists) {
     for (const source of list) {
       const quote = source.quote.trim();
-      if (!quote || seen.has(quote)) continue;
-      seen.add(quote);
-      merged.push({ quote, conversationId: source.conversationId });
+      const key = `${source.conversationId ?? ""}:${source.messageId ?? ""}:${quote}`;
+      if (!quote || seen.has(key)) continue;
+      seen.add(key);
+      merged.push({
+        quote,
+        conversationId: source.conversationId,
+        messageId: source.messageId ?? null,
+      });
       if (merged.length === cap) return merged;
     }
   }

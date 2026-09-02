@@ -60,8 +60,18 @@ import {
   ApplyDeviceModeResponseSchema,
   StopTurnRequestSchema,
   FactsResponseSchema,
+  MemoryKindSchema,
+  MemoryProvenanceResponseSchema,
+  ConversationForgetPreviewSchema,
+  SetMemorySourceExclusionRequestSchema,
+  ForgetMemoryFromSourceRequestSchema,
+  DeleteConversationRequestSchema,
   RecordFactRequestSchema,
   type RecordFactRequest,
+  type MemoryKind,
+  type SetMemorySourceExclusionRequest,
+  type ForgetMemoryFromSourceRequest,
+  type DeleteConversationRequest,
   VisionStatusSchema,
   ConnectVisionRequestSchema,
   EnginePairSchema,
@@ -577,7 +587,7 @@ import {
   createAskVaenyxConversation,
   createAskVaenyxMessage,
   resolveAskVaenyxStructuredQuestion,
-  deleteAskVaenyxConversation,
+  deleteAskVaenyxConversationWithMemory,
   listAskVaenyxConversations,
   listAskVaenyxMessages,
   setAskVaenyxReasoningEffort,
@@ -585,6 +595,12 @@ import {
   setAskVaenyxChatModel,
   type CreateAskVaenyxMessageOptions,
 } from "../core/ask-vaenyx.js";
+import {
+  forgetMemoryFromConversation,
+  listMemoryProvenance,
+  previewConversationForget,
+  setConversationSourceExcluded,
+} from "../core/memory-provenance.js";
 import { searchConversations } from "../core/conversation-search.js";
 import {
   cancelTask,
@@ -1487,6 +1503,7 @@ export async function registerGatewayRoutes(
           200: FactsResponseSchema,
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
@@ -1502,6 +1519,14 @@ export async function registerGatewayRoutes(
           owner.modeId ?? null,
         );
       } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "MEMORY_SOURCE_EXCLUDED"
+        ) {
+          return reply.code(409).send({
+            error: "This source is excluded from Memory learning.",
+          });
+        }
         return reply.code(400).send({
           error:
             error instanceof Error
@@ -1510,6 +1535,200 @@ export async function registerGatewayRoutes(
         });
       }
       return { facts: listCurrentFacts(context.database, owner.modeId) };
+    },
+  );
+
+  app.get<{ Params: { id: string; kind: MemoryKind } }>(
+    "/v1/memory/:kind/:id/provenance",
+    {
+      schema: {
+        params: Type.Object({
+          kind: MemoryKindSchema,
+          id: Type.String({ minLength: 1 }),
+        }),
+        response: {
+          200: MemoryProvenanceResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
+      try {
+        return listMemoryProvenance(
+          context.database,
+          request.params.kind,
+          request.params.id,
+          owner.modeId ?? null,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "MEMORY_NOT_FOUND") {
+          return reply
+            .code(404)
+            .send({ error: "That Memory item is not there." });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.put<{
+    Body: SetMemorySourceExclusionRequest;
+    Params: { id: string };
+  }>(
+    "/v1/memory/sources/conversation/:id",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        body: SetMemorySourceExclusionRequestSchema,
+        response: {
+          200: MessageResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
+      try {
+        setConversationSourceExcluded(context.database, {
+          conversationId: request.params.id,
+          excluded: request.body.excluded,
+          modeId: owner.modeId ?? null,
+          ownerId: owner.id,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
+        ) {
+          return reply
+            .code(404)
+            .send({ error: "Source Conversation not found." });
+        }
+        throw error;
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: request.body.excluded
+          ? "memory.source.exclude"
+          : "memory.source.include",
+        decision: "allowed",
+        reason: request.body.excluded
+          ? "Owner excluded a Conversation from future Memory learning."
+          : "Owner allowed a Conversation to contribute to future Memory again.",
+        resourceType: "ask_vaenyx_conversation",
+        resourceId: request.params.id,
+      });
+      return {
+        message: request.body.excluded ? "Source excluded." : "Source allowed.",
+      };
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/v1/memory/sources/conversation/:id/forget-preview",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: ConversationForgetPreviewSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
+      try {
+        return previewConversationForget(context.database, {
+          conversationId: request.params.id,
+          modeId: owner.modeId ?? null,
+          ownerId: owner.id,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
+        ) {
+          return reply
+            .code(404)
+            .send({ error: "Source Conversation not found." });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post<{
+    Body: ForgetMemoryFromSourceRequest;
+    Params: { id: string };
+  }>(
+    "/v1/memory/sources/conversation/:id/forget",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        body: ForgetMemoryFromSourceRequestSchema,
+        response: {
+          200: ConversationForgetPreviewSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner)
+        return reply.code(401).send({ error: "Owner login required." });
+      try {
+        const result = forgetMemoryFromConversation(context.database, {
+          action: "source_forget",
+          conversationId: request.params.id,
+          modeId: owner.modeId ?? null,
+          ownerId: owner.id,
+          previewRevision: request.body.previewRevision,
+        });
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "memory.source.forget",
+          decision: "allowed",
+          reason:
+            "Owner forgot identifiable Memory learned from a Conversation.",
+          resourceType: "ask_vaenyx_conversation",
+          resourceId: request.params.id,
+        });
+        return result;
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "MEMORY_PREVIEW_CHANGED"
+        ) {
+          return reply.code(409).send({
+            error: "Memory sources changed. Review the preview again.",
+          });
+        }
+        if (
+          error instanceof Error &&
+          error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
+        ) {
+          return reply
+            .code(404)
+            .send({ error: "Source Conversation not found." });
+        }
+        throw error;
+      }
     },
   );
 
@@ -2652,6 +2871,7 @@ export async function registerGatewayRoutes(
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
@@ -3633,50 +3853,34 @@ export async function registerGatewayRoutes(
     },
   );
 
-  app.delete<{ Params: { id: string } }>(
-    "/v1/ask-vaenyx/conversations/:id",
+  app.get<{ Params: { id: string } }>(
+    "/v1/ask-vaenyx/conversations/:id/delete-preview",
     {
       schema: {
         params: Type.Object(
-          {
-            id: Type.String({ minLength: 1 }),
-          },
+          { id: Type.String({ minLength: 1 }) },
           { additionalProperties: false },
         ),
         response: {
-          200: MessageResponseSchema,
-          409: ErrorResponseSchema,
+          200: ConversationForgetPreviewSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
     async (request, reply) => {
       const owner = requireOwner(request);
-
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-
       try {
-        const conversation = deleteAskVaenyxConversation(
-          context.database,
-          request.params.id,
-          owner.id,
-          context.config.dataDirectory,
-        );
-        recordAudit(context.database, {
-          actorType: "owner",
-          actorId: owner.id,
-          actorName: owner.name,
-          action: "ask_vaenyx.conversation.delete",
-          decision: "allowed",
-          reason: "Owner deleted a local Vaenyx Chat conversation.",
-          resourceType: "ask_vaenyx_conversation",
-          resourceId: conversation.id,
+        return previewConversationForget(context.database, {
+          conversationId: request.params.id,
+          modeId: owner.modeId ?? null,
+          ownerId: owner.id,
+          requireArchived: true,
         });
-
-        return { message: "Vaenyx Chat conversation deleted." };
       } catch (error) {
         if (
           error instanceof Error &&
@@ -3692,6 +3896,91 @@ export async function registerGatewayRoutes(
         ) {
           return reply.code(409).send({
             error: "Archive this Conversation before deleting it.",
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.delete<{ Body: DeleteConversationRequest; Params: { id: string } }>(
+    "/v1/ask-vaenyx/conversations/:id",
+    {
+      schema: {
+        params: Type.Object(
+          {
+            id: Type.String({ minLength: 1 }),
+          },
+          { additionalProperties: false },
+        ),
+        body: DeleteConversationRequestSchema,
+        response: {
+          200: MessageResponseSchema,
+          400: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+
+      try {
+        const result = deleteAskVaenyxConversationWithMemory(
+          context.database,
+          request.params.id,
+          owner.id,
+          {
+            memoryAction: request.body.memoryAction,
+            modeId: owner.modeId ?? null,
+            previewRevision: request.body.previewRevision,
+          },
+          context.config.dataDirectory,
+        );
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "ask_vaenyx.conversation.delete",
+          decision: "allowed",
+          reason:
+            request.body.memoryAction === "forget"
+              ? "Owner deleted a local Conversation and forgot identifiable derived Memory."
+              : "Owner deleted a local Conversation and kept its learned Memory.",
+          resourceType: "ask_vaenyx_conversation",
+          resourceId: result.conversation.id,
+        });
+
+        return { message: "Vaenyx Chat conversation deleted." };
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "ASK_VAENYX_CONVERSATION_NOT_FOUND"
+        ) {
+          return reply.code(404).send({
+            error: "Vaenyx Chat conversation not found.",
+          });
+        }
+        if (
+          error instanceof Error &&
+          (error.message === "CONVERSATION_NOT_ARCHIVED" ||
+            error.message === "CONVERSATION_PROTECTED")
+        ) {
+          return reply.code(409).send({
+            error: "Archive this Conversation before deleting it.",
+          });
+        }
+        if (
+          error instanceof Error &&
+          error.message === "MEMORY_PREVIEW_CHANGED"
+        ) {
+          return reply.code(409).send({
+            error: "Memory sources changed. Review the deletion choices again.",
           });
         }
 
@@ -4442,6 +4731,7 @@ export async function registerGatewayRoutes(
           400: ErrorResponseSchema,
           401: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
@@ -4509,6 +4799,15 @@ export async function registerGatewayRoutes(
         ) {
           return reply.code(400).send({
             error: "Only pending Vaenyx Me candidates can be approved.",
+          });
+        }
+
+        if (
+          error instanceof Error &&
+          error.message === "MEMORY_SOURCE_EXCLUDED"
+        ) {
+          return reply.code(409).send({
+            error: "This source is excluded from Memory learning.",
           });
         }
 

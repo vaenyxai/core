@@ -824,6 +824,92 @@ export const FactsResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const MemoryKindSchema = Type.Union([
+  Type.Literal("fact"),
+  Type.Literal("profile"),
+]);
+
+export const MemorySourceKindSchema = Type.Union([
+  Type.Literal("conversation"),
+  Type.Literal("task"),
+  Type.Literal("project_memory"),
+  Type.Literal("manual"),
+  Type.Literal("external"),
+  Type.Literal("unavailable"),
+]);
+
+export const MemoryProvenanceSourceSchema = Type.Object(
+  {
+    id: Type.String(),
+    sourceKind: MemorySourceKindSchema,
+    sourceId: Type.Union([Type.String(), Type.Null()]),
+    sourceMessageId: Type.Union([Type.String(), Type.Null()]),
+    sourceTitle: Type.String(),
+    modeId: Type.Union([Type.String(), Type.Null()]),
+    projectId: Type.Union([Type.String(), Type.Null()]),
+    admissionEventId: Type.String(),
+    admittedAt: Type.String(),
+    available: Type.Boolean(),
+    excluded: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export const MemoryProvenanceResponseSchema = Type.Object(
+  {
+    memoryKind: MemoryKindSchema,
+    memoryId: Type.String(),
+    sources: Type.Array(MemoryProvenanceSourceSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const ForgetPreviewItemSchema = Type.Object(
+  {
+    memoryKind: MemoryKindSchema,
+    memoryId: Type.String(),
+    title: Type.String(),
+    outcome: Type.Union([Type.Literal("forget"), Type.Literal("retain")]),
+    reason: Type.Union([
+      Type.Literal("selected_source_only"),
+      Type.Literal("independent_source"),
+      Type.Literal("legacy_unavailable"),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export const ConversationForgetPreviewSchema = Type.Object(
+  {
+    conversationId: Type.String(),
+    conversationTitle: Type.String(),
+    items: Type.Array(ForgetPreviewItemSchema),
+    forgettableCount: Type.Integer({ minimum: 0 }),
+    retainedCount: Type.Integer({ minimum: 0 }),
+    legacyUnknownCount: Type.Integer({ minimum: 0 }),
+    revision: Type.String({ minLength: 64, maxLength: 64 }),
+  },
+  { additionalProperties: false },
+);
+
+export const SetMemorySourceExclusionRequestSchema = Type.Object(
+  { excluded: Type.Boolean() },
+  { additionalProperties: false },
+);
+
+export const ForgetMemoryFromSourceRequestSchema = Type.Object(
+  { previewRevision: Type.String({ minLength: 64, maxLength: 64 }) },
+  { additionalProperties: false },
+);
+
+export const DeleteConversationRequestSchema = Type.Object(
+  {
+    memoryAction: Type.Union([Type.Literal("keep"), Type.Literal("forget")]),
+    previewRevision: Type.String({ minLength: 64, maxLength: 64 }),
+  },
+  { additionalProperties: false },
+);
+
 export const RecordFactRequestSchema = Type.Object(
   {
     slot: Type.String({ minLength: 1, maxLength: 60 }),
@@ -877,6 +963,7 @@ export const VaenyxMeCandidateSchema = Type.Object(
           {
             quote: Type.String(),
             conversationId: Type.Union([Type.String(), Type.Null()]),
+            messageId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
           },
           { additionalProperties: false },
         ),
@@ -3199,6 +3286,27 @@ export type VaenyxThread = Static<typeof VaenyxThreadSchema>;
 export type VaenyxMeItem = Static<typeof VaenyxMeItemSchema>;
 export type Fact = Static<typeof FactSchema>;
 export type FactsResponse = Static<typeof FactsResponseSchema>;
+export type MemoryKind = Static<typeof MemoryKindSchema>;
+export type MemorySourceKind = Static<typeof MemorySourceKindSchema>;
+export type MemoryProvenanceSource = Static<
+  typeof MemoryProvenanceSourceSchema
+>;
+export type MemoryProvenanceResponse = Static<
+  typeof MemoryProvenanceResponseSchema
+>;
+export type ForgetPreviewItem = Static<typeof ForgetPreviewItemSchema>;
+export type ConversationForgetPreview = Static<
+  typeof ConversationForgetPreviewSchema
+>;
+export type SetMemorySourceExclusionRequest = Static<
+  typeof SetMemorySourceExclusionRequestSchema
+>;
+export type ForgetMemoryFromSourceRequest = Static<
+  typeof ForgetMemoryFromSourceRequestSchema
+>;
+export type DeleteConversationRequest = Static<
+  typeof DeleteConversationRequestSchema
+>;
 export type RecordFactRequest = Static<typeof RecordFactRequestSchema>;
 export type VaenyxMeCandidate = Static<typeof VaenyxMeCandidateSchema>;
 export type VaenyxMeProfile = Static<typeof VaenyxMeProfileSchema>;

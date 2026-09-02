@@ -14,6 +14,23 @@ Unsorted. Inbox remains a protected per-Mode Conversation, not the Unsorted
 bucket. Project creation, naming, instructions and Memory are explicit Owner
 actions under Settings.
 
+## Derived Memory keeps source lineage
+
+Approved facts and Vaenyx Me traits write one `memory_provenance` row per known
+source in the same transaction as admission. Candidate merges preserve the
+union of sources. A source may be a Conversation/message, task, Project Memory,
+manual Owner entry, external source, or an explicit `unavailable` legacy
+marker; migration 0082 backfills only links already provable from stored ids.
+
+Conversation exclusion is a persistent source-level rule checked before scan,
+queue, and approval. Forgetting a source soft-removes its active provenance and
+retires a derived item only when no other valid source remains. Any unknown
+legacy source blocks automatic removal. Permanent Conversation deletion
+requires a fresh hashed preview revision and an explicit keep-or-forget choice;
+the selected Memory action and transcript deletion share one SQLite
+transaction. Forget audit rows contain only hashed ids, outcome, reason and
+time—never Memory or transcript text.
+
 ## Model-visible means persisted
 
 **Anything that entered a model request must be reconstructable from the

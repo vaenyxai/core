@@ -69,6 +69,26 @@ function freshDatabase(): DatabaseHandle {
     CREATE VIRTUAL TABLE fact_search USING fts5(
       fact_id UNINDEXED, mode_id UNINDEXED, body, tokenize = 'unicode61'
     );
+    CREATE TABLE vaenyx_threads (
+      conversation_id TEXT, project_id TEXT
+    );
+    CREATE TABLE memory_source_exclusions (
+      source_key TEXT PRIMARY KEY NOT NULL, source_kind TEXT NOT NULL,
+      source_id TEXT NOT NULL, mode_id TEXT, project_id TEXT,
+      excluded_at TEXT NOT NULL, cleared_at TEXT, updated_at TEXT NOT NULL
+    );
+    CREATE TABLE memory_provenance (
+      id TEXT PRIMARY KEY NOT NULL, memory_kind TEXT NOT NULL,
+      memory_id TEXT NOT NULL, source_kind TEXT NOT NULL, source_id TEXT,
+      source_message_id TEXT, mode_id TEXT, project_id TEXT,
+      admission_event_id TEXT NOT NULL, admitted_at TEXT NOT NULL,
+      removed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX memory_provenance_identity_index ON memory_provenance (
+      memory_kind, memory_id, source_kind, COALESCE(source_id, ''),
+      COALESCE(source_message_id, ''), admission_event_id
+    );
   `);
   return { close: () => sqlite.close(), ping: () => true, sqlite };
 }
@@ -287,9 +307,9 @@ describe("approving one", () => {
       .prepare(`SELECT id FROM vaenyx_me_candidates LIMIT 1`)
       .get() as unknown as { id: string };
     approveFactCandidate(database, row.id, "owner-1", null);
-    expect(() => approveFactCandidate(database, row.id, "owner-1", null)).toThrow(
-      "FACT_CANDIDATE_NOT_PENDING",
-    );
+    expect(() =>
+      approveFactCandidate(database, row.id, "owner-1", null),
+    ).toThrow("FACT_CANDIDATE_NOT_PENDING");
   });
 });
 

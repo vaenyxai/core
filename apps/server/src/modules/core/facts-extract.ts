@@ -39,6 +39,12 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseHandle } from "../../db/database.js";
 import { isKnownFactSlot } from "./fact-slots.js";
 import { recordFact, type Fact } from "./facts.js";
+import {
+  assertAdmissionSourcesAllowed,
+  candidateAdmissionSources,
+  isMemorySourceExcluded,
+} from "./memory-provenance.js";
+import { attachSources } from "./vaenyx-me-merge.js";
 
 /** How quiet a conversation has to be before its facts are distilled. */
 export const IDLE_BEFORE_EXTRACTION_MS = 30 * 60_000;
@@ -109,7 +115,11 @@ export function ownerMessagesSince(
         ORDER BY created_at ASC
         LIMIT 200`,
     )
-    .all(conversationId, afterMessageId, afterMessageId) as unknown as OwnerMessage[];
+    .all(
+      conversationId,
+      afterMessageId,
+      afterMessageId,
+    ) as unknown as OwnerMessage[];
   return rows;
 }
 
@@ -140,6 +150,13 @@ export function idleConversations(
          JOIN ask_vaenyx_messages m ON m.conversation_id = c.id
          LEFT JOIN fact_extraction_state s ON s.conversation_id = c.id
         WHERE COALESCE(s.failures, 0) < ?
+          AND NOT EXISTS (
+            SELECT 1 FROM memory_source_exclusions AS exclusions
+            WHERE exclusions.source_kind = 'conversation'
+              AND exclusions.source_id = c.id
+              AND exclusions.mode_id IS c.mode_id
+              AND exclusions.cleared_at IS NULL
+          )
         GROUP BY c.id
        HAVING MAX(m.created_at) < ?
           AND (
@@ -194,8 +211,19 @@ export function queueProposedFacts(
     modeId: string | null;
     ownerId: string;
     proposals: ProposedFact[];
+    sourceMessages?: OwnerMessage[];
   },
 ): number {
+  if (
+    isMemorySourceExcluded(
+      database,
+      "conversation",
+      options.conversationId,
+      options.modeId,
+    )
+  ) {
+    return 0;
+  }
   let queued = 0;
   for (const proposal of options.proposals) {
     const slot = proposal.slot?.trim().toLowerCase() ?? "";
@@ -206,6 +234,16 @@ export function queueProposedFacts(
 
     // Already waiting for review with the same value: proposing it again would
     // give the Owner the same decision twice.
+    const sourceMessageId = proposal.evidence.trim()
+      ? (options.sourceMessages?.find((message) =>
+          message.content.includes(proposal.evidence.trim()),
+        )?.id ?? null)
+      : null;
+    const source = {
+      quote: (proposal.evidence ?? "").slice(0, 500),
+      conversationId: options.conversationId,
+      messageId: sourceMessageId,
+    };
     const duplicate = database.sqlite
       .prepare(
         `SELECT id FROM vaenyx_me_candidates
@@ -213,16 +251,20 @@ export function queueProposedFacts(
             AND status = 'pending_review'
           LIMIT 1`,
       )
-      .get(slot, value);
-    if (duplicate) continue;
+      .get(slot, value) as { id: string } | undefined;
+    if (duplicate) {
+      attachSources(database, duplicate.id, [source]);
+      continue;
+    }
 
     database.sqlite
       .prepare(
         `INSERT INTO vaenyx_me_candidates (
            id, category, title, proposed_summary, proposed_evidence,
            source_type, source_id, confidence, status, created_by,
-           proposed_slot, proposed_value, proposed_event_time, mode_id
-         ) VALUES (?, ?, ?, ?, ?, 'chat_history', ?, ?, 'pending_review', ?, ?, ?, ?, ?)`,
+           proposed_slot, proposed_value, proposed_event_time, mode_id,
+           sources_json
+         ) VALUES (?, ?, ?, ?, ?, 'chat_history', ?, ?, 'pending_review', ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         randomUUID(),
@@ -237,6 +279,7 @@ export function queueProposedFacts(
         value,
         proposal.eventTime ?? null,
         options.modeId,
+        JSON.stringify([source]),
       );
     queued += 1;
   }
@@ -290,33 +333,52 @@ export function approveFactCandidate(
     throw new Error("FACT_CANDIDATE_NOT_PENDING");
   }
 
-  const fact = recordFact(database, {
-    // recorded_at is NOW, when the Owner accepted it — not when the sentence
-    // was typed. event_time carries when it was true; conflating the two is
-    // what makes a bitemporal table behave like a single-clock one.
-    confidence: Math.max(0, Math.min(1, row.confidence / 100)),
-    eventTime: row.eventTime,
-    modeId: row.modeId,
-    slot: row.slot,
-    sourceConversationId: row.conversationId,
-    sourceKind: "owner",
-    value: row.value,
-  });
+  const provenance = candidateAdmissionSources(database, candidateId);
+  assertAdmissionSourcesAllowed(database, provenance.sources, row.modeId);
+  const now = new Date().toISOString();
+  database.sqlite.exec("BEGIN IMMEDIATE;");
+  try {
+    const primaryConversation = provenance.sources.find(
+      (source) => source.sourceKind === "conversation",
+    );
+    const fact = recordFact(database, {
+      // recorded_at is NOW, when the Owner accepted it — not when the sentence
+      // was typed. event_time carries when it was true; conflating the two is
+      // what makes a bitemporal table behave like a single-clock one.
+      admissionEventId: `candidate:${candidateId}:approved`,
+      confidence: Math.max(0, Math.min(1, row.confidence / 100)),
+      eventTime: row.eventTime,
+      modeId: row.modeId,
+      provenanceSources: provenance.sources,
+      slot: row.slot,
+      sourceConversationId: primaryConversation?.sourceId ?? row.conversationId,
+      sourceKind: "owner",
+      sourceMessageId: primaryConversation?.sourceMessageId ?? null,
+      value: row.value,
+      withinTransaction: true,
+    });
 
-  database.sqlite
-    .prepare(
-      `UPDATE vaenyx_me_candidates
-          SET status = 'approved', reviewed_by = ?, reviewed_at = ?
-        WHERE id = ?`,
-    )
-    .run(ownerId, new Date().toISOString(), candidateId);
-
-  return fact;
+    database.sqlite
+      .prepare(
+        `UPDATE vaenyx_me_candidates
+            SET status = 'approved', reviewed_by = ?, reviewed_at = ?
+          WHERE id = ?`,
+      )
+      .run(ownerId, now, candidateId);
+    database.sqlite.exec("COMMIT;");
+    return fact;
+  } catch (error) {
+    database.sqlite.exec("ROLLBACK;");
+    throw error;
+  }
 }
 
 /** What the extractor is told. Kept here rather than inline so the two rules
  *  it must obey are visible next to the code that enforces them anyway. */
-export function extractionPrompt(slots: string[], messages: OwnerMessage[]): string {
+export function extractionPrompt(
+  slots: string[],
+  messages: OwnerMessage[],
+): string {
   return [
     "Read the Owner's own messages below and list durable facts about them.",
     "",
@@ -362,9 +424,10 @@ export function parseProposedFacts(text: string): ProposedFact[] {
     const rawConfidence =
       typeof item.confidence === "number" ? item.confidence : 50;
     proposals.push({
-      confidence: rawConfidence > 0 && rawConfidence <= 1
-        ? rawConfidence * 100
-        : rawConfidence,
+      confidence:
+        rawConfidence > 0 && rawConfidence <= 1
+          ? rawConfidence * 100
+          : rawConfidence,
       eventTime:
         typeof item.event_time === "string" && item.event_time.trim()
           ? item.event_time.trim()

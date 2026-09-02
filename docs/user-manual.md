@@ -66,6 +66,14 @@ Read this inside the app: **Settings → Manual**.
   answer, and why **History** on any line shows what it replaced.
 - **Forget** dates a memory rather than removing the record, so a memory can
   never quietly vanish.
+- **Open Sources** on a learned item to see every Conversation or other source
+  that supported it. An available Conversation opens at its source message.
+  **Exclude future learning** stops that Conversation from creating or
+  re-creating candidates, even after restart; it can be allowed again later.
+- **Preview forget** shows exactly which learned items would leave current
+  Memory and which stay. An item stays when another independent source supports
+  it, and old data whose source cannot be proved is labelled **Source
+  unavailable** and is never bulk-forgotten on a guess.
 - **It asks before it learns.** Once a conversation has been quiet for half an
   hour, Vaenyx reads back what **you** said in it and proposes anything durable.
   Proposals wait in the same review list as everything else and change no answer
@@ -175,8 +183,13 @@ Read this inside the app: **Settings → Manual**.
   without losing the cadence, time or timezone. Restore brings the
   Conversation back but leaves that Schedule paused; press **Resume** on the
   task or the **Scheduled** screen when you want it running again.
-- **Permanent delete starts in Archived.** Deleting a Conversation never
-  deletes a shared Routine or an Owner connection.
+- **Permanent delete starts in Archived.** Before anything is removed, choose
+  either **Delete Conversations only** (keep approved Memory) or **Delete and
+  forget identifiable Memory**. Neither is preselected. The preview names what
+  will be forgotten and what stays because another or unavailable legacy
+  source remains. The chosen transcript and Memory change succeed together or
+  neither does. Shared Routines, manual Project Memory, Project instructions
+  and Owner connections are never removed by this choice.
 - **Search old Conversations** — press **Search Conversations** under **New**
   (or `Ctrl/Cmd + K`), type keywords, or put an exact phrase in double quotes.
   Search checks titles, purposes and messages. Results include active, pinned,

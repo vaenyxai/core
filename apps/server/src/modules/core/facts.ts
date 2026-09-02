@@ -22,6 +22,10 @@ import { randomUUID } from "node:crypto";
 
 import type { DatabaseHandle } from "../../db/database.js";
 import { isKnownFactSlot } from "./fact-slots.js";
+import {
+  addMemoryProvenance,
+  type MemoryAdmissionSource,
+} from "./memory-provenance.js";
 import { indexableText, matchQuery } from "./text-index.js";
 
 export type FactSourceKind = "external" | "manual" | "owner";
@@ -84,18 +88,21 @@ export class UnknownFactSlotError extends Error {
 }
 
 export interface RecordFactInput {
+  admissionEventId?: string;
   confidence?: number;
   /** When it was true in the world. Partial is fine: "2025-03", "2025". */
   eventTime?: string | null;
   modeId?: string | null;
   /** Defaults to now; injectable so the ordering rule can be tested. */
   recordedAt?: string;
+  provenanceSources?: MemoryAdmissionSource[];
   slot: string;
   sourceConversationId?: string | null;
   sourceDetail?: string | null;
   sourceKind?: FactSourceKind;
   sourceMessageId?: string | null;
   value: string;
+  withinTransaction?: boolean;
 }
 
 /**
@@ -119,59 +126,98 @@ export function recordFact(
   const modeId = input.modeId ?? null;
   const recordedAt = input.recordedAt ?? new Date().toISOString();
   const id = randomUUID();
+  const sources: MemoryAdmissionSource[] = input.provenanceSources ?? [
+    input.sourceConversationId
+      ? {
+          sourceKind: "conversation",
+          sourceId: input.sourceConversationId,
+          sourceMessageId: input.sourceMessageId ?? null,
+        }
+      : input.sourceKind === "external"
+        ? { sourceKind: "external", sourceId: input.sourceDetail ?? null }
+        : { sourceKind: "manual" },
+  ];
+  const ownsTransaction = !input.withinTransaction;
+  if (ownsTransaction) database.sqlite.exec("BEGIN IMMEDIATE;");
 
-  const current = currentFactRow(database, input.slot, modeId);
-  // Same value, same slot, still current: nothing changed, so nothing is
-  // written. Without this a daily extractor turns one unchanged address into a
-  // hundred rows of identical history.
-  if (current && current.value === value) return toFact(current);
+  try {
+    const current = currentFactRow(database, input.slot, modeId);
+    // Same value, same slot, still current: preserve the new independent
+    // source even though there is deliberately no duplicate fact row.
+    if (current && current.value === value) {
+      addMemoryProvenance(database, {
+        memoryKind: "fact",
+        memoryId: current.id,
+        modeId,
+        sources,
+        admissionEventId: input.admissionEventId ?? `fact:${current.id}`,
+        admittedAt: recordedAt,
+      });
+      if (ownsTransaction) database.sqlite.exec("COMMIT;");
+      return toFact(current);
+    }
 
-  const supersedes = current && current.recorded_at <= recordedAt ? current : null;
-  const stale = Boolean(current) && !supersedes;
+    const supersedes =
+      current && current.recorded_at <= recordedAt ? current : null;
+    const stale = Boolean(current) && !supersedes;
 
-  database.sqlite
-    .prepare(
-      `INSERT INTO facts (
+    database.sqlite
+      .prepare(
+        `INSERT INTO facts (
          id, mode_id, slot, value, event_time, recorded_at, valid_until,
          supersedes_id, source_message_id, source_conversation_id,
          source_kind, source_detail, confidence
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      id,
+      )
+      .run(
+        id,
+        modeId,
+        input.slot,
+        value,
+        input.eventTime ?? null,
+        recordedAt,
+        // Arrived out of order: file it as already-retired rather than let it
+        // shadow the newer truth.
+        stale ? recordedAt : null,
+        supersedes ? supersedes.id : null,
+        input.sourceMessageId ?? null,
+        input.sourceConversationId ?? null,
+        input.sourceKind ?? "owner",
+        input.sourceDetail ?? null,
+        input.confidence ?? 0.5,
+      );
+
+    addMemoryProvenance(database, {
+      memoryKind: "fact",
+      memoryId: id,
       modeId,
-      input.slot,
-      value,
-      input.eventTime ?? null,
-      recordedAt,
-      // Arrived out of order: file it as already-retired rather than let it
-      // shadow the newer truth.
-      stale ? recordedAt : null,
-      supersedes ? supersedes.id : null,
-      input.sourceMessageId ?? null,
-      input.sourceConversationId ?? null,
-      input.sourceKind ?? "owner",
-      input.sourceDetail ?? null,
-      input.confidence ?? 0.5,
-    );
+      sources,
+      admissionEventId: input.admissionEventId ?? `fact:${id}`,
+      admittedAt: recordedAt,
+    });
 
-  if (supersedes) {
-    database.sqlite
-      .prepare(`UPDATE facts SET valid_until = ? WHERE id = ?`)
-      .run(recordedAt, supersedes.id);
-    // The retired row leaves the keyword index: search answers "what does
-    // Vaenyx know", not "what did it once believe".
-    database.sqlite
-      .prepare(`DELETE FROM fact_search WHERE fact_id = ?`)
-      .run(supersedes.id);
+    if (supersedes) {
+      database.sqlite
+        .prepare(`UPDATE facts SET valid_until = ? WHERE id = ?`)
+        .run(recordedAt, supersedes.id);
+      // The retired row leaves the keyword index: search answers "what does
+      // Vaenyx know", not "what did it once believe".
+      database.sqlite
+        .prepare(`DELETE FROM fact_search WHERE fact_id = ?`)
+        .run(supersedes.id);
+    }
+
+    if (!stale) indexFact(database, id, modeId, input.slot, value);
+
+    const row = database.sqlite
+      .prepare(`SELECT * FROM facts WHERE id = ?`)
+      .get(id) as unknown as FactRow;
+    if (ownsTransaction) database.sqlite.exec("COMMIT;");
+    return toFact(row);
+  } catch (error) {
+    if (ownsTransaction) database.sqlite.exec("ROLLBACK;");
+    throw error;
   }
-
-  if (!stale) indexFact(database, id, modeId, input.slot, value);
-
-  const row = database.sqlite
-    .prepare(`SELECT * FROM facts WHERE id = ?`)
-    .get(id) as unknown as FactRow;
-  return toFact(row);
 }
 
 // The sandbox filter, written once. Same shape as project_memories (0042):

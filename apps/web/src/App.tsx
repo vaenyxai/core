@@ -29,6 +29,7 @@ import type {
   ResolveStructuredQuestionRequest,
   ConversationSearchHighlight,
   ConversationSearchResult,
+  ConversationForgetPreview,
   ImageAnnotationItem,
   ReasoningEffort,
   AuditEvent,
@@ -38,6 +39,8 @@ import type {
   CreateAppProfileResponse,
   ForgeConnectionTestResult,
   InstanceSettings,
+  MemoryKind,
+  MemoryProvenanceResponse,
   AppProfileKind,
   LibraryMethod,
   LibraryMethodSummary,
@@ -106,6 +109,11 @@ import {
   fetchLibraryRoutines,
   fetchLibraryRoutine,
   deleteAskVaenyxConversation,
+  fetchMemoryProvenance,
+  setConversationMemoryExcluded,
+  previewMemoryFromConversation,
+  forgetMemoryFromConversation,
+  previewAskVaenyxConversationDelete,
   fetchCatalogue,
   previewCatalogueInstall,
   installRoutineFromCatalogue,
@@ -17904,7 +17912,287 @@ function factSlotLabel(slot: string, zh: boolean): string {
   return slot;
 }
 
-function FactsSection() {
+function MemorySources({
+  memoryId,
+  memoryKind,
+  onMemoryChanged,
+  onOpenConversation,
+}: {
+  memoryId: string;
+  memoryKind: MemoryKind;
+  onMemoryChanged: () => Promise<void>;
+  onOpenConversation: (conversationId: string, messageId?: string) => void;
+}) {
+  const { lang } = useI18n();
+  const zh = lang === "zh";
+  const [expanded, setExpanded] = useState(false);
+  const [provenance, setProvenance] = useState<MemoryProvenanceResponse | null>(
+    null,
+  );
+  const [preview, setPreview] = useState<ConversationForgetPreview | null>(
+    null,
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      setProvenance(await fetchMemoryProvenance(memoryKind, memoryId));
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "没能读出来源。"
+            : "Sources could not be loaded.",
+      );
+    }
+  }, [memoryId, memoryKind, zh]);
+
+  async function toggle() {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !provenance) await load();
+  }
+
+  async function setExcluded(conversationId: string, excluded: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await setConversationMemoryExcluded(conversationId, excluded);
+      await load();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "来源规则没能保存。"
+            : "The source rule could not be saved.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function showForgetPreview(conversationId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      setPreview(await previewMemoryFromConversation(conversationId));
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "没能预览。"
+            : "The preview could not be loaded.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmForget() {
+    if (!preview) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await forgetMemoryFromConversation(
+        preview.conversationId,
+        preview.revision,
+      );
+      setPreview(null);
+      setProvenance(null);
+      await onMemoryChanged();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : zh
+            ? "Memory 没有改变。请重新预览。"
+            : "Memory was not changed. Review the preview again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const sourceKindLabel = (
+    kind: MemoryProvenanceResponse["sources"][number]["sourceKind"],
+  ) => {
+    if (kind === "conversation") return zh ? "对话" : "Conversation";
+    if (kind === "task") return zh ? "任务" : "Task";
+    if (kind === "project_memory") return "Project Memory";
+    if (kind === "manual") return zh ? "你手动添加" : "Added by you";
+    if (kind === "external") return zh ? "外部来源" : "External source";
+    return zh ? "来源不可用" : "Source unavailable";
+  };
+
+  const sourceTitleLabel = (
+    source: MemoryProvenanceResponse["sources"][number],
+  ) => {
+    if (source.sourceKind === "manual") {
+      return zh ? "由 Owner 手动添加" : "Added by the Owner";
+    }
+    if (source.sourceKind === "external") {
+      return zh ? "外部来源" : "External source";
+    }
+    if (source.sourceTitle === "Source unavailable") {
+      return zh ? "来源不可用" : source.sourceTitle;
+    }
+    return source.sourceTitle;
+  };
+
+  return (
+    <div className="memory-provenance">
+      <button
+        aria-expanded={expanded}
+        className="text-button"
+        onClick={() => void toggle()}
+        type="button"
+      >
+        {expanded
+          ? zh
+            ? "收起来源"
+            : "Hide sources"
+          : zh
+            ? "来源"
+            : "Sources"}
+      </button>
+      {expanded ? (
+        <div className="memory-provenance-panel">
+          {error ? <p className="settings-error">{error}</p> : null}
+          {!provenance && !error ? (
+            <p className="text-faint">{zh ? "正在读取…" : "Loading…"}</p>
+          ) : null}
+          {provenance?.sources.map((source) => (
+            <div className="memory-source-row" key={source.id}>
+              <div>
+                <strong>{sourceKindLabel(source.sourceKind)}</strong>
+                <span>{sourceTitleLabel(source)}</span>
+                <small>
+                  {zh ? "批准于" : "Admitted"} {source.admittedAt.slice(0, 10)}
+                  {source.excluded
+                    ? ` · ${zh ? "已排除,以后不再学习" : "excluded from future learning"}`
+                    : ""}
+                </small>
+              </div>
+              {source.sourceKind === "conversation" && source.sourceId ? (
+                <div className="memory-source-actions">
+                  {source.available ? (
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        onOpenConversation(
+                          source.sourceId!,
+                          source.sourceMessageId ?? undefined,
+                        )
+                      }
+                      type="button"
+                    >
+                      {zh ? "查看原处" : "View source"}
+                    </button>
+                  ) : null}
+                  {source.available ? (
+                    <button
+                      className="text-button"
+                      disabled={busy}
+                      onClick={() =>
+                        void setExcluded(source.sourceId!, !source.excluded)
+                      }
+                      type="button"
+                    >
+                      {source.excluded
+                        ? zh
+                          ? "允许以后学习"
+                          : "Allow future learning"
+                        : zh
+                          ? "以后不从这里学"
+                          : "Exclude future learning"}
+                    </button>
+                  ) : null}
+                  {source.available ? (
+                    <button
+                      className="text-button danger"
+                      disabled={busy}
+                      onClick={() => void showForgetPreview(source.sourceId!)}
+                      type="button"
+                    >
+                      {zh ? "预览忘掉内容" : "Preview forget"}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
+          {preview ? (
+            <div className="memory-forget-preview" role="status">
+              <strong>
+                {zh
+                  ? `从「${preview.conversationTitle}」可识别出 ${preview.items.length} 条 Memory`
+                  : `${preview.items.length} Memory item(s) trace to “${preview.conversationTitle}”`}
+              </strong>
+              {preview.items.length === 0 ? (
+                <p className="text-faint">
+                  {zh
+                    ? "没有可识别的衍生 Memory。"
+                    : "No derived Memory is identifiable."}
+                </p>
+              ) : (
+                <ul>
+                  {preview.items.map((item) => (
+                    <li key={`${item.memoryKind}:${item.memoryId}`}>
+                      <span>{item.title}</span>
+                      <small>
+                        {item.outcome === "forget"
+                          ? zh
+                            ? "会从当前 Memory 移除"
+                            : "will leave current Memory"
+                          : item.reason === "independent_source"
+                            ? zh
+                              ? "保留:还有独立来源"
+                              : "kept: another source remains"
+                            : zh
+                              ? "保留:旧来源无法确认"
+                              : "kept: legacy source is unavailable"}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="modal-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => setPreview(null)}
+                  type="button"
+                >
+                  {zh ? "取消" : "Cancel"}
+                </button>
+                <button
+                  className="primary-button danger"
+                  disabled={busy || preview.forgettableCount === 0}
+                  onClick={() => void confirmForget()}
+                  type="button"
+                >
+                  {zh
+                    ? `忘掉 ${preview.forgettableCount} 条`
+                    : `Forget ${preview.forgettableCount}`}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FactsSection({
+  onOpenConversation,
+}: {
+  onOpenConversation: (conversationId: string, messageId?: string) => void;
+}) {
   const { lang } = useI18n();
   const zh = lang === "zh";
   const [facts, setFacts] = useState<FactRow[]>([]);
@@ -18039,6 +18327,12 @@ function FactsSection() {
                   {zh ? "忘掉" : "Forget"}
                 </button>
               </div>
+              <MemorySources
+                memoryId={fact.id}
+                memoryKind="fact"
+                onMemoryChanged={load}
+                onOpenConversation={onOpenConversation}
+              />
               {history[fact.slot] ? (
                 <ol className="fact-history">
                   {history[fact.slot]?.map((old) => (
@@ -18323,10 +18617,12 @@ function VaenyxMeLedger({
 
 function VaenyxMePanel({
   ownerName,
+  onOpenConversation,
   onProfileRefresh,
   profile,
 }: {
   ownerName: string;
+  onOpenConversation: (conversationId: string, messageId?: string) => void;
   onProfileRefresh: () => Promise<void>;
   profile: Workspace["vaenyxMe"];
 }) {
@@ -18527,7 +18823,7 @@ function VaenyxMePanel({
             </button>
           </div>
         </div>
-        <FactsSection />
+        <FactsSection onOpenConversation={onOpenConversation} />
         <div className="vaenyx-me-grid">
           {items.map((item) => {
             const state = vaenyxMeState(item);
@@ -18552,6 +18848,14 @@ function VaenyxMePanel({
                     <dd>{item.evidence ?? "Not learned yet."}</dd>
                   </div>
                 </dl>
+                {item.status === "approved" ? (
+                  <MemorySources
+                    memoryId={item.id}
+                    memoryKind="profile"
+                    onMemoryChanged={onProfileRefresh}
+                    onOpenConversation={onOpenConversation}
+                  />
+                ) : null}
               </article>
             );
           })}
@@ -25972,14 +26276,29 @@ function SidebarThreadTree({
     status: VaenyxThread["status"],
   ) => void;
   onBulkArchive: (threads: VaenyxThread[]) => Promise<boolean>;
-  onBulkDelete: (threads: VaenyxThread[]) => void;
+  onBulkDelete: (
+    threads: VaenyxThread[],
+    memoryAction: "forget" | "keep",
+    previews: ConversationForgetPreview[],
+  ) => Promise<boolean>;
   onNewChatInProject: (projectId: string) => void;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [pickedArchived, setPickedArchived] = useState<Set<string>>(new Set());
   // Deleting archived chats is the one destructive act here — two clicks.
   const [confirmArchiveDelete, setConfirmArchiveDelete] = useState(false);
+  const [deleteThreadsPending, setDeleteThreadsPending] = useState<
+    VaenyxThread[]
+  >([]);
+  const [deletePreviews, setDeletePreviews] = useState<
+    ConversationForgetPreview[]
+  >([]);
+  const [deleteMemoryAction, setDeleteMemoryAction] = useState<
+    "forget" | "keep" | null
+  >(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // What this session has already marked read on the server, so the dot goes
   // out at once rather than at the next workspace refresh.
   const [justSeen, setJustSeen] = useState<Record<string, string>>({});
@@ -26053,6 +26372,38 @@ function SidebarThreadTree({
       thread.projectId === null || thread.projectId === GENERAL_PROJECT_ID,
   );
 
+  async function beginDeleteReview(threads: VaenyxThread[]) {
+    const chats = threads.filter(
+      (thread) => thread.kind === "chat" && thread.conversationId,
+    );
+    if (chats.length === 0) return;
+    setDeleteThreadsPending(chats);
+    setDeletePreviews([]);
+    setDeleteMemoryAction(null);
+    setDeleteError(null);
+    setDeleteLoading(true);
+    try {
+      const previews = await Promise.all(
+        chats.map((thread) =>
+          previewAskVaenyxConversationDelete(thread.conversationId!),
+        ),
+      );
+      setDeletePreviews(previews);
+      setArchiveOpen(false);
+      setConfirmArchiveDelete(false);
+    } catch (nextError) {
+      setDeleteError(
+        nextError instanceof Error
+          ? nextError.message
+          : lang === "zh"
+            ? "没能准备删除预览。"
+            : "The deletion preview could not be prepared.",
+      );
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
   function renderThreadItems(threads: VaenyxThread[], emptyLabel: string) {
     return (
       <ThreadList
@@ -26063,7 +26414,7 @@ function SidebarThreadTree({
         onUpdateThreadDetails={onUpdateThreadDetails}
         onSetThreadStatus={onSetThreadStatus}
         onBulkArchive={onBulkArchive}
-        onBulkDelete={onBulkDelete}
+        onBulkDelete={(threads) => void beginDeleteReview(threads)}
         projects={workspace.projects}
         selectedThreadId={selectedThreadId}
         tasks={workspace.tasks}
@@ -26162,6 +26513,11 @@ function SidebarThreadTree({
           </button>
         </div>
       ) : null}
+      {deleteError &&
+      deleteThreadsPending.length > 0 &&
+      deletePreviews.length === 0 ? (
+        <p className="settings-error thread-delete-error">{deleteError}</p>
+      ) : null}
       {archiveOpen ? (
         <Modal
           onClose={() => {
@@ -26239,7 +26595,7 @@ function SidebarThreadTree({
                   className="primary-button danger"
                   disabled={pickedArchived.size === 0}
                   onClick={() => {
-                    onBulkDelete(
+                    void beginDeleteReview(
                       archivedThreads.filter((thread) =>
                         pickedArchived.has(thread.id),
                       ),
@@ -26261,6 +26617,155 @@ function SidebarThreadTree({
                   {t("threads.bulk.delete")}
                 </button>
               )}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+      {deleteThreadsPending.length > 0 && deletePreviews.length > 0 ? (
+        <Modal
+          onClose={() => {
+            if (deleteLoading) return;
+            setDeleteThreadsPending([]);
+            setDeletePreviews([]);
+            setDeleteMemoryAction(null);
+            setDeleteError(null);
+          }}
+          title={
+            lang === "zh" ? "永久删除对话" : "Permanently delete Conversations"
+          }
+        >
+          <div className="conversation-delete-choice">
+            <p>
+              {lang === "zh"
+                ? `将永久删除 ${deleteThreadsPending.length} 个对话。先决定这些对话已经教给 Vaenyx 的内容怎么办。`
+                : `${deleteThreadsPending.length} Conversation(s) will be permanently deleted. First decide what happens to Memory learned from them.`}
+            </p>
+            <div className="conversation-delete-options" role="radiogroup">
+              <label
+                className={deleteMemoryAction === "keep" ? "selected" : ""}
+              >
+                <input
+                  checked={deleteMemoryAction === "keep"}
+                  name="delete-memory-action"
+                  onChange={() => setDeleteMemoryAction("keep")}
+                  type="radio"
+                />
+                <strong>
+                  {lang === "zh" ? "只删除对话" : "Delete Conversations only"}
+                </strong>
+                <span>
+                  {lang === "zh"
+                    ? "保留已经批准的 Memory；来源以后会显示为不可用。"
+                    : "Keep approved Memory; its source will later show as unavailable."}
+                </span>
+              </label>
+              <label
+                className={deleteMemoryAction === "forget" ? "selected" : ""}
+              >
+                <input
+                  checked={deleteMemoryAction === "forget"}
+                  name="delete-memory-action"
+                  onChange={() => setDeleteMemoryAction("forget")}
+                  type="radio"
+                />
+                <strong>
+                  {lang === "zh"
+                    ? "删除对话并忘掉可识别的 Memory"
+                    : "Delete and forget identifiable Memory"}
+                </strong>
+                <span>
+                  {lang === "zh"
+                    ? "只有完全由所选对话支持的条目会离开当前 Memory。"
+                    : "Only items fully accounted for by the selected Conversations leave current Memory."}
+                </span>
+              </label>
+            </div>
+            <div className="conversation-delete-impact">
+              <strong>{lang === "zh" ? "影响预览" : "Impact preview"}</strong>
+              <ul>
+                {deletePreviews.flatMap((preview) =>
+                  preview.items.map((item) => (
+                    <li
+                      key={`${preview.conversationId}:${item.memoryKind}:${item.memoryId}`}
+                    >
+                      <span>{item.title}</span>
+                      <small>
+                        {item.outcome === "forget"
+                          ? lang === "zh"
+                            ? "选第二项时会忘掉"
+                            : "forgotten with the second choice"
+                          : item.reason === "independent_source"
+                            ? lang === "zh"
+                              ? "保留:还有独立来源"
+                              : "kept: another source remains"
+                            : lang === "zh"
+                              ? "保留:旧来源无法确认"
+                              : "kept: legacy source unavailable"}
+                      </small>
+                    </li>
+                  )),
+                )}
+              </ul>
+              {deletePreviews.every((preview) => preview.items.length === 0) ? (
+                <p className="text-faint">
+                  {lang === "zh"
+                    ? "没有可识别的衍生 Memory。"
+                    : "No identifiable derived Memory was found."}
+                </p>
+              ) : null}
+            </div>
+            {deleteError ? (
+              <p className="settings-error">{deleteError}</p>
+            ) : null}
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                disabled={deleteLoading}
+                onClick={() => {
+                  setDeleteThreadsPending([]);
+                  setDeletePreviews([]);
+                  setDeleteMemoryAction(null);
+                }}
+                type="button"
+              >
+                {lang === "zh" ? "取消" : "Cancel"}
+              </button>
+              <button
+                className="primary-button danger"
+                disabled={!deleteMemoryAction || deleteLoading}
+                onClick={() => {
+                  if (!deleteMemoryAction) return;
+                  setDeleteLoading(true);
+                  setDeleteError(null);
+                  void onBulkDelete(
+                    deleteThreadsPending,
+                    deleteMemoryAction,
+                    deletePreviews,
+                  ).then((complete) => {
+                    setDeleteLoading(false);
+                    if (complete) {
+                      setDeleteThreadsPending([]);
+                      setDeletePreviews([]);
+                      setDeleteMemoryAction(null);
+                    } else {
+                      setDeleteError(
+                        lang === "zh"
+                          ? "有对话没有删除。请重新打开预览再试。"
+                          : "A Conversation was not deleted. Reopen the preview and try again.",
+                      );
+                    }
+                  });
+                }}
+                type="button"
+              >
+                {deleteLoading
+                  ? lang === "zh"
+                    ? "正在删除…"
+                    : "Deleting…"
+                  : lang === "zh"
+                    ? "永久删除"
+                    : "Delete permanently"}
+              </button>
             </div>
           </div>
         </Modal>
@@ -26926,34 +27431,38 @@ function VaenyxWorkspace({
     return true;
   }
 
-  // Bulk delete: this one asks first, because it cannot be undone and the
-  // whole point of selecting several is that it is easy to select one too many.
-  async function deleteThreads(threads: VaenyxThread[]): Promise<void> {
+  async function deleteThreads(
+    threads: VaenyxThread[],
+    memoryAction: "forget" | "keep",
+    previews: ConversationForgetPreview[],
+  ): Promise<boolean> {
     const chats = threads.filter(
       (thread) => thread.kind === "chat" && thread.conversationId,
     );
-    if (chats.length === 0) return;
-    const question =
-      lang === "zh"
-        ? `删除 ${chats.length} 个对话?这个动作无法撤销。`
-        : `Delete ${chats.length} conversation(s)? This cannot be undone.`;
-    if (!window.confirm(question)) return;
+    if (chats.length === 0) return true;
+    const deletedIds = new Set<string>();
     for (const thread of chats) {
       try {
         if (thread.conversationId) {
-          await deleteAskVaenyxConversation(thread.conversationId);
+          const preview = previews.find(
+            (candidate) => candidate.conversationId === thread.conversationId,
+          );
+          if (!preview) continue;
+          await deleteAskVaenyxConversation(thread.conversationId, {
+            memoryAction,
+            previewRevision: preview.revision,
+          });
+          deletedIds.add(thread.conversationId);
         }
       } catch {
         // Keep going: one failure should not strand the rest.
       }
     }
     setAskVaenyxConversations((current) =>
-      current.filter(
-        (conversation) =>
-          !chats.some((thread) => thread.conversationId === conversation.id),
-      ),
+      current.filter((conversation) => !deletedIds.has(conversation.id)),
     );
     await refreshWorkspace();
+    return deletedIds.size === chats.length;
   }
 
   function openThreadTask(
@@ -27237,7 +27746,7 @@ function VaenyxWorkspace({
               void setWorkspaceThreadStatus(thread, status)
             }
             onBulkArchive={archiveThreads}
-            onBulkDelete={(threads) => void deleteThreads(threads)}
+            onBulkDelete={deleteThreads}
           />
         </nav>
 
@@ -27498,6 +28007,9 @@ function VaenyxWorkspace({
           />
         ) : screen === "vaenyx-me" ? (
           <VaenyxMePanel
+            onOpenConversation={(conversationId, messageId) =>
+              openSourceConversation(conversationId, undefined, messageId)
+            }
             onProfileRefresh={async () =>
               onWorkspaceChange(await fetchWorkspace())
             }
