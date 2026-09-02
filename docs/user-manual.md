@@ -116,6 +116,12 @@ Read this inside the app: **Settings → Manual**.
 - **Enter sends; Shift+Enter makes a new line** — the usual chat convention.
   While typing Chinese, Enter picks the candidate word and never fires the
   message. On a phone, the Send button is the send.
+- **Answer a decision with one tap** — when Vaenyx genuinely needs your choice,
+  the reply may show two or more large answer buttons. Tap one, type your own
+  answer, or press **Skip**. The first answer is the recorded one even after a
+  reload or on another device; a double tap cannot submit it twice. Skip stays
+  visibly skipped and is never treated as approval. Any action that normally
+  needs confirmation still needs that confirmation.
 - **Speak instead of typing** — the microphone button. Needs the **Hearing** row
   switched on with an engine (Settings → AI Settings → Capabilities).
 - **Hear the answer** — the ▶ button at the bottom-right of any reply. It reads

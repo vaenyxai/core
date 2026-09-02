@@ -35,6 +35,7 @@ import type {
   CreateAskVaenyxConversationRequest,
   CreateAskVaenyxMessageRequest,
   CreateAskVaenyxMessageResponse,
+  ResolveStructuredQuestionRequest,
   CreateAppProfileRequest,
   CreateAppProfileResponse,
   CreateProjectMemoryRequest,
@@ -661,6 +662,17 @@ export function fetchAskVaenyxMessages(
 ): Promise<AskVaenyxMessage[]> {
   return requestJson<AskVaenyxMessage[]>(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+  );
+}
+
+export function resolveStructuredQuestion(
+  conversationId: string,
+  questionId: string,
+  resolution: ResolveStructuredQuestionRequest,
+): Promise<CreateAskVaenyxMessageResponse> {
+  return requestJson<CreateAskVaenyxMessageResponse>(
+    `/v1/ask-vaenyx/conversations/${conversationId}/questions/${questionId}/resolve`,
+    { method: "POST", body: JSON.stringify(resolution) },
   );
 }
 

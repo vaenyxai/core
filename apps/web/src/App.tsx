@@ -26,6 +26,7 @@ import type {
   SkillImportPreviewResponse,
   AskVaenyxConversation,
   AskVaenyxMessage,
+  ResolveStructuredQuestionRequest,
   ConversationSearchHighlight,
   ConversationSearchResult,
   ImageAnnotationItem,
@@ -93,6 +94,7 @@ import {
   fetchAskVaenyxConversations,
   fetchAskVaenyxMessages,
   searchConversations,
+  resolveStructuredQuestion,
   fetchAppProfiles,
   fetchAuditEvents,
   draftMethod,
@@ -296,6 +298,11 @@ import {
   type ComponentBootProgress,
 } from "./api.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
+import {
+  StructuredQuestionCard,
+  questionPart,
+  visibleMessageContent,
+} from "./structured-question.js";
 import { setToastListener, showErrorToast, type ToastTone } from "./toast.js";
 import { useI18n, type Lang } from "./i18n.js";
 import {
@@ -6272,6 +6279,7 @@ function AskVaenyxPanel({
   const [activeConversationId, setActiveConversationId] = useState<
     string | null
   >(conversations[0]?.id ?? null);
+  const activeConversationIdRef = useRef(activeConversationId);
   const [messages, setMessages] = useState<AskVaenyxMessage[]>([]);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
@@ -6383,6 +6391,9 @@ function AskVaenyxPanel({
   const [loadingTaskMessages, setLoadingTaskMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendingTaskMessage, setSendingTaskMessage] = useState(false);
+  const [resolvingQuestionIds, setResolvingQuestionIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [error, setError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const taskEndRef = useRef<HTMLDivElement | null>(null);
@@ -6419,6 +6430,70 @@ function AskVaenyxPanel({
     } finally {
       setLoadingMessages(false);
     }
+  }
+
+  async function answerStructuredQuestion(
+    message: AskVaenyxMessage,
+    questionId: string,
+    resolution: ResolveStructuredQuestionRequest,
+  ): Promise<void> {
+    setResolvingQuestionIds((current) => new Set(current).add(questionId));
+    setError(null);
+    try {
+      const response = await resolveStructuredQuestion(
+        message.conversationId,
+        questionId,
+        resolution,
+      );
+      const fresh = await fetchAskVaenyxMessages(message.conversationId);
+      if (activeConversationIdRef.current === message.conversationId) {
+        setMessages(fresh);
+      }
+      setTaskMessages((current) =>
+        current.some(
+          (candidate) => candidate.conversationId === message.conversationId,
+        )
+          ? fresh
+          : current,
+      );
+      if (
+        conversations.some(
+          (conversation) => conversation.id === response.conversation.id,
+        )
+      ) {
+        onConversationsChange(
+          upsertConversation(conversations, response.conversation),
+        );
+      }
+      void onWorkspaceRefresh();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Vaenyx could not send that answer.",
+      );
+      throw nextError;
+    } finally {
+      setResolvingQuestionIds((current) => {
+        const next = new Set(current);
+        next.delete(questionId);
+        return next;
+      });
+    }
+  }
+
+  function renderStructuredQuestion(message: AskVaenyxMessage): ReactNode {
+    const part = questionPart(message);
+    if (message.role === "owner" || !part) return null;
+    return (
+      <StructuredQuestionCard
+        busy={resolvingQuestionIds.has(part.questionId)}
+        onResolve={(resolution) =>
+          answerStructuredQuestion(message, part.questionId, resolution)
+        }
+        part={part}
+      />
+    );
   }
 
   useEffect(() => {
@@ -6568,7 +6643,6 @@ function AskVaenyxPanel({
   // the open conversation so the real answer replaces any stale error bubble.
   // Runs once immediately and once after 2.5s: on resume, the dead stream's
   // rejection may not have settled yet (sending still true on the first pass).
-  const activeConversationIdRef = useRef(activeConversationId);
   const sendingRef = useRef(sending);
   const sendingTaskRef = useRef(sendingTaskMessage);
   useEffect(() => {
@@ -6909,6 +6983,40 @@ function AskVaenyxPanel({
     streamThinking,
     view,
   ]);
+
+  // A structured card is much taller than the empty streaming bubble it
+  // replaces. Message count does not change at that handoff, so the ordinary
+  // arrival anchor above cannot see it; anchor on the part's own state instead
+  // or its buttons can land behind the sticky composer.
+  const latestChatQuestion = [...messages]
+    .reverse()
+    .map(questionPart)
+    .find((part) => part !== null);
+  const latestTaskQuestion = [...taskMessages]
+    .reverse()
+    .map(questionPart)
+    .find((part) => part !== null);
+  const latestChatQuestionKey = latestChatQuestion
+    ? `${latestChatQuestion.questionId}:${latestChatQuestion.state.status}`
+    : "";
+  const latestTaskQuestionKey = latestTaskQuestion
+    ? `${latestTaskQuestion.questionId}:${latestTaskQuestion.state.status}`
+    : "";
+  useEffect(() => {
+    const target =
+      view === "chat"
+        ? latestChatQuestionKey
+          ? chatEndRef.current
+          : null
+        : view === "task" && latestTaskQuestionKey
+          ? taskEndRef.current
+          : null;
+    if (!target) return undefined;
+    const frame = window.requestAnimationFrame(() =>
+      target.scrollIntoView({ block: "end" }),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, [latestChatQuestionKey, latestTaskQuestionKey, view]);
 
   // streamStatus/streamThinking are in here on purpose: the working line ("Joining
   // the dots…") appears AFTER the send flips, so anchoring only on the send left
@@ -10026,8 +10134,11 @@ This conversation is its home — feed it something to try it, and ask for chang
                       {node.message.role === "owner" ? (
                         <p>{node.message.content}</p>
                       ) : (
-                        <MarkdownMessage content={node.message.content} />
+                        <MarkdownMessage
+                          content={visibleMessageContent(node.message)}
+                        />
                       )}
+                      {renderStructuredQuestion(node.message)}
                     </article>
                   ) : node.kind === "journal" ? (
                     <article
@@ -10181,7 +10292,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                 ) : message.role === "owner" ? (
                   <p>{message.content}</p>
                 ) : message.content ? (
-                  <MarkdownMessage content={message.content} />
+                  <MarkdownMessage content={visibleMessageContent(message)} />
                 ) : (
                   <ThinkingIndicator
                     label={streamStatus ? statusLabel(streamStatus) : null}
@@ -10189,6 +10300,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                     thinking={Boolean(streamThinking)}
                   />
                 )}
+                {renderStructuredQuestion(message)}
                 {message.webSearchUsed ? (
                   <span className="web-search-chip">Web search used</span>
                 ) : null}
@@ -10829,7 +10941,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                   {message.role === "owner" ? (
                     <p>{message.content}</p>
                   ) : message.content ? (
-                    <MarkdownMessage content={message.content} />
+                    <MarkdownMessage content={visibleMessageContent(message)} />
                   ) : (
                     <ThinkingIndicator
                       label={streamStatus ? statusLabel(streamStatus) : null}
@@ -10837,6 +10949,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                       thinking={Boolean(streamThinking)}
                     />
                   )}
+                  {renderStructuredQuestion(message)}
                   {message.webSearchUsed ? (
                     <span className="web-search-chip">Web search used</span>
                   ) : null}

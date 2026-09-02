@@ -86,6 +86,7 @@ import {
   CreateAskVaenyxConversationRequestSchema,
   CreateAskVaenyxMessageRequestSchema,
   CreateAskVaenyxMessageResponseSchema,
+  ResolveStructuredQuestionRequestSchema,
   CreateProjectMemoryRequestSchema,
   CreateProjectRequestSchema,
   CreateTaskRequestSchema,
@@ -178,6 +179,7 @@ import {
   type ChatConnectionTestRequest,
   type CreateAskVaenyxConversationRequest,
   type CreateAskVaenyxMessageRequest,
+  type ResolveStructuredQuestionRequest,
   type CreateAppProfileRequest,
   type CreateProjectMemoryRequest,
   type CreateProjectRequest,
@@ -572,6 +574,7 @@ import {
   conversationHasPhoto,
   createAskVaenyxConversation,
   createAskVaenyxMessage,
+  resolveAskVaenyxStructuredQuestion,
   deleteAskVaenyxConversation,
   listAskVaenyxConversations,
   listAskVaenyxMessages,
@@ -3752,6 +3755,79 @@ export async function registerGatewayRoutes(
           return reply.code(404).send({
             error: "Vaenyx Chat conversation not found.",
           });
+        }
+        throw error;
+      }
+    },
+  );
+
+  app.post<{
+    Body: ResolveStructuredQuestionRequest;
+    Params: { id: string; questionId: string };
+  }>(
+    "/v1/ask-vaenyx/conversations/:id/questions/:questionId/resolve",
+    {
+      schema: {
+        params: Type.Object(
+          {
+            id: Type.String({ minLength: 1 }),
+            questionId: Type.String({ minLength: 1 }),
+          },
+          { additionalProperties: false },
+        ),
+        body: ResolveStructuredQuestionRequestSchema,
+        response: {
+          200: CreateAskVaenyxMessageResponseSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      try {
+        const response = await resolveAskVaenyxStructuredQuestion(
+          context.database,
+          request.params.id,
+          owner.id,
+          owner.modeId,
+          request.params.questionId,
+          request.body,
+          {
+            dataDirectory: context.config.dataDirectory,
+            secretsDirectory: context.config.secretsDirectory,
+          },
+        );
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: "ask_vaenyx.structured_question.resolve",
+          decision: "allowed",
+          reason:
+            request.body.kind === "skip"
+              ? "Owner explicitly skipped a structured question."
+              : "Owner answered a structured question through the normal chat path.",
+          resourceType: "ask_vaenyx_structured_question",
+          resourceId: request.params.questionId,
+        });
+        return response;
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "STRUCTURED_QUESTION_NOT_FOUND"
+        ) {
+          return reply.code(404).send({ error: "Question not found." });
+        }
+        if (
+          error instanceof Error &&
+          error.message === "STRUCTURED_QUESTION_INVALID_RESOLUTION"
+        ) {
+          return reply.code(400).send({ error: "That answer is not valid." });
         }
         throw error;
       }

@@ -16,6 +16,7 @@ import {
   CreateVaenyxMeCandidateRequestSchema,
   CatalogueInstallPreviewSchema,
   ConversationSearchResponseSchema,
+  ResolveStructuredQuestionRequestSchema,
   RejectVaenyxMeCandidateRequestSchema,
   UpdateVaenyxThreadProjectRequestSchema,
   UpdateVaenyxThreadStatusRequestSchema,
@@ -156,6 +157,46 @@ describe("M1 contracts", () => {
         createdAt: "2026-06-08T00:00:01.000Z",
       }),
     ).toBe(true);
+    expect(
+      Value.Check(AskVaenyxMessageSchema, {
+        id: "question-message",
+        conversationId: "conversation-id",
+        role: "assistant",
+        content: "Which route?\n- Scenic\n- Fast",
+        status: "completed",
+        webSearchUsed: false,
+        createdAt: "2026-06-08T00:00:02.000Z",
+        parts: [
+          {
+            type: "structured-question",
+            version: 1,
+            questionId: "question-id",
+            prompt: "Which route?",
+            helpText: null,
+            options: [
+              { id: "option-1", label: "Scenic" },
+              { id: "option-2", label: "Fast" },
+            ],
+            allowFreeText: true,
+            allowSkip: true,
+            plainTextFallback: "Which route?\n- Scenic\n- Fast",
+            state: { status: "open" },
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ResolveStructuredQuestionRequestSchema, {
+        kind: "free_text",
+        text: "Take the train",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(ResolveStructuredQuestionRequestSchema, {
+        kind: "free_text",
+        text: "",
+      }),
+    ).toBe(false);
   });
 
   it("accepts safe local Conversation search results", () => {

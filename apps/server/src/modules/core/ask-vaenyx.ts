@@ -9,6 +9,7 @@ import type {
   CreateAskVaenyxMessageResponse,
   ImageAnnotationItem,
   ProjectMemory,
+  ResolveStructuredQuestionRequest,
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
@@ -86,6 +87,18 @@ import {
   touchChatThread,
   updateChatThreadTitle,
 } from "./threads.js";
+import {
+  STRUCTURED_QUESTION_PROTOCOL_INSTRUCTION,
+  claimStructuredQuestionResolution,
+  extractStructuredQuestion,
+  insertStructuredQuestion,
+  linkStructuredQuestionReply,
+  structuredQuestionAllowance,
+  toStructuredQuestionPart,
+  type StructuredQuestionClaim,
+  type StructuredQuestionDraft,
+  type StructuredQuestionJoinedRow,
+} from "./structured-questions.js";
 
 interface AskVaenyxConversationRow {
   id: string;
@@ -98,7 +111,7 @@ interface AskVaenyxConversationRow {
   model_name: string | null;
 }
 
-interface AskVaenyxMessageRow {
+interface AskVaenyxMessageRow extends StructuredQuestionJoinedRow {
   id: string;
   conversation_id: string;
   role: "owner" | "assistant";
@@ -423,6 +436,7 @@ function toConversation(row: AskVaenyxConversationRow): AskVaenyxConversation {
 }
 
 function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
+  const structuredQuestion = toStructuredQuestionPart(row);
   return {
     id: row.id,
     conversationId: row.conversation_id,
@@ -439,6 +453,7 @@ function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
     documentId: row.document_id ?? null,
     documentName: row.document_name ?? null,
     documentPages: row.document_pages ?? null,
+    ...(structuredQuestion ? { parts: [structuredQuestion] } : {}),
   };
 }
 
@@ -842,9 +857,23 @@ export function listAskVaenyxMessages(
       `SELECT m.id, m.conversation_id, m.role, m.content, m.status,
               m.web_search_used, m.created_at, m.voice, m.audio_id, m.image_id,
               m.image_prompt, m.document_id, m.document_name, m.document_pages,
-              a.items AS image_annotations
+              a.items AS image_annotations,
+              q.id AS question_id, q.version AS question_version,
+              q.prompt AS question_prompt, q.help_text AS question_help_text,
+              q.options_json AS question_options_json,
+              q.allow_free_text AS question_allow_free_text,
+              q.allow_skip AS question_allow_skip,
+              q.plain_text_fallback AS question_plain_text_fallback,
+              q.resolution_kind AS question_resolution_kind,
+              q.resolution_option_id AS question_resolution_option_id,
+              q.resolution_text AS question_resolution_text,
+              q.resolution_display_text AS question_resolution_display_text,
+              q.resolved_at AS question_resolved_at,
+              q.owner_message_id AS question_owner_message_id
        FROM ask_vaenyx_messages m
        LEFT JOIN image_annotations a ON a.image_id = m.image_id
+       LEFT JOIN ask_vaenyx_structured_questions q
+         ON q.assistant_message_id = m.id
        WHERE m.conversation_id = ?
        ORDER BY m.created_at ASC`,
     )
@@ -906,6 +935,10 @@ export interface CreateAskVaenyxMessageOptions {
   // chat model cannot see images: the vision model describes it and the
   // description rides along as context.
   secretsDirectory?: string;
+  // H-009: an accepted structured answer is inserted atomically with the
+  // question resolution before generation starts. Reuse that canonical Owner
+  // row instead of inserting a second message here.
+  structuredQuestionClaim?: StructuredQuestionClaim;
 }
 
 // Insert a Vaenyx-authored status note into a conversation (e.g. "✔ Routine X
@@ -954,16 +987,20 @@ export async function createAskVaenyxMessage(
   options?: CreateAskVaenyxMessageOptions,
 ): Promise<CreateAskVaenyxMessageResponse> {
   const conversation = getConversationRow(database, conversationId, ownerId);
-  const now = new Date().toISOString();
-  const ownerMessageId = randomUUID();
+  const now =
+    options?.structuredQuestionClaim?.createdAt ?? new Date().toISOString();
+  const ownerMessageId =
+    options?.structuredQuestionClaim?.ownerMessageId ?? randomUUID();
   // A photo may BE the message (Oskar, 2026-08-31: 能否把照片作为我的对话
   // 输入). With no words and a photo attached, a small stand-in line becomes
   // the text — visible on the bubble, honest about what was asked, and every
   // downstream reader (title, history, the model) keeps working. No words and
   // no photo stays refused.
-  let trimmedContent = content.trim();
+  let trimmedContent =
+    options?.structuredQuestionClaim?.content ?? content.trim();
   if (!trimmedContent && options?.imageId) {
-    trimmedContent = pushLanguage() === "zh" ? "(看看这张照片)" : "(Look at this photo.)";
+    trimmedContent =
+      pushLanguage() === "zh" ? "(看看这张照片)" : "(Look at this photo.)";
   }
   if (!trimmedContent) {
     throw new Error("EMPTY_MESSAGE");
@@ -1064,25 +1101,27 @@ export async function createAskVaenyxMessage(
     }
   }
 
-  database.sqlite
-    .prepare(
-      `INSERT INTO ask_vaenyx_messages (
-        id, conversation_id, role, content, status, web_search_used, created_at,
-        voice, audio_id, image_id, document_id, document_name, document_pages
-      ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      ownerMessageId,
-      conversationId,
-      trimmedContent,
-      now,
-      options?.voiceAudioId ? 1 : 0,
-      options?.voiceAudioId ?? null,
-      options?.imageId ?? null,
-      options?.documentId ?? null,
-      options?.documentName ?? null,
-      documentPages,
-    );
+  if (!options?.structuredQuestionClaim) {
+    database.sqlite
+      .prepare(
+        `INSERT INTO ask_vaenyx_messages (
+          id, conversation_id, role, content, status, web_search_used, created_at,
+          voice, audio_id, image_id, document_id, document_name, document_pages
+        ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        ownerMessageId,
+        conversationId,
+        trimmedContent,
+        now,
+        options?.voiceAudioId ? 1 : 0,
+        options?.voiceAudioId ?? null,
+        options?.imageId ?? null,
+        options?.documentId ?? null,
+        options?.documentName ?? null,
+        documentPages,
+      );
+  }
 
   const firstExchange =
     conversation.message_count === 0 &&
@@ -1134,6 +1173,12 @@ export async function createAskVaenyxMessage(
   let webSearchUsed = false;
   let streamed = "";
   let generatedImageId: string | null = null;
+  let structuredQuestionDraft: StructuredQuestionDraft | null = null;
+  const structuredQuestion = structuredQuestionAllowance(
+    database,
+    conversationId,
+    options?.structuredQuestionClaim?.questionId,
+  );
   // The exact sentence that reached the image provider, stored with the reply
   // and shown beside the picture — F5's closing sentence promises it, and the
   // main model can word things the Owner never typed.
@@ -1145,6 +1190,19 @@ export async function createAskVaenyxMessage(
 
   const baseContext = getConversationProjectContext(database, conversationId);
   let projectContext = baseContext;
+  if (options?.structuredQuestionClaim) {
+    projectContext = [
+      projectContext,
+      "The latest Owner message resolves your structured question. It is one ordinary answer, not permission for any side effect or future action. If it says it was skipped, no answer was given: do not infer a choice or approval; use only a safe default or explain why you cannot proceed.",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  if (structuredQuestion.allowed) {
+    projectContext = [projectContext, STRUCTURED_QUESTION_PROTOCOL_INSTRUCTION]
+      .filter(Boolean)
+      .join("\n\n");
+  }
   // A mode may name its own assistant (spec §6): tell the model who it is
   // here, so the name in the UI and the voice in the replies agree.
   if (modeRow?.agent_name.trim()) {
@@ -1877,9 +1935,23 @@ export async function createAskVaenyxMessage(
         noteLang,
       );
     }
-    assistantContent = backupNote
-      ? `${result.answer}\n\n_${backupNote}_`
-      : result.answer;
+    const extractedQuestion = extractStructuredQuestion(result.answer);
+    structuredQuestionDraft = structuredQuestion.allowed
+      ? extractedQuestion.draft
+      : null;
+    if (structuredQuestionDraft && backupNote) {
+      const fallback = structuredQuestionDraft.plainTextFallback;
+      const beforeFallback = extractedQuestion.content
+        .slice(0, -fallback.length)
+        .trimEnd();
+      assistantContent = [beforeFallback, `_${backupNote}_`, fallback]
+        .filter(Boolean)
+        .join("\n\n");
+    } else {
+      assistantContent = backupNote
+        ? `${extractedQuestion.content}\n\n_${backupNote}_`
+        : extractedQuestion.content;
+    }
     assistantStatus = "completed";
     webSearchUsed = result.webSearchUsed;
   } catch (error) {
@@ -1914,26 +1986,54 @@ export async function createAskVaenyxMessage(
   const assistantMessageId = randomUUID();
   const completedAt = new Date().toISOString();
 
-  database.sqlite
-    .prepare(
-      `INSERT INTO ask_vaenyx_messages (
-        id, conversation_id, role, content, status, web_search_used, created_at,
-        voice, image_id, image_prompt
-      ) VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      assistantMessageId,
-      conversationId,
-      assistantContent,
-      assistantStatus,
-      webSearchUsed ? 1 : 0,
-      completedAt,
-      options?.voiceAudioId && assistantStatus === "completed" ? 1 : 0,
-      // A generated picture wins; otherwise the analysed photo comes back
-      // with the answer (marked), which is what the Owner is looking at.
-      generatedImageId ?? echoImageId,
-      generatedImageId ? sentImagePrompt : null,
-    );
+  database.sqlite.exec("BEGIN IMMEDIATE");
+  try {
+    database.sqlite
+      .prepare(
+        `INSERT INTO ask_vaenyx_messages (
+          id, conversation_id, role, content, status, web_search_used, created_at,
+          voice, image_id, image_prompt
+        ) VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        assistantMessageId,
+        conversationId,
+        assistantContent,
+        assistantStatus,
+        webSearchUsed ? 1 : 0,
+        completedAt,
+        options?.voiceAudioId && assistantStatus === "completed" ? 1 : 0,
+        // A generated picture wins; otherwise the analysed photo comes back
+        // with the answer (marked), which is what the Owner is looking at.
+        generatedImageId ?? echoImageId,
+        generatedImageId ? sentImagePrompt : null,
+      );
+    if (structuredQuestionDraft && assistantStatus === "completed") {
+      insertStructuredQuestion(database, {
+        id: randomUUID(),
+        conversationId,
+        assistantMessageId,
+        draft: structuredQuestionDraft,
+        loopDepth: structuredQuestion.loopDepth,
+        createdAt: completedAt,
+      });
+    }
+    if (options?.structuredQuestionClaim) {
+      linkStructuredQuestionReply(
+        database,
+        options.structuredQuestionClaim.questionId,
+        assistantMessageId,
+      );
+    }
+    database.sqlite.exec("COMMIT");
+  } catch (error) {
+    try {
+      database.sqlite.exec("ROLLBACK");
+    } catch {
+      // Preserve the write failure.
+    }
+    throw error;
+  }
 
   database.sqlite
     .prepare(
@@ -2121,4 +2221,60 @@ export async function createAskVaenyxMessage(
         message.id === ownerMessageId || message.id === assistantMessageId,
     ),
   };
+}
+
+// Resolve through the same authenticated Owner-message and model-generation
+// path as a typed chat turn. The claim writes the answer exactly once before
+// any model/tool work starts; a retry reads the canonical result and never
+// starts a second turn.
+export async function resolveAskVaenyxStructuredQuestion(
+  database: DatabaseHandle,
+  conversationId: string,
+  ownerId: string,
+  modeId: string | null,
+  questionId: string,
+  input: ResolveStructuredQuestionRequest,
+  options?: Pick<
+    CreateAskVaenyxMessageOptions,
+    "dataDirectory" | "secretsDirectory"
+  >,
+): Promise<CreateAskVaenyxMessageResponse> {
+  const claim = claimStructuredQuestionResolution(
+    database,
+    conversationId,
+    ownerId,
+    modeId,
+    questionId,
+    input,
+  );
+  if (!claim.accepted) {
+    const messages = listAskVaenyxMessages(
+      database,
+      conversationId,
+      ownerId,
+    ).filter(
+      (message) =>
+        message.id === claim.ownerMessageId ||
+        message.id === claim.existingReplyMessageId ||
+        message.parts?.some(
+          (part) =>
+            part.type === "structured-question" &&
+            part.questionId === questionId,
+        ),
+    );
+    return {
+      conversation: toConversation(
+        getConversationRow(database, conversationId, ownerId),
+      ),
+      messages,
+    };
+  }
+
+  return createAskVaenyxMessage(
+    database,
+    conversationId,
+    ownerId,
+    claim.content,
+    { ...options, structuredQuestionClaim: claim },
+  );
 }

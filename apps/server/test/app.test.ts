@@ -20,8 +20,12 @@ const temporaryDirectories: string[] = [];
 const originalCodexCommand = process.env.VAENYX_CODEX_COMMAND;
 
 function createTestConfig(): AppConfig {
-  const dataDirectory = mkdtempSync(resolve(tmpdir(), "vaenyx-test-"));
-  temporaryDirectories.push(dataDirectory);
+  // Production keeps userdata and config as siblings. Give every test the
+  // same isolated shape so app-language.ts never reads a shared
+  // %TEMP%\config\language.json left by another local instance or QA run.
+  const instanceDirectory = mkdtempSync(resolve(tmpdir(), "vaenyx-test-"));
+  const dataDirectory = resolve(instanceDirectory, "userdata");
+  temporaryDirectories.push(instanceDirectory);
 
   // The library is COPIED, never pointed at the repo's sample-library. Paths
   // that only ever read were safe to share; the moment one of them writes — a
@@ -149,9 +153,11 @@ lines.on("line", (line) => {
       });
     }
 
-    const answer = text.includes("First question") && text.includes("Follow up")
-      ? "Follow-up saw earlier context."
-      : "Vaenyx Chat answered with live context.";
+    const answer = text.includes("Need structured choice") && !text.includes("Scenic")
+      ? 'I need one decision.\\n\\n<!--VAENYX_QUESTION_V1:{"prompt":"Which route should I use?","helpText":"You can also type another route.","options":["Scenic","Fast"]}-->'
+      : text.includes("First question") && text.includes("Follow up")
+        ? "Follow-up saw earlier context."
+        : "Vaenyx Chat answered with live context.";
 
     for (const piece of answer.split(" ")) {
       send({
@@ -310,9 +316,7 @@ describe("Vaenyx Gateway foundation", () => {
     });
     expect(renewed.statusCode).toBe(200);
     expect(String(renewed.headers["set-cookie"])).toContain("vaenyx_session=");
-    expect(String(renewed.headers["set-cookie"])).toContain(
-      "Max-Age=31536000",
-    );
+    expect(String(renewed.headers["set-cookie"])).toContain("Max-Age=31536000");
 
     const verify = new DatabaseSync(config.databasePath, { readOnly: true });
     const row = verify
@@ -998,6 +1002,109 @@ describe("Vaenyx Gateway foundation", () => {
     });
     expect(unauthorized.statusCode).toBe(401);
 
+    await app.close();
+  });
+
+  it("persists and idempotently resolves structured questions", async () => {
+    process.env.VAENYX_CODEX_COMMAND = createFakeCodexCommand();
+    const config = createTestConfig();
+    let app = await buildApp(config);
+    const sessionCookie = await createOwnerAndSession(app);
+    const created = await app.inject({
+      method: "POST",
+      url: "/v1/ask-vaenyx/conversations",
+      headers: { cookie: sessionCookie },
+      payload: {},
+    });
+    const conversationId = created.json().id;
+    await app.inject({
+      method: "POST",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+      headers: { cookie: sessionCookie },
+      payload: { content: "Warm up" },
+    });
+    const asked = await app.inject({
+      method: "POST",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+      headers: { cookie: sessionCookie },
+      payload: { content: "Need structured choice" },
+    });
+    expect(asked.statusCode).toBe(200);
+    const questionMessage = asked
+      .json()
+      .messages.find(
+        (message: { role: string }) => message.role === "assistant",
+      );
+    const question = questionMessage.parts[0];
+    expect(questionMessage.content).not.toContain("VAENYX_QUESTION_V1");
+    expect(questionMessage.content).toContain("Other: write your own answer");
+    expect(question).toMatchObject({
+      type: "structured-question",
+      version: 1,
+      prompt: "Which route should I use?",
+      allowFreeText: true,
+      allowSkip: true,
+      state: { status: "open" },
+    });
+
+    const unauthorized = await app.inject({
+      method: "POST",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/questions/${question.questionId}/resolve`,
+      payload: { kind: "choice", optionId: "option-1" },
+    });
+    expect(unauthorized.statusCode).toBe(401);
+    const invalid = await app.inject({
+      method: "POST",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/questions/${question.questionId}/resolve`,
+      headers: { cookie: sessionCookie },
+      payload: { kind: "choice", optionId: "missing" },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const resolved = await app.inject({
+      method: "POST",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/questions/${question.questionId}/resolve`,
+      headers: { cookie: sessionCookie },
+      payload: { kind: "choice", optionId: "option-1" },
+    });
+    expect(resolved.statusCode).toBe(200);
+    expect(resolved.json().conversation.messageCount).toBe(6);
+    const duplicate = await app.inject({
+      method: "POST",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/questions/${question.questionId}/resolve`,
+      headers: { cookie: sessionCookie },
+      payload: { kind: "skip" },
+    });
+    expect(duplicate.statusCode).toBe(200);
+    expect(duplicate.json().conversation.messageCount).toBe(6);
+
+    await app.close();
+    app = await buildApp(config);
+    const afterRestart = await app.inject({
+      method: "GET",
+      url: `/v1/ask-vaenyx/conversations/${conversationId}/messages`,
+      headers: { cookie: sessionCookie },
+    });
+    expect(afterRestart.statusCode).toBe(200);
+    expect(
+      afterRestart
+        .json()
+        .filter(
+          (message: { role: string; content: string }) =>
+            message.role === "owner" && message.content === "Scenic",
+        ),
+    ).toHaveLength(1);
+    expect(
+      afterRestart
+        .json()
+        .find((message: { id: string }) => message.id === questionMessage.id)
+        .parts[0].state,
+    ).toMatchObject({
+      status: "resolved",
+      kind: "choice",
+      optionId: "option-1",
+      displayText: "Scenic",
+    });
     await app.close();
   });
 

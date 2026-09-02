@@ -290,6 +290,60 @@ export const AnnotateImageResponseSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const StructuredQuestionOptionSchema = Type.Object(
+  {
+    id: Type.String({ minLength: 1, maxLength: 100 }),
+    label: Type.String({ minLength: 1, maxLength: 120 }),
+  },
+  { additionalProperties: false },
+);
+
+export const StructuredQuestionStateSchema = Type.Union([
+  Type.Object(
+    { status: Type.Literal("open") },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      status: Type.Literal("resolved"),
+      kind: Type.Union([
+        Type.Literal("choice"),
+        Type.Literal("free_text"),
+        Type.Literal("skip"),
+      ]),
+      optionId: Type.Union([Type.String(), Type.Null()]),
+      text: Type.Union([Type.String(), Type.Null()]),
+      displayText: Type.String(),
+      resolvedAt: Type.String(),
+      ownerMessageId: Type.String(),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
+// Version 1 of the compact decision card that can ride on an assistant
+// message. `plainTextFallback` is also stored in message.content: clients that
+// predate parts still see the complete question and its answer in the normal
+// transcript.
+export const StructuredQuestionPartSchema = Type.Object(
+  {
+    type: Type.Literal("structured-question"),
+    version: Type.Literal(1),
+    questionId: Type.String(),
+    prompt: Type.String({ minLength: 1, maxLength: 500 }),
+    helpText: Type.Union([Type.String({ maxLength: 500 }), Type.Null()]),
+    options: Type.Array(StructuredQuestionOptionSchema, {
+      minItems: 2,
+      maxItems: 5,
+    }),
+    allowFreeText: Type.Boolean(),
+    allowSkip: Type.Boolean(),
+    plainTextFallback: Type.String(),
+    state: StructuredQuestionStateSchema,
+  },
+  { additionalProperties: false },
+);
+
 export const AskVaenyxMessageSchema = Type.Object(
   {
     id: Type.String(),
@@ -321,6 +375,7 @@ export const AskVaenyxMessageSchema = Type.Object(
     documentId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     documentName: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     documentPages: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
+    parts: Type.Optional(Type.Array(StructuredQuestionPartSchema)),
   },
   { additionalProperties: false },
 );
@@ -440,6 +495,19 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     documentId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     documentName: Type.Optional(Type.String({ maxLength: 200 })),
     documentAcknowledged: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
+export const ResolveStructuredQuestionRequestSchema = Type.Object(
+  {
+    kind: Type.Union([
+      Type.Literal("choice"),
+      Type.Literal("free_text"),
+      Type.Literal("skip"),
+    ]),
+    optionId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    text: Type.Optional(Type.String({ minLength: 1, maxLength: 1_000 })),
   },
   { additionalProperties: false },
 );
@@ -2926,6 +2994,15 @@ export type SetEngineChoiceRequest = Static<
 >;
 export type StopTurnRequest = Static<typeof StopTurnRequestSchema>;
 export type AskVaenyxMessage = Static<typeof AskVaenyxMessageSchema>;
+export type StructuredQuestionOption = Static<
+  typeof StructuredQuestionOptionSchema
+>;
+export type StructuredQuestionPart = Static<
+  typeof StructuredQuestionPartSchema
+>;
+export type ResolveStructuredQuestionRequest = Static<
+  typeof ResolveStructuredQuestionRequestSchema
+>;
 export type ConversationSearchHighlight = Static<
   typeof ConversationSearchHighlightSchema
 >;
