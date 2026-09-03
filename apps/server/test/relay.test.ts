@@ -5,7 +5,7 @@
 // was granted it), and a link may only point at a host the Owner listed.
 // Nothing here reaches a real subscription — the refusals happen before any
 // engine is asked, which is the whole point of testing them.
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
@@ -13,6 +13,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import { writeGlobalCapabilities } from "../src/modules/core/capabilities.js";
+import {
+  pictureSize,
+  probePdf,
+} from "../src/modules/core/capability-probe.js";
 import {
   DEFAULT_RELAY_CONFIG,
   assertRelayRateLimit,
@@ -25,6 +29,7 @@ import {
   runRelay,
   writeRelayConfig,
 } from "../src/modules/core/relay.js";
+import { renderRelayPdfPages } from "../src/modules/core/relay-pdf.js";
 import {
   normalizeSearchEvidence,
   normalizeSearchRunEvidence,
@@ -135,6 +140,7 @@ describe("the subscription door", () => {
               "text_analysis",
               "structured_output",
               "vision_analysis",
+              "document_analysis",
               "web_search",
             ],
       );
@@ -285,7 +291,7 @@ describe("the subscription door", () => {
     expect(claude?.models).toEqual([]);
   });
 
-  it("reports probe-backed availability and keeps unsupported distinct", () => {
+  it("reports every implemented capability separately from its connection state", () => {
     const database = createTestDatabase();
     recordRelayCapabilityProbe(
       database,
@@ -306,11 +312,27 @@ describe("the subscription door", () => {
       (status) => status.capability === "document_analysis",
     );
     expect(document).toMatchObject({
-      supported: false,
+      supported: true,
       available: false,
-      unavailable_reason: "FILE_TRANSPORT_NOT_IMPLEMENTED",
+      unavailable_reason: "NOT_CONNECTED",
     });
     expect(health.contract_version).toBe(2);
+  });
+
+  it("renders an OpenAI relay PDF into bounded local page images", async () => {
+    const directory = mkdtempSync(resolve(tmpdir(), "vaenyx-relay-pdf-test-"));
+    temporaryDirectories.push(directory);
+    const paths = await renderRelayPdfPages(
+      probePdf("VAENYX-PDF123"),
+      directory,
+    );
+    expect(paths).toHaveLength(1);
+    const size = pictureSize(readFileSync(paths[0] as string));
+    expect(size?.width).toBeGreaterThanOrEqual(300);
+    expect(size?.height).toBeGreaterThanOrEqual(200);
+    expect(Math.max(size?.width ?? 0, size?.height ?? 0)).toBeLessThanOrEqual(
+      1_800,
+    );
   });
 
   it("accepts only structured, valid, domain-filtered web evidence", () => {

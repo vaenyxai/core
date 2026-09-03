@@ -680,14 +680,19 @@ Read this inside the app: **Settings → Manual**.
 - **Test all capabilities** — runs real Subscription calls and lists each
   engine's current result. A failed or unbuilt ability stays grey with the
   reason; it is never presented as a provider outage. Web Search is green only
-  when the CLI returns structured, verifiable source URLs.
+  when the CLI returns structured, verifiable source URLs. Image tests use a
+  real 256-pixel colour picture. PDF tests print a fresh code inside the file
+  and pass only when the selected engine reads that code.
 - **A Token is not a Model Key** — this door takes Model Keys only. A Method or
   Routine Token from Library → Token knocking here is refused with its own
   answer (`RELAY_KEY_WRONG_KIND`), so you always know which of the two an app
   is holding. The two products never blur: Tokens live on the Tokens screen,
   Model Keys live here.
 - **Files** — apps send a short-lived download link, never the file. Vaenyx
-  fetches it only from the hosts you listed, uses it, and deletes it.
+  fetches it only from the hosts you listed, uses it, and deletes it. Claude
+  reads a PDF directly. For OpenAI, Vaenyx privately turns up to 20 PDF pages
+  into temporary pictures and sends those to Codex; no API key, paid API or
+  outside converter is used.
 - **What is written down** — time, kind of job, which subscription, how long,
   worked or not. **Never** the prompt, the file, or the answer.
 - **This month** — the same card shows who spent what this month, per app and

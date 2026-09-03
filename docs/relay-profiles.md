@@ -64,12 +64,34 @@ capability's probe record.
 ## Probe
 
 `POST /v1/relay/profile/probe` runs real Subscription calls for the calling
-profile. It probes text/structured output, image input, Claude PDF input, and
-web search. OpenAI PDF transport is reported as unsupported until implemented.
+profile. Image input is proved with a generated 256×256 picture whose colour
+Vaenyx already knows. PDF input is proved with a fresh code printed inside a
+generated PDF: Claude receives the PDF document block; OpenAI receives PNG
+images rendered locally from the same PDF. A pass therefore proves the
+transport and the model actually read the attachment, not merely that it
+answered a prompt.
 
 The Owner UI exposes the same operation as **Test all capabilities**. Its one
 **Connect** action copies whichever Owner-side Subscription logins exist into
 the app profile; the two engine statuses remain separate.
+
+## Image and PDF input
+
+Apps provide one short-lived HTTPS file URL in files. The hostname must be on
+the Owner allowlist. For vision_analysis the file must be an image; for
+document_analysis it must be a standard, unencrypted PDF.
+
+Claude's Subscription transport sends the PDF as a native document block.
+Codex App Server has no PDF input item, so Vaenyx renders every page to a
+temporary PNG and sends those pages as localImage items in order. The
+conversion is local and temporary; it never uses the OpenAI API, Anthropic
+API, a billing key, or an external converter.
+
+OpenAI PDF input is limited to 20 pages per call, with each rendered page
+bounded to a 1,800-pixel long edge. Larger documents return
+RELAY_PDF_TOO_MANY_PAGES; malformed, encrypted or unrenderable documents
+return RELAY_PDF_UNREADABLE. Type mismatches return RELAY_IMAGE_REQUIRED or
+RELAY_PDF_REQUIRED.
 
 ## Web search
 
