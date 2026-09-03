@@ -1,5 +1,5 @@
 export const RELAY_CONTRACT_VERSION = 2;
-export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.5";
+export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.6";
 
 export interface RelaySearchResult {
   title: string;

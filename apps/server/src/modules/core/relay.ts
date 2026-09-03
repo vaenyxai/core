@@ -36,6 +36,8 @@ import {
 import { claudeSubscriptionRelay } from "../models/claude-subscription-provider.js";
 
 import { capabilityOff } from "./capabilities.js";
+import { namesRed, probePdf, redSquarePng } from "./capability-probe.js";
+import { renderRelayPdfPages } from "./relay-pdf.js";
 import { recordEngineUsage } from "./relay-usage.js";
 import {
   normalizeSearchRunEvidence,
@@ -77,17 +79,12 @@ export const RELAY_SAFE_CAPABILITIES = [
 ] as const;
 export type RelaySafeCapability = (typeof RELAY_SAFE_CAPABILITIES)[number];
 
-// Split now that the vocabulary distinguishes them: Claude reads a PDF itself,
-// Codex takes pictures only — so a caller sending a PDF to Codex must turn its
-// pages into images first, which is what the hand-off prompt already says.
+// Claude reads a PDF natively. Codex's documented input transport takes local
+// images, so Vaenyx renders the PDF pages to temporary PNGs before the call.
+// Both are real document paths and both stay behind a probe.
 // `web_search` is enabled only when its live tool returns structured URLs.
 const ENGINE_CAPABILITIES: Record<RelayEngine, RelaySafeCapability[]> = {
-  "openai-cli": [
-    "text_analysis",
-    "structured_output",
-    "vision_analysis",
-    "web_search",
-  ],
+  "openai-cli": [...RELAY_SAFE_CAPABILITIES],
   "claude-cli": [...RELAY_SAFE_CAPABILITIES],
 };
 
@@ -323,9 +320,7 @@ function capabilityStatuses(
       unavailable_reason: available
         ? null
         : !supported
-          ? capability === "document_analysis" && engine === "openai-cli"
-            ? "FILE_TRANSPORT_NOT_IMPLEMENTED"
-            : "NOT_IMPLEMENTED"
+          ? "NOT_IMPLEMENTED"
           : !signedIn
             ? "NOT_CONNECTED"
             : globalOff
@@ -574,31 +569,6 @@ export function relayProfileEngineStatus(
   };
 }
 
-const PROBE_IMAGE_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZK9sAAAAASUVORK5CYII=";
-
-function probePdfBase64(): string {
-  const objects = [
-    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
-    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
-    "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
-    "5 0 obj\n<< /Length 49 >>\nstream\nBT /F1 18 Tf 20 50 Td (VAENYX PDF PROBE) Tj ET\nendstream\nendobj\n",
-  ];
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  for (const object of objects) {
-    offsets.push(Buffer.byteLength(pdf));
-    pdf += object;
-  }
-  const xref = Buffer.byteLength(pdf);
-  pdf += `xref\n0 6\n0000000000 65535 f \n${offsets
-    .slice(1)
-    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n `)
-    .join("\n")}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(pdf).toString("base64");
-}
-
 export async function probeRelayCapabilities(
   database: DatabaseHandle,
   secretsDirectory: string,
@@ -608,7 +578,14 @@ export async function probeRelayCapabilities(
   const scratch = resolve(tmpdir(), "vaenyx-relay-probe", randomUUID());
   mkdirSync(scratch, { recursive: true });
   const imagePath = resolve(scratch, "probe.png");
-  writeFileSync(imagePath, Buffer.from(PROBE_IMAGE_BASE64, "base64"));
+  const image = redSquarePng();
+  writeFileSync(imagePath, image);
+  const documentCode = `VAENYX-${randomUUID()
+    .replace(/-/g, "")
+    .slice(0, 6)
+    .toUpperCase()}`;
+  const document = probePdf(documentCode);
+  const documentPaths = await renderRelayPdfPages(document, scratch);
 
   const call = async (
     engine: RelayEngine,
@@ -619,7 +596,11 @@ export async function probeRelayCapabilities(
     return engine === "openai-cli"
       ? runCodexRelay(
           prompt,
-          options.image ? imagePath : undefined,
+          options.pdf
+            ? documentPaths
+            : options.image
+              ? imagePath
+              : undefined,
           profileId,
           options.web === true,
         )
@@ -627,9 +608,9 @@ export async function probeRelayCapabilities(
           secretsDirectory,
           prompt,
           options.pdf
-            ? { base64: probePdfBase64(), mediaType: "application/pdf" }
+            ? { base64: document.toString("base64"), mediaType: "application/pdf" }
             : options.image
-              ? { base64: PROBE_IMAGE_BASE64, mediaType: "image/png" }
+              ? { base64: image.toString("base64"), mediaType: "image/png" }
               : undefined,
           profileId,
           options.web === true,
@@ -676,10 +657,10 @@ export async function probeRelayCapabilities(
     try {
       const output = await call(
         engine,
-        "Reply exactly VAENYX_VISION_OK if an image is attached and visible.",
+        "What color is the square in the attached image? Reply with the color only.",
         { image: true },
       );
-      note(engine, "vision_analysis", output.text.includes("VAENYX_VISION_OK"), {
+      note(engine, "vision_analysis", namesRed(output.text), {
         provider: output.provider,
         model: output.model,
         reason: "VISION_PROBE_FAILED",
@@ -690,28 +671,26 @@ export async function probeRelayCapabilities(
       });
     }
 
-    if (engine === "claude-cli") {
-      try {
-        const output = await call(
-          engine,
-          "Read the attached PDF. Reply exactly VAENYX_DOCUMENT_OK if it contains VAENYX PDF PROBE.",
-          { pdf: true },
-        );
-        note(
-          engine,
-          "document_analysis",
-          output.text.includes("VAENYX_DOCUMENT_OK"),
-          {
-            provider: output.provider,
-            model: output.model,
-            reason: "DOCUMENT_PROBE_FAILED",
-          },
-        );
-      } catch (error) {
-        note(engine, "document_analysis", false, {
-          reason: publicRelayError(error, engine),
-        });
-      }
+    try {
+      const output = await call(
+        engine,
+        "Read the attached PDF and reply with the exact VAENYX code printed on its page. Reply with the code only.",
+        { pdf: true },
+      );
+      note(
+        engine,
+        "document_analysis",
+        output.text.includes(documentCode),
+        {
+          provider: output.provider,
+          model: output.model,
+          reason: "DOCUMENT_PROBE_FAILED",
+        },
+      );
+    } catch (error) {
+      note(engine, "document_analysis", false, {
+        reason: publicRelayError(error, engine),
+      });
     }
 
     if (!capabilityOff(database, "web")) {
@@ -848,6 +827,17 @@ export async function runRelay(
           region: request.region,
         })
       : prompt!;
+    const codexImagePaths =
+      request.engine === "openai-cli" && attachment
+        ? attachment.mediaType === "application/pdf"
+          ? await renderRelayPdfPages(
+              Buffer.from(attachment.base64, "base64"),
+              scratch,
+            )
+          : attachment.mediaType.startsWith("image/")
+            ? [attachment.path]
+            : []
+        : [];
     const engineResult =
       request.engine === "claude-cli"
         ? await claudeSubscriptionRelay(
@@ -861,12 +851,7 @@ export async function runRelay(
           )
         : await runCodexRelay(
             enginePrompt,
-            // Codex reads a picture from a path. It has no document channel, so
-            // a PDF has to arrive as pictures of its pages — which is exactly
-            // what the calling app is asked to send.
-            attachment && attachment.mediaType.startsWith("image/")
-              ? attachment.path
-              : undefined,
+            codexImagePaths,
             profileKey,
             allowWeb,
             request.effort,
@@ -1017,6 +1002,8 @@ export function publicRelayError(error: unknown, engine: RelayEngine): string {
     "RELAY_NO_FILE",
     "RELAY_IMAGE_REQUIRED",
     "RELAY_PDF_REQUIRED",
+    "RELAY_PDF_TOO_MANY_PAGES",
+    "RELAY_PDF_UNREADABLE",
     "RELAY_QUERY_REQUIRED",
     "RELAY_PROMPT_REQUIRED",
     "RELAY_STRUCTURED_OUTPUT_INVALID",

@@ -6150,6 +6150,8 @@ export async function registerGatewayRoutes(
                   code === "RELAY_NO_FILE" ||
                   code === "RELAY_IMAGE_REQUIRED" ||
                   code === "RELAY_PDF_REQUIRED" ||
+                  code === "RELAY_PDF_TOO_MANY_PAGES" ||
+                  code === "RELAY_PDF_UNREADABLE" ||
                   code === "RELAY_QUERY_REQUIRED" ||
                   code === "RELAY_PROMPT_REQUIRED" ||
                   code === "RELAY_STRUCTURED_OUTPUT_INVALID"
