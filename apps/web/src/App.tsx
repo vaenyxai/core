@@ -287,6 +287,8 @@ import {
   restartVaenyx,
   shutdownVaenyx,
   testChatConnection,
+  fetchLastChatTest,
+  fetchEnginePair,
   testForgeConnection,
   fetchPublishState,
   disconnectPublishService,
@@ -17693,6 +17695,19 @@ function SettingsPanel({
   const [chatTestError, setChatTestError] = useState<string | null>(null);
   const [chatStartedAt, setChatStartedAt] = useState<number | null>(null);
   const [chatElapsedSeconds, setChatElapsedSeconds] = useState(0);
+  // The last test on record shows before anything is pressed: a card that
+  // only knows about tests made in this browser tab forgets on refresh.
+  useEffect(() => {
+    let active = true;
+    fetchLastChatTest()
+      .then((result) => {
+        if (active && result.last) setChatTestResult(result.last);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
   // Regrouped 2026-07-22 (Oskar): User Settings = Appearance + Account;
   // AI Settings = Identity + Connection + Models; Notifications its own tab;
   // Manual second-to-last.
@@ -17843,7 +17858,18 @@ function SettingsPanel({
     setChatStartedAt(Date.now());
 
     try {
-      setChatTestResult(await testChatConnection({ prompt: chatPrompt }));
+      // The main model AS IT STANDS ON SCREEN: the picker saves each choice
+      // the moment it is made, so the saved chat pair IS the screen — read
+      // fresh here rather than trusting anything remembered earlier.
+      const pair = await fetchEnginePair("chat");
+      const primary = pair.primary;
+      setChatTestResult(
+        await testChatConnection({
+          prompt: chatPrompt,
+          ...(primary ? { provider: primary.provider } : {}),
+          ...(primary?.model ? { model: primary.model } : {}),
+        }),
+      );
     } catch (nextError) {
       setChatTestError(
         nextError instanceof Error
@@ -18381,12 +18407,13 @@ function SettingsPanel({
               </div>
               <div className="connection-test-panel">
                 <div>
-                  <strong>ChatGPT quick chat</strong>
+                  <strong>
+                    {lang === "zh" ? "主模型快速测试" : "Main model quick test"}
+                  </strong>
                   <p>
-                    Sends one short message through your ChatGPT / Codex
-                    account. It does not read files, change files, or expose
-                    tokens in the browser. The first call may take longer while
-                    Vaenyx warms the local Codex bridge.
+                    {lang === "zh"
+                      ? "用上面选定的主模型(账号 + 型号)发一句话,回来时显示引擎自己报的实际模型。不读文件、不改文件、不在浏览器里暴露 token。"
+                      : "Sends one short message through the main model as chosen above (account + model) and shows the model the engine itself reports back. It does not read files, change files, or expose tokens in the browser."}
                   </p>
                 </div>
                 <label>
@@ -18423,6 +18450,22 @@ function SettingsPanel({
                     <p>
                       Response time: {formatDuration(chatTestResult.durationMs)}
                     </p>
+                    {chatTestResult.provider ? (
+                      <p>
+                        {lang === "zh" ? "账号:" : "Account: "}
+                        {chatTestResult.provider}
+                        {" · "}
+                        {lang === "zh" ? "要求的型号:" : "requested model: "}
+                        {chatTestResult.requestedModel ??
+                          (lang === "zh" ? "默认" : "default")}
+                        {" · "}
+                        {lang === "zh" ? "引擎回报的实际型号:" : "engine reported: "}
+                        {chatTestResult.model ??
+                          (lang === "zh" ? "未回报" : "not reported")}
+                        {" · "}
+                        {new Date(chatTestResult.timestamp).toLocaleString()}
+                      </p>
+                    ) : null}
                     {chatTestResult.output ? (
                       <pre className="connection-test-output">
                         {chatTestResult.output}

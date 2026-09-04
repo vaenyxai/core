@@ -2613,6 +2613,16 @@ export function testChatConnection(
   });
 }
 
+// The last main-model test on record (which model, when, what the engine
+// reported) — so the card shows it before anyone presses anything.
+export function fetchLastChatTest(): Promise<{
+  last: ChatConnectionTestResult | null;
+}> {
+  return requestJson<{ last: ChatConnectionTestResult | null }>(
+    "/v1/settings/chat-test/last",
+  );
+}
+
 // A capability's pair: who does this job, and the stand-in the Owner picked
 // for when that one cannot answer at all. One shape for every capability.
 export interface EngineChoiceValue {

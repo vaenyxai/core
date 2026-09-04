@@ -115,9 +115,8 @@ export function initModelRegistry(config: {
   secretsDirectory: string;
 }): ModelRegistry {
   const next = new ModelRegistry();
-  next.register(new CodexProvider(), true);
-
   const connections = readProviderConnections(config.secretsDirectory);
+  next.register(new CodexProvider({ model: connections.codex?.model }), true);
   // The Claude-subscription mirror of Codex — registered ONLY once the Owner
   // has connected it (pasted `claude setup-token` value), so it flows through
   // the same Add a Model path as every other backend instead of squatting in
@@ -127,7 +126,11 @@ export function initModelRegistry(config: {
   // CLI's own credentials natively).
   const claudeSubAuth = resolveClaudeSubscriptionAuth(config.secretsDirectory);
   if (claudeSubAuth.token || claudeSubAuth.machineLogin) {
-    next.register(new ClaudeSubscriptionProvider(config.secretsDirectory));
+    next.register(
+      new ClaudeSubscriptionProvider(config.secretsDirectory, {
+        model: connections["claude-sub"]?.model,
+      }),
+    );
   }
   // Every key-based OpenAI-compatible backend registers the same way — one
   // table, not one hand-rolled block per provider. Groq / Cerebras / OpenRouter

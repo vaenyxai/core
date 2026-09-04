@@ -195,6 +195,12 @@ export const ForgeConnectionTestResultSchema = Type.Object(
 export const ChatConnectionTestRequestSchema = Type.Object(
   {
     prompt: Type.String({ minLength: 1, maxLength: 1_000 }),
+    // The main model AS CURRENTLY CHOSEN on screen (2026-09-01): which
+    // account, which model within it, which effort. Omitted = the saved
+    // main model. The test proves this exact selection, never a stale one.
+    provider: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+    model: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+    effort: Type.Optional(Type.String({ minLength: 1, maxLength: 20 })),
   },
   { additionalProperties: false },
 );
@@ -212,6 +218,12 @@ export const ChatConnectionTestResultSchema = Type.Object(
     ownerError: Type.Optional(OwnerSafeErrorSchema),
     output: Type.Union([Type.String(), Type.Null()]),
     timestamp: Type.String(),
+    // Which account and model the test ran on, and the model the engine
+    // itself reported back (null when it reports none).
+    provider: Type.Optional(Type.String()),
+    requestedModel: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    model: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    effort: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -3514,6 +3526,16 @@ export const RelayRunResponseSchema = Type.Object(
     fallback_occurred: Type.Literal(false),
     fallback_disclosure: Type.String(),
     capability_probe_revision: Type.String(),
+    // Contract 2.1 — which model the caller asked for, which one ran, and how
+    // good the evidence is. `model` alone was the engine's word before; now a
+    // caller can tell "reported by the engine" from "configured and the turn
+    // completed". Old clients ignore the extra fields.
+    requested_model: Type.Union([Type.String(), Type.Null()]),
+    model_reported_by_engine: Type.Boolean(),
+    model_evidence: Type.String(),
+    effort: Type.Union([Type.String(), Type.Null()]),
+    effort_reported_by_engine: Type.Boolean(),
+    contract_revision: Type.String(),
     structured: Type.Optional(Type.Unknown()),
   },
   { additionalProperties: false },
@@ -3546,6 +3568,7 @@ export const RelayCapabilityStatusSchema = Type.Object(
 export const RelayHealthSchema = Type.Object(
   {
     contract_version: Type.Literal(2),
+    contract_revision: Type.String(),
     capability_probe_revision: Type.String(),
     on: Type.Boolean(),
     engines: Type.Array(
@@ -3559,6 +3582,7 @@ export const RelayHealthSchema = Type.Object(
           // Empty = not selectable here.
           efforts: Type.Array(Type.String()),
           models: Type.Array(Type.String()),
+          model_catalogue_verified_at: Type.Union([Type.String(), Type.Null()]),
         },
         { additionalProperties: false },
       ),
@@ -3622,6 +3646,7 @@ export const RelayPanelSchema = Type.Object(
 export const RelayProfileStatusSchema = Type.Object(
   {
     contract_version: Type.Literal(2),
+    contract_revision: Type.String(),
     capability_probe_revision: Type.String(),
     // Always "dedicated" since 2026-08-02: a profile rides its own login,
     // never the door's. The field survives so a v1 client's parser does not
@@ -3637,6 +3662,7 @@ export const RelayProfileStatusSchema = Type.Object(
           capability_status: Type.Array(RelayCapabilityStatusSchema),
           efforts: Type.Array(Type.String()),
           models: Type.Array(Type.String()),
+          model_catalogue_verified_at: Type.Union([Type.String(), Type.Null()]),
         },
         { additionalProperties: false },
       ),
@@ -3727,6 +3753,112 @@ export const RelayUsageResponseSchema = Type.Object(
 // (with the other side's own words), or this path is not built yet. A green
 // tick that means "probably" and a red cross for something we never wrote are
 // both lies.
+// Contract 2.1 — the live model catalogue for the calling profile, each row
+// carrying what THIS profile has proved on it under the current probe
+// revision. Never a stored list: the engine is asked (cached ten minutes).
+export const RelayModelVerificationSchema = Type.Object(
+  {
+    capability: Type.String(),
+    ok: Type.Boolean(),
+    reason: Type.Union([Type.String(), Type.Null()]),
+    actual_model: Type.Union([Type.String(), Type.Null()]),
+    model_reported_by_engine: Type.Boolean(),
+    effort: Type.Union([Type.String(), Type.Null()]),
+    path: Type.Union([Type.Literal("run"), Type.Literal("test")]),
+    at: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayCatalogueModelSchema = Type.Object(
+  {
+    id: Type.String(),
+    resolved_id: Type.String(),
+    display_name: Type.String(),
+    default: Type.Boolean(),
+    selectable: Type.Boolean(),
+    unavailable_reason: Type.Union([Type.String(), Type.Null()]),
+    efforts: Type.Array(Type.String()),
+    default_effort: Type.Union([Type.String(), Type.Null()]),
+    input: Type.Array(Type.String()),
+    upgrade_to: Type.Union([Type.String(), Type.Null()]),
+    model_reported_by_engine: Type.Boolean(),
+    verified: Type.Array(RelayModelVerificationSchema),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayModelCatalogueSchema = Type.Object(
+  {
+    contract_version: Type.Literal(2),
+    contract_revision: Type.String(),
+    capability_probe_revision: Type.String(),
+    engines: Type.Array(
+      Type.Object(
+        {
+          engine: RelayEngineSchema,
+          login_status: Type.Union([
+            Type.Literal("connected"),
+            Type.Literal("not_connected"),
+          ]),
+          catalogue_status: Type.Union([
+            Type.Literal("ok"),
+            Type.Literal("not_connected"),
+            Type.Literal("unavailable"),
+          ]),
+          unavailable_reason: Type.Union([Type.String(), Type.Null()]),
+          verified_at: Type.Union([Type.String(), Type.Null()]),
+          default_model: Type.Union([Type.String(), Type.Null()]),
+          efforts: Type.Array(Type.String()),
+          models: Type.Array(RelayCatalogueModelSchema),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayModelTestRequestSchema = Type.Object(
+  {
+    engine: RelayEngineSchema,
+    model: Type.String({ minLength: 1, maxLength: 60 }),
+    effort: Type.Optional(Type.String({ minLength: 1, maxLength: 20 })),
+    capability: Type.Optional(
+      Type.Union([
+        Type.Literal("text_analysis"),
+        Type.Literal("structured_output"),
+        Type.Literal("vision_analysis"),
+      ]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const RelayModelTestResultSchema = Type.Object(
+  {
+    engine: RelayEngineSchema,
+    capability: Type.Union([
+      Type.Literal("text_analysis"),
+      Type.Literal("structured_output"),
+      Type.Literal("vision_analysis"),
+    ]),
+    requested_model: Type.String(),
+    model: Type.Union([Type.String(), Type.Null()]),
+    model_reported_by_engine: Type.Boolean(),
+    model_evidence: Type.String(),
+    effort: Type.Union([Type.String(), Type.Null()]),
+    effort_reported_by_engine: Type.Boolean(),
+    status: Type.Union([Type.Literal("ok"), Type.Literal("failed")]),
+    unavailable_reason: Type.Union([Type.String(), Type.Null()]),
+    ms: Type.Integer(),
+    verified_at: Type.String(),
+    contract_revision: Type.String(),
+    capability_probe_revision: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 export const RelayTestResultSchema = Type.Object(
   {
     status: Type.Union([
@@ -3762,6 +3894,10 @@ export type RelayEngine = Static<typeof RelayEngineSchema>;
 export type RelayCapability = Static<typeof RelayCapabilitySchema>;
 export type RelayRunRequest = Static<typeof RelayRunRequestSchema>;
 export type RelayRunResponse = Static<typeof RelayRunResponseSchema>;
+export type RelayModelCatalogue = Static<typeof RelayModelCatalogueSchema>;
+export type RelayCatalogueModel = Static<typeof RelayCatalogueModelSchema>;
+export type RelayModelTestRequest = Static<typeof RelayModelTestRequestSchema>;
+export type RelayModelTestResult = Static<typeof RelayModelTestResultSchema>;
 export type RelayHealth = Static<typeof RelayHealthSchema>;
 export type RelayCapabilityStatus = Static<typeof RelayCapabilityStatusSchema>;
 export type RelaySettings = Static<typeof RelaySettingsSchema>;

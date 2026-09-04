@@ -40,11 +40,20 @@ import { namesRed, probePdf, redSquarePng } from "./capability-probe.js";
 import { renderRelayPdfPages } from "./relay-pdf.js";
 import { recordEngineUsage } from "./relay-usage.js";
 import {
+  cachedRelayModelCatalogue,
+  findRelayModel,
+  loadRelayModelCatalogue,
+  RELAY_ENGINE_EFFORTS,
+  type RelayCatalogueModel,
+  type RelayModelCatalogue,
+} from "./relay-models.js";
+import {
   normalizeSearchRunEvidence,
   RELAY_CAPABILITY_PROBE_REVISION,
   RELAY_CONTRACT_VERSION,
   relaySearchPrompt,
   type RelaySearchResult,
+  RELAY_CONTRACT_REVISION,
 } from "./relay-search.js";
 
 export const RELAY_ENGINES = ["openai-cli", "claude-cli"] as const;
@@ -103,26 +112,254 @@ function canonicalCapability(capability: RelayCapability): RelaySafeCapability |
   return aliases[capability] ?? null;
 }
 
-// What a call may ASK FOR, per engine (Oskar, 2026-08-30): a reasoning-effort
-// tier, valid for that one call, enforced at the codex lane's spawn flags.
-// Claude's single-turn relay has no equivalent knob, so its list is empty and
-// health says so rather than accepting a field that would do nothing.
-//
-// The model list is EMPTY on purpose (2026-08-31, live-verified): spawning the
-// relay's app-server with any --config model="…" — including the working
-// default's own id — made every turn come back with no answer, so until that
-// is understood no model override is offered. The field and its whitelist
-// check stay wired; filling this list is the whole change when a variant
-// verifies.
-export const RELAY_EFFORTS = ["low", "medium", "high"] as const;
-export const RELAY_CODEX_MODELS = [] as const;
-
+// What a call may ASK FOR, per engine (contract 2.1, 2026-09-01): a
+// reasoning-effort tier and a model, both valid for that one call only.
+// Efforts are the engine's own tiers (relay-models.ts); models come from the
+// engine's LIVE catalogue for the calling profile — never a stored list — and
+// health reports what that catalogue last said, without asking again.
 function engineEfforts(engine: RelayEngine): string[] {
-  return engine === "openai-cli" ? [...RELAY_EFFORTS] : [];
+  return [...RELAY_ENGINE_EFFORTS[engine]];
 }
 
-function engineModels(engine: RelayEngine): string[] {
-  return engine === "openai-cli" ? [...RELAY_CODEX_MODELS] : [];
+function engineModels(engine: RelayEngine, profileId: string): string[] {
+  const catalogue = cachedRelayModelCatalogue(engine, profileId);
+  return catalogue
+    ? catalogue.models.filter((model) => model.selectable).map((model) => model.id)
+    : [];
+}
+
+function catalogueVerifiedAt(engine: RelayEngine, profileId: string): string | null {
+  return cachedRelayModelCatalogue(engine, profileId)?.verified_at ?? null;
+}
+
+// ── Per-model evidence ──────────────────────────────────────────────────────
+// A green tick is bound to (profile, engine, MODEL, capability, revision,
+// path). Kept apart from the default-model probes so a model that was never
+// tested cannot borrow the default's tick, and a revision bump retires all.
+interface StoredModelProbe {
+  ok: boolean;
+  reason: string | null;
+  actualModel: string | null;
+  modelReportedByEngine: boolean;
+  effort: string | null;
+  path: "run" | "test";
+  probedAt: string;
+  revision: string;
+}
+
+type StoredModelProbes = Partial<
+  Record<RelayEngine, Record<string, Partial<Record<RelaySafeCapability, StoredModelProbe>>>>
+>;
+
+function modelProbeKey(profileId: string): string {
+  return `relay.model-probes.${profileId}`;
+}
+
+function readModelProbes(database: DatabaseHandle, profileId: string): StoredModelProbes {
+  const row = database.sqlite
+    .prepare("SELECT value FROM instance_settings WHERE key = ?")
+    .get(modelProbeKey(profileId)) as { value?: string } | undefined;
+  try {
+    return row?.value ? (JSON.parse(row.value) as StoredModelProbes) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function recordRelayModelProbe(
+  database: DatabaseHandle,
+  profileId: string,
+  engine: RelayEngine,
+  model: string,
+  capability: RelaySafeCapability,
+  probe: Omit<StoredModelProbe, "probedAt" | "revision">,
+): void {
+  const current = readModelProbes(database, profileId);
+  const forEngine = current[engine] ?? {};
+  const next: StoredModelProbes = {
+    ...current,
+    [engine]: {
+      ...forEngine,
+      [model]: {
+        ...forEngine[model],
+        [capability]: {
+          ...probe,
+          probedAt: new Date().toISOString(),
+          revision: RELAY_CAPABILITY_PROBE_REVISION,
+        },
+      },
+    },
+  };
+  database.sqlite
+    .prepare(
+      `INSERT INTO instance_settings (key, value, updated_at)
+       VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                                      updated_at = CURRENT_TIMESTAMP`,
+    )
+    .run(modelProbeKey(profileId), JSON.stringify(next));
+}
+
+export interface RelayModelVerification {
+  capability: RelaySafeCapability;
+  ok: boolean;
+  reason: string | null;
+  actual_model: string | null;
+  model_reported_by_engine: boolean;
+  effort: string | null;
+  path: "run" | "test";
+  at: string;
+}
+
+function modelVerifications(
+  database: DatabaseHandle,
+  profileId: string,
+  engine: RelayEngine,
+  model: string,
+): RelayModelVerification[] {
+  const probes = readModelProbes(database, profileId)[engine]?.[model] ?? {};
+  return RELAY_SAFE_CAPABILITIES.flatMap((capability) => {
+    const probe = probes[capability];
+    if (!probe || probe.revision !== RELAY_CAPABILITY_PROBE_REVISION) return [];
+    return [
+      {
+        capability,
+        ok: probe.ok,
+        reason: probe.reason,
+        actual_model: probe.actualModel,
+        model_reported_by_engine: probe.modelReportedByEngine,
+        effort: probe.effort,
+        path: probe.path,
+        at: probe.probedAt,
+      },
+    ];
+  });
+}
+
+export interface RelayModelCatalogueEngine {
+  engine: RelayEngine;
+  login_status: "connected" | "not_connected";
+  catalogue_status: "ok" | "not_connected" | "unavailable";
+  unavailable_reason: string | null;
+  verified_at: string | null;
+  default_model: string | null;
+  efforts: string[];
+  models: (RelayCatalogueModel & { verified: RelayModelVerification[] })[];
+}
+
+export interface RelayModelCatalogueResponse {
+  contract_version: number;
+  contract_revision: string;
+  capability_probe_revision: string;
+  engines: RelayModelCatalogueEngine[];
+}
+
+/** The live catalogue for the CALLING profile, both engines, each model
+ *  carrying whatever this profile has proved on it under the current probe
+ *  revision. Asks the engine (cached ten minutes); never a stored list. */
+export async function relayModelCatalogue(
+  database: DatabaseHandle,
+  secretsDirectory: string,
+  profileId: string,
+  options: { force?: boolean } = {},
+): Promise<RelayModelCatalogueResponse> {
+  const engines: RelayModelCatalogueEngine[] = [];
+  for (const engine of RELAY_ENGINES) {
+    if (!engineSignedIn(engine, profileId)) {
+      engines.push({
+        engine,
+        login_status: "not_connected",
+        catalogue_status: "not_connected",
+        unavailable_reason: "NOT_CONNECTED",
+        verified_at: null,
+        default_model: null,
+        efforts: engineEfforts(engine),
+        models: [],
+      });
+      continue;
+    }
+    let catalogue: RelayModelCatalogue;
+    try {
+      catalogue = await loadRelayModelCatalogue(
+        engine,
+        profileId,
+        secretsDirectory,
+        options,
+      );
+    } catch (error) {
+      engines.push({
+        engine,
+        login_status: "connected",
+        catalogue_status: "unavailable",
+        unavailable_reason: publicRelayError(error, engine),
+        verified_at: null,
+        default_model: null,
+        efforts: engineEfforts(engine),
+        models: [],
+      });
+      continue;
+    }
+    engines.push({
+      engine,
+      login_status: "connected",
+      catalogue_status: "ok",
+      unavailable_reason: null,
+      verified_at: catalogue.verified_at,
+      default_model: catalogue.default_model,
+      efforts: engineEfforts(engine),
+      models: catalogue.models.map((model) => ({
+        ...model,
+        verified: modelVerifications(database, profileId, engine, model.id),
+      })),
+    });
+  }
+  return {
+    contract_version: RELAY_CONTRACT_VERSION,
+    contract_revision: RELAY_CONTRACT_REVISION,
+    capability_probe_revision: RELAY_CAPABILITY_PROBE_REVISION,
+    engines,
+  };
+}
+
+// Resolve a caller's model/effort against the engine's live catalogue —
+// refused by name, never accepted-and-ignored, never swapped for a default.
+async function resolveRelaySelection(
+  engine: RelayEngine,
+  profileId: string,
+  secretsDirectory: string,
+  requestedModel: string | undefined,
+  requestedEffort: string | undefined,
+): Promise<RelayCatalogueModel | null> {
+  if (
+    requestedEffort !== undefined &&
+    !engineEfforts(engine).includes(requestedEffort)
+  ) {
+    throw new Error(`RELAY_EFFORT_INVALID:${engine}:${requestedEffort}`);
+  }
+  if (requestedModel === undefined) return null;
+  if (!engineSignedIn(engine, profileId)) {
+    throw new Error(`RELAY_PROFILE_NOT_CONNECTED:${engine}`);
+  }
+  let catalogue: RelayModelCatalogue;
+  try {
+    catalogue = await loadRelayModelCatalogue(engine, profileId, secretsDirectory);
+  } catch {
+    throw new Error("RELAY_MODEL_CATALOGUE_UNAVAILABLE");
+  }
+  const chosen = findRelayModel(catalogue, requestedModel);
+  if (!chosen) throw new Error(`RELAY_MODEL_INVALID:${engine}:${requestedModel}`);
+  if (!chosen.selectable) {
+    throw new Error(`RELAY_MODEL_NOT_AVAILABLE:${engine}:${requestedModel}`);
+  }
+  if (
+    requestedEffort !== undefined &&
+    !chosen.efforts.includes(requestedEffort)
+  ) {
+    throw new Error(
+      `RELAY_EFFORT_INVALID:${engine}:${chosen.id}:${requestedEffort}`,
+    );
+  }
+  return chosen;
 }
 
 interface StoredProbe {
@@ -254,6 +491,7 @@ export function writeRelayConfig(
 
 export interface RelayHealth {
   contract_version: number;
+  contract_revision: string;
   capability_probe_revision: string;
   on: boolean;
   engines: {
@@ -261,10 +499,12 @@ export interface RelayHealth {
     signedIn: boolean;
     capabilities: RelaySafeCapability[];
     capability_status: RelayCapabilityStatus[];
-    // What a call may ask for on this engine, so a caller can build its
-    // dropdowns from the door's own answer. Empty = not selectable here.
+    // What a call may ask for on this engine. `models` is what the live
+    // catalogue last listed for this profile (empty until it was asked —
+    // GET /v1/relay/models asks); `model_catalogue_verified_at` says when.
     efforts: string[];
     models: string[];
+    model_catalogue_verified_at: string | null;
   }[];
   limits: {
     maxFiles: number;
@@ -349,6 +589,7 @@ export function relayHealth(
   const claudeStatus = capabilityStatuses(database, profileId, "claude-cli");
   return {
     contract_version: RELAY_CONTRACT_VERSION,
+    contract_revision: RELAY_CONTRACT_REVISION,
     capability_probe_revision: RELAY_CAPABILITY_PROBE_REVISION,
     on: config.enabled,
     engines: [
@@ -358,7 +599,8 @@ export function relayHealth(
         capabilities: [...ENGINE_CAPABILITIES["openai-cli"]],
         capability_status: openaiStatus,
         efforts: engineEfforts("openai-cli"),
-        models: engineModels("openai-cli"),
+        models: engineModels("openai-cli", profileId),
+        model_catalogue_verified_at: catalogueVerifiedAt("openai-cli", profileId),
       },
       {
         id: "claude-cli",
@@ -366,7 +608,8 @@ export function relayHealth(
         capabilities: [...ENGINE_CAPABILITIES["claude-cli"]],
         capability_status: claudeStatus,
         efforts: engineEfforts("claude-cli"),
-        models: engineModels("claude-cli"),
+        models: engineModels("claude-cli", profileId),
+        model_catalogue_verified_at: catalogueVerifiedAt("claude-cli", profileId),
       },
     ],
     limits: {
@@ -413,7 +656,16 @@ export interface RelayRunResult {
   text: string;
   engine: RelayEngine;
   provider: string;
+  // The model that ran, as far as the engine will say: Claude reports it
+  // (model_reported_by_engine = true); Codex echoes the thread's configured
+  // model and would have failed the turn on an unsupported one.
   model: string;
+  requested_model: string | null;
+  model_reported_by_engine: boolean;
+  model_evidence: string;
+  effort: string | null;
+  effort_reported_by_engine: boolean;
+  contract_revision: string;
   ms: number;
   searched_at: string | null;
   query: string | null;
@@ -531,6 +783,7 @@ export interface RelayProfileEngineStatus {
   capability_status: RelayCapabilityStatus[];
   efforts: string[];
   models: string[];
+  model_catalogue_verified_at: string | null;
 }
 
 export function relayProfileEngineStatus(
@@ -538,12 +791,14 @@ export function relayProfileEngineStatus(
   profileId: string,
 ): {
   contract_version: number;
+  contract_revision: string;
   capability_probe_revision: string;
   mode: "dedicated";
   engines: RelayProfileEngineStatus[];
 } {
   return {
     contract_version: RELAY_CONTRACT_VERSION,
+    contract_revision: RELAY_CONTRACT_REVISION,
     capability_probe_revision: RELAY_CAPABILITY_PROBE_REVISION,
     mode: "dedicated",
     engines: [
@@ -554,7 +809,8 @@ export function relayProfileEngineStatus(
         capabilities: [...ENGINE_CAPABILITIES["openai-cli"]],
         capability_status: capabilityStatuses(database, profileId, "openai-cli"),
         efforts: engineEfforts("openai-cli"),
-        models: engineModels("openai-cli"),
+        models: engineModels("openai-cli", profileId),
+        model_catalogue_verified_at: catalogueVerifiedAt("openai-cli", profileId),
       },
       {
         id: "claude-cli",
@@ -563,10 +819,166 @@ export function relayProfileEngineStatus(
         capabilities: [...ENGINE_CAPABILITIES["claude-cli"]],
         capability_status: capabilityStatuses(database, profileId, "claude-cli"),
         efforts: engineEfforts("claude-cli"),
-        models: engineModels("claude-cli"),
+        models: engineModels("claude-cli", profileId),
+        model_catalogue_verified_at: catalogueVerifiedAt("claude-cli", profileId),
       },
     ],
   };
+}
+
+// ── One model, one capability, one real call ────────────────────────────────
+// The per-model Test (contract 2.1): a caller picks a model and proves it on
+// the capability it means to use, before assigning work to it. The evidence
+// is recorded against that model alone; nothing here lights a default's tick.
+export interface RelayModelTestRequest {
+  engine: RelayEngine;
+  model: string;
+  effort?: string;
+  capability?: "text_analysis" | "structured_output" | "vision_analysis";
+}
+
+export interface RelayModelTestResult {
+  engine: RelayEngine;
+  capability: "text_analysis" | "structured_output" | "vision_analysis";
+  requested_model: string;
+  model: string | null;
+  model_reported_by_engine: boolean;
+  model_evidence: string;
+  effort: string | null;
+  effort_reported_by_engine: boolean;
+  status: "ok" | "failed";
+  unavailable_reason: string | null;
+  ms: number;
+  verified_at: string;
+  contract_revision: string;
+  capability_probe_revision: string;
+}
+
+export async function probeRelayModel(
+  database: DatabaseHandle,
+  secretsDirectory: string,
+  profileId: string,
+  request: RelayModelTestRequest,
+): Promise<RelayModelTestResult> {
+  const config = readRelayConfig(database);
+  if (!config.enabled) throw new Error("RELAY_OFF");
+  assertRelayRateLimit(profileId, config.maxCallsPerMinute);
+  const capability = request.capability ?? "text_analysis";
+  const chosen = await resolveRelaySelection(
+    request.engine,
+    profileId,
+    secretsDirectory,
+    request.model,
+    request.effort,
+  );
+  if (!chosen) throw new Error("RELAY_MODEL_REQUIRED");
+  if (capability === "vision_analysis" && capabilityOff(database, "vision")) {
+    throw new Error("RELAY_CAPABILITY_OFF:vision_analysis");
+  }
+
+  const started = Date.now();
+  const scratch = resolve(tmpdir(), "vaenyx-relay-model-test", randomUUID());
+  mkdirSync(scratch, { recursive: true });
+  const finish = (
+    outcome: {
+      ok: boolean;
+      reason: string | null;
+      model: string | null;
+      reported: boolean;
+      effort: string | null;
+      effortReported: boolean;
+    },
+  ): RelayModelTestResult => {
+    recordRelayModelProbe(database, profileId, request.engine, chosen.id, capability, {
+      ok: outcome.ok,
+      reason: outcome.reason,
+      actualModel: outcome.model,
+      modelReportedByEngine: outcome.reported,
+      effort: outcome.effort,
+      path: "test",
+    });
+    return {
+      engine: request.engine,
+      capability,
+      requested_model: chosen.id,
+      model: outcome.model,
+      model_reported_by_engine: outcome.reported,
+      model_evidence: outcome.reported
+        ? "engine_report"
+        : "thread_config_echo_and_turn_completed",
+      effort: outcome.effort,
+      effort_reported_by_engine: outcome.effortReported,
+      status: outcome.ok ? "ok" : "failed",
+      unavailable_reason: outcome.ok ? null : outcome.reason,
+      ms: Date.now() - started,
+      verified_at: new Date().toISOString(),
+      contract_revision: RELAY_CONTRACT_REVISION,
+      capability_probe_revision: RELAY_CAPABILITY_PROBE_REVISION,
+    };
+  };
+
+  try {
+    const image = capability === "vision_analysis" ? redSquarePng() : null;
+    const imagePath = resolve(scratch, "probe.png");
+    if (image) writeFileSync(imagePath, image);
+    const prompt =
+      capability === "vision_analysis"
+        ? "What color is the square in the attached image? Reply with the color only."
+        : 'Return exactly this JSON and nothing else: {"vaenyx_probe":"ok"}';
+    recordEngineUsage(database, profileId, request.engine);
+    const output =
+      request.engine === "openai-cli"
+        ? await runCodexRelay(
+            prompt,
+            image ? [imagePath] : [],
+            profileId,
+            false,
+            request.effort,
+            chosen.id,
+          )
+        : await claudeSubscriptionRelay(
+            secretsDirectory,
+            prompt,
+            image ? { base64: image.toString("base64"), mediaType: "image/png" } : undefined,
+            profileId,
+            false,
+            { model: chosen.id, expectedModel: chosen.resolved_id, effort: request.effort },
+          );
+    let ok: boolean;
+    if (capability === "vision_analysis") {
+      ok = namesRed(output.text);
+    } else {
+      try {
+        ok = (JSON.parse(output.text) as { vaenyx_probe?: unknown }).vaenyx_probe === "ok";
+      } catch {
+        ok = false;
+      }
+    }
+    return finish({
+      ok,
+      reason: ok
+        ? null
+        : capability === "vision_analysis"
+          ? "VISION_PROBE_FAILED"
+          : "STRUCTURED_PROBE_FAILED",
+      model: output.model,
+      reported: output.modelReportedByEngine,
+      effort: output.reasoningEffort ?? request.effort ?? null,
+      effortReported:
+        request.engine === "openai-cli" && output.reasoningEffort !== null,
+    });
+  } catch (error) {
+    return finish({
+      ok: false,
+      reason: publicRelayError(error, request.engine),
+      model: null,
+      reported: false,
+      effort: request.effort ?? null,
+      effortReported: false,
+    });
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
+  }
 }
 
 export async function probeRelayCapabilities(
@@ -767,24 +1179,16 @@ export async function runRelay(
   if (capability === "web_search" && !query) throw new Error("RELAY_QUERY_REQUIRED");
   if (capability !== "web_search" && !prompt) throw new Error("RELAY_PROMPT_REQUIRED");
 
-  // Per-call effort/model, validated against the ENGINE's own whitelist and
-  // refused echoing the caller's word — never accepted-and-ignored. Claude's
-  // lists are empty on purpose (no equivalent knob), so any value sent for
-  // it is refused the same way.
-  if (
-    request.effort !== undefined &&
-    !engineEfforts(request.engine).includes(request.effort)
-  ) {
-    throw new Error(
-      `RELAY_EFFORT_INVALID:${request.engine}:${request.effort}`,
-    );
-  }
-  if (
-    request.model !== undefined &&
-    !engineModels(request.engine).includes(request.model)
-  ) {
-    throw new Error(`RELAY_MODEL_INVALID:${request.engine}:${request.model}`);
-  }
+  // Per-call model/effort (contract 2.1): resolved against the engine's LIVE
+  // catalogue for this profile and refused echoing the caller's own word —
+  // never accepted-and-ignored, never swapped for the default.
+  const chosen = await resolveRelaySelection(
+    request.engine,
+    request.appProfileId,
+    secretsDirectory,
+    request.model,
+    request.effort,
+  );
 
   // The call rides the profile's own login, nothing else. The shared door
   // key — the last path that used Vaenyx's own credentials here — retired in
@@ -848,6 +1252,12 @@ export async function runRelay(
               : undefined,
             profileKey,
             allowWeb,
+            chosen || request.effort
+              ? {
+                  ...(chosen ? { model: chosen.id, expectedModel: chosen.resolved_id } : {}),
+                  ...(request.effort ? { effort: request.effort } : {}),
+                }
+              : undefined,
           )
         : await runCodexRelay(
             enginePrompt,
@@ -855,7 +1265,7 @@ export async function runRelay(
             profileKey,
             allowWeb,
             request.effort,
-            request.model,
+            chosen?.id,
           );
 
     const results = allowWeb
@@ -891,24 +1301,46 @@ export async function runRelay(
       }
     }
 
-    recordRelayCapabilityProbe(
-      database,
-      request.appProfileId,
-      request.engine,
-      capability,
-      {
-        available: true,
-        unavailableReason: null,
-        provider: engineResult.provider,
-        model: engineResult.model,
-      },
-    );
+    // A successful ordinary call refreshes the DEFAULT-model evidence only when
+    // it ran on the default; a call on a chosen model proves that model.
+    if (chosen) {
+      recordRelayModelProbe(database, request.appProfileId, request.engine, chosen.id, capability, {
+        ok: true,
+        reason: null,
+        actualModel: engineResult.model,
+        modelReportedByEngine: engineResult.modelReportedByEngine,
+        effort: engineResult.reasoningEffort ?? request.effort ?? null,
+        path: "run",
+      });
+    } else {
+      recordRelayCapabilityProbe(
+        database,
+        request.appProfileId,
+        request.engine,
+        capability,
+        {
+          available: true,
+          unavailableReason: null,
+          provider: engineResult.provider,
+          model: engineResult.model,
+        },
+      );
+    }
 
     return {
       text: engineResult.text,
       engine: request.engine,
       provider: engineResult.provider,
       model: engineResult.model,
+      requested_model: chosen?.id ?? null,
+      model_reported_by_engine: engineResult.modelReportedByEngine,
+      model_evidence: engineResult.modelReportedByEngine
+        ? "engine_report"
+        : "thread_config_echo_and_turn_completed",
+      effort: engineResult.reasoningEffort ?? request.effort ?? null,
+      effort_reported_by_engine:
+        request.engine === "openai-cli" && engineResult.reasoningEffort !== null,
+      contract_revision: RELAY_CONTRACT_REVISION,
       ms: Date.now() - started,
       searched_at: allowWeb ? new Date().toISOString() : null,
       query: allowWeb ? query! : null,
@@ -1008,14 +1440,22 @@ export function publicRelayError(error: unknown, engine: RelayEngine): string {
     "RELAY_PROMPT_REQUIRED",
     "RELAY_STRUCTURED_OUTPUT_INVALID",
     "RELAY_RATE_LIMITED",
+    "RELAY_MODEL_CATALOGUE_UNAVAILABLE",
+    "RELAY_MODEL_REQUIRED",
+    "RELAY_TIMEOUT",
     "CLAUDE_SDK_NOT_INSTALLED",
   ]);
+  if (raw === "CODEX_TASK_TIMED_OUT" || raw === "CODEX_RPC_TIMED_OUT") {
+    return "RELAY_TIMEOUT";
+  }
   if (exact.has(raw)) return raw;
   const safePrefixes = [
     "RELAY_CAPABILITY_OFF:",
     "RELAY_CAPABILITY_UNSUPPORTED:",
     "RELAY_EFFORT_INVALID:",
     "RELAY_MODEL_INVALID:",
+    "RELAY_MODEL_NOT_AVAILABLE:",
+    "RELAY_MODEL_NOT_HONOURED:",
     "RELAY_PROFILE_NOT_CONNECTED:",
     "RELAY_NOT_SIGNED_IN:",
     "RELAY_HOST_NOT_ALLOWED:",

@@ -2497,7 +2497,7 @@ describe("Vaenyx Gateway foundation", () => {
     expect(chat.statusCode).toBe(200);
     expect(chat.json()).toMatchObject({
       status: "failed",
-      check: "ChatGPT Subscription Auth quick chat",
+      check: "Main model quick test — codex",
       output: null,
       ownerError: {
         code: "VX-MODEL-INSTALL",
@@ -2520,7 +2520,7 @@ describe("Vaenyx Gateway foundation", () => {
     expect(liveDataChat.statusCode).toBe(200);
     expect(liveDataChat.json()).toMatchObject({
       status: "blocked",
-      check: "ChatGPT Subscription Auth quick chat",
+      check: "Main model quick test — codex",
       output: null,
       ownerError: {
         code: "VX-SAFETY-BOUNDARY",

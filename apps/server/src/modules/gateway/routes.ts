@@ -258,6 +258,10 @@ import {
   CapabilityTestResultSchema,
   UpdateRelaySettingsRequestSchema,
   RelayProfileStatusSchema,
+  RelayModelCatalogueSchema,
+  RelayModelTestRequestSchema,
+  RelayModelTestResultSchema,
+  type RelayModelTestRequest,
   RelayProfileLoginStartRequestSchema,
   RelayProfileLoginStartResponseSchema,
   RelayProfileLoginCompleteRequestSchema,
@@ -472,7 +476,11 @@ import {
   classifyRoutineIntent,
 } from "../core/routine-intent.js";
 import { getFreePicks, refreshFreePicks } from "../core/free-picks.js";
-import { getDefaultProvider, initModelRegistry } from "../models/registry.js";
+import {
+  getDefaultProvider,
+  getModelRegistry,
+  initModelRegistry,
+} from "../models/registry.js";
 import type { ModelProvider } from "../models/provider.js";
 import {
   disclosedCapabilities,
@@ -657,7 +665,7 @@ import {
   disconnectCodexProfile,
   ensureCodexInstalled,
   grantCodexLoginToProfile,
-  runCodexChatTest,
+  listCodexRelayModels,
   runForgeReadOnly,
   startCodexLogin,
 } from "../harness/codex.js";
@@ -729,13 +737,20 @@ import {
   listRelayCalls,
   publicRelayError,
   probeRelayCapabilities,
+  probeRelayModel,
   readRelayConfig,
   recordRelayCall,
   relayHealth,
+  relayModelCatalogue,
   relayProfileEngineStatus,
   runRelay,
   writeRelayConfig,
 } from "../core/relay.js";
+import { claudeSubscriptionModels } from "../models/claude-subscription-provider.js";
+import {
+  readChatTestRecord,
+  writeChatTestRecord,
+} from "../models/chat-test-record.js";
 import { listMonthUsage, usageMonth } from "../core/relay-usage.js";
 import { ocrEngineConnected } from "../core/ocr.js";
 
@@ -2324,6 +2339,23 @@ export async function registerGatewayRoutes(
         return reply.code(401).send({ error: "Owner login required." });
       }
       try {
+        // The two subscriptions answer from their own live catalogues
+        // (contract 2.1): Codex's app-server model/list, the Claude SDK's
+        // supportedModels — the Owner's own logins, never a stored list.
+        if (request.params.id === "codex") {
+          return {
+            models: (await listCodexRelayModels("core"))
+              .filter((model) => !model.hidden)
+              .map((model) => model.id),
+          };
+        }
+        if (request.params.id === "claude-sub") {
+          return {
+            models: (
+              await claudeSubscriptionModels(context.config.secretsDirectory, "core")
+            ).map((model) => model.id),
+          };
+        }
         return {
           models: await listProviderModels(
             context.config.secretsDirectory,
@@ -6130,6 +6162,18 @@ export async function registerGatewayRoutes(
         const status =
           code === "RELAY_RATE_LIMITED"
             ? 429
+            : // Contract 2.1 model errors, each its own answer: unknown to the
+              // engine (400, below), listed but not selectable (404), asked
+              // for but not what ran (409), catalogue could not be read
+              // (503), engine timed out (504).
+              code.startsWith("RELAY_MODEL_NOT_AVAILABLE")
+              ? 404
+              : code.startsWith("RELAY_MODEL_NOT_HONOURED")
+                ? 409
+                : code === "RELAY_MODEL_CATALOGUE_UNAVAILABLE"
+                  ? 503
+                  : code === "RELAY_TIMEOUT"
+                    ? 504
             : code === "RELAY_NOT_OWNER"
             ? 403
             : code === "RELAY_OFF" ||
@@ -6190,6 +6234,8 @@ export async function registerGatewayRoutes(
     "/v1/relay/profile/disconnect",
     "/v1/relay/profile/key/rotate",
     "/v1/relay/profile/probe",
+    "/v1/relay/models",
+    "/v1/relay/models/test",
   ]) {
     app.options(path, async (request, reply) => {
       allowRelayOrigin(request, reply);
@@ -6223,6 +6269,7 @@ export async function registerGatewayRoutes(
       const status = relayProfileEngineStatus(context.database, profile.id);
       return {
         contract_version: status.contract_version,
+        contract_revision: status.contract_revision,
         capability_probe_revision: status.capability_probe_revision,
         mode: status.mode,
         engines: status.engines,
@@ -6279,6 +6326,120 @@ export async function registerGatewayRoutes(
           ...new Set(status.engines.flatMap((engine) => engine.capabilities)),
         ],
       };
+    },
+  );
+
+  // ── Contract 2.1: the live model catalogue and the per-model test ────────
+  // Both answer for the CALLING key's own profile and logins, like health.
+  app.get<{ Querystring: { refresh?: string } }>(
+    "/v1/relay/models",
+    {
+      schema: {
+        querystring: Type.Object(
+          { refresh: Type.Optional(Type.String()) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: RelayModelCatalogueSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
+      const profile = knockingProfile(request);
+      if (profile === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
+      if (!profile) {
+        return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
+      }
+      return relayModelCatalogue(
+        context.database,
+        context.config.secretsDirectory,
+        profile.id,
+        { force: request.query.refresh === "1" },
+      );
+    },
+  );
+
+  app.post<{ Body: RelayModelTestRequest }>(
+    "/v1/relay/models/test",
+    {
+      schema: {
+        body: RelayModelTestRequestSchema,
+        response: {
+          200: RelayModelTestResultSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          429: ErrorResponseSchema,
+          503: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      allowRelayOrigin(request, reply);
+      if (outsideTailnet(request)) {
+        return reply.code(403).send({ error: "RELAY_TAILNET_REQUIRED" });
+      }
+      const profile = knockingProfile(request);
+      if (profile === "wrong-kind") {
+        return reply.code(403).send({ error: "RELAY_KEY_WRONG_KIND" });
+      }
+      if (!profile) {
+        return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
+      }
+      const started = Date.now();
+      try {
+        const result = await probeRelayModel(
+          context.database,
+          context.config.secretsDirectory,
+          profile.id,
+          request.body,
+        );
+        recordRelayCall(context.database, {
+          task: `model-test:${request.body.capability ?? "text_analysis"}`,
+          engine: request.body.engine,
+          capability: request.body.capability ?? "text_analysis",
+          ms: result.ms,
+          ok: result.status === "ok",
+          failure: result.unavailable_reason,
+          appId: profile.id,
+        });
+        return result;
+      } catch (error) {
+        // Refusals BEFORE the engine is reached (bad model, bad effort, not
+        // connected, off, rate-limited) come back as codes; a failure inside
+        // the engine is a "failed" result above, never a 5xx.
+        const code = publicRelayError(error, request.body.engine);
+        recordRelayCall(context.database, {
+          task: `model-test:${request.body.capability ?? "text_analysis"}`,
+          engine: request.body.engine,
+          capability: request.body.capability ?? "text_analysis",
+          ms: Date.now() - started,
+          ok: false,
+          failure: code,
+          appId: profile.id,
+        });
+        const status =
+          code === "RELAY_RATE_LIMITED"
+            ? 429
+            : code.startsWith("RELAY_MODEL_NOT_AVAILABLE")
+              ? 404
+              : code === "RELAY_OFF" ||
+                  code === "RELAY_MODEL_CATALOGUE_UNAVAILABLE" ||
+                  code.startsWith("RELAY_PROFILE_NOT_CONNECTED") ||
+                  code.startsWith("RELAY_NOT_SIGNED_IN")
+                ? 503
+                : 400;
+        return reply.code(status).send({ error: code });
+      }
     },
   );
 
@@ -14536,9 +14697,54 @@ export async function registerGatewayRoutes(
         return reply.code(400).send({ error: "Chat prompt is required." });
       }
 
-      const check = "ChatGPT Subscription Auth quick chat";
+      // The selection under test: what the request names (the screen's
+      // current main model), else the saved main model. Never a stale copy.
+      const registry = getModelRegistry();
+      const providerId = request.body.provider?.trim() || registry.default().id;
+      const target = registry.get(providerId);
+      const requestedModel = request.body.model?.trim() || null;
+      const requestedEffort = request.body.effort?.trim() || null;
+      const check = `Main model quick test — ${providerId}${requestedModel ? ` / ${requestedModel}` : ""}`;
       const startedAt = Date.now();
       const timestamp = new Date().toISOString();
+      const remember = (
+        record: {
+          status: "passed" | "failed" | "blocked";
+          message: string;
+          model: string | null;
+        },
+      ) => {
+        try {
+          writeChatTestRecord(context.database, {
+            provider: providerId,
+            requestedModel,
+            model: record.model,
+            effort: requestedEffort,
+            status: record.status,
+            message: record.message,
+            durationMs: Date.now() - startedAt,
+            timestamp,
+          });
+        } catch {
+          // The record is a convenience; the test's answer is the answer.
+        }
+      };
+      if (!target) {
+        const message = `The account "${providerId}" is not connected, so nothing was tested.`;
+        remember({ status: "failed", message, model: null });
+        return {
+          status: "failed",
+          check,
+          durationMs: Date.now() - startedAt,
+          message,
+          output: null,
+          timestamp,
+          provider: providerId,
+          requestedModel,
+          model: null,
+          effort: requestedEffort,
+        };
+      }
 
       if (isLiveDataPrompt(prompt)) {
         const failure = ownerSafeErrorText(
@@ -14568,7 +14774,18 @@ export async function registerGatewayRoutes(
       }
 
       try {
-        const output = await runCodexChatTest(prompt);
+        // Through the SAME provider path the chat uses, with the chosen
+        // model named on this one call; the engine reports what answered.
+        const answer = await target.sendChat(
+          [{ role: "owner", content: prompt }],
+          undefined,
+          {
+            ...(requestedModel ? { model: requestedModel } : {}),
+            ...(requestedEffort ? { reasoningEffort: requestedEffort } : {}),
+          },
+        );
+        const output = answer.answer;
+        const answeredBy = answer.model ?? null;
         const passed = output.trim().length > 0;
         const failure = passed
           ? null
@@ -14589,16 +14806,22 @@ export async function registerGatewayRoutes(
           resourceType: "provider_connection",
         });
 
+        const message = passed
+          ? `Test passed on ${providerId}${requestedModel ? ` / ${requestedModel}` : ""}. Engine reported: ${answeredBy ?? "no model name"}.`
+          : (failure?.text ?? "Chat test returned no visible answer.");
+        remember({ status: passed ? "passed" : "failed", message, model: answeredBy });
         return {
           status: passed ? "passed" : "failed",
           check,
           durationMs: Date.now() - startedAt,
-          message: passed
-            ? "Chat test passed. Vaenyx can send a simple prompt through your ChatGPT / Codex account."
-            : (failure?.text ?? "Chat test returned no visible answer."),
+          message,
           ...(failure ? { ownerError: failure.ownerError } : {}),
           output: passed ? output : null,
           timestamp,
+          provider: providerId,
+          requestedModel,
+          model: answeredBy,
+          effort: requestedEffort,
         };
       } catch (error) {
         const failure = getChatTestFailure(error);
@@ -14615,6 +14838,11 @@ export async function registerGatewayRoutes(
           resourceType: "provider_connection",
         });
 
+        remember({
+          status: blocked ? "blocked" : "failed",
+          message: failure.text,
+          model: null,
+        });
         return {
           status: blocked ? "blocked" : "failed",
           check,
@@ -14623,8 +14851,57 @@ export async function registerGatewayRoutes(
           ownerError: failure.ownerError,
           output: null,
           timestamp,
+          provider: providerId,
+          requestedModel,
+          model: null,
+          effort: requestedEffort,
         };
       }
+    },
+  );
+
+  // The last main-model test on record, for the card to show on arrival —
+  // the saved main model's, or the account the query names.
+  app.get<{ Querystring: { provider?: string } }>(
+    "/v1/settings/chat-test/last",
+    {
+      schema: {
+        querystring: Type.Object(
+          { provider: Type.Optional(Type.String({ maxLength: 40 })) },
+          { additionalProperties: false },
+        ),
+        response: {
+          200: Type.Object(
+            { last: Type.Union([ChatConnectionTestResultSchema, Type.Null()]) },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const providerId =
+        request.query.provider?.trim() || getModelRegistry().default().id;
+      const record = readChatTestRecord(context.database, providerId);
+      if (!record) return { last: null };
+      return {
+        last: {
+          status: record.status,
+          check: `Main model quick test — ${record.provider}${record.requestedModel ? ` / ${record.requestedModel}` : ""}`,
+          durationMs: record.durationMs,
+          message: record.message,
+          output: null,
+          timestamp: record.timestamp,
+          provider: record.provider,
+          requestedModel: record.requestedModel,
+          model: record.model,
+          effort: record.effort,
+        },
+      };
     },
   );
 }

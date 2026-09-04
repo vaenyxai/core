@@ -1,5 +1,11 @@
 export const RELAY_CONTRACT_VERSION = 2;
-export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.6";
+// Additive revision within v2 (2026-09-01): per-call model selection with
+// engine-reported evidence, the live model catalogue and per-model tests.
+export const RELAY_CONTRACT_REVISION = "2.1";
+// Bumped with the model-selection contract: probe evidence is now bound to
+// the model it ran on, so every earlier green tick is retired rather than
+// reused against a model it never touched.
+export const RELAY_CAPABILITY_PROBE_REVISION = "2026-09-03.7";
 
 export interface RelaySearchResult {
   title: string;

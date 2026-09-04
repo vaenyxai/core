@@ -659,6 +659,15 @@ Read this inside the app: **Settings → Manual**.
   The one worth knowing cold: the two easiest free options (Gemini's free
   tier, Mistral's free tier) **both train on what you send them by default**.
 
+- **Which model, on each subscription** — the ChatGPT (Codex) and Claude rows
+  under Models now list the models your own login may use, asked of the
+  engine itself, never a stored list. Pick one as the main model's model, or
+  leave **Default model**. The **Main model quick test** on the Connection card
+  sends one line through the main model exactly as chosen on screen and shows
+  the model the engine itself reported back, with the time; the last test
+  stays on the card. Claude reports its model on every answer; Codex echoes
+  the model the thread was set to and refuses one your plan does not allow.
+
 ## 10. Subscription Door — lending your subscriptions to your own apps
 
 - **What it is** — Settings → AI Settings → **Subscription Door**. Your other
@@ -683,6 +692,10 @@ Read this inside the app: **Settings → Manual**.
   when the CLI returns structured, verifiable source URLs. Image tests use a
   real 256-pixel colour picture. PDF tests print a fresh code inside the file
   and pass only when the selected engine reads that code.
+- **Apps choose a model per call** — an app can ask the door for the live
+  model list of your logins, test one model before assigning work to it, and
+  name that model on each call. Its choice never changes your own main model,
+  and one app's choice never changes another's.
 - **A Token is not a Model Key** — this door takes Model Keys only. A Method or
   Routine Token from Library → Token knocking here is refused with its own
   answer (`RELAY_KEY_WRONG_KIND`), so you always know which of the two an app
@@ -952,5 +965,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.12** · last updated 2026-09-02.
+Manual for **v0.4.12** · last updated 2026-09-01.
 Keep this file up to date whenever a feature changes.

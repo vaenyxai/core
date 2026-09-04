@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import { writeGlobalCapabilities } from "../src/modules/core/capabilities.js";
+import { findRelayModel } from "../src/modules/core/relay-models.js";
 import {
   pictureSize,
   probePdf,
@@ -261,22 +262,58 @@ describe("the subscription door", () => {
     ).rejects.toThrow("RELAY_TOO_MANY_FILES");
   });
 
-  it("refuses an effort or model outside the engine's whitelist, echoing it", async () => {
+  it("refuses an effort the engine does not have, echoing the caller's word", async () => {
     const database = createTestDatabase();
     writeRelayConfig(database, OPEN_DOOR);
-    // The engine's word comes back with the caller's own value — never a
-    // silent acceptance that would do nothing.
+    // Both engines' tiers are the engines' own (live-verified 2026-09-01):
+    // Codex low…xhigh, Claude low…max. Anything else comes back by name —
+    // never a silent acceptance that would do nothing.
+    await expect(
+      runOnce(database, { engine: "openai-cli", effort: "ultra" }),
+    ).rejects.toThrow("RELAY_EFFORT_INVALID:openai-cli:ultra");
+    await expect(
+      runOnce(database, { engine: "claude-cli", effort: "max" }),
+    ).rejects.toThrow("RELAY_PROFILE_NOT_CONNECTED:claude-cli");
     await expect(
       runOnce(database, { engine: "openai-cli", effort: "xhigh" }),
-    ).rejects.toThrow("RELAY_EFFORT_INVALID:openai-cli:xhigh");
+    ).rejects.toThrow("RELAY_PROFILE_NOT_CONNECTED:openai-cli");
+  });
+
+  it("cannot judge a model without the engine's catalogue, so an unconnected key hears that first", async () => {
+    const database = createTestDatabase();
+    writeRelayConfig(database, OPEN_DOOR);
+    // A named model is resolved against the LIVE catalogue of the profile's
+    // own login; with no login there is no catalogue to consult, and the
+    // answer is the login, not a guess about the model.
     await expect(
       runOnce(database, { engine: "openai-cli", model: "gpt-99" }),
-    ).rejects.toThrow("RELAY_MODEL_INVALID:openai-cli:gpt-99");
-    // Claude's lists are empty on purpose: no equivalent knob, so any value
-    // is refused rather than accepted-and-ignored.
-    await expect(
-      runOnce(database, { engine: "claude-cli", effort: "medium" }),
-    ).rejects.toThrow("RELAY_EFFORT_INVALID:claude-cli:medium");
+    ).rejects.toThrow("RELAY_PROFILE_NOT_CONNECTED:openai-cli");
+  });
+
+  it("resolves a requested model by id or by what an alias resolves to", () => {
+    const catalogue = {
+      engine: "claude-cli" as const,
+      verified_at: new Date().toISOString(),
+      default_model: "default",
+      models: [
+        {
+          id: "sonnet",
+          resolved_id: "claude-sonnet-5",
+          display_name: "Sonnet",
+          default: false,
+          selectable: true,
+          unavailable_reason: null,
+          efforts: ["low", "medium", "high"],
+          default_effort: "high",
+          input: ["text"],
+          upgrade_to: null,
+          model_reported_by_engine: true,
+        },
+      ],
+    };
+    expect(findRelayModel(catalogue, "sonnet")?.id).toBe("sonnet");
+    expect(findRelayModel(catalogue, "claude-sonnet-5")?.id).toBe("sonnet");
+    expect(findRelayModel(catalogue, "gpt-99")).toBeNull();
   });
 
   it("tells callers what each engine will accept", () => {
@@ -284,11 +321,14 @@ describe("the subscription door", () => {
     const health = relayHealth(database, TEST_PROFILE);
     const codex = health.engines.find((engine) => engine.id === "openai-cli");
     const claude = health.engines.find((engine) => engine.id === "claude-cli");
-    expect(codex?.efforts).toEqual(["low", "medium", "high"]);
-    // Empty until a model override verifies live — see RELAY_CODEX_MODELS.
+    expect(health.contract_revision).toBe("2.1");
+    expect(codex?.efforts).toEqual(["low", "medium", "high", "xhigh"]);
+    expect(claude?.efforts).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    // The model list is the engine's live catalogue; until this profile's
+    // catalogue was asked for, health says nothing rather than guessing.
     expect(codex?.models).toEqual([]);
-    expect(claude?.efforts).toEqual([]);
     expect(claude?.models).toEqual([]);
+    expect(codex?.model_catalogue_verified_at).toBeNull();
   });
 
   it("reports every implemented capability separately from its connection state", () => {

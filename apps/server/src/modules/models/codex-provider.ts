@@ -20,6 +20,13 @@ import type {
 export class CodexProvider implements ModelProvider {
   readonly id = "codex";
   readonly name = "Codex CLI (ChatGPT)";
+  // The model chosen for this account under Settings → Models (empty = the
+  // account's own default). A per-call model still wins; nothing else does.
+  readonly #model: string | null;
+
+  constructor(options?: { model?: string | null }) {
+    this.#model = options?.model?.trim() || null;
+  }
 
   async sendChat(
     messages: ModelChatMessage[],
@@ -43,7 +50,14 @@ export class CodexProvider implements ModelProvider {
       );
       return { answer, webSearchUsed: false };
     }
-    return runAskVaenyxChat(messages, projectContext, options);
+    return runAskVaenyxChat(messages, projectContext, {
+      ...options,
+      ...(options?.model?.trim()
+        ? { model: options.model.trim() }
+        : this.#model
+          ? { model: this.#model }
+          : {}),
+    });
   }
 
   healthCheck(): ModelProviderStatus {
