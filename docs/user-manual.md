@@ -669,7 +669,8 @@ Read this inside the app: **Settings → Manual**.
   through that exact model and shows what the engine reported answered, how
   long it took and when; only a model that answered gets a **Use** button, and
   models in use are the ones the Capabilities rows and the switcher under the
-  chat box offer. **Stop using** drops one again. Claude reports its model on
+  chat box offer — a row shows no model picker at all until its account has
+  one in use. **Stop using** drops one again. Claude reports its model on
   every answer; Codex echoes the model the thread was set to and refuses one
   your plan does not allow; a key backend reports nothing, so its test shows
   the model as requested. The **Main model quick test** on the Connection card
@@ -677,9 +678,9 @@ Read this inside the app: **Settings → Manual**.
 
 ## 10. Subscription Door — lending your subscriptions to your own apps
 
-- **Folded by default** — the card sits folded at the bottom of AI Settings
-  with Open/Closed and the number of keys on the fold; click the fold to open
-  it.
+- **Each section folds** — the switch stays in sight; the address, your
+  apps, file sources, limits, this month and recent calls each open on their
+  own heading.
 - **What it is** — Settings → AI Settings → **Subscription Door**. Your other
   apps borrow your ChatGPT and Claude subscriptions through this computer.
 - **Why it exists** — those subscriptions can only be used by a machine running

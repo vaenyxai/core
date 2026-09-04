@@ -171,14 +171,19 @@ export function EnginePairPicker({
     }
   }
 
+  // No adopted model, nothing pinned: no second picker at all — the account
+  // answers with its own default, and a menu offering only "default" said
+  // nothing (Oskar, 2026-09-05). Once models are adopted, the unpinned state
+  // is one honest entry among them.
   function modelOptions(
     provider: string | undefined,
     chosen: string | undefined,
-  ) {
+  ): PickerOption[] | null {
     const listed = provider ? (models[provider] ?? []) : [];
+    if (listed.length === 0 && !chosen) return null;
     const options: PickerOption[] = [
       {
-        label: zh ? "默认型号" : "Default model",
+        label: zh ? "未指定(引擎默认)" : "Not pinned (engine default)",
         value: DEFAULT_MODEL,
       },
       ...listed.map((id) => ({ label: id, value: id })),
@@ -230,6 +235,8 @@ export function EnginePairPicker({
         const canServe =
           !choice ||
           providerOptions.some((option) => option.value === choice.provider);
+        const modelMenu =
+          choice && !follows ? modelOptions(choice.provider, choice.model) : null;
         return (
           <div className="engine-pair-side" key={row.which}>
             <div className="engine-pair-row">
@@ -282,14 +289,14 @@ export function EnginePairPicker({
                 ]}
                 value={providerValue}
               />
-              {choice && !follows ? (
+              {choice && modelMenu ? (
                 <Picker
                   ariaLabel={`${slot} ${row.which} model`}
                   disabled={busy !== null}
                   onChange={(next) =>
                     void save(row.which, choice.provider, next)
                   }
-                  options={modelOptions(choice.provider, choice.model)}
+                  options={modelMenu}
                   value={modelValue}
                 />
               ) : (

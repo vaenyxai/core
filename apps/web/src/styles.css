@@ -10063,37 +10063,28 @@ body {
   color: #df938a;
 }
 
-/* ── The Subscription Door, folded by default (2026-09-05) ─────────────────
-   Open/closed and the key count sit on the fold; everything else opens. */
-.door-card > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  list-style: none;
-  cursor: pointer;
+/* ── The Subscription Door: every section folds on its own (2026-09-05) ───
+   The switch stays in sight; a section's heading is its fold. */
+.door-section {
+  margin: var(--space-2) 0 0;
 }
 
-.door-card > summary::-webkit-details-marker {
+.door-section > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.door-section > summary::-webkit-details-marker {
   display: none;
 }
 
-.door-card-summary .eyebrow {
-  display: block;
+.door-section > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  color: var(--text-faint);
 }
 
-.door-card-title {
-  display: block;
-  font-size: var(--fs-md);
-  font-weight: 600;
-}
-
-.door-card-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.door-card[open] > summary {
-  margin-bottom: var(--space-3);
+.door-section[open] > summary::before {
+  content: "▾";
 }

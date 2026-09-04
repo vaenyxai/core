@@ -13189,27 +13189,13 @@ function SubscriptionDoorPanel() {
   const { settings, calls } = panel;
 
   return (
-    <details className="settings-card door-card">
-      {/* Folded by default (Oskar, 2026-09-05: 没有必要一直打开这么多信息):
-          the two facts worth a glance sit on the fold itself. */}
-      <summary className="door-card-summary">
-        <span>
-          <span className="eyebrow">For your other apps</span>
-          <span className="door-card-title">Subscription Door</span>
-        </span>
-        <span className="door-card-chips">
-          <span
-            className={
-              settings.enabled ? "library-chip chip-published" : "library-chip"
-            }
-          >
-            {settings.enabled ? "Open" : "Closed"}
-          </span>
-          <span className="library-chip">
-            {apps.length} {apps.length === 1 ? "key" : "keys"}
-          </span>
-        </span>
-      </summary>
+    <section className="settings-card">
+      <p className="eyebrow">For your other apps</p>
+      <h2>Subscription Door</h2>
+      {/* The switch stays in sight; every section below it folds on its own
+          (Oskar, 2026-09-05: 不是整个折叠,是每个项目折叠) — the address, the
+          keys, the file sources, the limits, this month and recent calls
+          each open only when they are the thing being looked at. */}
 
       <div className="door-switch">
         <div>
@@ -13228,9 +13214,8 @@ function SubscriptionDoorPanel() {
         />
       </div>
 
-      <h3 className="door-subhead">
-        {lang === "zh" ? "给 app 填的地址" : "Address for your apps"}
-      </h3>
+      <details className="door-section">
+        <summary className="door-subhead">{lang === "zh" ? "给 app 填的地址" : "Address for your apps"}</summary>
       {/* One line: what gets pasted into an app's settings next to its key.
           The loopback twin was noise — an app on another device can never
           reach 127.0.0.1 here (Oskar, 2026-08-06). */}
@@ -13252,7 +13237,9 @@ function SubscriptionDoorPanel() {
         </span>
       </div>
 
-      <h3 className="door-subhead">Your apps</h3>
+      </details>
+      <details className="door-section">
+        <summary className="door-subhead">Your apps · {apps.length}</summary>
       <ul className="settings-dots">
         <li>
           {lang === "zh"
@@ -13472,9 +13459,9 @@ function SubscriptionDoorPanel() {
         </div>
       ))}
 
-      <h3 className="door-subhead">
-        {lang === "zh" ? "文件可以来自" : "Files may come from"}
-      </h3>
+      </details>
+      <details className="door-section">
+        <summary className="door-subhead">{lang === "zh" ? "文件可以来自" : "Files may come from"}</summary>
       {/* The one list that stays (Oskar, 2026-08-06: the rest of "who and
           where" retired with the shared key). This one is a real wall: it is
           the only thing stopping a stolen key from making this machine
@@ -13496,7 +13483,9 @@ function SubscriptionDoorPanel() {
         />
       </div>
 
-      <h3 className="door-subhead">Limits</h3>
+      </details>
+      <details className="door-section">
+        <summary className="door-subhead">Limits</summary>
       {/* Typed freely, saved when the box loses focus (or on Enter) — never
           per keystroke, or the server's clamp rewrites the box mid-number. */}
       <div className="door-limits">
@@ -13586,7 +13575,9 @@ function SubscriptionDoorPanel() {
           sees a bill that grew and cannot say which app grew it. Token counts
           appear only when an engine really reported them — the Claude SDK
           does, the Codex CLI does not — never estimated. */}
-      <h3 className="door-subhead">This month</h3>
+      </details>
+      <details className="door-section">
+        <summary className="door-subhead">This month</summary>
       {!usage || usage.rows.length === 0 ? (
         <p className="door-legend">
           {lang === "zh" ? "这个月还没有调用。" : "No calls yet this month."}
@@ -13624,7 +13615,9 @@ function SubscriptionDoorPanel() {
         </ul>
       )}
 
-      <h3 className="door-subhead">Recent calls</h3>
+      </details>
+      <details className="door-section">
+        <summary className="door-subhead">Recent calls · {calls.length}</summary>
       {calls.length === 0 ? (
         <p className="door-legend">Nothing yet.</p>
       ) : (
@@ -13651,7 +13644,8 @@ function SubscriptionDoorPanel() {
         What happened, never what was in it: no prompt, no file, no answer is
         written down.
       </p>
-    </details>
+      </details>
+    </section>
   );
 }
 
@@ -16563,7 +16557,7 @@ function ModelsPanel({
                   2026-09-05: 右边有一个搜索按钮). */}
               {provider.connected ? (
                 <button
-                  className="text-button model-finder-toggle"
+                  className="capability-row-test model-finder-toggle"
                   onClick={() => void openFinder(provider)}
                   type="button"
                 >
