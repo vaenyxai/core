@@ -212,7 +212,14 @@ main model does not change.
 **Per-model test — `POST /v1/relay/models/test`**
 `{ "engine", "model", "effort"?, "capability"? }` with capability one of
 `text_analysis` (default), `structured_output`, `vision_analysis`. One
-real call on that model; the answer is a `RelayModelTestResult` with
+real call on that model, judged the way that kind of call is used:
+`text_analysis` must answer a one-word instruction, `structured_output`
+must return bare parseable JSON (the same rule the run path enforces as
+`RELAY_STRUCTURED_OUTPUT_INVALID`; a code fence fails), `vision_analysis`
+must name the colour of a generated square. A failed test names the
+reason (`TEXT_PROBE_FAILED`, `STRUCTURED_PROBE_FAILED`,
+`VISION_PROBE_FAILED`, or the engine's own error). The answer is a
+`RelayModelTestResult` with
 `status` ok/failed, the same model-evidence fields as a run, `ms`,
 `verified_at`, and both revisions. The evidence lands on that model's
 `verified` list in the catalogue. Refusals before the engine is reached come

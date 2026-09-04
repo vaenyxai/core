@@ -921,10 +921,18 @@ export async function probeRelayModel(
     const image = capability === "vision_analysis" ? redSquarePng() : null;
     const imagePath = resolve(scratch, "probe.png");
     if (image) writeFileSync(imagePath, image);
+    // Each capability is judged the way a real call of that kind is used:
+    // text by a plain one-word reply, structured output by the same strict
+    // JSON rule the run path enforces (RELAY_STRUCTURED_OUTPUT_INVALID), and
+    // vision by naming the colour of a generated square. Judging a text test
+    // by strict JSON failed models that wrap JSON in a code fence (haiku,
+    // live 2026-09-04) although their text answers are fine.
     const prompt =
       capability === "vision_analysis"
         ? "What color is the square in the attached image? Reply with the color only."
-        : 'Return exactly this JSON and nothing else: {"vaenyx_probe":"ok"}';
+        : capability === "structured_output"
+          ? 'Return exactly this JSON and nothing else: {"vaenyx_probe":"ok"}'
+          : "Reply with exactly the single word PONG and nothing else.";
     recordEngineUsage(database, profileId, request.engine);
     const output =
       request.engine === "openai-cli"
@@ -947,12 +955,14 @@ export async function probeRelayModel(
     let ok: boolean;
     if (capability === "vision_analysis") {
       ok = namesRed(output.text);
-    } else {
+    } else if (capability === "structured_output") {
       try {
         ok = (JSON.parse(output.text) as { vaenyx_probe?: unknown }).vaenyx_probe === "ok";
       } catch {
         ok = false;
       }
+    } else {
+      ok = output.text.toUpperCase().includes("PONG");
     }
     return finish({
       ok,
@@ -960,7 +970,9 @@ export async function probeRelayModel(
         ? null
         : capability === "vision_analysis"
           ? "VISION_PROBE_FAILED"
-          : "STRUCTURED_PROBE_FAILED",
+          : capability === "structured_output"
+            ? "STRUCTURED_PROBE_FAILED"
+            : "TEXT_PROBE_FAILED",
       model: output.model,
       reported: output.modelReportedByEngine,
       effort: output.reasoningEffort ?? request.effort ?? null,
