@@ -479,19 +479,23 @@ Read this inside the app: **Settings → Manual**.
   shared answer is how a chat model chosen for quality ends up putting every
   photo on its tightest free bucket.
 - **Every job has a main model and a backup** — open a capability row and you
-  see two lines. Pick the account, then a model from that account's own live
-  list (Vaenyx asks the provider with your key; a backend with no list to ask
-  keeps the default). The **backup** line is empty until you fill it, and
-  Vaenyx never fills it for you.
+  see two lines. Pick the account, then a model from that account's **adopted**
+  list — the models you found, tested and chose to use under Models (below).
+  The **backup** line is empty until you fill it, and Vaenyx never fills it
+  for you.
 - **The backup only stands in when the main model could not answer at all** —
   out of free quota, key rejected, model retired, provider down, unreachable.
   A poor answer is not that, and standing in there would only hide it. When
   the backup does answer, the reply ends with one plain sentence saying which
   model stood in, why the main one could not, and the error code — never a
   quiet swap you meet later as "why does this answer look different".
-- **The main model has a row too** — the first row of Capabilities. It is the
-  same setting as the switcher under the chat box: change either and the other
-  follows.
+- **The main model is a preselection** — the first row of Capabilities. Every
+  other row may **follow the main model** instead of naming a backend: it then
+  uses the main model's account and model, and the main model's backup too, so
+  changing the main model changes every follower at once. **Text** — chat,
+  Routines, Methods, the Journal — is its own row right under it and follows
+  the main model unless you point it elsewhere. The switcher under the chat
+  box changes that one conversation only; it never changes these rows.
 - **Free or paid, marked per job** — every provider carries a badge, and the
   engine lists mark the job that costs money even when the provider is
   otherwise free. Gemini is the one to know: its free tier covers text,
@@ -610,9 +614,9 @@ Read this inside the app: **Settings → Manual**.
   because some of them spend real money.
 - **A connected model that cannot do a job is greyed out, not hidden** — so you
   can see it is there and that it is not the tool for this.
-- **The main model is chosen once**, in the **Models** card below this one —
-  **Set As Default**. Every row that rides the main model re-labels itself to
-  whatever you picked.
+- **The main model is chosen once**, on its own row at the top of
+  Capabilities (or with **Set As Default** on a Models card). Every row that
+  follows it re-labels itself to whatever you picked.
 - **If an engine stops working** — Vaenyx does not quietly switch to another
   model. It tells you which one failed and why, and you change it here. That is
   deliberate: a silent swap means never knowing who wrote the answer.
@@ -659,17 +663,23 @@ Read this inside the app: **Settings → Manual**.
   The one worth knowing cold: the two easiest free options (Gemini's free
   tier, Mistral's free tier) **both train on what you send them by default**.
 
-- **Which model, on each subscription** — the ChatGPT (Codex) and Claude rows
-  under Models now list the models your own login may use, asked of the
-  engine itself, never a stored list. Pick one as the main model's model, or
-  leave **Default model**. The **Main model quick test** on the Connection card
-  sends one line through the main model exactly as chosen on screen and shows
-  the model the engine itself reported back, with the time; the last test
-  stays on the card. Claude reports its model on every answer; Codex echoes
-  the model the thread was set to and refuses one your plan does not allow.
+- **Find → Test → Use** — every connected Models card has a **Find models**
+  button. It asks the account itself which models your login or key may use
+  right now (never a stored list) and lists them. **Test** sends one line
+  through that exact model and shows what the engine reported answered, how
+  long it took and when; only a model that answered gets a **Use** button, and
+  models in use are the ones the Capabilities rows and the switcher under the
+  chat box offer. **Stop using** drops one again. Claude reports its model on
+  every answer; Codex echoes the model the thread was set to and refuses one
+  your plan does not allow; a key backend reports nothing, so its test shows
+  the model as requested. The **Main model quick test** on the Connection card
+  still sends one line through the main model exactly as chosen on screen.
 
 ## 10. Subscription Door — lending your subscriptions to your own apps
 
+- **Folded by default** — the card sits folded at the bottom of AI Settings
+  with Open/Closed and the number of keys on the fold; click the fold to open
+  it.
 - **What it is** — Settings → AI Settings → **Subscription Door**. Your other
   apps borrow your ChatGPT and Claude subscriptions through this computer.
 - **Why it exists** — those subscriptions can only be used by a machine running
@@ -965,5 +975,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.12** · last updated 2026-09-01.
+Manual for **v0.4.12** · last updated 2026-09-05.
 Keep this file up to date whenever a feature changes.

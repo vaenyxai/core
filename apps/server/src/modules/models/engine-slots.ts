@@ -33,6 +33,7 @@ import {
 /** The capabilities that pick their own engine. Keys in the secrets file. */
 export const ENGINE_SLOTS = [
   "chat",
+  "text",
   "vision",
   "imageOutput",
   "voice",
@@ -92,19 +93,69 @@ function chatPrimary(
   return model ? { provider, model } : { provider };
 }
 
+// ── Following the main model (Oskar, 2026-09-05) ────────────────────────────
+// The main model (the chat slot) is a PRESELECTION, not a job: every other
+// row may point at it instead of naming a backend of its own, and a row that
+// follows it follows its backup too — "when the main one cannot work, use its
+// stand-in at once, without setting one per row". Stored as the provider
+// name "main" in the row's own entry, so the Settings row can show "follows"
+// while every reader below still gets a real provider.
+export const FOLLOW_MAIN = "main";
+
+export interface EnginePairDetail extends EnginePair {
+  /** Whether each side is stored as "follow the main model". The primary and
+   *  backup above are already resolved to real providers. */
+  follows: { primary: boolean; backup: boolean };
+}
+
+/** What the file literally holds for one side: nothing, "none", "main", or a
+ *  provider name. */
+function storedProvider(
+  connections: Record<string, ProviderConnection>,
+  key: string,
+  field: "provider" | "engine",
+): string | undefined {
+  const value = connections[key]?.[field]?.trim();
+  return value ? value : undefined;
+}
+
+export function describeEnginePair(
+  secretsDirectory: string,
+  slot: EngineSlot,
+): EnginePairDetail {
+  const connections = readProviderConnections(secretsDirectory);
+  const field = slotField(slot);
+  const main: EnginePair = {
+    primary: chatPrimary(secretsDirectory, connections),
+    backup: toChoice(connections[backupKey("chat")]),
+  };
+  if (slot === "chat") {
+    return { ...main, follows: { primary: false, backup: false } };
+  }
+  const rawPrimary = storedProvider(connections, slot, field);
+  const rawBackup = storedProvider(connections, backupKey(slot), field);
+  // Text is chat and every other written job; it cannot be off, so "nothing
+  // chosen" means "follow". Every other row keeps "nothing chosen" = off.
+  const primaryFollows =
+    rawPrimary === FOLLOW_MAIN || (slot === "text" && rawPrimary === undefined);
+  const backupFollows =
+    rawBackup === FOLLOW_MAIN ||
+    (rawBackup === undefined && (primaryFollows || slot === "text"));
+  return {
+    primary: primaryFollows ? main.primary : toChoice(connections[slot], field),
+    backup: backupFollows
+      ? main.backup
+      : toChoice(connections[backupKey(slot)], field),
+    follows: { primary: primaryFollows, backup: backupFollows },
+  };
+}
+
 export function readEnginePair(
   secretsDirectory: string,
   slot: EngineSlot,
 ): EnginePair {
-  const connections = readProviderConnections(secretsDirectory);
-  const field = slotField(slot);
-  return {
-    primary:
-      slot === "chat"
-        ? chatPrimary(secretsDirectory, connections)
-        : toChoice(connections[slot], field),
-    backup: toChoice(connections[backupKey(slot)], field),
-  };
+  const { primary, backup } = describeEnginePair(secretsDirectory, slot);
+  return { primary, backup };
 }
 
 /** Write one side of a slot. null clears it (and clearing the primary clears
@@ -116,6 +167,10 @@ export function writeEngineChoice(
   choice: EngineChoice | null,
 ): EnginePair {
   const connections = readProviderConnections(secretsDirectory);
+  // The main model is what the others follow; it cannot follow itself.
+  if (choice?.provider === FOLLOW_MAIN && slot === "chat") {
+    throw new Error("MAIN_CANNOT_FOLLOW_ITSELF");
+  }
   // Chat's main engine goes back where it came from (see chatPrimary): the
   // default-provider file, and the model on that provider's own connection.
   // Chat cannot be turned off, so a null here is ignored rather than obeyed —
@@ -133,8 +188,19 @@ export function writeEngineChoice(
   }
   const key = which === "primary" ? slot : backupKey(slot);
   if (!choice) {
-    delete connections[key];
-    if (which === "primary") delete connections[backupKey(slot)];
+    // A row that follows the main model inherits its backup when it has none
+    // of its own, and Text follows by default — so "no backup" on those rows
+    // has to be written down, or clearing it would read as "inherit".
+    const inherits =
+      slot === "text" ||
+      storedProvider(connections, slot, slotField(slot)) === FOLLOW_MAIN;
+    if (which === "backup" && inherits) {
+      connections[key] = { ...connections[key], [slotField(slot)]: "none" };
+      delete connections[key].model;
+    } else {
+      delete connections[key];
+      if (which === "primary") delete connections[backupKey(slot)];
+    }
   } else {
     // The slot entry keeps whatever else lived on it (the Owner's chosen
     // voices, above all) — only the pointer and the model are replaced.

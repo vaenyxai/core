@@ -1697,9 +1697,58 @@ export const EngineChoiceSchema = Type.Object(
 export const EnginePairSchema = Type.Object(
   {
     slot: Type.String({ minLength: 1, maxLength: 40 }),
+    // Already resolved: a side that follows the main model carries the main
+    // model's real provider here, and says so in `follows`.
     primary: Type.Union([EngineChoiceSchema, Type.Null()]),
     backup: Type.Union([EngineChoiceSchema, Type.Null()]),
+    follows: Type.Optional(
+      Type.Object(
+        { primary: Type.Boolean(), backup: Type.Boolean() },
+        { additionalProperties: false },
+      ),
+    ),
   },
+  { additionalProperties: false },
+);
+
+// Models the Owner has found, tested and chosen to use (2026-09-05): the top
+// of Settings picks only among these; a model earns its place with one real
+// answer, recorded here with what the engine said answered.
+export const ModelAdmissionTestSchema = Type.Object(
+  {
+    status: Type.Union([Type.Literal("ok"), Type.Literal("failed")]),
+    requestedModel: Type.String(),
+    model: Type.Union([Type.String(), Type.Null()]),
+    modelReportedByEngine: Type.Boolean(),
+    message: Type.String(),
+    durationMs: Type.Integer(),
+    timestamp: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+export const AdoptedModelSchema = Type.Object(
+  {
+    id: Type.String(),
+    adoptedAt: Type.String(),
+    test: Type.Union([ModelAdmissionTestSchema, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const AdoptedModelsResponseSchema = Type.Object(
+  {
+    adopted: Type.Record(Type.String(), Type.Array(AdoptedModelSchema)),
+    tests: Type.Record(
+      Type.String(),
+      Type.Record(Type.String(), ModelAdmissionTestSchema),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const ModelIdRequestSchema = Type.Object(
+  { model: Type.String({ minLength: 1, maxLength: 200 }) },
   { additionalProperties: false },
 );
 
@@ -3191,6 +3240,10 @@ export type UpdateStatus = Static<typeof UpdateStatusSchema>;
 export type ConnectVisionRequest = Static<typeof ConnectVisionRequestSchema>;
 export type EngineChoice = Static<typeof EngineChoiceSchema>;
 export type EnginePair = Static<typeof EnginePairSchema>;
+export type ModelAdmissionTest = Static<typeof ModelAdmissionTestSchema>;
+export type AdoptedModel = Static<typeof AdoptedModelSchema>;
+export type AdoptedModelsResponse = Static<typeof AdoptedModelsResponseSchema>;
+export type ModelIdRequest = Static<typeof ModelIdRequestSchema>;
 export type SetEngineChoiceRequest = Static<
   typeof SetEngineChoiceRequestSchema
 >;

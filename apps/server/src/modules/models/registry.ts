@@ -9,6 +9,7 @@ import {
   resolveClaudeSubscriptionAuth,
 } from "./claude-subscription-provider.js";
 import { CodexProvider } from "./codex-provider.js";
+import { describeEnginePair, type EngineChoice } from "./engine-slots.js";
 import {
   readDefaultProviderId,
   readProviderConnections,
@@ -111,6 +112,9 @@ let registry: ModelRegistry | null = null;
 // Build the registry from config at startup: Codex is always the default
 // provider; any backend configured in the local model-providers.json secrets
 // file is registered alongside it. Called once from buildApp.
+// The Text row's explicit choice, or null while it follows the main model.
+let textChoice: EngineChoice | null = null;
+
 export function initModelRegistry(config: {
   secretsDirectory: string;
 }): ModelRegistry {
@@ -198,9 +202,32 @@ export function initModelRegistry(config: {
   if (defaultId) {
     next.setDefault(defaultId);
   }
+  // The Text row (Oskar, 2026-09-05): chat and every other written job use
+  // it. Following the main model — the default — is the registry default
+  // itself; an explicit choice is remembered here and applied per call.
+  const text = describeEnginePair(config.secretsDirectory, "text");
+  textChoice = text.follows.primary ? null : text.primary;
 
   registry = next;
   return next;
+}
+
+/** The same backend, answering with one fixed model unless a call names its
+ *  own. How a row's "provider + model" choice becomes a provider object. */
+export function withPinnedModel(
+  provider: ModelProvider,
+  model: string,
+): ModelProvider {
+  return {
+    id: provider.id,
+    name: provider.name,
+    healthCheck: () => provider.healthCheck(),
+    sendChat: (messages, projectContext, options) =>
+      provider.sendChat(messages, projectContext, {
+        ...options,
+        model: options?.model?.trim() || model,
+      }),
+  };
 }
 
 export function getModelRegistry(): ModelRegistry {
@@ -212,8 +239,19 @@ export function getModelRegistry(): ModelRegistry {
   return registry;
 }
 
+// What answers when nothing more specific was asked for: the Text row —
+// the main model unless the Owner pointed Text somewhere else. An explicit
+// Text backend that is no longer connected fails by name rather than quietly
+// sliding back to the main model (the Settings row shows the same fact).
 export function getDefaultProvider(): ModelProvider {
-  return getModelRegistry().default();
+  const registry = getModelRegistry();
+  const choice = textChoice;
+  if (!choice) return registry.default();
+  const provider = registry.get(choice.provider);
+  if (!provider) {
+    throw new Error(`TEXT_ENGINE_NOT_CONNECTED:${choice.provider}`);
+  }
+  return choice.model ? withPinnedModel(provider, choice.model) : provider;
 }
 
 // A chat can pin a specific provider; fall back to the default if it is unset
@@ -222,5 +260,5 @@ export function resolveProvider(
   providerId: string | null | undefined,
 ): ModelProvider {
   const registry = getModelRegistry();
-  return (providerId ? registry.get(providerId) : null) ?? registry.default();
+  return (providerId ? registry.get(providerId) : null) ?? getDefaultProvider();
 }

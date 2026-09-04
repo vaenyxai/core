@@ -2632,8 +2632,71 @@ export interface EngineChoiceValue {
 
 export interface EnginePairValue {
   slot: string;
+  /** Already resolved: a side that follows the main model carries the main
+   *  model's real provider here, and says so in `follows`. */
   primary: EngineChoiceValue | null;
   backup: EngineChoiceValue | null;
+  follows?: { primary: boolean; backup: boolean };
+}
+
+// Find → Test → Use (2026-09-05): the models each backend has been tested
+// and adopted with. The pickers offer these; Models is where one earns its
+// place with a real answer.
+export interface ModelAdmissionTestValue {
+  status: "ok" | "failed";
+  requestedModel: string;
+  model: string | null;
+  modelReportedByEngine: boolean;
+  message: string;
+  durationMs: number;
+  timestamp: string;
+}
+
+export interface AdoptedModelValue {
+  id: string;
+  adoptedAt: string;
+  test: ModelAdmissionTestValue | null;
+}
+
+export interface AdoptedModelsValue {
+  adopted: Record<string, AdoptedModelValue[]>;
+  tests: Record<string, Record<string, ModelAdmissionTestValue>>;
+}
+
+export function fetchAdoptedModels(): Promise<AdoptedModelsValue> {
+  return requestJson<AdoptedModelsValue>("/v1/models/adopted");
+}
+
+/** One real call on one model of one account; the answer says what the
+ *  engine reported and how long it took. */
+export function testProviderModel(
+  id: string,
+  model: string,
+): Promise<ModelAdmissionTestValue> {
+  return requestJson<ModelAdmissionTestValue>(
+    `/v1/models/providers/${encodeURIComponent(id)}/models/test`,
+    { method: "POST", body: JSON.stringify({ model }) },
+  );
+}
+
+export function adoptProviderModel(
+  id: string,
+  model: string,
+): Promise<AdoptedModelsValue> {
+  return requestJson<AdoptedModelsValue>(
+    `/v1/models/providers/${encodeURIComponent(id)}/models/adopt`,
+    { method: "POST", body: JSON.stringify({ model }) },
+  );
+}
+
+export function unadoptProviderModel(
+  id: string,
+  model: string,
+): Promise<AdoptedModelsValue> {
+  return requestJson<AdoptedModelsValue>(
+    `/v1/models/providers/${encodeURIComponent(id)}/models/unadopt`,
+    { method: "POST", body: JSON.stringify({ model }) },
+  );
 }
 
 export function fetchEnginePair(slot: string): Promise<EnginePairValue> {

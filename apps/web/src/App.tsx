@@ -289,6 +289,13 @@ import {
   testChatConnection,
   fetchLastChatTest,
   fetchEnginePair,
+  fetchAdoptedModels,
+  fetchProviderModels,
+  testProviderModel,
+  adoptProviderModel,
+  unadoptProviderModel,
+  type AdoptedModelsValue,
+  type EngineChoiceValue,
   testForgeConnection,
   fetchPublishState,
   disconnectPublishService,
@@ -347,7 +354,11 @@ import {
   CapabilityChips,
   capabilityMeta,
 } from "./capability-chips.js";
-import { EnginePairPicker, MODEL_DEFAULT_CHANGED } from "./engine-pair.js";
+import {
+  ADOPTED_MODELS_CHANGED,
+  EnginePairPicker,
+  MODEL_DEFAULT_CHANGED,
+} from "./engine-pair.js";
 import {
   clampThinkingLevel,
   thinkingLevelOptions,
@@ -6405,6 +6416,51 @@ function AskVaenyxPanel({
   // Connected model backends, for the composer's provider picker. Fetched once;
   // an empty/failed fetch just hides the picker (Codex-only stays the default).
   const [chatProviders, setChatProviders] = useState<ModelProviderInfo[]>([]);
+  // What a conversation uses when it pins nothing: the Text row (the main
+  // model unless the Owner pointed Text elsewhere), and the models each
+  // backend has been tested and adopted with under Models (Oskar,
+  // 2026-09-05). A pin under the chat box stays with that conversation.
+  const [textDefault, setTextDefault] = useState<EngineChoiceValue | null>(
+    null,
+  );
+  const [adoptedModels, setAdoptedModels] = useState<Record<string, string[]>>(
+    {},
+  );
+  useEffect(() => {
+    let active = true;
+    function loadText() {
+      void fetchEnginePair("text")
+        .then((pair) => {
+          if (active) setTextDefault(pair.primary);
+        })
+        .catch(() => undefined);
+    }
+    function loadAdopted() {
+      void fetchAdoptedModels()
+        .then((result) => {
+          if (!active) return;
+          const next: Record<string, string[]> = {};
+          for (const [provider, entries] of Object.entries(result.adopted)) {
+            next[provider] = entries.map((entry) => entry.id);
+          }
+          setAdoptedModels(next);
+        })
+        .catch(() => undefined);
+    }
+    loadText();
+    loadAdopted();
+    window.addEventListener(MODEL_DEFAULT_CHANGED, loadText);
+    window.addEventListener(ADOPTED_MODELS_CHANGED, loadAdopted);
+    return () => {
+      active = false;
+      window.removeEventListener(MODEL_DEFAULT_CHANGED, loadText);
+      window.removeEventListener(ADOPTED_MODELS_CHANGED, loadAdopted);
+    };
+  }, []);
+  const defaultChatProvider =
+    chatProviders.find((provider) => provider.id === textDefault?.provider) ??
+    chatProviders.find((provider) => provider.isDefault) ??
+    null;
   // Whether ANY backend can actually answer. Codex is always "connected"
   // even with no CLI installed, so only `healthy` tells the truth — without
   // this the composer used to show a confident "ChatGPT" chip on an install
@@ -9635,16 +9691,20 @@ This conversation is its home — feed it something to try it, and ask for chang
   function renderSimpleCompose() {
     const newChatEffective =
       chatProviders.find((candidate) => candidate.id === newChatProviderId) ??
-      chatProviders.find((candidate) => candidate.isDefault) ??
-      null;
+      defaultChatProvider;
     // Always attachable (Oskar, 2026-08-31: 任何时候都要能够输入照片): a chat
     // model that cannot read pictures itself is not the wall — the photo goes
     // through the Vision slot's own engine, whoever answers the words.
     const defaultCanAttach = true;
-    const newChatModelChoices =
-      newChatEffective && newChatEffective.kind !== "cli-login"
-        ? (MODEL_CHOICES[newChatEffective.id] ?? [])
-        : [];
+    // The adopted list — the same models the Settings rows offer, for a
+    // subscription login as much as for a key (2026-09-05).
+    const newChatModelChoices = newChatEffective
+      ? (adoptedModels[newChatEffective.id] ?? [])
+      : [];
+    const newChatDefaultModel =
+      (newChatEffective?.id === textDefault?.provider
+        ? textDefault?.model
+        : null) ?? newChatEffective?.model;
     return (
       <div className="simple-compose-shell">
         <form className="simple-compose-panel" onSubmit={startWork}>
@@ -9707,14 +9767,13 @@ This conversation is its home — feed it something to try it, and ask for chang
                 }}
                 options={[
                   {
-                    label: `${
-                      chatProviders.find((provider) => provider.isDefault)
-                        ?.name ?? "Codex"
-                    } (Default)`,
+                    label: `${defaultChatProvider?.name ?? "Codex"} (Default)`,
                     value: "",
                   },
                   ...chatProviders
-                    .filter((provider) => !provider.isDefault)
+                    .filter(
+                      (provider) => provider.id !== defaultChatProvider?.id,
+                    )
                     .map((provider) => ({
                       label: provider.name,
                       value: provider.id,
@@ -9735,12 +9794,12 @@ This conversation is its home — feed it something to try it, and ask for chang
                     options={[
                       {
                         label: `${
-                          newChatEffective.model ?? "provider default"
+                          newChatDefaultModel ?? "provider default"
                         } (Default)`,
                         value: "",
                       },
                       ...newChatModelChoices
-                        .filter((choice) => choice !== newChatEffective.model)
+                        .filter((choice) => choice !== newChatDefaultModel)
                         .map((choice) => ({ label: choice, value: choice })),
                     ]}
                     value={newChatModelName ?? ""}
@@ -11155,14 +11214,13 @@ This conversation is its home — feed it something to try it, and ask for chang
                   // marked inline, never listed twice (Oskar, dev.159).
                   options={[
                     {
-                      label: `${
-                        chatProviders.find((provider) => provider.isDefault)
-                          ?.name ?? "Codex"
-                      } (Default)`,
+                      label: `${defaultChatProvider?.name ?? "Codex"} (Default)`,
                       value: "",
                     },
                     ...chatProviders
-                      .filter((provider) => !provider.isDefault)
+                      .filter(
+                        (provider) => provider.id !== defaultChatProvider?.id,
+                      )
                       .map((provider) => ({
                         label: provider.name,
                         value: provider.id,
@@ -11194,19 +11252,20 @@ This conversation is its home — feed it something to try it, and ask for chang
                   chatProviders.find(
                     (provider) =>
                       provider.id === activeConversation?.modelProviderId,
-                  ) ??
-                  chatProviders.find((provider) => provider.isDefault) ??
-                  null;
+                  ) ?? defaultChatProvider;
+                // The models this account was tested and adopted with under
+                // Models — the same list the rows in Settings offer. A
+                // subscription login lists its models too now (2026-09-05).
                 const choices = effective
-                  ? (MODEL_CHOICES[effective.id] ?? [])
+                  ? (adoptedModels[effective.id] ?? [])
                   : [];
-                if (
-                  !effective ||
-                  effective.kind === "cli-login" ||
-                  choices.length === 0
-                ) {
+                if (!effective || choices.length === 0) {
                   return null;
                 }
+                const defaultModel =
+                  (effective.id === textDefault?.provider
+                    ? textDefault?.model
+                    : null) ?? effective.model;
                 return (
                   <>
                     <span aria-hidden="true" className="composer-sep">
@@ -11230,11 +11289,11 @@ This conversation is its home — feed it something to try it, and ask for chang
                       }}
                       options={[
                         {
-                          label: `${effective.model ?? "provider default"} (Default)`,
+                          label: `${defaultModel ?? "provider default"} (Default)`,
                           value: "",
                         },
                         ...choices
-                          .filter((choice) => choice !== effective.model)
+                          .filter((choice) => choice !== defaultModel)
                           .map((choice) => ({ label: choice, value: choice })),
                       ]}
                       value={activeConversation?.modelName ?? ""}
@@ -11252,9 +11311,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                   chatProviders.find(
                     (provider) =>
                       provider.id === activeConversation?.modelProviderId,
-                  ) ??
-                  chatProviders.find((provider) => provider.isDefault) ??
-                  null;
+                  ) ?? defaultChatProvider;
                 const shape = thinkingLevelShape(
                   effective?.id,
                   activeConversation?.modelName ?? effective?.model,
@@ -13132,9 +13189,27 @@ function SubscriptionDoorPanel() {
   const { settings, calls } = panel;
 
   return (
-    <section className="settings-card">
-      <p className="eyebrow">For your other apps</p>
-      <h2>Subscription Door</h2>
+    <details className="settings-card door-card">
+      {/* Folded by default (Oskar, 2026-09-05: 没有必要一直打开这么多信息):
+          the two facts worth a glance sit on the fold itself. */}
+      <summary className="door-card-summary">
+        <span>
+          <span className="eyebrow">For your other apps</span>
+          <span className="door-card-title">Subscription Door</span>
+        </span>
+        <span className="door-card-chips">
+          <span
+            className={
+              settings.enabled ? "library-chip chip-published" : "library-chip"
+            }
+          >
+            {settings.enabled ? "Open" : "Closed"}
+          </span>
+          <span className="library-chip">
+            {apps.length} {apps.length === 1 ? "key" : "keys"}
+          </span>
+        </span>
+      </summary>
 
       <div className="door-switch">
         <div>
@@ -13576,7 +13651,7 @@ function SubscriptionDoorPanel() {
         What happened, never what was in it: no prompt, no file, no answer is
         written down.
       </p>
-    </section>
+    </details>
   );
 }
 
@@ -15359,7 +15434,11 @@ function CapabilitiesPanel({
           <span className="capability-row-name">
             {lang === "zh" ? "主模型" : "Main model"}
             <em>
-              ({lang === "zh" ? "聊天、读文档、上网" : "chat, reading, web"})
+              (
+              {lang === "zh"
+                ? "预选,下面各行可跟随"
+                : "a preselection the rows below may follow"}
+              )
             </em>
           </span>
         </div>
@@ -15372,8 +15451,41 @@ function CapabilitiesPanel({
           />
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "这一行跟聊天框下面的切换器是同一个设置 —— 在哪边改,另一边跟着变。"
-              : "This row and the switcher under the chat box are the same setting — change either and the other follows."}
+              ? "主模型一换,所有「跟随」的行一起换;它的备用也一起跟。上面只选已使用的型号 —— 找型号、测型号在下面 Models。"
+              : "Change it and every row that follows changes with it — its backup comes along too. Only adopted models are offered here; finding and testing models happens under Models below."}
+          </p>
+        </div>
+      </div>
+      {/* TEXT (Oskar, 2026-09-05): chat and every written job — Routines,
+          Methods, the Journal — in one row that follows the main model until
+          pointed elsewhere. A single conversation can still pin its own
+          backend and model under the chat box; that pin stays with the
+          conversation and never touches this row. */}
+      <div className="capability-block">
+        <div className="capability-row open">
+          <span className="capability-row-icon">✎</span>
+          <span className="capability-row-name">
+            {lang === "zh" ? "文字" : "Text"}
+            <em>
+              (
+              {lang === "zh"
+                ? "对话、Routine、Method、日记"
+                : "chat, Routines, Methods, Journal"}
+              )
+            </em>
+          </span>
+        </div>
+        <div className="capability-setup open">
+          <EnginePairPicker
+            providerOptions={slotOptions("chat").filter(
+              (option) => !option.disabled,
+            )}
+            slot="text"
+          />
+          <p className="settings-card-copy">
+            {lang === "zh"
+              ? "默认跟随主模型。聊天框下面的切换只换那一个对话,不改这里。"
+              : "Follows the main model by default. The switcher under the chat box changes that one conversation only, never this row."}
           </p>
         </div>
       </div>
@@ -15531,6 +15643,226 @@ function ModelsPanel({
   // Compact layout (Oskar, dev.127): connected backends are small cards; the
   // rest live behind one "Add a Model" dropdown whose pick expands its form.
   const [addTargetId, setAddTargetId] = useState("");
+  // FIND → TEST → USE (Oskar, 2026-09-05). Per backend: the live list it
+  // answered with, which model is being tested, plus the adopted lists with
+  // their evidence. The pickers at the top of Settings offer adopted models
+  // only, so this is where a model earns its place — with one real answer.
+  interface FinderState {
+    open: boolean;
+    loading: boolean;
+    models: string[] | null;
+    error: string | null;
+    testing: string | null;
+  }
+  const FINDER_CLOSED: FinderState = {
+    open: false,
+    loading: false,
+    models: null,
+    error: null,
+    testing: null,
+  };
+  const [finder, setFinder] = useState<Record<string, FinderState>>({});
+  const [adopted, setAdopted] = useState<AdoptedModelsValue | null>(null);
+  useEffect(() => {
+    let active = true;
+    void fetchAdoptedModels()
+      .then((result) => {
+        if (active) setAdopted(result);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  function finderState(id: string): FinderState {
+    return finder[id] ?? FINDER_CLOSED;
+  }
+  function patchFinder(id: string, changes: Partial<FinderState>) {
+    setFinder((current) => ({
+      ...current,
+      [id]: { ...(current[id] ?? FINDER_CLOSED), ...changes },
+    }));
+  }
+  async function openFinder(provider: ModelProviderInfo) {
+    if (finderState(provider.id).open) {
+      patchFinder(provider.id, { open: false });
+      return;
+    }
+    patchFinder(provider.id, { open: true, loading: true, error: null });
+    try {
+      // Asked live, every time: the account's own answer, never a kept list.
+      const result = await fetchProviderModels(provider.id);
+      patchFinder(provider.id, { loading: false, models: result.models });
+    } catch (error) {
+      patchFinder(provider.id, {
+        loading: false,
+        models: [],
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : lang === "zh"
+              ? "这家没有回答型号名单。"
+              : "This backend did not answer with its model list.",
+      });
+    }
+  }
+  async function testModel(provider: ModelProviderInfo, model: string) {
+    patchFinder(provider.id, { testing: model });
+    try {
+      const result = await testProviderModel(provider.id, model);
+      setAdopted((current) =>
+        current
+          ? {
+              ...current,
+              tests: {
+                ...current.tests,
+                [provider.id]: { ...current.tests[provider.id], [model]: result },
+              },
+            }
+          : { adopted: {}, tests: { [provider.id]: { [model]: result } } },
+      );
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error
+          ? error.message
+          : lang === "zh"
+            ? "这次测试没能发出去。"
+            : "That test could not be sent.",
+      );
+    } finally {
+      patchFinder(provider.id, { testing: null });
+    }
+  }
+  async function useModel(provider: ModelProviderInfo, model: string, on: boolean) {
+    try {
+      const result = on
+        ? await adoptProviderModel(provider.id, model)
+        : await unadoptProviderModel(provider.id, model);
+      setAdopted(result);
+      window.dispatchEvent(new Event(ADOPTED_MODELS_CHANGED));
+    } catch (error) {
+      showErrorToast(
+        error instanceof Error
+          ? error.message
+          : lang === "zh"
+            ? "没能改这个型号的使用状态。"
+            : "That model's in-use state could not be changed.",
+      );
+    }
+  }
+  function renderFinder(provider: ModelProviderInfo) {
+    const state = finderState(provider.id);
+    if (!state.open) return null;
+    const zh = lang === "zh";
+    const adoptedIds = (adopted?.adopted[provider.id] ?? []).map(
+      (entry) => entry.id,
+    );
+    const found = state.models ?? [];
+    // Adopted models first, whether or not today's list still names them:
+    // a model in use is never hidden by a list that failed to load.
+    const ids = [
+      ...adoptedIds,
+      ...found.filter((id) => !adoptedIds.includes(id)),
+    ];
+    const tests = adopted?.tests[provider.id] ?? {};
+    return (
+      <div className="model-finder">
+        {state.loading ? (
+          <p className="settings-card-copy">
+            {zh
+              ? "正在问这个账号现在能用哪些型号…"
+              : "Asking which models this account can use right now…"}
+          </p>
+        ) : null}
+        {state.error ? <p className="form-error">{state.error}</p> : null}
+        {!state.loading && !state.error && ids.length === 0 ? (
+          <p className="settings-card-copy">
+            {zh ? "这个账号没有列出任何型号。" : "This account listed no models."}
+          </p>
+        ) : null}
+        {ids.length > 0 ? (
+          <p className="settings-card-copy text-faint">
+            {zh
+              ? "先测一次,答上来的才能「使用」;使用中的型号会出现在上面各行的下拉里。"
+              : "Test first — only a model that answers can be used; models in use appear in the rows above."}
+          </p>
+        ) : null}
+        <ul className="model-finder-list">
+          {ids.map((id) => {
+            const test = tests[id];
+            const inUse = adoptedIds.includes(id);
+            const testing = state.testing === id;
+            let verdict: string;
+            if (!test) verdict = zh ? "还没测过" : "Not tested yet";
+            else if (test.status === "ok") {
+              const who = test.model
+                ? test.modelReportedByEngine
+                  ? `${zh ? "引擎回报 " : "engine reported "}${test.model}`
+                  : `${zh ? "按 " : "as "}${test.model}`
+                : zh
+                  ? "有回答"
+                  : "answered";
+              verdict = `✓ ${who} · ${(test.durationMs / 1000).toFixed(1)} s · ${new Date(test.timestamp).toLocaleString()}`;
+            } else verdict = `✗ ${test.message}`;
+            return (
+              <li className="model-finder-row" key={id}>
+                <span className="model-finder-name">
+                  {id}
+                  {inUse ? (
+                    <span className="library-chip chip-installed">
+                      {zh ? "使用中" : "In use"}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="model-finder-actions">
+                  <button
+                    className="capability-row-test"
+                    disabled={state.testing !== null}
+                    onClick={() => void testModel(provider, id)}
+                    type="button"
+                  >
+                    {testing
+                      ? zh
+                        ? "测试中…"
+                        : "Testing…"
+                      : zh
+                        ? "测一次"
+                        : "Test"}
+                  </button>
+                  {inUse ? (
+                    <button
+                      className="text-button"
+                      onClick={() => void useModel(provider, id, false)}
+                      type="button"
+                    >
+                      {zh ? "取消使用" : "Stop using"}
+                    </button>
+                  ) : test?.status === "ok" ? (
+                    <button
+                      className="primary-button"
+                      onClick={() => void useModel(provider, id, true)}
+                      type="button"
+                    >
+                      {zh ? "使用" : "Use"}
+                    </button>
+                  ) : null}
+                </span>
+                <span
+                  className={
+                    test
+                      ? `model-finder-result ${test.status}`
+                      : "model-finder-result"
+                  }
+                >
+                  {verdict}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
   const [editingId, setEditingId] = useState<string | null>(null);
   // Disconnecting drops a stored key — ask first (Oskar, dev.171).
   const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(
@@ -16227,7 +16559,25 @@ function ModelsPanel({
                   {costBadge(provider.id, lang)}
                 </span>
               ) : null}
+              {/* The way in to find → test → use, on the card itself (Oskar,
+                  2026-09-05: 右边有一个搜索按钮). */}
+              {provider.connected ? (
+                <button
+                  className="text-button model-finder-toggle"
+                  onClick={() => void openFinder(provider)}
+                  type="button"
+                >
+                  {finderState(provider.id).open
+                    ? lang === "zh"
+                      ? "收起型号"
+                      : "Hide models"
+                    : lang === "zh"
+                      ? "搜索型号"
+                      : "Find models"}
+                </button>
+              ) : null}
             </div>
+            {provider.connected ? renderFinder(provider) : null}
             {/* Everything below is behind the expander. A connected backend
                 is one line — name, state, what it costs, what it can do —
                 because the list is read to answer "what have I got", and the
@@ -23689,30 +24039,6 @@ const MODEL_FREE_TIER_NOTES: Record<string, string> = {
 // Per-provider model shortlists for the in-chat picker (curated 2026-07-22;
 // the provider's own configured model always remains the Default option, and
 // Settings → Models → Edit accepts any model id these lists miss).
-const MODEL_CHOICES: Record<string, string[]> = {
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "o4-mini"],
-  anthropic: ["claude-sonnet-5", "claude-opus-4-8", "claude-haiku-4-5"],
-  gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-  grok: ["grok-4", "grok-3-mini"],
-  groq: [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "openai/gpt-oss-120b",
-  ],
-  cerebras: ["llama-3.3-70b", "llama3.1-8b", "qwen-3-32b"],
-  openrouter: [
-    "deepseek/deepseek-chat-v3-0324:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "qwen/qwen3-235b-a22b:free",
-  ],
-  zhipu: ["glm-4.7-flash", "glm-4.6v-flash", "glm-4-flash"],
-  mistral: ["mistral-small-latest", "mistral-medium-latest"],
-  workersai: [
-    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    "@cf/qwen/qwen2.5-coder-32b-instruct",
-  ],
-};
-
 function routineDomain(tags: string[]): "health" | "finance" | "legal" | null {
   const lower = tags.map((tag) => tag.toLowerCase());
   const has = (...needles: string[]) =>

@@ -2101,7 +2101,7 @@ export async function createAskVaenyxMessage(
         modeRow?.local_only !== 1 &&
         options?.secretsDirectory &&
         deservesBackup(error)
-          ? readEnginePair(options.secretsDirectory, "chat").backup
+          ? readEnginePair(options.secretsDirectory, "text").backup
           : null;
       const standIn =
         chatBackup && chatBackup.provider !== provider.id

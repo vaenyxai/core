@@ -77,6 +77,11 @@ import {
   ConnectVisionRequestSchema,
   EnginePairSchema,
   SetEngineChoiceRequestSchema,
+  AdoptedModelsResponseSchema,
+  ModelAdmissionTestSchema,
+  ModelIdRequestSchema,
+  type ModelAdmissionTest,
+  type ModelIdRequest,
   type SetEngineChoiceRequest,
   type ConnectVisionRequest,
   VisionDescribeResponseSchema,
@@ -481,6 +486,13 @@ import {
   getModelRegistry,
   initModelRegistry,
 } from "../models/registry.js";
+import {
+  adoptModel,
+  readAdmissionTests,
+  readAdoptedModels,
+  recordAdmissionTest,
+  unadoptModel,
+} from "../models/adopted-models.js";
 import type { ModelProvider } from "../models/provider.js";
 import {
   disclosedCapabilities,
@@ -517,7 +529,8 @@ import {
 import {
   backupNoteSentence,
   ENGINE_SLOTS,
-  readEnginePair,
+  describeEnginePair,
+  FOLLOW_MAIN,
   writeEngineChoice,
 } from "../models/engine-slots.js";
 import {
@@ -2373,6 +2386,161 @@ export async function registerGatewayRoutes(
       }
     },
   );
+
+  // ── Find → Test → Use (Oskar, 2026-09-05) ──────────────────────────────
+  // The list a backend answers with is only a list; a model joins the pickers
+  // at the top of Settings after ONE real answer, recorded with what the
+  // engine said answered. Nothing here touches any row's choice.
+  const adoptedResponse = () => ({
+    adopted: readAdoptedModels(context.database),
+    tests: readAdmissionTests(context.database),
+  });
+
+  app.get(
+    "/v1/models/adopted",
+    {
+      schema: {
+        response: { 200: AdoptedModelsResponseSchema, 401: ErrorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return adoptedResponse();
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: ModelIdRequest }>(
+    "/v1/models/providers/:id/models/test",
+    {
+      schema: {
+        params: Type.Object(
+          { id: Type.String({ minLength: 1 }) },
+          { additionalProperties: false },
+        ),
+        body: ModelIdRequestSchema,
+        response: {
+          200: ModelAdmissionTestSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const providerId = request.params.id;
+      const model = request.body.model.trim();
+      const target = getModelRegistry().get(providerId);
+      if (!target) {
+        return reply.code(400).send({
+          error:
+            "That backend is not connected yet — connect it under Models first.",
+        });
+      }
+      const startedAt = Date.now();
+      let record: ModelAdmissionTest;
+      try {
+        // The same path a chat takes, with this one model named on this one
+        // call. Judged by the answer, not by the absence of an error.
+        const answer = await target.sendChat(
+          [{ role: "owner", content: "Reply with exactly the single word PONG." }],
+          undefined,
+          { model, signal: AbortSignal.timeout(120_000) },
+        );
+        const ok = /pong/i.test(answer.answer);
+        record = {
+          status: ok ? "ok" : "failed",
+          requestedModel: model,
+          model: answer.model ?? null,
+          // Only the Claude SDK reports the model that answered; Codex echoes
+          // the model its thread was configured with; a key backend says
+          // nothing (relay-profiles.md, "Model selection").
+          modelReportedByEngine:
+            providerId === "claude-sub" && Boolean(answer.model),
+          message: ok
+            ? "Answered."
+            : "Answered, but not with the expected word: " +
+              answer.answer.trim().slice(0, 120),
+          durationMs: Date.now() - startedAt,
+          timestamp: new Date().toISOString(),
+        };
+      } catch (error) {
+        record = {
+          status: "failed",
+          requestedModel: model,
+          model: null,
+          modelReportedByEngine: false,
+          message: (error instanceof Error ? error.message : String(error)).slice(
+            0,
+            300,
+          ),
+          durationMs: Date.now() - startedAt,
+          timestamp: new Date().toISOString(),
+        };
+      }
+      recordAdmissionTest(context.database, providerId, record);
+      return record;
+    },
+  );
+
+  for (const verb of ["adopt", "unadopt"] as const) {
+    app.post<{ Params: { id: string }; Body: ModelIdRequest }>(
+      "/v1/models/providers/:id/models/" + verb,
+      {
+        schema: {
+          params: Type.Object(
+            { id: Type.String({ minLength: 1 }) },
+            { additionalProperties: false },
+          ),
+          body: ModelIdRequestSchema,
+          response: {
+            200: AdoptedModelsResponseSchema,
+            400: ErrorResponseSchema,
+            401: ErrorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const owner = requireOwner(request);
+        if (!owner) {
+          return reply.code(401).send({ error: "Owner login required." });
+        }
+        const model = request.body.model.trim();
+        try {
+          if (verb === "adopt") {
+            adoptModel(context.database, request.params.id, model);
+          } else {
+            unadoptModel(context.database, request.params.id, model);
+          }
+        } catch {
+          return reply.code(400).send({
+            error:
+              "Test this model first — only a model that just answered can be used.",
+          });
+        }
+        recordAudit(context.database, {
+          actorType: "owner",
+          actorId: owner.id,
+          actorName: owner.name,
+          action: verb === "adopt" ? "model.adopt" : "model.unadopt",
+          decision: "allowed",
+          reason:
+            "Owner " +
+            (verb === "adopt" ? "started" : "stopped") +
+            " using \"" +
+            model +
+            "\" on \"" +
+            request.params.id +
+            "\".",
+          resourceType: "system",
+        });
+        return adoptedResponse();
+      },
+    );
+  }
 
   app.delete<{ Params: { id: string } }>(
     "/v1/models/providers/:id",
@@ -7641,7 +7809,10 @@ export async function registerGatewayRoutes(
       if (!slot) {
         return reply.code(400).send({ error: "No such capability." });
       }
-      return { slot, ...readEnginePair(context.config.secretsDirectory, slot) };
+      return {
+        slot,
+        ...describeEnginePair(context.config.secretsDirectory, slot),
+      };
     },
   );
 
@@ -7694,7 +7865,9 @@ export async function registerGatewayRoutes(
         return reply.code(400).send({ error: "No such capability." });
       }
       const choice = request.body.choice;
-      if (choice) {
+      // "Follow the main model" names no backend of its own; whatever the
+      // main model is connected to is checked when IT is chosen.
+      if (choice && choice.provider !== FOLLOW_MAIN) {
         // Speaking has two answers that are not accounts at all: this browser's
         // own voice, and the one downloaded onto this machine. Neither has a
         // key to check — the downloaded one is checked for being THERE.
@@ -7725,16 +7898,27 @@ export async function registerGatewayRoutes(
           }
         }
       }
-      const pair = writeEngineChoice(
-        context.config.secretsDirectory,
+      try {
+        writeEngineChoice(
+          context.config.secretsDirectory,
+          slot,
+          request.body.which,
+          choice,
+        );
+      } catch {
+        return reply.code(400).send({
+          error:
+            "The main model is what the others follow; it cannot follow itself.",
+        });
+      }
+      // The main model IS the default backend and Text rides on it
+      // (engine-slots.ts, registry.ts), so either has to take effect on the
+      // next message, not the next restart.
+      if (slot === "chat" || slot === "text") initModelRegistry(context.config);
+      return {
         slot,
-        request.body.which,
-        choice,
-      );
-      // Chat's main engine IS the default backend (engine-slots.ts), so it has
-      // to take effect on the next message, not the next restart.
-      if (slot === "chat") initModelRegistry(context.config);
-      return { slot, ...pair };
+        ...describeEnginePair(context.config.secretsDirectory, slot),
+      };
     },
   );
 

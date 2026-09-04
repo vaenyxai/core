@@ -1,10 +1,16 @@
 // WHO DOES THIS JOB, AND WHO STANDS IN (Oskar, 2026-08-16).
 //
 // Two levels, because a capability now names its own model: pick the ACCOUNT
-// first (what you have connected), then a model from that account's own live
-// list. The backend supplies the list, so a retired model id cannot be
-// offered — and a list that cannot be fetched still lets the current value
-// stand rather than blanking a working setting.
+// first (what you have connected), then a model from that account's own
+// adopted list — the models the Owner found, tested and chose to use under
+// Models (Oskar, 2026-09-05: 上面只选,不找). A model already chosen but no
+// longer adopted still stands rather than blanking a working setting.
+//
+// Every row but the main model may also FOLLOW the main model: it then uses
+// the main model's account and model, and the main model's backup too, so a
+// change to the main model changes every follower at once. The main model
+// itself is a preselection — Text (chat and every written job) rides on it
+// unless pointed elsewhere.
 //
 // The backup half is deliberately identical in shape and deliberately EMPTY
 // until the Owner fills it: the app never chooses a stand-in. What it does do
@@ -12,8 +18,8 @@
 import { useEffect, useState } from "react";
 
 import {
+  fetchAdoptedModels,
   fetchEnginePair,
-  fetchProviderModels,
   setEngineChoice,
   type EnginePairValue,
 } from "./api";
@@ -24,11 +30,16 @@ import { showErrorToast } from "./toast";
 
 const NONE = "__none__";
 const DEFAULT_MODEL = "__default__";
+/** The server's name for "follow the main model" (engine-slots.ts). */
+export const FOLLOW_MAIN = "main";
 
-/** Fired when the MAIN model changes, so the switcher under the chat box —
- *  which shows the same value from a different window — updates with it
- *  instead of showing the model that was chosen before. */
+/** Fired when the MAIN model (or the Text row it feeds) changes, so the
+ *  switcher under the chat box — which shows the same value from a different
+ *  window — updates with it instead of showing the model chosen before. */
 export const MODEL_DEFAULT_CHANGED = "vaenyx:model-default-changed";
+/** Fired when a model is adopted or dropped under Models, so every picker
+ *  offering "which model" refreshes its list. */
+export const ADOPTED_MODELS_CHANGED = "vaenyx:adopted-models-changed";
 
 export function EnginePairPicker({
   slot,
@@ -55,36 +66,73 @@ export function EnginePairPicker({
   const { lang } = useI18n();
   const zh = lang === "zh";
   const [pair, setPair] = useState<EnginePairValue | null>(null);
+  // The main model itself, for every other row: "follow" is only offered
+  // when the main model's account can do THIS job (a text-only main model
+  // cannot suddenly see), and Text may always follow.
+  const [mainPair, setMainPair] = useState<EnginePairValue | null>(null);
   const [models, setModels] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState<"primary" | "backup" | null>(null);
+  const isMain = slot === "chat";
+  const isText = slot === "text";
 
   useEffect(() => {
     let active = true;
-    fetchEnginePair(slot)
-      .then((next) => {
-        if (active) setPair(next);
-      })
-      .catch(() => undefined);
+    function load() {
+      fetchEnginePair(slot)
+        .then((next) => {
+          if (active) setPair(next);
+        })
+        .catch(() => undefined);
+      if (!isMain) {
+        fetchEnginePair("chat")
+          .then((next) => {
+            if (active) setMainPair(next);
+          })
+          .catch(() => undefined);
+      }
+    }
+    load();
+    // A follower shows the main model's real answer, so it re-reads when the
+    // main model changes — from this row's neighbour or from the chat box.
+    if (!isMain) window.addEventListener(MODEL_DEFAULT_CHANGED, load);
     return () => {
       active = false;
+      if (!isMain) window.removeEventListener(MODEL_DEFAULT_CHANGED, load);
     };
-  }, [slot]);
+  }, [slot, isMain]);
 
-  // One list per account, fetched the first time that account is shown. A
-  // failure is not fatal: the model picker then offers the default and
-  // whatever is already chosen.
-  useEffect(() => {
-    const wanted = [pair?.primary?.provider, pair?.backup?.provider].filter(
-      (id): id is string => typeof id === "string" && !(id in models),
+  function mainCanServe(which: "primary" | "backup"): boolean {
+    const choice = which === "primary" ? mainPair?.primary : mainPair?.backup;
+    return (
+      Boolean(choice) &&
+      providerOptions.some((option) => option.value === choice?.provider)
     );
-    for (const id of wanted) {
-      void fetchProviderModels(id)
-        .then((result) =>
-          setModels((current) => ({ ...current, [id]: result.models })),
-        )
-        .catch(() => setModels((current) => ({ ...current, [id]: [] })));
+  }
+
+  // The adopted lists, all accounts at once — one small read, refreshed when
+  // Models adopts or drops one. A failure is not fatal: the model picker then
+  // offers the default and whatever is already chosen.
+  useEffect(() => {
+    let active = true;
+    function load() {
+      fetchAdoptedModels()
+        .then((result) => {
+          if (!active) return;
+          const next: Record<string, string[]> = {};
+          for (const [provider, entries] of Object.entries(result.adopted)) {
+            next[provider] = entries.map((entry) => entry.id);
+          }
+          setModels(next);
+        })
+        .catch(() => undefined);
     }
-  }, [pair, models]);
+    load();
+    window.addEventListener(ADOPTED_MODELS_CHANGED, load);
+    return () => {
+      active = false;
+      window.removeEventListener(ADOPTED_MODELS_CHANGED, load);
+    };
+  }, []);
 
   async function save(
     which: "primary" | "backup",
@@ -98,24 +146,17 @@ export function EnginePairPicker({
         which,
         provider === NONE
           ? null
-          : {
-              provider,
-              ...(model && model !== DEFAULT_MODEL ? { model } : {}),
-            },
+          : provider === FOLLOW_MAIN
+            ? { provider: FOLLOW_MAIN }
+            : {
+                provider,
+                ...(model && model !== DEFAULT_MODEL ? { model } : {}),
+              },
       );
       setPair(next);
       onChanged?.(next);
-      if (slot === "chat" && which === "primary") {
+      if (isMain || isText) {
         window.dispatchEvent(new Event(MODEL_DEFAULT_CHANGED));
-      }
-      if (provider !== NONE && !(provider in models)) {
-        void fetchProviderModels(provider)
-          .then((result) =>
-            setModels((current) => ({ ...current, [provider]: result.models })),
-          )
-          .catch(() =>
-            setModels((current) => ({ ...current, [provider]: [] })),
-          );
       }
     } catch (error) {
       showErrorToast(
@@ -142,13 +183,18 @@ export function EnginePairPicker({
       },
       ...listed.map((id) => ({ label: id, value: id })),
     ];
-    // A model already chosen but missing from the list (offline, or an id the
-    // account no longer lists) stays selectable — blanking a working setting
-    // because a list did not load would be worse than showing it.
+    // A model already chosen but missing from the list (dropped from the
+    // adopted list, or an id the account no longer offers) stays selectable —
+    // blanking a working setting because a list changed would be worse than
+    // showing it.
     if (chosen && !listed.includes(chosen)) {
       options.push({ label: chosen, value: chosen });
     }
     return options;
+  }
+
+  function providerLabel(id: string): string {
+    return providerOptions.find((option) => option.value === id)?.label ?? id;
   }
 
   if (!pair) return null;
@@ -172,9 +218,18 @@ export function EnginePairPicker({
     <div className="engine-pair">
       {rows.map((row) => {
         const choice = row.which === "primary" ? pair.primary : pair.backup;
-        const providerValue = choice?.provider ?? NONE;
+        const follows =
+          !isMain && (pair.follows?.[row.which] ?? false);
+        const providerValue = follows
+          ? FOLLOW_MAIN
+          : (choice?.provider ?? NONE);
         const modelValue = choice?.model ?? DEFAULT_MODEL;
         const under = renderUnder?.(row.which, choice?.provider ?? null);
+        // A follower can only follow into an account this job can use: the
+        // main model on a text-only backend cannot suddenly see.
+        const canServe =
+          !choice ||
+          providerOptions.some((option) => option.value === choice.provider);
         return (
           <div className="engine-pair-side" key={row.which}>
             <div className="engine-pair-row">
@@ -188,8 +243,9 @@ export function EnginePairPicker({
                 onChange={(next) => void save(row.which, next, DEFAULT_MODEL)}
                 options={[
                   // "Off" is a real choice for a capability, but not for the
-                  // main model: an app with nothing to talk to is not a setting.
-                  ...(row.which === "primary" && slot === "chat"
+                  // main model or for Text: an app with nothing to talk to is
+                  // not a setting.
+                  ...(row.which === "primary" && (isMain || isText)
                     ? []
                     : [
                         {
@@ -204,11 +260,29 @@ export function EnginePairPicker({
                           value: NONE,
                         },
                       ]),
+                  // Offered when the main model can do this job (Text
+                  // always can), and kept while a row already follows so the
+                  // current value never vanishes from its own menu.
+                  ...(!isMain && (isText || follows || mainCanServe(row.which))
+                    ? [
+                        {
+                          label:
+                            row.which === "backup"
+                              ? zh
+                                ? "跟随主模型的备用"
+                                : "Follow the main model's backup"
+                              : zh
+                                ? "跟随主模型"
+                                : "Follow the main model",
+                          value: FOLLOW_MAIN,
+                        },
+                      ]
+                    : []),
                   ...providerOptions,
                 ]}
                 value={providerValue}
               />
-              {choice ? (
+              {choice && !follows ? (
                 <Picker
                   ariaLabel={`${slot} ${row.which} model`}
                   disabled={busy !== null}
@@ -223,6 +297,35 @@ export function EnginePairPicker({
                 <span className="engine-pair-model-empty" />
               )}
             </div>
+            {follows ? (
+              // What following means right now, in real names — a row that
+              // says "follows" and nothing else makes the Owner work it out.
+              <p
+                className={
+                  canServe
+                    ? "engine-pair-follow"
+                    : "engine-pair-follow engine-pair-follow-warning"
+                }
+              >
+                {choice
+                  ? `${zh ? "现在实际 = " : "Right now = "}${providerLabel(
+                      choice.provider,
+                    )} / ${choice.model ?? (zh ? "默认型号" : "default model")}${
+                      canServe
+                        ? ""
+                        : zh
+                          ? " —— 主模型做不了这一项,请单独选"
+                          : " — the main model cannot do this job; choose one here"
+                    }`
+                  : row.which === "backup"
+                    ? zh
+                      ? "主模型没有设备用,所以这里也没有"
+                      : "The main model has no backup, so neither does this"
+                    : zh
+                      ? "主模型还没选"
+                      : "No main model chosen yet"}
+              </p>
+            ) : null}
             {under ? <div className="engine-pair-under">{under}</div> : null}
           </div>
         );

@@ -16,8 +16,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   backupNoteSentence,
+  describeEnginePair,
   deservesBackup,
   explainEngineFailure,
+  FOLLOW_MAIN,
   readEnginePair,
   runWithBackup,
   writeEngineChoice,
@@ -281,5 +283,104 @@ describe("the chat slot is a view over the default backend", () => {
     writeEngineChoice(dir, "chat", "primary", { provider: "gemini" });
     writeEngineChoice(dir, "chat", "primary", null);
     expect(readEnginePair(dir, "chat").primary?.provider).toBe("gemini");
+  });
+});
+
+describe("following the main model (Oskar, 2026-09-05)", () => {
+  function withMain(model = "gemini-3.7-flash"): string {
+    const dir = secrets({
+      gemini: { apiKey: "k", model },
+      groq: { apiKey: "k" },
+      mistral: { apiKey: "k" },
+    });
+    writeFileSync(
+      join(dir, "model-default.json"),
+      JSON.stringify({ id: "gemini" }),
+      "utf8",
+    );
+    return dir;
+  }
+
+  it("resolves a follower to the main model, backup included", () => {
+    const dir = withMain();
+    writeEngineChoice(dir, "chat", "backup", { provider: "groq" });
+    writeEngineChoice(dir, "vision", "primary", { provider: FOLLOW_MAIN });
+    expect(describeEnginePair(dir, "vision")).toEqual({
+      primary: { provider: "gemini", model: "gemini-3.7-flash" },
+      backup: { provider: "groq" },
+      follows: { primary: true, backup: true },
+    });
+    // Change the main model once; the follower moves with it.
+    writeEngineChoice(dir, "chat", "primary", { provider: "mistral" });
+    expect(readEnginePair(dir, "vision").primary).toEqual({
+      provider: "mistral",
+    });
+  });
+
+  it("lets a follower keep a backup of its own, and a chosen row borrow the main backup", () => {
+    const dir = withMain();
+    writeEngineChoice(dir, "chat", "backup", { provider: "groq" });
+    writeEngineChoice(dir, "vision", "primary", { provider: FOLLOW_MAIN });
+    writeEngineChoice(dir, "vision", "backup", { provider: "mistral" });
+    expect(describeEnginePair(dir, "vision")).toMatchObject({
+      backup: { provider: "mistral" },
+      follows: { primary: true, backup: false },
+    });
+    writeEngineChoice(dir, "ocr", "primary", { provider: "mistral" });
+    writeEngineChoice(dir, "ocr", "backup", { provider: FOLLOW_MAIN });
+    expect(describeEnginePair(dir, "ocr")).toMatchObject({
+      primary: { provider: "mistral" },
+      backup: { provider: "groq" },
+      follows: { primary: false, backup: true },
+    });
+  });
+
+  it("Text follows by default, can be pointed elsewhere, and can drop its inherited backup", () => {
+    const dir = withMain();
+    writeEngineChoice(dir, "chat", "backup", { provider: "groq" });
+    expect(describeEnginePair(dir, "text")).toEqual({
+      primary: { provider: "gemini", model: "gemini-3.7-flash" },
+      backup: { provider: "groq" },
+      follows: { primary: true, backup: true },
+    });
+    writeEngineChoice(dir, "text", "primary", {
+      provider: "mistral",
+      model: "mistral-small-latest",
+    });
+    expect(describeEnginePair(dir, "text")).toMatchObject({
+      primary: { provider: "mistral", model: "mistral-small-latest" },
+      backup: { provider: "groq" },
+      follows: { primary: false, backup: true },
+    });
+    writeEngineChoice(dir, "text", "backup", null);
+    expect(describeEnginePair(dir, "text")).toMatchObject({
+      backup: null,
+      follows: { primary: false, backup: false },
+    });
+    // Back to following: the inherited backup returns with it.
+    writeEngineChoice(dir, "text", "primary", { provider: FOLLOW_MAIN });
+    expect(describeEnginePair(dir, "text").follows).toEqual({
+      primary: true,
+      backup: false,
+    });
+  });
+
+  it("every other row still means off when nothing is chosen", () => {
+    const dir = withMain();
+    expect(describeEnginePair(dir, "vision")).toEqual({
+      primary: null,
+      backup: null,
+      follows: { primary: false, backup: false },
+    });
+  });
+
+  it("refuses to let the main model follow itself", () => {
+    const dir = withMain();
+    expect(() =>
+      writeEngineChoice(dir, "chat", "primary", { provider: FOLLOW_MAIN }),
+    ).toThrow("MAIN_CANNOT_FOLLOW_ITSELF");
+    expect(() =>
+      writeEngineChoice(dir, "chat", "backup", { provider: FOLLOW_MAIN }),
+    ).toThrow("MAIN_CANNOT_FOLLOW_ITSELF");
   });
 });
