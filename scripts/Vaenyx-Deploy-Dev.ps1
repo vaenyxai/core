@@ -78,7 +78,7 @@ try {
   Write-Host "Building $version..." -ForegroundColor Cyan
   Invoke-LoggedNpm "run build" "The DEV build failed; Vaenyx remains stopped."
 
-  cmd.exe /d /s /c "Vaenyx-Start.cmd --no-browser"
+  cmd.exe /d /s /c "`"$(Join-Path $root "Vaenyx-Start.cmd")`" --no-browser"
   if ($LASTEXITCODE -ne 0) { throw "Vaenyx did not restart after the DEV build." }
 
   $status = Invoke-RestMethod -Uri "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 5
