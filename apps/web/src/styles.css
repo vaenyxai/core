@@ -10063,28 +10063,57 @@ body {
   color: #df938a;
 }
 
-/* ── The Subscription Door: every section folds on its own (2026-09-05) ───
-   The switch stays in sight; a section's heading is its fold. */
-.door-section {
-  margin: var(--space-2) 0 0;
-}
-
-.door-section > summary {
+/* ── The Subscription Door: one fold per app (2026-09-05) ────────────────
+   The name and its logins sit on the fold; the key, the actions and what
+   each engine proved open under it. */
+.door-app > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
   list-style: none;
 }
 
-.door-section > summary::-webkit-details-marker {
+.door-app > summary::-webkit-details-marker {
   display: none;
 }
 
-.door-section > summary::before {
+.door-app > summary::before {
   content: "▸";
   display: inline-block;
   width: 1em;
   color: var(--text-faint);
 }
 
-.door-section[open] > summary::before {
+.door-app[open] > summary::before {
   content: "▾";
+}
+
+.door-app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: var(--space-2) 0;
+}
+
+.door-app-engines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+
+.door-app-engines .door-engine-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+/* One line per backend card: what it does. */
+.model-card-line {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-label);
 }

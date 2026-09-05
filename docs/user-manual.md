@@ -493,8 +493,8 @@ Read this inside the app: **Settings → Manual**.
   other row may **follow the main model** instead of naming a backend: it then
   uses the main model's account and model, and the main model's backup too, so
   changing the main model changes every follower at once. **Text** — chat,
-  Routines, Methods, the Journal — is its own row right under it and follows
-  the main model unless you point it elsewhere. The switcher under the chat
+  Routines, Methods, the Journal — is an ordinary row right under it, with
+  its own Test, and follows the main model unless you point it elsewhere. The switcher under the chat
   box changes that one conversation only; it never changes these rows.
 - **Free or paid, marked per job** — every provider carries a badge, and the
   engine lists mark the job that costs money even when the provider is
@@ -663,8 +663,8 @@ Read this inside the app: **Settings → Manual**.
   The one worth knowing cold: the two easiest free options (Gemini's free
   tier, Mistral's free tier) **both train on what you send them by default**.
 
-- **Find → Test → Use** — every connected Models card has a **Find models**
-  button. It asks the account itself which models your login or key may use
+- **Find → Test → Use** — every connected Models card is one line and one
+  row of buttons, starting with **Find models**. It asks the account itself which models your login or key may use
   right now (never a stored list) and lists them. **Test** sends one line
   through that exact model and shows what the engine reported answered, how
   long it took and when; only a model that answered gets a **Use** button, and
@@ -678,9 +678,8 @@ Read this inside the app: **Settings → Manual**.
 
 ## 10. Subscription Door — lending your subscriptions to your own apps
 
-- **Each section folds** — the switch stays in sight; the address, your
-  apps, file sources, limits, this month and recent calls each open on their
-  own heading.
+- **One fold per app** — the switch, address, limits and usage stay in
+  sight; each app's key, logins and test results open under its own name.
 - **What it is** — Settings → AI Settings → **Subscription Door**. Your other
   apps borrow your ChatGPT and Claude subscriptions through this computer.
 - **Why it exists** — those subscriptions can only be used by a machine running

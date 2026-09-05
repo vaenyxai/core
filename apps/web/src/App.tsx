@@ -296,6 +296,7 @@ import {
   unadoptProviderModel,
   type AdoptedModelsValue,
   type EngineChoiceValue,
+  type EnginePairValue,
   testForgeConnection,
   fetchPublishState,
   disconnectPublishService,
@@ -367,7 +368,6 @@ import {
 import { Picker, type PickerOption } from "./picker.js";
 import { PROVIDER_DATA_FACTS, dataFactsBadge } from "./data-facts.js";
 import {
-  PROVIDER_COST_FACTS,
   capabilityCostNote,
   visionMarkNote,
   costBadge,
@@ -13192,10 +13192,8 @@ function SubscriptionDoorPanel() {
     <section className="settings-card">
       <p className="eyebrow">For your other apps</p>
       <h2>Subscription Door</h2>
-      {/* The switch stays in sight; every section below it folds on its own
-          (Oskar, 2026-09-05: 不是整个折叠,是每个项目折叠) — the address, the
-          keys, the file sources, the limits, this month and recent calls
-          each open only when they are the thing being looked at. */}
+      {/* One fold per app (Oskar, 2026-09-05: 每一个折叠的是一个 app); the
+          switch, the address, the limits and the usage stay in sight. */}
 
       <div className="door-switch">
         <div>
@@ -13214,8 +13212,9 @@ function SubscriptionDoorPanel() {
         />
       </div>
 
-      <details className="door-section">
-        <summary className="door-subhead">{lang === "zh" ? "给 app 填的地址" : "Address for your apps"}</summary>
+      <h3 className="door-subhead">
+        {lang === "zh" ? "给 app 填的地址" : "Address for your apps"}
+      </h3>
       {/* One line: what gets pasted into an app's settings next to its key.
           The loopback twin was noise — an app on another device can never
           reach 127.0.0.1 here (Oskar, 2026-08-06). */}
@@ -13237,9 +13236,7 @@ function SubscriptionDoorPanel() {
         </span>
       </div>
 
-      </details>
-      <details className="door-section">
-        <summary className="door-subhead">Your apps · {apps.length}</summary>
+      <h3 className="door-subhead">Your apps</h3>
       <ul className="settings-dots">
         <li>
           {lang === "zh"
@@ -13276,101 +13273,87 @@ function SubscriptionDoorPanel() {
           {lang === "zh" ? "添加 App" : "Add App"}
         </button>
       </div>
-      {apps.map((appProfile) => (
-        <div className="door-app" key={appProfile.id}>
-          <div className="door-app-head">
-            <strong>{appProfile.name}</strong>
-            {/* Date only: the key row right below already carries the prefix,
-                and on a phone the two prefixes read as a duplicated mess
-                (Oskar, 2026-08-31: 手机这个页面乱乱的). */}
-            <span className="door-app-meta">
-              {new Date(appProfile.createdAt).toLocaleDateString()}
-            </span>
-            <button
-              className="door-copy"
-              disabled={appBusy === appProfile.id}
-              onClick={() => void rotateApp(appProfile.id)}
-              type="button"
-            >
-              {lang === "zh" ? "换钥匙" : "Rotate"}
-            </button>
-            {confirmRevoke === appProfile.id ? (
-              <>
-                <button
-                  className="door-copy danger"
-                  disabled={appBusy === appProfile.id}
-                  onClick={() => void revokeApp(appProfile.id)}
-                  type="button"
+      {apps.map((appProfile) => {
+        const appLogin = logins?.apps.find(
+          (entry) => entry.id === appProfile.id,
+        );
+        const engineRows = [
+          { engine: "openai-cli", name: "OpenAI (Codex)" },
+          { engine: "claude-cli", name: "Claude" },
+        ] as const;
+        const capabilityNames: Record<string, [string, string]> = {
+          text_analysis: ["文字", "Text"],
+          structured_output: ["结构化", "Structured"],
+          vision_analysis: ["图片", "Image"],
+          document_analysis: ["PDF", "PDF"],
+          web_search: ["搜索", "Web"],
+        };
+        return (
+          // One fold per app: the name and which logins it holds on the fold;
+          // inside, only the key, the actions, and what each engine proved.
+          <details className="door-app" key={appProfile.id}>
+            <summary className="door-app-head">
+              <strong>{appProfile.name}</strong>
+              {engineRows.map((row) => (
+                <span
+                  className={
+                    appLogin?.[row.engine] === true
+                      ? "library-chip chip-published"
+                      : "library-chip"
+                  }
+                  key={row.engine}
                 >
-                  {lang === "zh" ? "确认吊销" : "Really revoke"}
-                </button>
-                <button
-                  className="door-copy"
-                  onClick={() => setConfirmRevoke(null)}
-                  type="button"
-                >
-                  {lang === "zh" ? "算了" : "Keep it"}
-                </button>
-              </>
-            ) : (
+                  {row.name}
+                </span>
+              ))}
+            </summary>
+            <div className="door-address door-key-row">
+              <code>
+                {shownKeys.has(appProfile.id) && revealedKeys[appProfile.id]
+                  ? revealedKeys[appProfile.id]
+                  : appProfile.tokenPrefix + "••••••••••••••••"}
+              </code>
+              <button
+                className="door-copy"
+                onClick={() => void toggleKeyShown(appProfile.id)}
+                type="button"
+              >
+                {shownKeys.has(appProfile.id)
+                  ? lang === "zh"
+                    ? "隐藏"
+                    : "Hide"
+                  : lang === "zh"
+                    ? "显示"
+                    : "Show"}
+              </button>
+              <button
+                className="door-copy"
+                onClick={() => void copyKey(appProfile.id)}
+                type="button"
+              >
+                {copiedKey === appProfile.id
+                  ? lang === "zh"
+                    ? "已复制 ✓"
+                    : "Copied ✓"
+                  : lang === "zh"
+                    ? "复制"
+                    : "Copy"}
+              </button>
               <button
                 className="door-copy"
                 disabled={appBusy === appProfile.id}
-                onClick={() => setConfirmRevoke(appProfile.id)}
+                onClick={() => void rotateApp(appProfile.id)}
                 type="button"
               >
-                {lang === "zh" ? "吊销" : "Revoke"}
+                {lang === "zh" ? "换钥匙" : "Rotate"}
               </button>
-            )}
-          </div>
-          <div className="door-address door-key-row">
-            <code>
-              {shownKeys.has(appProfile.id) && revealedKeys[appProfile.id]
-                ? revealedKeys[appProfile.id]
-                : `${appProfile.tokenPrefix}••••••••••••••••`}
-            </code>
-            <button
-              className="door-copy"
-              onClick={() => void toggleKeyShown(appProfile.id)}
-              type="button"
-            >
-              {shownKeys.has(appProfile.id)
-                ? lang === "zh"
-                  ? "隐藏"
-                  : "Hide"
-                : lang === "zh"
-                  ? "显示"
-                  : "Show"}
-            </button>
-            <button
-              className="door-copy"
-              onClick={() => void copyKey(appProfile.id)}
-              type="button"
-            >
-              {copiedKey === appProfile.id
-                ? lang === "zh"
-                  ? "已复制 ✓"
-                  : "Copied ✓"
-                : lang === "zh"
-                  ? "复制"
-                  : "Copy"}
-            </button>
-          </div>
-          {keyErrors[appProfile.id] ? (
-            <p className="form-error">{keyErrors[appProfile.id]}</p>
-          ) : null}
-          {/* One key, one Connect action. Engine identities remain independent:
-              Connect copies whichever Owner subscription logins currently
-              exist, then the probe rows say what each engine really passed. */}
-          {logins ? (
-            <div className="door-app-caps">
-              <div className="door-app-cap door-engine-row">
-                <span className="door-engine-line">
-                  {lang === "zh"
-                    ? "有效 Model Key 自动获得所有已验证的安全能力"
-                    : "A valid Model Key receives every verified safe capability"}
-                </span>
-                <span>
+            </div>
+            {keyErrors[appProfile.id] ? (
+              <p className="form-error">{keyErrors[appProfile.id]}</p>
+            ) : null}
+            <div className="door-app-actions">
+              {logins ? (
+                <>
                   <button
                     className="door-copy"
                     disabled={appBusy === appProfile.id}
@@ -13378,7 +13361,7 @@ function SubscriptionDoorPanel() {
                     type="button"
                   >
                     {lang === "zh" ? "连接" : "Connect"}
-                  </button>{" "}
+                  </button>
                   <button
                     className="door-copy"
                     disabled={appBusy === appProfile.id}
@@ -13393,75 +13376,84 @@ function SubscriptionDoorPanel() {
                         ? "测试全部能力"
                         : "Test all capabilities"}
                   </button>
-                </span>
-              </div>
-              {(
-                [
-                  { engine: "openai-cli", name: "OpenAI (Codex)" },
-                  { engine: "claude-cli", name: "Claude" },
-                ] as const
-              ).map((row) => {
-                const appLogin = logins.apps.find(
-                  (entry) => entry.id === appProfile.id,
-                );
-                const signedIn = appLogin?.[row.engine] === true;
-                const statuses = (appLogin?.capabilityStatus ?? []).filter(
-                  (status) => status.engine === row.engine,
-                );
-                return (
-                  <div
-                    className="door-app-cap door-engine-row"
-                    key={row.engine}
+                </>
+              ) : null}
+              {confirmRevoke === appProfile.id ? (
+                <>
+                  <button
+                    className="door-copy danger"
+                    disabled={appBusy === appProfile.id}
+                    onClick={() => void revokeApp(appProfile.id)}
+                    type="button"
                   >
-                    <span className="door-engine-line">
-                      {row.name}
-                      {" — "}
-                      {signedIn ? (
-                        <strong>
-                          {lang === "zh" ? "已登录" : "signed in"}
-                        </strong>
-                      ) : lang === "zh" ? (
-                        "未登录"
-                      ) : (
-                        "not signed in"
-                      )}
-                    </span>
-                    <div className="door-capability-results">
-                      {statuses.map((status) => {
-                        const names: Record<string, [string, string]> = {
-                          text_analysis: ["文字分析", "Text analysis"],
-                          structured_output: ["结构化结果", "Structured output"],
-                          vision_analysis: ["图片输入", "Image input"],
-                          document_analysis: ["PDF 输入", "PDF input"],
-                          web_search: ["网页搜索", "Web search"],
-                        };
-                        const label = names[status.capability]?.[lang === "zh" ? 0 : 1] ?? status.capability;
-                        return (
-                          <span
-                            className={status.available ? "" : "capability-row-pending"}
-                            key={status.capability}
-                            title={status.unavailable_reason ?? undefined}
-                          >
-                            {status.available ? "✓" : "○"} {label}
-                            {status.model ? ` · ${status.model}` : ""}
-                            {!status.available && status.unavailable_reason
-                              ? ` — ${status.unavailable_reason}`
-                              : ""}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+                    {lang === "zh" ? "确认吊销" : "Really revoke"}
+                  </button>
+                  <button
+                    className="door-copy"
+                    onClick={() => setConfirmRevoke(null)}
+                    type="button"
+                  >
+                    {lang === "zh" ? "算了" : "Keep it"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="door-copy"
+                  disabled={appBusy === appProfile.id}
+                  onClick={() => setConfirmRevoke(appProfile.id)}
+                  type="button"
+                >
+                  {lang === "zh" ? "吊销" : "Revoke"}
+                </button>
+              )}
             </div>
-          ) : null}
-        </div>
-      ))}
+            {logins ? (
+              <div className="door-app-engines">
+                {engineRows.map((row) => {
+                  const signedIn = appLogin?.[row.engine] === true;
+                  const statuses = (appLogin?.capabilityStatus ?? []).filter(
+                    (status) => status.engine === row.engine,
+                  );
+                  return (
+                    <div className="door-engine-line" key={row.engine}>
+                      <span>
+                        {row.name}
+                        {" — "}
+                        {signedIn
+                          ? lang === "zh"
+                            ? "已登录"
+                            : "signed in"
+                          : lang === "zh"
+                            ? "未登录"
+                            : "not signed in"}
+                      </span>
+                      {statuses.map((status) => (
+                        <span
+                          className={
+                            status.available ? "" : "capability-row-pending"
+                          }
+                          key={status.capability}
+                          title={status.unavailable_reason ?? undefined}
+                        >
+                          {status.available ? "✓" : "○"}{" "}
+                          {capabilityNames[status.capability]?.[
+                            lang === "zh" ? 0 : 1
+                          ] ?? status.capability}
+                          {status.model ? " · " + status.model : ""}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </details>
+        );
+      })}
 
-      </details>
-      <details className="door-section">
-        <summary className="door-subhead">{lang === "zh" ? "文件可以来自" : "Files may come from"}</summary>
+      <h3 className="door-subhead">
+        {lang === "zh" ? "文件可以来自" : "Files may come from"}
+      </h3>
       {/* The one list that stays (Oskar, 2026-08-06: the rest of "who and
           where" retired with the shared key). This one is a real wall: it is
           the only thing stopping a stolen key from making this machine
@@ -13483,9 +13475,7 @@ function SubscriptionDoorPanel() {
         />
       </div>
 
-      </details>
-      <details className="door-section">
-        <summary className="door-subhead">Limits</summary>
+      <h3 className="door-subhead">Limits</h3>
       {/* Typed freely, saved when the box loses focus (or on Enter) — never
           per keystroke, or the server's clamp rewrites the box mid-number. */}
       <div className="door-limits">
@@ -13575,9 +13565,7 @@ function SubscriptionDoorPanel() {
           sees a bill that grew and cannot say which app grew it. Token counts
           appear only when an engine really reported them — the Claude SDK
           does, the Codex CLI does not — never estimated. */}
-      </details>
-      <details className="door-section">
-        <summary className="door-subhead">This month</summary>
+      <h3 className="door-subhead">This month</h3>
       {!usage || usage.rows.length === 0 ? (
         <p className="door-legend">
           {lang === "zh" ? "这个月还没有调用。" : "No calls yet this month."}
@@ -13615,9 +13603,7 @@ function SubscriptionDoorPanel() {
         </ul>
       )}
 
-      </details>
-      <details className="door-section">
-        <summary className="door-subhead">Recent calls · {calls.length}</summary>
+      <h3 className="door-subhead">Recent calls</h3>
       {calls.length === 0 ? (
         <p className="door-legend">Nothing yet.</p>
       ) : (
@@ -13644,7 +13630,6 @@ function SubscriptionDoorPanel() {
         What happened, never what was in it: no prompt, no file, no answer is
         written down.
       </p>
-      </details>
     </section>
   );
 }
@@ -13840,6 +13825,10 @@ const SETUP_ROWS = new Set([
 // nothing there can listen to the other — so this device does them instead, in
 // the browser, which is why they have a cost line like the rest.
 const TEST_COST: Record<string, { en: string; zh: string }> = {
+  text: {
+    en: "Sends one short line through the Text row exactly as it stands — the main model unless Text was pointed elsewhere. One small request.",
+    zh: "按文字行现在的账号和型号(默认就是主模型)发一句很短的话。一次很小的请求。",
+  },
   hearing: {
     en: "Records three seconds from this device's microphone and sends it to the engine on this row. Say anything — what comes back is what it heard. The recording is not kept.",
     zh: "用这台设备的麦克风录三秒,发给这一行的引擎。随便说一句 —— 回来的就是它听到的。录音不保留。",
@@ -13969,6 +13958,40 @@ function CapabilitiesPanel({
   // the answer for that row, and clearing it when you open another one would
   // throw away the only record of what happened.
   const [testing, setTesting] = useState<string | null>(null);
+  // The Text row's answer — the main model unless pointed elsewhere — for
+  // its one-line summary and its Test. Re-read when the main model changes
+  // or the row's own drawer saves.
+  const [textPair, setTextPair] = useState<EnginePairValue | null>(null);
+  const [textPairVersion, setTextPairVersion] = useState(0);
+  useEffect(() => {
+    let active = true;
+    function load() {
+      void fetchEnginePair("text")
+        .then((pair) => {
+          if (active) setTextPair(pair);
+        })
+        .catch(() => undefined);
+    }
+    load();
+    window.addEventListener(MODEL_DEFAULT_CHANGED, load);
+    return () => {
+      active = false;
+      window.removeEventListener(MODEL_DEFAULT_CHANGED, load);
+    };
+  }, [textPairVersion, refreshKey]);
+  function providerLabelOf(id: string): string {
+    return providers.find((provider) => provider.id === id)?.name ?? id;
+  }
+  function textSummary(): string {
+    const choice = textPair?.primary;
+    if (!choice) return lang === "zh" ? "还没选" : "not chosen";
+    const name =
+      providerLabelOf(choice.provider) +
+      (choice.model ? " / " + choice.model : "");
+    return textPair?.follows?.primary
+      ? (lang === "zh" ? "跟随主模型 · " : "follows main · ") + name
+      : name;
+  }
   const [testResults, setTestResults] = useState<
     Record<string, CapabilityTestResult>
   >({});
@@ -14137,6 +14160,27 @@ function CapabilitiesPanel({
   async function runTest(id: string) {
     setTesting(id);
     try {
+      if (id === "text") {
+        // One short line through the Text row exactly as it stands — the
+        // account and model the row shows, never a stored default.
+        const choice = textPair?.primary;
+        const result = await testChatConnection({
+          prompt: "Reply with exactly the single word PONG.",
+          ...(choice ? { provider: choice.provider } : {}),
+          ...(choice?.model ? { model: choice.model } : {}),
+        });
+        setTestResults((current) => ({
+          ...current,
+          text: {
+            status: result.status === "passed" ? "ok" : "failed",
+            engine:
+              providerLabelOf(result.provider ?? choice?.provider ?? "") +
+              (result.model ? " / " + result.model : ""),
+            detail: result.message,
+          },
+        }));
+        return;
+      }
       // Two of the eight cannot be tested by the server, for opposite reasons:
       // nothing on that side can listen, and nothing on that side can speak.
       // Both are testable HERE, because the browser has ears and a mouth — so
@@ -15451,12 +15495,16 @@ function CapabilitiesPanel({
         </div>
       </div>
       {/* TEXT (Oskar, 2026-09-05): chat and every written job — Routines,
-          Methods, the Journal — in one row that follows the main model until
-          pointed elsewhere. A single conversation can still pin its own
-          backend and model under the chat box; that pin stays with the
-          conversation and never touches this row. */}
-      <div className="capability-block">
-        <div className="capability-row open">
+          Methods, the Journal — as one ordinary row: what answers, a Test,
+          and its pair in the drawer. It follows the main model until pointed
+          elsewhere and cannot be switched off; a conversation's own pin under
+          the chat box stays with that conversation. */}
+      <div className="capability-block" id="capability-block-text">
+        <div
+          className={
+            openSetups.has("text") ? "capability-row open" : "capability-row"
+          }
+        >
           <span className="capability-row-icon">✎</span>
           <span className="capability-row-name">
             {lang === "zh" ? "文字" : "Text"}
@@ -15468,20 +15516,42 @@ function CapabilitiesPanel({
               )
             </em>
           </span>
+          <span className="capability-row-engine capability-row-summary">
+            {textSummary()}
+          </span>
+          {rowTest("text")}
+          <button
+            aria-controls="setup-text"
+            aria-expanded={openSetups.has("text")}
+            aria-label={lang === "zh" ? "文字的设置" : "Text setup"}
+            className={
+              openSetups.has("text")
+                ? "capability-row-more open"
+                : "capability-row-more"
+            }
+            onClick={() => toggleSetup("text")}
+            type="button"
+          >
+            <LineIcon>
+              <path d="m7 10 5 5 5-5" />
+            </LineIcon>
+          </button>
+          <span className="capability-row-pending">
+            {lang === "zh" ? "常开" : "always on"}
+          </span>
         </div>
-        <div className="capability-setup open">
-          <EnginePairPicker
-            providerOptions={slotOptions("chat").filter(
-              (option) => !option.disabled,
-            )}
-            slot="text"
-          />
-          <p className="settings-card-copy">
-            {lang === "zh"
-              ? "默认跟随主模型。聊天框下面的切换只换那一个对话,不改这里。"
-              : "Follows the main model by default. The switcher under the chat box changes that one conversation only, never this row."}
-          </p>
-        </div>
+        {testAnswer("text")}
+        {openSetups.has("text") ? (
+          <div className="capability-setup" id="setup-text">
+            <EnginePairPicker
+              onChanged={() => setTextPairVersion((current) => current + 1)}
+              providerOptions={slotOptions("chat").filter(
+                (option) => !option.disabled,
+              )}
+              slot="text"
+            />
+          </div>
+        ) : null}
       </div>
       <div className="capability-rows">
         {CAPABILITY_META.map((meta) => {
@@ -15776,9 +15846,7 @@ function ModelsPanel({
         ) : null}
         {ids.length > 0 ? (
           <p className="settings-card-copy text-faint">
-            {zh
-              ? "先测一次,答上来的才能「使用」;使用中的型号会出现在上面各行的下拉里。"
-              : "Test first — only a model that answers can be used; models in use appear in the rows above."}
+            {zh ? "测过才能使用。" : "Test, then use."}
           </p>
         ) : null}
         <ul className="model-finder-list">
@@ -16553,193 +16621,156 @@ function ModelsPanel({
                   {costBadge(provider.id, lang)}
                 </span>
               ) : null}
-              {/* The way in to find → test → use, on the card itself (Oskar,
-                  2026-09-05: 右边有一个搜索按钮). */}
-              {provider.connected ? (
-                <button
-                  className="capability-row-test model-finder-toggle"
-                  onClick={() => void openFinder(provider)}
-                  type="button"
-                >
-                  {finderState(provider.id).open
-                    ? lang === "zh"
-                      ? "收起型号"
-                      : "Hide models"
-                    : lang === "zh"
-                      ? "搜索型号"
-                      : "Find models"}
-                </button>
-              ) : null}
             </div>
-            {provider.connected ? renderFinder(provider) : null}
-            {/* Everything below is behind the expander. A connected backend
-                is one line — name, state, what it costs, what it can do —
-                because the list is read to answer "what have I got", and the
-                detail is only ever wanted about ONE of them (Oskar,
-                2026-08-07: 字还是太多太大,一眼扫完). Two exceptions stand open
-                on their own: an unconnected featured card IS its connect
-                form, and a featured channel that is signed out keeps its
-                sign-in in sight — the fresh install reads OpenAI, Anthropic,
-                each one click from working (Oskar, 2026-08-11). */}
+            {/* One line of what it does; the provider's own data terms stay as
+                the one small dated line the rules require (Oskar, 2026-09-05:
+                一两句话,最好就一句话). */}
+            <p className="model-card-line">
+              {capabilitySummary(provider, lang)}
+            </p>
+            {(() => {
+              const facts = PROVIDER_DATA_FACTS[provider.id];
+              if (!facts) return null;
+              return (
+                <small className="model-data-facts">
+                  {facts.en}{" "}
+                  <a href={facts.sourceUrl} rel="noreferrer" target="_blank">
+                    source, {facts.checkedAt}
+                  </a>
+                </small>
+              );
+            })()}
+            {provider.connected && !provider.healthy ? (
+              <small className="model-card-model">{provider.detail}</small>
+            ) : null}
             {!provider.connected ? (
               renderConnectForm(provider)
             ) : (
               <>
-                <button
-                  aria-expanded={bodyOpen(provider)}
-                  className="model-card-summary"
-                  onClick={() =>
-                    setEditingId((current) =>
-                      current === provider.id ? null : provider.id,
-                    )
-                  }
-                  type="button"
-                >
-                  <span className="model-card-does">
-                    {capabilitySummary(provider, lang)}
-                  </span>
-                  <LineIcon>
-                    <path d="m7 10 5 5 5-5" />
-                  </LineIcon>
-                </button>
-                {bodyOpen(provider) ? (
-                  <>
-                    {PROVIDER_COST_FACTS[provider.id]?.eligibility ? (
-                      <small className="model-card-model">
-                        {
-                          PROVIDER_COST_FACTS[provider.id]?.eligibility?.[
-                            lang === "zh" ? "zh" : "en"
-                          ]
+                {/* Every action in one row — find models, sign in, main, key,
+                    disconnect. Test and Use sit on each found model below. */}
+                <div className="model-card-actions">
+                  <button
+                    className="capability-row-test"
+                    onClick={() => void openFinder(provider)}
+                    type="button"
+                  >
+                    {finderState(provider.id).open
+                      ? lang === "zh"
+                        ? "收起型号"
+                        : "Hide models"
+                      : lang === "zh"
+                        ? "找型号"
+                        : "Find models"}
+                  </button>
+                  {provider.kind === "cli-login" && !provider.healthy ? (
+                    <button
+                      className="primary-button"
+                      disabled={codexWaiting}
+                      onClick={() => void signInCodex()}
+                      type="button"
+                    >
+                      {codexWaiting
+                        ? codexLoginUrl
+                          ? "Waiting For Sign-In..."
+                          : "Preparing The ChatGPT Sign-In (About A Minute)..."
+                        : "Sign In With ChatGPT"}
+                    </button>
+                  ) : null}
+                  {!provider.isDefault ? (
+                    <button
+                      className="secondary-button"
+                      disabled={busy === provider.id}
+                      onClick={() => void makeDefault(provider)}
+                      type="button"
+                    >
+                      Set As Default
+                    </button>
+                  ) : null}
+                  {provider.kind !== "cli-login" ? (
+                    <>
+                      <button
+                        className="text-button"
+                        onClick={() =>
+                          setEditingId((current) =>
+                            current === provider.id ? null : provider.id,
+                          )
                         }
-                      </small>
-                    ) : null}
-                    {provider.model ? (
-                      <small className="model-card-model">
-                        {provider.model}
-                      </small>
-                    ) : null}
-                    {/* The provider's own data conditions, copied from its terms and
-                dated — the label beside the choice, never our judgment. */}
-                    {(() => {
-                      const facts = PROVIDER_DATA_FACTS[provider.id];
-                      if (!facts) return null;
-                      return (
-                        <small className="model-data-facts">
-                          {facts.en}{" "}
-                          <a
-                            href={facts.sourceUrl}
-                            rel="noreferrer"
-                            target="_blank"
+                        type="button"
+                      >
+                        {bodyOpen(provider)
+                          ? lang === "zh"
+                            ? "收起 key"
+                            : "Hide key"
+                          : lang === "zh"
+                            ? "改 key"
+                            : "Update key"}
+                      </button>
+                      {confirmDisconnect === provider.id ? (
+                        <>
+                          <button
+                            className="text-button danger"
+                            disabled={busy === provider.id}
+                            onClick={() => {
+                              setConfirmDisconnect(null);
+                              void disconnect(provider);
+                            }}
+                            type="button"
                           >
-                            source, {facts.checkedAt}
-                          </a>
-                        </small>
-                      );
-                    })()}
-                    {!provider.healthy ? (
-                      <small className="model-card-model">
-                        {provider.detail}
-                      </small>
-                    ) : null}
-                    {provider.kind === "cli-login" ? (
-                      <>
-                        {!provider.healthy ? (
-                          <>
-                            <div className="model-card-actions">
-                              <button
-                                className="primary-button"
-                                disabled={codexWaiting}
-                                onClick={() => void signInCodex()}
-                                type="button"
-                              >
-                                {codexWaiting
-                                  ? codexLoginUrl
-                                    ? "Waiting For Sign-In..."
-                                    : "Preparing The ChatGPT Sign-In (About A Minute)..."
-                                  : "Sign In With ChatGPT"}
-                              </button>
-                            </div>
-                            {/* F1 (copy pack): a cloud-provider connect surface
-                            carries the third-party notice. This sign-in IS
-                            the Codex channel's connect surface now that the
-                            old Provider Auth card is gone. */}
-                            <p className="context-disclaimer">
-                              {t("legal.notice.modelConnect.cloud")}
-                            </p>
-                          </>
-                        ) : null}
-                        {codexLoginUrl ? (
-                          // The link outlives the wait on purpose: on a
-                          // machine where no window can appear (the SYSTEM
-                          // autostart), this link IS the sign-in.
-                          <a
-                            className="model-key-link"
-                            href={codexLoginUrl}
-                            rel="noreferrer"
-                            target="_blank"
+                            Really Disconnect
+                          </button>
+                          <button
+                            className="text-button"
+                            onClick={() => setConfirmDisconnect(null)}
+                            type="button"
                           >
-                            No window? Open the sign-in page ↗
-                          </a>
-                        ) : null}
-                        {codexWaiting ? (
-                          <p className="library-note">
-                            Finish the ChatGPT sign-in — in the window that
-                            opened, or through the link above if none did. This
-                            card updates by itself.
-                          </p>
-                        ) : null}
-                      </>
-                    ) : null}
-                    <div className="model-card-actions">
-                      {!provider.isDefault ? (
+                            Keep
+                          </button>
+                        </>
+                      ) : (
                         <button
-                          className="secondary-button"
+                          className="text-button"
                           disabled={busy === provider.id}
-                          onClick={() => void makeDefault(provider)}
+                          onClick={() => setConfirmDisconnect(provider.id)}
                           type="button"
                         >
-                          Set As Default
+                          Disconnect
                         </button>
-                      ) : null}
-                      {provider.kind !== "cli-login" ? (
-                        <>
-                          {confirmDisconnect === provider.id ? (
-                            <>
-                              <button
-                                className="text-button danger"
-                                disabled={busy === provider.id}
-                                onClick={() => {
-                                  setConfirmDisconnect(null);
-                                  void disconnect(provider);
-                                }}
-                                type="button"
-                              >
-                                Really Disconnect
-                              </button>
-                              <button
-                                className="text-button"
-                                onClick={() => setConfirmDisconnect(null)}
-                                type="button"
-                              >
-                                Keep
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              className="text-button"
-                              disabled={busy === provider.id}
-                              onClick={() => setConfirmDisconnect(provider.id)}
-                              type="button"
-                            >
-                              Disconnect
-                            </button>
-                          )}
-                        </>
-                      ) : null}
-                    </div>
-                    {renderConnectForm(provider)}
+                      )}
+                    </>
+                  ) : null}
+                </div>
+                {provider.kind === "cli-login" && !provider.healthy ? (
+                  <>
+                    {/* F1 (copy pack): a cloud-provider connect surface carries
+                        the third-party notice. This sign-in IS the Codex
+                        channel's connect surface. */}
+                    <p className="context-disclaimer">
+                      {t("legal.notice.modelConnect.cloud")}
+                    </p>
+                    {codexLoginUrl ? (
+                      <a
+                        className="model-key-link"
+                        href={codexLoginUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        No window? Open the sign-in page ↗
+                      </a>
+                    ) : null}
+                    {codexWaiting ? (
+                      <p className="library-note">
+                        Finish the ChatGPT sign-in — in the window that opened,
+                        or through the link above if none did. This card
+                        updates by itself.
+                      </p>
+                    ) : null}
                   </>
                 ) : null}
+                {renderFinder(provider)}
+                {bodyOpen(provider) && provider.kind !== "cli-login"
+                  ? renderConnectForm(provider)
+                  : null}
               </>
             )}
           </div>
