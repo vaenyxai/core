@@ -21,9 +21,9 @@ import {
   fetchAdoptedModels,
   fetchEnginePair,
   setEngineChoice,
+  type EngineChoiceValue,
   type EnginePairValue,
 } from "./api";
-import { Hint } from "./hint";
 import { useI18n } from "./i18n";
 import { Picker, type PickerOption } from "./picker";
 import { showErrorToast } from "./toast";
@@ -47,6 +47,8 @@ export function EnginePairPicker({
   /** Called after a save so the row above can refresh whatever it shows. */
   onChanged,
   renderUnder,
+  renderTest,
+  renderTestResult,
 }: {
   slot: string;
   /** The accounts that can do THIS job, already labelled by the caller. */
@@ -61,6 +63,17 @@ export function EnginePairPicker({
   renderUnder?: (
     which: "primary" | "backup",
     providerId: string | null,
+  ) => React.ReactNode;
+  /** A Test for THIS side, rendered at the end of its line: each side of
+   *  the pair is tested on its own (Oskar, 2026-09-05). */
+  renderTest?: (
+    which: "primary" | "backup",
+    choice: EngineChoiceValue | null,
+  ) => React.ReactNode;
+  /** That side's last result, painted under its line. */
+  renderTestResult?: (
+    which: "primary" | "backup",
+    choice: EngineChoiceValue | null,
   ) => React.ReactNode;
 }) {
   const { lang } = useI18n();
@@ -207,17 +220,10 @@ export function EnginePairPicker({
   // "Primary" and "Backup" need no gloss — the words are the explanation
   // (Oskar, 2026-08-17). What is NOT obvious is when the backup fires, so that
   // one sentence lives behind a "?" instead of under every row forever.
-  const rows: { which: "primary" | "backup"; label: string; hint?: string }[] =
-    [
-      { which: "primary", label: zh ? "主用" : "Primary" },
-      {
-        which: "backup",
-        label: zh ? "备用" : "Backup",
-        hint: zh
-          ? "只有主用完全答不上来时才会用它(额度用完、钥匙失效、对方挂了)。用了会在回复里说明。答得不好不算。"
-          : "Used only when the primary cannot answer at all — out of quota, key rejected, provider down. The reply says so when it happens. A poor answer does not count.",
-      },
-    ];
+  const rows: { which: "primary" | "backup"; label: string }[] = [
+    { which: "primary", label: zh ? "主用" : "Primary" },
+    { which: "backup", label: zh ? "备用" : "Backup" },
+  ];
 
   return (
     <div className="engine-pair">
@@ -240,10 +246,7 @@ export function EnginePairPicker({
         return (
           <div className="engine-pair-side" key={row.which}>
             <div className="engine-pair-row">
-              <span className="engine-pair-label">
-                {row.label}
-                {row.hint ? <Hint text={row.hint} /> : null}
-              </span>
+              <span className="engine-pair-label">{row.label}</span>
               <Picker
                 ariaLabel={`${slot} ${row.which} provider`}
                 disabled={busy !== null}
@@ -299,39 +302,43 @@ export function EnginePairPicker({
                   options={modelMenu}
                   value={modelValue}
                 />
+              ) : follows ? (
+                // What following means right now, in real names, in the
+                // model's own column — one line, nothing under it.
+                <span
+                  className={
+                    canServe
+                      ? "engine-pair-follow-inline"
+                      : "engine-pair-follow-inline engine-pair-follow-warning"
+                  }
+                >
+                  {choice
+                    ? "→ " +
+                      providerLabel(choice.provider) +
+                      (choice.model ? " / " + choice.model : "") +
+                      (canServe ? "" : zh ? "(做不了这项)" : " (cannot do this)")
+                    : row.which === "backup"
+                      ? zh
+                        ? "→ 主模型没设备用"
+                        : "→ main has no backup"
+                      : zh
+                        ? "→ 主模型还没选"
+                        : "→ no main model yet"}
+                </span>
               ) : (
                 // Holds its column so the two rows stay aligned.
                 <span className="engine-pair-model-empty" />
               )}
+              {renderTest ? (
+                <span className="engine-pair-test">
+                  {renderTest(row.which, choice)}
+                </span>
+              ) : null}
             </div>
-            {follows ? (
-              // What following means right now, in real names — a row that
-              // says "follows" and nothing else makes the Owner work it out.
-              <p
-                className={
-                  canServe
-                    ? "engine-pair-follow"
-                    : "engine-pair-follow engine-pair-follow-warning"
-                }
-              >
-                {choice
-                  ? `${zh ? "现在实际 = " : "Right now = "}${providerLabel(
-                      choice.provider,
-                    )} / ${choice.model ?? (zh ? "默认型号" : "default model")}${
-                      canServe
-                        ? ""
-                        : zh
-                          ? " —— 主模型做不了这一项,请单独选"
-                          : " — the main model cannot do this job; choose one here"
-                    }`
-                  : row.which === "backup"
-                    ? zh
-                      ? "主模型没有设备用,所以这里也没有"
-                      : "The main model has no backup, so neither does this"
-                    : zh
-                      ? "主模型还没选"
-                      : "No main model chosen yet"}
-              </p>
+            {renderTestResult?.(row.which, choice) ? (
+              <div className="engine-pair-result">
+                {renderTestResult(row.which, choice)}
+              </div>
             ) : null}
             {under ? <div className="engine-pair-under">{under}</div> : null}
           </div>

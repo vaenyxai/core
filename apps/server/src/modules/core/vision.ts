@@ -258,8 +258,29 @@ export async function askVisionModel(
   prompt: string,
   image: Buffer,
   mimeType: string,
-  options: { failureCode: string; temperature?: number; lang?: string },
+  options: {
+    failureCode: string;
+    temperature?: number;
+    lang?: string;
+    /** One side of the pair, alone — how a Test proves THAT engine rather
+     *  than earning its tick from the other side standing in. */
+    engineOverride?: EngineChoice;
+  },
 ): Promise<VisionOutcome<VisionAnswer>> {
+  if (options.engineOverride) {
+    const choice = options.engineOverride;
+    return {
+      value: await askVisionModelOnce(
+        secretsDirectory,
+        prompt,
+        image,
+        mimeType,
+        options,
+        choice,
+      ),
+      note: { provider: choice.provider, model: choice.model ?? null },
+    };
+  }
   // The Owner's pair: their primary, and — only if it cannot answer at all —
   // the stand-in THEY chose. The app never picks one (owner rule,
   // 2026-08-16), and whichever answered is carried out in the note so the

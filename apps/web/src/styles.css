@@ -9711,9 +9711,42 @@ body {
    columns are fixed: label, account, model. */
 .engine-pair-row {
   display: grid;
-  grid-template-columns: 108px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 108px minmax(0, 1fr) minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-2);
+}
+
+/* Each side's own Test at the end of its line, and its result under it —
+   green or red, nothing else (2026-09-05). */
+.engine-pair-test {
+  display: inline-flex;
+  align-items: center;
+}
+
+.engine-pair-result {
+  margin: -2px 0 0 108px;
+  font-size: var(--fs-label);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.engine-side-result.ok {
+  color: #75b094;
+}
+
+.engine-side-result.failed {
+  color: #df938a;
+}
+
+.engine-side-result.not-implemented {
+  color: var(--text-faint);
+}
+
+.engine-pair-follow-inline {
+  min-width: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+  overflow-wrap: anywhere;
 }
 
 .engine-pair-label {
@@ -10014,10 +10047,15 @@ body {
 }
 
 .model-finder-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 10px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 6px;
+}
+
+.model-finder-row .picker {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .model-finder-name {
@@ -10037,10 +10075,11 @@ body {
 }
 
 .model-finder-result {
-  grid-column: 1 / -1;
+  margin: 4px 0 0;
   color: var(--text-faint);
   font-size: var(--fs-label);
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .model-finder-result.ok {

@@ -369,9 +369,24 @@ export async function generateImage(
   prompt: string,
   modeId: string | null,
   lang?: string,
+  /** One side of the pair, alone — a Test of that engine and nothing else. */
+  engineOverride?: EngineChoice,
 ): Promise<string> {
   if (capabilityRefusedBy(database, "drawing", modeId)) {
     throw new Error("IMAGE_CAPABILITY_OFF");
+  }
+  if (engineOverride) {
+    const value = await drawWith(
+      engineOverride,
+      secretsDirectory,
+      dataDirectory,
+      prompt,
+    );
+    lastDrawNote = {
+      provider: engineOverride.provider,
+      model: engineOverride.model ?? null,
+    };
+    return value;
   }
   const pair = readEnginePair(secretsDirectory, "imageOutput");
   if (!pair.primary) throw new Error("IMAGE_NOT_CONNECTED");

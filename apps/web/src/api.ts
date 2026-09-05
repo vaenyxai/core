@@ -2257,9 +2257,11 @@ export function recordCapabilityWanted(
 export function runCapabilityTest(
   capability: string,
   lang: string,
+  /** Which side of the row to test; that side runs alone. */
+  side?: "primary" | "backup",
 ): Promise<CapabilityTestResult> {
   return requestJson<CapabilityTestResult>(
-    `/v1/capability-test/${encodeURIComponent(capability)}?lang=${encodeURIComponent(lang)}`,
+    `/v1/capability-test/${encodeURIComponent(capability)}?lang=${encodeURIComponent(lang)}${side ? `&side=${side}` : ""}`,
     { method: "POST", body: JSON.stringify({}) },
   );
 }

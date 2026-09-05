@@ -7359,7 +7359,10 @@ export async function registerGatewayRoutes(
   // matched by startsWith in two places that would both be wrong here — the
   // locked-mode mutation list, and the web app's "Saved" toast rule, which
   // would pop "Saved" over a test result on every press.
-  app.post<{ Params: { capability: string }; Querystring: { lang?: string } }>(
+  app.post<{
+    Params: { capability: string };
+    Querystring: { lang?: string; side?: string };
+  }>(
     "/v1/capability-test/:capability",
     {
       schema: {
@@ -7429,6 +7432,8 @@ export async function registerGatewayRoutes(
         lang: language,
         owner: { id: owner.id, name: owner.name },
         provider: mainModel,
+        // Each side of a row has its own Test; the side named runs alone.
+        side: request.query.side === "backup" ? "backup" : "primary",
       });
       // Recorded whichever way it went, the way the Forge test is: what was
       // tried, with which engine, and what came back, so a Test pressed last

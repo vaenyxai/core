@@ -37,6 +37,11 @@ import type { DatabaseHandle } from "../../db/database.js";
 import type { ModelProvider } from "../models/provider.js";
 import { providerDisplayName } from "../models/provider-settings.js";
 import {
+  readEnginePair,
+  type EngineChoice,
+  type EngineSlot,
+} from "../models/engine-slots.js";
+import {
   type Capability,
   type CapabilityLanguage,
   backendCannotMessage,
@@ -283,6 +288,35 @@ export interface CapabilityProbeContext {
   /** The main model, resolved by the caller rather than looked up here, so a
    *  probe can be driven by a test without a registry, a key or a network. */
   provider: ModelProvider | null;
+  /** Which side of the row's pair to test. A test must never earn its tick
+   *  from the other side standing in, so the chosen side runs alone. */
+  side?: "primary" | "backup";
+}
+
+/** The one engine this test may use: the row's primary, or its backup when
+ *  the backup was asked for. */
+function sideChoice(
+  context: CapabilityProbeContext,
+  slot: EngineSlot,
+): { choice: EngineChoice | null; missing: CapabilityTestResult | null } {
+  const pair = readEnginePair(context.secretsDirectory, slot);
+  const choice = context.side === "backup" ? pair.backup : pair.primary;
+  if (choice) return { choice, missing: null };
+  return {
+    choice: null,
+    missing: {
+      status: "failed",
+      engine: "",
+      detail:
+        context.side === "backup"
+          ? context.lang === "zh"
+            ? "这一行没有设备用。"
+            : "No backup is set on this row."
+          : context.lang === "zh"
+            ? "这一行还没有连上模型 —— 先在这里加一个 key。"
+            : "No model is connected for this row yet — add a key here first.",
+    },
+  };
 }
 
 function noMainModel(lang: CapabilityLanguage): CapabilityTestResult {
@@ -303,15 +337,18 @@ async function probeVision(
 ): Promise<CapabilityTestResult> {
   const { lang } = context;
   const status = getVisionStatus(context.secretsDirectory);
-  if (!status.connected) {
-    return {
-      status: "failed",
-      engine: "",
-      detail:
-        lang === "zh"
-          ? "这一行还没有连上模型 —— 先在这里加一个 key。"
-          : "No model is connected for this row yet — add a key here first.",
-    };
+  const side = sideChoice(context, "vision");
+  if (!status.connected || !side.choice) {
+    return (
+      side.missing ?? {
+        status: "failed",
+        engine: "",
+        detail:
+          lang === "zh"
+            ? "这一行还没有连上模型 —— 先在这里加一个 key。"
+            : "No model is connected for this row yet — add a key here first.",
+      }
+    );
   }
   const prompt =
     "This picture is a plain white background with one solid coloured square in the middle. Answer with ONE English word: the colour of that square.";
@@ -323,14 +360,14 @@ async function probeVision(
         prompt,
         redSquarePng(),
         "image/png",
-        { failureCode: "VISION_DESCRIBE_FAILED" },
+        { failureCode: "VISION_DESCRIBE_FAILED", engineOverride: side.choice },
       ),
       lang,
     );
   } catch (error) {
     return {
       status: "failed",
-      engine: providerDisplayName(status.provider ?? ""),
+      engine: providerDisplayName(side.choice.provider),
       detail:
         lang === "zh"
           ? `拒绝了测试图:${failureWords(error, lang)}`
@@ -367,17 +404,20 @@ async function probeDrawing(
 ): Promise<CapabilityTestResult> {
   const { lang } = context;
   const status = getImageEngineStatus(context.secretsDirectory);
-  if (!status.connected) {
-    return {
-      status: "failed",
-      engine: "",
-      detail:
-        lang === "zh"
-          ? "这一行还没有连上画图的引擎 —— 先在这里加一个。"
-          : "No picture engine is connected for this row yet — add one here first.",
-    };
+  const side = sideChoice(context, "imageOutput");
+  if (!status.connected || !side.choice) {
+    return (
+      side.missing ?? {
+        status: "failed",
+        engine: "",
+        detail:
+          lang === "zh"
+            ? "这一行还没有连上画图的引擎 —— 先在这里加一个。"
+            : "No picture engine is connected for this row yet — add one here first.",
+      }
+    );
   }
-  const engine = providerDisplayName(status.provider ?? "");
+  const engine = providerDisplayName(side.choice.provider);
   // A scratch directory, not the Owner's own images folder: a Test pressed
   // twenty times must not leave twenty test pictures inside their backups.
   const scratch = mkdtempSync(resolve(tmpdir(), "vaenyx-drawing-test-"));
@@ -391,6 +431,8 @@ async function probeDrawing(
         // No mode: /v1/capability-test refuses any session that is in one, so
         // a Test only ever runs as the Owner in User Mode.
         null,
+        undefined,
+        side.choice,
       ),
       lang,
     );
@@ -793,11 +835,17 @@ async function probeOcr(
   context: CapabilityProbeContext,
 ): Promise<CapabilityTestResult> {
   const { runOcr, OcrNotConnectedError } = await import("./ocr.js");
+  const side = sideChoice(context, "ocr");
+  if (side.missing) return side.missing;
   try {
-    const result = await runOcr(context.secretsDirectory, {
-      base64: OCR_PROBE_PNG_BASE64,
-      mediaType: "image/png",
-    });
+    const result = await runOcr(
+      context.secretsDirectory,
+      {
+        base64: OCR_PROBE_PNG_BASE64,
+        mediaType: "image/png",
+      },
+      { engineOverride: side.choice ?? undefined },
+    );
     const flat = result.text.replace(/\s+/g, " ").toUpperCase();
     if (flat.includes("VAENYX") && flat.includes("2468")) {
       return {

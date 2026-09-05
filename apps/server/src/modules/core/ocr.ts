@@ -79,7 +79,17 @@ export function ocrEngineConnected(secretsDirectory: string): boolean {
 export async function runOcr(
   secretsDirectory: string,
   input: { base64: string; mediaType: string },
+  options: { engineOverride?: EngineChoice } = {},
 ): Promise<OcrResult> {
+  if (options.engineOverride) {
+    // One side of the pair, alone: a Test of that engine and nothing else.
+    const choice = options.engineOverride;
+    const read = await readWith(secretsDirectory, choice, input);
+    return {
+      ...read,
+      note: { provider: choice.provider, model: choice.model ?? null },
+    };
+  }
   const primary = ocrPrimary(secretsDirectory);
   if (!primary) throw new OcrNotConnectedError();
   const pair = {

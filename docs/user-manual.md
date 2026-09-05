@@ -478,11 +478,12 @@ Read this inside the app: **Settings → Manual**.
   you want for conversation is rarely the one you want reading photos, and one
   shared answer is how a chat model chosen for quality ends up putting every
   photo on its tightest free bucket.
-- **Every job has a main model and a backup** — open a capability row and you
-  see two lines. Pick the account, then a model from that account's **adopted**
-  list — the models you found, tested and chose to use under Models (below).
-  The **backup** line is empty until you fill it, and Vaenyx never fills it
-  for you.
+- **Every job has a main model and a backup** — each capability row shows
+  its two lines, Primary and Backup, each with its own **Test** that runs
+  that side alone and paints the result green or red under the line. Pick
+  the account, then a model from that account's **adopted** list — the models
+  you found, tested and chose to use under Models (below). The **backup** line
+  is empty until you fill it, and Vaenyx never fills it for you.
 - **The backup only stands in when the main model could not answer at all** —
   out of free quota, key rejected, model retired, provider down, unreachable.
   A poor answer is not that, and standing in there would only hide it. When
@@ -493,8 +494,8 @@ Read this inside the app: **Settings → Manual**.
   other row may **follow the main model** instead of naming a backend: it then
   uses the main model's account and model, and the main model's backup too, so
   changing the main model changes every follower at once. **Text** — chat,
-  Routines, Methods, the Journal — is an ordinary row right under it, with
-  its own Test, and follows the main model unless you point it elsewhere. The switcher under the chat
+  Routines, Methods, the Journal — is an ordinary row right under it and
+  follows the main model unless you point it elsewhere. The switcher under the chat
   box changes that one conversation only; it never changes these rows.
 - **Free or paid, marked per job** — every provider carries a badge, and the
   engine lists mark the job that costs money even when the provider is
@@ -665,9 +666,10 @@ Read this inside the app: **Settings → Manual**.
 
 - **Find → Test → Use** — every connected Models card is one line and one
   row of buttons, starting with **Find models**. It asks the account itself which models your login or key may use
-  right now (never a stored list) and lists them. **Test** sends one line
-  through that exact model and shows what the engine reported answered, how
-  long it took and when; only a model that answered gets a **Use** button, and
+  right now (never a stored list) and offers them in one menu. **Test** sends
+  one line through the model picked there and shows what the engine reported
+  answered, how long it took and when; only a model that answered gets a
+  **Use** button, and
   models in use are the ones the Capabilities rows and the switcher under the
   chat box offer — a row shows no model picker at all until its account has
   one in use. **Stop using** drops one again. Claude reports its model on

@@ -296,7 +296,6 @@ import {
   unadoptProviderModel,
   type AdoptedModelsValue,
   type EngineChoiceValue,
-  type EnginePairValue,
   testForgeConnection,
   fetchPublishState,
   disconnectPublishService,
@@ -373,7 +372,6 @@ import {
   costBadge,
 } from "./provider-facts.js";
 import { CAPABILITIES } from "./capabilities.js";
-import { Hint } from "./hint.js";
 import { getCodexAuthCopy } from "./status-copy.js";
 
 type Screen =
@@ -12728,25 +12726,6 @@ function SharingPanel() {
 // screen, that it may simply be wrong. The pack string holds {model} / {date}
 // and an optional web-search clause; one refresh answers all four slots, so
 // one rendered instance covers them.
-function freeAnswerNotice(
-  t: (key: string) => string,
-  lang: string,
-  pick: { source: string; checkedAt: string },
-): string {
-  const webSuffix = ", web search";
-  const searched = pick.source.endsWith(webSuffix);
-  const model = searched
-    ? pick.source.slice(0, -webSuffix.length)
-    : pick.source;
-  const date = new Date(pick.checkedAt).toLocaleDateString(
-    lang === "zh" ? "zh-CN" : "en-AU",
-  );
-  return t("legal.notice.freeOptions.modelAnswer")
-    .replaceAll("{model}", model)
-    .replaceAll("{date}", date)
-    .replace("{, with web search}", searched ? ", with web search" : "")
-    .replace("{,已联网搜索}", searched ? ",已联网搜索" : "");
-}
 
 // The free way to do each of the four things Vaenyx needs an outside model for
 // (Oskar, 2026-07-27). Someone who cannot pay should still be able to run the
@@ -12760,50 +12739,7 @@ function freeAnswerNotice(
 // Stored as a plain date rather than as English words, so both languages render
 // it the same way the model-answered variant below already does — one fact, one
 // constant, and no second spelling of it to go stale.
-const FREE_PICK_CHECKED = "2026-07-27";
 
-function FreePick({
-  children,
-  href,
-  pick,
-}: {
-  children: ReactNode;
-  href?: string;
-  /** A fresher suggestion from the Owner's own model (the Update button). It
-   *  replaces the shipped line but is labelled as the model's answer, dated —
-   *  the shipped line was verified by hand, this one was not. */
-  pick?: { text: string; checkedAt: string; source: string } | undefined;
-}) {
-  // This sits inside four drawers that are written in both languages, and it
-  // was the one line in them still speaking only English.
-  const { lang } = useI18n();
-  const checked = new Date(
-    pick ? pick.checkedAt : FREE_PICK_CHECKED,
-  ).toLocaleDateString();
-  return (
-    <p className="free-pick">
-      <strong>{lang === "zh" ? "免费选项" : "Free option"}</strong>{" "}
-      <span className="text-faint">
-        (
-        {lang === "zh"
-          ? pick
-            ? `${pick.source} 于 ${checked} 核对`
-            : `${checked} 核对`
-          : `checked ${checked}${pick ? ` by ${pick.source}` : ""}`}
-        )
-      </span>{" "}
-      {pick ? pick.text : children}
-      {!pick && href ? (
-        <>
-          {" "}
-          <a href={href} rel="noreferrer noopener" target="_blank">
-            {new URL(href).hostname.replace(/^www\./, "")}
-          </a>
-        </>
-      ) : null}
-    </p>
-  );
-}
 
 // F2 (copy pack): which local-backend notice variant applies to an entered
 // address. "Your own machine" may only render after a technical check confirms
@@ -13804,6 +13740,10 @@ function FreeModelsModal({
 // capability you cannot try is one you cannot trust. All eight are here: the
 // two that cannot be tested by machine say so in their own drawer instead of
 // showing a button that would have to pretend.
+/** Rows with an engine pair of their own (Primary + Backup, each with a
+ *  Test). The others ride the Text row and carry one Test on the header. */
+const PAIR_ROWS = new Set(["hearing", "speaking", "vision", "drawing", "ocr"]);
+
 const SETUP_ROWS = new Set([
   "hearing",
   "speaking",
@@ -13926,20 +13866,10 @@ function CapabilitiesPanel({
   // 任何屏幕上的现有的东西…而且不要去关闭其他已经打开的). A SET of open rows
   // has no such problem — opening one only ever adds height BELOW it, so every
   // pixel above stays exactly where it was and no compensation is needed.
-  const [openSetups, setOpenSetups] = useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
-
-  function toggleSetup(id: string): void {
-    setOpenSetups((current) => {
-      const next = new Set(current);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }
-  // Everything below belongs to the setup drawers — what used to be a separate
-  // card of its own.
-  const [output, setOutput] = useState<VoiceOutputStatus | null>(null);
+  // (The drawers are gone — every row shows its pair outright, 2026-09-05.)
+  // Everything below belongs to the rows' own settings — what used to be a
+  // separate card of its own.
+  const [, setOutput] = useState<VoiceOutputStatus | null>(null);
   const [outputVoice, setOutputVoice] = useState("Kore");
   const [localEnVoice, setLocalEnVoice] = useState("en_US-amy-medium");
   // Chinese default is chaowen (CC0). huayan, whose licence its own model card
@@ -13958,39 +13888,117 @@ function CapabilitiesPanel({
   // the answer for that row, and clearing it when you open another one would
   // throw away the only record of what happened.
   const [testing, setTesting] = useState<string | null>(null);
-  // The Text row's answer — the main model unless pointed elsewhere — for
-  // its one-line summary and its Test. Re-read when the main model changes
-  // or the row's own drawer saves.
-  const [textPair, setTextPair] = useState<EnginePairValue | null>(null);
-  const [textPairVersion, setTextPairVersion] = useState(0);
-  useEffect(() => {
-    let active = true;
-    function load() {
-      void fetchEnginePair("text")
-        .then((pair) => {
-          if (active) setTextPair(pair);
-        })
-        .catch(() => undefined);
-    }
-    load();
-    window.addEventListener(MODEL_DEFAULT_CHANGED, load);
-    return () => {
-      active = false;
-      window.removeEventListener(MODEL_DEFAULT_CHANGED, load);
-    };
-  }, [textPairVersion, refreshKey]);
   function providerLabelOf(id: string): string {
     return providers.find((provider) => provider.id === id)?.name ?? id;
   }
-  function textSummary(): string {
-    const choice = textPair?.primary;
-    if (!choice) return lang === "zh" ? "还没选" : "not chosen";
-    const name =
-      providerLabelOf(choice.provider) +
-      (choice.model ? " / " + choice.model : "");
-    return textPair?.follows?.primary
-      ? (lang === "zh" ? "跟随主模型 · " : "follows main · ") + name
-      : name;
+  // EACH SIDE HAS ITS OWN TEST (Oskar, 2026-09-05; the ruleset's ⭐): the
+  // Primary line and the Backup line each carry a Test, and the side named
+  // runs alone — a tick never comes from the other side standing in. Results
+  // are keyed by row and side and painted green or red right under the line.
+  function sideTest(id: string) {
+    return (which: "primary" | "backup", choice: EngineChoiceValue | null) => {
+      if (!choice) return null;
+      const key = id + ":" + which;
+      const running = testing === key;
+      // Speaking and Hearing are tested from this device through the row as
+      // it stands; their backup cannot be singled out yet, and says so.
+      const separable = !(
+        which === "backup" && (id === "speaking" || id === "hearing")
+      );
+      const cost = TEST_COST[id];
+      return (
+        <button
+          className="capability-row-test"
+          disabled={testing !== null || !separable}
+          onClick={() => void runSideTest(id, which, choice)}
+          title={cost ? (lang === "zh" ? cost.zh : cost.en) : undefined}
+          type="button"
+        >
+          {running
+            ? lang === "zh"
+              ? "测试中…"
+              : "Testing…"
+            : lang === "zh"
+              ? "测一次"
+              : "Test"}
+        </button>
+      );
+    };
+  }
+  function sideResult(id: string) {
+    return (which: "primary" | "backup", choice: EngineChoiceValue | null) => {
+      if (!choice) return null;
+      const result = testResults[id + ":" + which];
+      const separable = !(
+        which === "backup" && (id === "speaking" || id === "hearing")
+      );
+      if (!result) {
+        return separable ? null : (
+          <span className="engine-side-result not-implemented">
+            {lang === "zh"
+              ? "— 备用暂不能单独测"
+              : "— the backup cannot be tested on its own yet"}
+          </span>
+        );
+      }
+      const mark =
+        result.status === "ok" ? "✓" : result.status === "failed" ? "✗" : "—";
+      return (
+        <span className={"engine-side-result " + result.status}>
+          {mark} {result.engine ? result.engine + ": " : ""}
+          {result.detail}
+        </span>
+      );
+    };
+  }
+  async function runSideTest(
+    id: string,
+    which: "primary" | "backup",
+    choice: EngineChoiceValue,
+  ) {
+    const key = id + ":" + which;
+    setTesting(key);
+    try {
+      let result: CapabilityTestResult;
+      if (id === "text") {
+        // One short line through this side exactly as it stands.
+        const answer = await testChatConnection({
+          prompt: "Reply with exactly the single word PONG.",
+          provider: choice.provider,
+          ...(choice.model ? { model: choice.model } : {}),
+        });
+        result = {
+          status: answer.status === "passed" ? "ok" : "failed",
+          engine:
+            providerLabelOf(answer.provider ?? choice.provider) +
+            (answer.model ? " / " + answer.model : ""),
+          detail: answer.message,
+        };
+      } else if (id === "speaking") {
+        result = await testSpeakingHere();
+      } else if (id === "hearing") {
+        result = await testHearingHere();
+      } else {
+        result = await runCapabilityTest(id, lang === "zh" ? "zh" : "en", which);
+      }
+      setTestResults((current) => ({ ...current, [key]: result }));
+    } catch (error) {
+      setTestResults((current) => ({
+        ...current,
+        [key]: {
+          status: "failed",
+          engine: "",
+          detail:
+            error instanceof Error
+              ? error.message
+              : lang === "zh"
+                ? "测试没跑起来。"
+                : "The test could not be run.",
+        },
+      }));
+    } finally {
+      setTesting(null);
+    }
   }
   const [testResults, setTestResults] = useState<
     Record<string, CapabilityTestResult>
@@ -14020,7 +14028,6 @@ function CapabilitiesPanel({
   // The engine the SERVER has, never the one the row's chooser happens to
   // display: a blank slot is back-filled below with the main model's name, so
   // the chooser can read "gemini" while nothing is connected.
-  const outputEngine = output?.engine ?? "none";
 
   // One loader for first mount AND for after a key is added in any drawer: a
   // new connection can auto-fill empty slots server-side, so every slot
@@ -14160,27 +14167,6 @@ function CapabilitiesPanel({
   async function runTest(id: string) {
     setTesting(id);
     try {
-      if (id === "text") {
-        // One short line through the Text row exactly as it stands — the
-        // account and model the row shows, never a stored default.
-        const choice = textPair?.primary;
-        const result = await testChatConnection({
-          prompt: "Reply with exactly the single word PONG.",
-          ...(choice ? { provider: choice.provider } : {}),
-          ...(choice?.model ? { model: choice.model } : {}),
-        });
-        setTestResults((current) => ({
-          ...current,
-          text: {
-            status: result.status === "passed" ? "ok" : "failed",
-            engine:
-              providerLabelOf(result.provider ?? choice?.provider ?? "") +
-              (result.model ? " / " + result.model : ""),
-            detail: result.message,
-          },
-        }));
-        return;
-      }
       // Two of the eight cannot be tested by the server, for opposite reasons:
       // nothing on that side can listen, and nothing on that side can speak.
       // Both are testable HERE, because the browser has ears and a mouth — so
@@ -14613,57 +14599,21 @@ function CapabilitiesPanel({
   // F6 (copy pack): a free-option line that came from the model — rather than
   // from the hand-checked shipped list — carries the may-be-wrong caveat right
   // beside it. Only one drawer is open at a time, so it appears at most once.
-  function freeAnswerLine(
-    pick: { checkedAt: string; source: string } | undefined,
-  ) {
-    if (!pick) return null;
-    return (
-      <p className="context-disclaimer">{freeAnswerNotice(t, lang, pick)}</p>
-    );
-  }
 
   function hearingSetup() {
     return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "麦克风按钮 —— 你说的话变成文字。"
-            : "The mic button — what you say becomes text."}
-        </p>
-      ),
       who: (
-        <>
-          <EnginePairPicker
-            onChanged={(next) =>
-              setHearingEngine(next.primary?.provider ?? "none")
-            }
-            providerOptions={slotOptions("voice-in").filter(
-              (option) => !option.disabled,
-            )}
-            slot="voice"
-          />
-          <p className="settings-card-copy">
-            {lang === "zh"
-              ? "key 在 Models 里粘。"
-              : "Its key is pasted in Models."}
-            <Hint
-              text={
-                lang === "zh"
-                  ? "录音发到这一行选的服务,回来的是文字。"
-                  : "The recording goes to whichever service this row is set to; words come back."
-              }
-            />
-          </p>
-          <FreePick
-            href="https://console.groq.com"
-            pick={freePicks?.items.voiceIn}
-          >
-            {lang === "zh"
-              ? "Groq —— 免费 key,不用绑卡。"
-              : "Groq — free key, no card."}
-          </FreePick>
-          {freeAnswerLine(freePicks?.items.voiceIn)}
-        </>
+        <EnginePairPicker
+          onChanged={(next) =>
+            setHearingEngine(next.primary?.provider ?? "none")
+          }
+          providerOptions={slotOptions("voice-in").filter(
+            (option) => !option.disabled,
+          )}
+          renderTest={sideTest("hearing")}
+          renderTestResult={sideResult("hearing")}
+          slot="voice"
+        />
       ),
     });
   }
@@ -14680,30 +14630,9 @@ function CapabilitiesPanel({
   }
 
   function speakingSetup() {
-    // WHICH voice speaks is how this job behaves, so it stays on the row. What
-    // PUTS a voice on this machine — the 150 MB download, its progress and its
-    // removal — is connecting a model, so it moved to the Models card (Oskar,
-    // 2026-08-01: 所有添加模型都應該在模型那邊添加,然後 capability 這邊只是選擇模型).
-    // Both engines' voice lists sit here together, so "change the voice" is one
-    // place whatever happens to be speaking.
-    //
-    // `installed` is not just belt-and-braces: this card's copy of the status
-    // arrives a moment after the first paint, and the server refuses to set
-    // this engine at all until the download is there — so an uninstalled
-    // "local" is only ever the half-second before the answer lands, and half a
-    // second of the wrong sentence is worse than half a second of nothing.
-    // The voice list belongs to ONE side, because it is a property of the
-    // engine that side is set to. Gemini's voices mean nothing to Cloudflare,
-    // and the machine's own voices mean nothing to either. Rendered under the
-    // row it describes rather than floating above both.
     const voiceFor = (engineId: string | null) =>
       engineId === "local" && localTts?.installed ? (
         <>
-          <p className="settings-card-copy">
-            {lang === "zh"
-              ? "回复是哪种语言,就用哪个音色。"
-              : "The right voice is used per reply, by the language it is written in."}
-          </p>
           <div className="field-pair">
             <div className="chat-font-field">
               <span>{lang === "zh" ? "英文音色" : "English Voice"}</span>
@@ -14726,23 +14655,12 @@ function CapabilitiesPanel({
               />
             </div>
           </div>
-          {/* Picking a voice that is not on the machine yet fetches its own
-              ~60 MB, so the wait it causes is shown where it was caused. The
-              first 150 MB install is a different thing, started and shown on
-              the Models card — one poll, up on the Settings page, feeds both. */}
           {localTts.status === "downloading" ? (
-            <>
-              <p className="settings-card-copy">
-                {lang === "zh" ? "下载中… " : "Downloading… "}
-                {localTts.progress}%
-                {localTts.detail ? ` · ${localTts.detail}` : ""}
-              </p>
-              <progress
-                className="local-tts-progress"
-                max={100}
-                value={localTts.progress}
-              />
-            </>
+            <progress
+              className="local-tts-progress"
+              max={100}
+              value={localTts.progress}
+            />
           ) : null}
         </>
       ) : engineId === "gemini" ? (
@@ -14759,180 +14677,70 @@ function CapabilitiesPanel({
             value={outputVoice}
           />
         </div>
-      ) : engineId === "workersai" ? (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "这个引擎只有一个声音(Aura),没有可选项 —— 而且只会英文。"
-            : "This engine has one voice (Aura) and nothing to choose — and it speaks English only."}
-        </p>
       ) : null;
     return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh" ? "回复念出来。" : "Replies read aloud."}
-        </p>
-      ),
-      // The voice used to live here, above both rows — see voiceFor. All that
-      // is left at drawer level is an error, which belongs to neither side.
       settings: outputError ? (
         <p className="form-error">{outputError}</p>
       ) : null,
       who: (
-        <>
-          {/* Speaking's two non-account answers ride the same picker: the
-              voice on this machine and this browser's own are engines, not
-              logins, and they belong in the same list as the accounts — one
-              question, "who speaks", with every real answer in it. */}
-          <EnginePairPicker
-            onChanged={(next) => {
-              setSpeakingEngine(next.primary?.provider ?? "none");
-              void fetchVoiceOutput()
-                .then(setOutput)
-                .catch(() => undefined);
-            }}
-            providerOptions={slotOptions("voice-out", [
-              {
-                label: lang === "zh" ? "本机浏览器" : "This device",
-                value: "browser",
-              },
-              {
-                label: lang === "zh" ? "本机语音" : "On this machine",
-                value: "local",
-              },
-            ]).filter((option) => !option.disabled)}
-            renderUnder={(_which, providerId) => voiceFor(providerId)}
-            slot="voiceOutput"
-          />
-          <p className="settings-card-copy">
-            {lang === "zh"
-              ? "本机语音在 Models 里安装。"
-              : "The on-machine voice is installed in Models."}
-            <Hint
-              text={
-                lang === "zh"
-                  ? "本机语音:什么都不出这台电脑,没有每次的费用,中英文都念。Gemini:发出去合成,更自然,中英文都行。Cloudflare:只会英文。"
-                  : "On this machine: nothing leaves, no per-use cost, speaks English and Chinese. Gemini: synthesised away from here, more natural, does both. Cloudflare: English only."
-              }
-            />
-          </p>
-          {outputEngine === "browser" ? (
-            <p className="settings-card-copy">
-              {lang === "zh"
-                ? "现在用的是这台设备自带的语音。Gemini TTS 或本机语音听起来自然得多。"
-                : "Right now that is the device's own built-in voice. Gemini TTS or the voice on this machine sound much more natural."}
-            </p>
-          ) : null}
-          <FreePick pick={freePicks?.items.voiceOut}>
-            {lang === "zh"
-              ? "本机语音 —— 永久免费,离线可用。"
-              : "Local Voice — free forever, works offline."}
-          </FreePick>
-          {freeAnswerLine(freePicks?.items.voiceOut)}
-        </>
+        <EnginePairPicker
+          onChanged={(next) => {
+            setSpeakingEngine(next.primary?.provider ?? "none");
+            void fetchVoiceOutput()
+              .then(setOutput)
+              .catch(() => undefined);
+          }}
+          providerOptions={slotOptions("voice-out", [
+            {
+              label: lang === "zh" ? "本机浏览器" : "This device",
+              value: "browser",
+            },
+            {
+              label: lang === "zh" ? "本机语音" : "On this machine",
+              value: "local",
+            },
+          ]).filter((option) => !option.disabled)}
+          renderTest={sideTest("speaking")}
+          renderTestResult={sideResult("speaking")}
+          renderUnder={(_which, providerId) => voiceFor(providerId)}
+          slot="voiceOutput"
+        />
       ),
     });
   }
 
   function visionSetup() {
     return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "相机按钮 —— 一张照片变成文字。"
-            : "The camera button — a photo becomes words."}
-        </p>
-      ),
       who: (
-        <>
-          {/* Who does this job, and who stands in. Two levels: the account,
-              then that account's own models — because a capability picking
-              its own model is what stops a chat model chosen for quality
-              from putting every photo on its tightest free bucket. */}
-          <EnginePairPicker
-            onChanged={(next) =>
-              setVisionEngineState(next.primary?.provider ?? "none")
-            }
-            providerOptions={slotOptions("vision").filter(
-              (option) => !option.disabled,
-            )}
-            slot="vision"
-          />
-          <p className="settings-card-copy">
-            {lang === "zh"
-              ? "key 在 Models 里粘。"
-              : "Its key is pasted in Models."}
-            <Hint
-              text={
-                lang === "zh"
-                  ? "照片直接发给这一行选的模型 —— 它就是真正看图的那个,不是先让别人描述一遍。"
-                  : "The photo goes straight to the model this row is set to — it is the one that actually looks, not one being handed somebody else's description."
-              }
-            />
-          </p>
-          <FreePick
-            href="https://aistudio.google.com/apikey"
-            pick={freePicks?.items.vision}
-          >
-            {lang === "zh"
-              ? "Gemini —— Google AI Studio 的免费 key。"
-              : "Gemini — free Google AI Studio key."}
-          </FreePick>
-          {freeAnswerLine(freePicks?.items.vision)}
-        </>
+        <EnginePairPicker
+          onChanged={(next) =>
+            setVisionEngineState(next.primary?.provider ?? "none")
+          }
+          providerOptions={slotOptions("vision").filter(
+            (option) => !option.disabled,
+          )}
+          renderTest={sideTest("vision")}
+          renderTestResult={sideResult("vision")}
+          slot="vision"
+        />
       ),
     });
   }
 
   function drawingSetup() {
-    // This row has no settings of its own any more. The Cloudflare token and
-    // account id were typed here because pictures are the one thing a household
-    // adds Cloudflare for — but a token is a key, and a key belongs to the model
-    // rather than to the job it was bought for (Oskar, 2026-08-01: 所有添加模型
-    // 都應該在模型那邊添加,然後 capability 這邊只是選擇模型). Both fields moved to
-    // the Models card, which is also the honest home for them: the same Workers
-    // AI connection can answer chats, not only draw. The row picks the engine
-    // and nothing else, so the drawer leaves the settings part out entirely.
     return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "在聊天里说一句,就画出一张图。关掉,Vaenyx 就不会去画。"
-            : "Ask in chat and a picture is made. Off means Vaenyx will not try."}
-        </p>
-      ),
       who: (
-        <>
-          <EnginePairPicker
-            onChanged={(next) =>
-              setDrawingEngine(next.primary?.provider ?? "none")
-            }
-            providerOptions={slotOptions("image").filter(
-              (option) => !option.disabled,
-            )}
-            slot="imageOutput"
-          />
-          <p className="settings-card-copy">
-            {lang === "zh"
-              ? "Cloudflare 和智谱都免费。"
-              : "Cloudflare and Zhipu are both free."}
-            <Hint
-              text={
-                lang === "zh"
-                  ? "画图跟看图是两回事 —— 会看图的模型不一定会画。"
-                  : "Drawing is not seeing — a model that can look at a picture cannot necessarily make one."
-              }
-            />
-          </p>
-          <FreePick
-            href="https://dash.cloudflare.com/profile/api-tokens"
-            pick={freePicks?.items.image}
-          >
-            {lang === "zh"
-              ? "Cloudflare Workers AI —— 免费,一天大约 170 张。"
-              : "Cloudflare Workers AI — free, about 170 pictures a day."}
-          </FreePick>
-          {freeAnswerLine(freePicks?.items.image)}
-        </>
+        <EnginePairPicker
+          onChanged={(next) =>
+            setDrawingEngine(next.primary?.provider ?? "none")
+          }
+          providerOptions={slotOptions("image").filter(
+            (option) => !option.disabled,
+          )}
+          renderTest={sideTest("drawing")}
+          renderTestResult={sideResult("drawing")}
+          slot="imageOutput"
+        />
       ),
     });
   }
@@ -14988,13 +14796,6 @@ function CapabilitiesPanel({
 
   function fetchingSetup() {
     return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "只有你在下面点名的文件夹,Vaenyx 才能打开里面的文字文件。没有点名之前,就算开关是开的,它也一个字都读不到。"
-            : "Vaenyx can open text files from the folders you name here, and nowhere else. Until you name one, the switch on its own reads nothing at all."}
-        </p>
-      ),
       settings: (
         <>
           {/* One click per folder this machine really has. Typing an absolute
@@ -15055,20 +14856,7 @@ function CapabilitiesPanel({
           ))}
         </>
       ),
-      who: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "开文件的是 Vaenyx,不是模型。"
-            : "Vaenyx opens the file, not the model."}
-          <Hint
-            text={
-              lang === "zh"
-                ? "模型只拿到文字,它没有任何能碰硬盘的工具 —— 所以主模型是哪个都行。文档和扫描件走聊天里的附件按钮,那是「读文档」。"
-                : "The model is handed words and never gets a tool that can touch a disk, so any main model works. Documents and scans go through the chat's attach button — that is Reading."
-            }
-          />
-        </p>
-      ),
+      who: null,
     });
   }
 
@@ -15076,29 +14864,7 @@ function CapabilitiesPanel({
   // model — so their drawers hold the one thing that was missing: what the row
   // actually means on this machine, and a way to try it.
   function readingSetup() {
-    return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "在聊天里用附件按钮丢进来的 PDF 或文档。"
-            : "A PDF or document you attach in a chat with the attach button."}
-        </p>
-      ),
-      who: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "跟主模型走,没得选。"
-            : "It rides the main model — nothing to choose."}
-          <Hint
-            text={
-              lang === "zh"
-                ? "读法因模型而异:Claude 把每页当图片看,所以图和表格看得见;别的模型只拿到本机抠出来的文字。超过十页会先问你,因为那是真花钱的。"
-                : "How it reads differs: Claude takes each page as a picture, so drawings and tables reach it; every other model gets only the words pulled out here. Over ten pages you are asked first, because that costs real money."
-            }
-          />
-        </p>
-      ),
-    });
+    return null;
   }
 
   function ocrSetup() {
@@ -15106,24 +14872,6 @@ function CapabilitiesPanel({
       (provider) => provider.id === "mistral" && provider.connected,
     );
     return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "把图里的字变成文字。"
-            : "Turns the words in a picture into text."}
-          <Hint
-            text={
-              lang === "zh"
-                ? "扫描件、照片上的字都是它认。只开这一个的话,扫描件在本机变成文字给你自己看,不送给任何模型。"
-                : "Scans, and text in photos. With only this one on, a scan becomes text on this machine for your own eyes and no model sees it."
-            }
-          />
-        </p>
-      ),
-      // "Its key goes under Models" is true and was not enough: the entry
-      // there is called Mistral, the engine here is called Mistral OCR, and
-      // the Owner could not find one from the other (2026-08-07). This takes
-      // them to it, opened and scrolled to.
       settings: mistralConnected ? null : (
         <button
           className="secondary-button"
@@ -15142,72 +14890,23 @@ function CapabilitiesPanel({
         </button>
       ),
       who: (
-        <>
-          {/* Both sides of this pair are DEDICATED readers, and the list holds
-              nothing else on purpose — a chat model as the stand-in would put
-              a plausible invented digit on a quote the one time it mattered. */}
-          <EnginePairPicker
-            onChanged={(next) =>
-              setOcrEngine(next.primary?.provider ?? "mistral")
-            }
-            providerOptions={slotOptions("ocr").filter(
-              (option) => !option.disabled,
-            )}
-            slot="ocr"
-          />
-          <p className="settings-card-copy">
-            {lang === "zh"
-              ? "只有专用引擎,没有聊天模型。"
-              : "Dedicated readers only — never a chat model."}
-            <Hint
-              text={
-                lang === "zh"
-                  ? "聊天模型看不清一个字时会编一个看着合理的 —— 报价单上的数字是要进钱的。专用引擎读不出就吐乱码,错得看得见。"
-                  : "A chat model that cannot make out a character writes a plausible one instead, and numbers on a quote turn into money. A dedicated engine fails as visible garbage."
-              }
-            />
-          </p>
-          <p className="settings-card-copy">
-            {lang === "zh"
-              ? "目前只有 Mistral OCR 一个引擎,所以备用是空的。"
-              : "Mistral OCR is the only engine today, so there is no backup to set."}
-            <Hint
-              text={
-                lang === "zh"
-                  ? "试过 OCR.space 当免费备用,实测它大部分请求返回 502/503,已经拿掉了。宁可明说没有备用,也不放一个偶尔才灵的。"
-                  : "OCR.space was tried as the free stand-in and removed: measured, it answered 502/503 to most requests. A named gap beats a stand-in that only works sometimes."
-              }
-            />
-          </p>
-        </>
+        <EnginePairPicker
+          onChanged={(next) =>
+            setOcrEngine(next.primary?.provider ?? "mistral")
+          }
+          providerOptions={slotOptions("ocr").filter(
+            (option) => !option.disabled,
+          )}
+          renderTest={sideTest("ocr")}
+          renderTestResult={sideResult("ocr")}
+          slot="ocr"
+        />
       ),
     });
   }
 
   function webSetup() {
-    return drawer({
-      what: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "回答的时候上网查一下,而不是只用它记住的东西。"
-            : "Looking something up on the internet while it answers, instead of answering only from memory."}
-        </p>
-      ),
-      who: (
-        <p className="settings-card-copy">
-          {lang === "zh"
-            ? "跟主模型走,没得选。"
-            : "It rides the main model — nothing to choose."}
-          <Hint
-            text={
-              lang === "zh"
-                ? "只有 ChatGPT(Codex)和 Claude 订阅会真的去搜。别的模型是凭训练时记住的东西回答,过时了也一样自信。"
-                : "Only the ChatGPT (Codex) and Claude subscriptions really search. Every other model answers from what it memorised when trained, and sounds just as certain when that is out of date."
-            }
-          />
-        </p>
-      ),
-    });
+    return null;
   }
 
   // Three outcomes, never merged: it worked, it failed in the failing side's
@@ -15262,30 +14961,14 @@ function CapabilitiesPanel({
   // questions in the order they get asked: what IS this, what do I set, and
   // what actually does it.
   function drawer(parts: {
-    /** What the capability is, in one line. */
-    what: ReactNode;
     /** Its own settings, if it has any of its own. */
     settings?: ReactNode;
-    /** Who really performs it, and what happens when nothing can. */
+    /** Who really performs it: the pair, each side with its Test. */
     who: ReactNode;
   }) {
     return (
       <>
-        <p className="drawer-head">
-          {lang === "zh" ? "这是什么" : "What it is"}
-        </p>
-        {parts.what}
-        {parts.settings ? (
-          <>
-            <p className="drawer-head">
-              {lang === "zh" ? "它自己的设置" : "Its own settings"}
-            </p>
-            {parts.settings}
-          </>
-        ) : null}
-        <p className="drawer-head">
-          {lang === "zh" ? "谁真的在做" : "What actually does it"}
-        </p>
+        {parts.settings ?? null}
         {parts.who}
       </>
     );
@@ -15489,22 +15172,18 @@ function CapabilitiesPanel({
           />
           <p className="settings-card-copy">
             {lang === "zh"
-              ? "主模型一换,所有「跟随」的行一起换;它的备用也一起跟。上面只选已使用的型号 —— 找型号、测型号在下面 Models。"
-              : "Change it and every row that follows changes with it — its backup comes along too. Only adopted models are offered here; finding and testing models happens under Models below."}
+              ? "各行可跟随它;型号在下面 Models 里找、测、用。"
+              : "Rows below may follow it; find, test and adopt models under Models."}
           </p>
         </div>
       </div>
       {/* TEXT (Oskar, 2026-09-05): chat and every written job — Routines,
-          Methods, the Journal — as one ordinary row: what answers, a Test,
-          and its pair in the drawer. It follows the main model until pointed
-          elsewhere and cannot be switched off; a conversation's own pin under
-          the chat box stays with that conversation. */}
+          Methods, the Journal — one row like the others: its pair, each side
+          with a Test. It follows the main model until pointed elsewhere and
+          cannot be switched off; a conversation's own pin under the chat box
+          stays with that conversation. */}
       <div className="capability-block" id="capability-block-text">
-        <div
-          className={
-            openSetups.has("text") ? "capability-row open" : "capability-row"
-          }
-        >
+        <div className="capability-row">
           <span className="capability-row-icon">✎</span>
           <span className="capability-row-name">
             {lang === "zh" ? "文字" : "Text"}
@@ -15516,70 +15195,41 @@ function CapabilitiesPanel({
               )
             </em>
           </span>
-          <span className="capability-row-engine capability-row-summary">
-            {textSummary()}
-          </span>
-          {rowTest("text")}
-          <button
-            aria-controls="setup-text"
-            aria-expanded={openSetups.has("text")}
-            aria-label={lang === "zh" ? "文字的设置" : "Text setup"}
-            className={
-              openSetups.has("text")
-                ? "capability-row-more open"
-                : "capability-row-more"
-            }
-            onClick={() => toggleSetup("text")}
-            type="button"
-          >
-            <LineIcon>
-              <path d="m7 10 5 5 5-5" />
-            </LineIcon>
-          </button>
+          <span className="capability-row-engine" />
           <span className="capability-row-pending">
             {lang === "zh" ? "常开" : "always on"}
           </span>
         </div>
-        {testAnswer("text")}
-        {openSetups.has("text") ? (
-          <div className="capability-setup" id="setup-text">
-            <EnginePairPicker
-              onChanged={() => setTextPairVersion((current) => current + 1)}
-              providerOptions={slotOptions("chat").filter(
-                (option) => !option.disabled,
-              )}
-              slot="text"
-            />
-          </div>
-        ) : null}
+        <div className="capability-setup" id="setup-text">
+          <EnginePairPicker
+            providerOptions={slotOptions("chat").filter(
+              (option) => !option.disabled,
+            )}
+            renderTest={sideTest("text")}
+            renderTestResult={sideResult("text")}
+            slot="text"
+          />
+        </div>
       </div>
       <div className="capability-rows">
         {CAPABILITY_META.map((meta) => {
           const built = implemented[meta.id] !== false;
-          const engine = engines[meta.id];
-          const hasSetup = SETUP_ROWS.has(meta.id);
-          const open = openSetups.has(meta.id);
+          const hasPair = PAIR_ROWS.has(meta.id);
+          const setup = SETUP_ROWS.has(meta.id) ? setupFor(meta.id) : null;
           return (
-            // One block per capability, and the dividing line belongs to the
-            // BLOCK. It used to sit on the row itself, which put the test
-            // result — a sibling rendered after the row — on the far side of
-            // its own line, reading as though it belonged to the row below
-            // (Oskar, 2026-08-07: "✓ gemini: It spoke" appearing under
-            // Speaking's divider, against Vision). Row, its answer and its
-            // drawer are one thing now, and the line closes them.
             <div
               className="capability-block"
               id={`capability-block-${meta.id}`}
               key={meta.id}
             >
-              <div className={open ? "capability-row open" : "capability-row"}>
+              {/* The header: name, who would notice if it went off, the
+                  switch — and, for a row that rides the Text row, its one
+                  Test. A row with a pair of its own tests each side below. */}
+              <div className="capability-row">
                 <span className="capability-row-icon">{meta.icon}</span>
                 <span className="capability-row-name">
                   {lang === "zh" ? meta.name.zh : meta.name.en}
                   <em>({lang === "zh" ? meta.gloss.zh : meta.gloss.en})</em>
-                  {/* Who would notice if this went off. Shown only when the
-                      answer is "somebody" — a row nothing depends on says
-                      nothing rather than "0 Methods". */}
                   {(usedByMethods[meta.id] ?? 0) > 0 ? (
                     <em className="capability-row-users">
                       {lang === "zh"
@@ -15590,51 +15240,8 @@ function CapabilitiesPanel({
                     </em>
                   ) : null}
                 </span>
-                {/* A row whose engine is a PAIR (main + the Owner's backup) is
-                    set inside its own drawer — one place, not two. The row then
-                    shows a plain read-only summary instead of a second control
-                    that could disagree with the pair below it. */}
-                {/* 🔴 NO ROW EVER CARRIES A PICKER. Every row now falls into
-                    one of two kinds and neither has anything to choose HERE:
-                    a row with its own engine is set as a pair inside its
-                    drawer, and a row that rides the main model (Reading,
-                    Fetching, Web) has exactly one possible answer. Those three
-                    used to show a drop-down holding a single option whose
-                    handler did nothing — a control that opens, offers one
-                    thing, and changes nothing, sitting next to rows that had
-                    no control at all. Oskar spotted the mismatch on sight
-                    (2026-08-17: 為什麼有一些可以直接選擇,有一些不能). One
-                    capability, one control, one place. */}
-                {engine ? (
-                  <span className="capability-row-engine capability-row-summary">
-                    {engine.options.find(
-                      (option) => option.value === engine.value,
-                    )?.label ?? engine.value}
-                  </span>
-                ) : (
-                  <span className="capability-row-engine" />
-                )}
-                {rowTest(meta.id)}
-                {hasSetup ? (
-                  <button
-                    aria-controls={`setup-${meta.id}`}
-                    aria-expanded={open}
-                    aria-label={
-                      lang === "zh"
-                        ? `${meta.name.zh}的设置`
-                        : `${meta.name.en} setup`
-                    }
-                    className={
-                      open ? "capability-row-more open" : "capability-row-more"
-                    }
-                    onClick={() => toggleSetup(meta.id)}
-                    type="button"
-                  >
-                    <LineIcon>
-                      <path d="m7 10 5 5 5-5" />
-                    </LineIcon>
-                  </button>
-                ) : null}
+                <span className="capability-row-engine" />
+                {!hasPair ? rowTest(meta.id) : null}
                 {built ? (
                   <input
                     aria-label={lang === "zh" ? meta.name.zh : meta.name.en}
@@ -15648,20 +15255,15 @@ function CapabilitiesPanel({
                     type="checkbox"
                   />
                 ) : (
-                  // Not "unsupported" — that reads as broken. Vaenyx simply has
-                  // not built it yet, which is a different sentence and a
-                  // different fix.
                   <span className="capability-row-pending">
                     {lang === "zh" ? "还没做出来" : "not built yet"}
                   </span>
                 )}
               </div>
-              {/* A SIBLING of the row, never a child: it needs the block's
-                  full width, not a slot in the row's flex line. */}
-              {testAnswer(meta.id)}
-              {hasSetup && open ? (
+              {!hasPair ? testAnswer(meta.id) : null}
+              {setup ? (
                 <div className="capability-setup" id={`setup-${meta.id}`}>
-                  {setupFor(meta.id)}
+                  {setup}
                 </div>
               ) : null}
             </div>
@@ -15717,6 +15319,8 @@ function ModelsPanel({
     models: string[] | null;
     error: string | null;
     testing: string | null;
+    /** The model picked in the menu; Test and Use act on it. */
+    selected: string | null;
   }
   const FINDER_CLOSED: FinderState = {
     open: false,
@@ -15724,6 +15328,7 @@ function ModelsPanel({
     models: null,
     error: null,
     testing: null,
+    selected: null,
   };
   const [finder, setFinder] = useState<Record<string, FinderState>>({});
   const [adopted, setAdopted] = useState<AdoptedModelsValue | null>(null);
@@ -15829,99 +15434,101 @@ function ModelsPanel({
       ...found.filter((id) => !adoptedIds.includes(id)),
     ];
     const tests = adopted?.tests[provider.id] ?? {};
+    const selected =
+      state.selected && ids.includes(state.selected)
+        ? state.selected
+        : (ids[0] ?? null);
+    const test = selected ? tests[selected] : undefined;
+    const inUse = selected ? adoptedIds.includes(selected) : false;
+    let verdict = "";
+    if (selected) {
+      if (!test) verdict = zh ? "还没测过" : "Not tested yet";
+      else if (test.status === "ok") {
+        const who = test.model
+          ? test.modelReportedByEngine
+            ? (zh ? "引擎回报 " : "engine reported ") + test.model
+            : (zh ? "按 " : "as ") + test.model
+          : zh
+            ? "有回答"
+            : "answered";
+        verdict =
+          "✓ " +
+          who +
+          " · " +
+          (test.durationMs / 1000).toFixed(1) +
+          " s · " +
+          new Date(test.timestamp).toLocaleString();
+      } else verdict = "✗ " + test.message;
+    }
     return (
       <div className="model-finder">
         {state.loading ? (
           <p className="settings-card-copy">
-            {zh
-              ? "正在问这个账号现在能用哪些型号…"
-              : "Asking which models this account can use right now…"}
+            {zh ? "正在问这个账号…" : "Asking the account…"}
           </p>
         ) : null}
         {state.error ? <p className="form-error">{state.error}</p> : null}
         {!state.loading && !state.error && ids.length === 0 ? (
           <p className="settings-card-copy">
-            {zh ? "这个账号没有列出任何型号。" : "This account listed no models."}
+            {zh ? "没有列出任何型号。" : "No models listed."}
           </p>
         ) : null}
-        {ids.length > 0 ? (
-          <p className="settings-card-copy text-faint">
-            {zh ? "测过才能使用。" : "Test, then use."}
-          </p>
-        ) : null}
-        <ul className="model-finder-list">
-          {ids.map((id) => {
-            const test = tests[id];
-            const inUse = adoptedIds.includes(id);
-            const testing = state.testing === id;
-            let verdict: string;
-            if (!test) verdict = zh ? "还没测过" : "Not tested yet";
-            else if (test.status === "ok") {
-              const who = test.model
-                ? test.modelReportedByEngine
-                  ? `${zh ? "引擎回报 " : "engine reported "}${test.model}`
-                  : `${zh ? "按 " : "as "}${test.model}`
-                : zh
-                  ? "有回答"
-                  : "answered";
-              verdict = `✓ ${who} · ${(test.durationMs / 1000).toFixed(1)} s · ${new Date(test.timestamp).toLocaleString()}`;
-            } else verdict = `✗ ${test.message}`;
-            return (
-              <li className="model-finder-row" key={id}>
-                <span className="model-finder-name">
-                  {id}
-                  {inUse ? (
-                    <span className="library-chip chip-installed">
-                      {zh ? "使用中" : "In use"}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="model-finder-actions">
-                  <button
-                    className="capability-row-test"
-                    disabled={state.testing !== null}
-                    onClick={() => void testModel(provider, id)}
-                    type="button"
-                  >
-                    {testing
-                      ? zh
-                        ? "测试中…"
-                        : "Testing…"
-                      : zh
-                        ? "测一次"
-                        : "Test"}
-                  </button>
-                  {inUse ? (
-                    <button
-                      className="text-button"
-                      onClick={() => void useModel(provider, id, false)}
-                      type="button"
-                    >
-                      {zh ? "取消使用" : "Stop using"}
-                    </button>
-                  ) : test?.status === "ok" ? (
-                    <button
-                      className="primary-button"
-                      onClick={() => void useModel(provider, id, true)}
-                      type="button"
-                    >
-                      {zh ? "使用" : "Use"}
-                    </button>
-                  ) : null}
-                </span>
-                <span
-                  className={
-                    test
-                      ? `model-finder-result ${test.status}`
-                      : "model-finder-result"
-                  }
+        {selected ? (
+          <>
+            <div className="model-finder-row">
+              <Picker
+                ariaLabel={zh ? "型号" : "Model"}
+                disabled={state.testing !== null}
+                onChange={(next) => patchFinder(provider.id, { selected: next })}
+                options={ids.map((id) => ({
+                  label: adoptedIds.includes(id)
+                    ? id + (zh ? " · 使用中" : " · in use")
+                    : id,
+                  value: id,
+                }))}
+                value={selected}
+              />
+              <button
+                className="capability-row-test"
+                disabled={state.testing !== null}
+                onClick={() => void testModel(provider, selected)}
+                type="button"
+              >
+                {state.testing === selected
+                  ? zh
+                    ? "测试中…"
+                    : "Testing…"
+                  : zh
+                    ? "测一次"
+                    : "Test"}
+              </button>
+              {inUse ? (
+                <button
+                  className="capability-row-test"
+                  onClick={() => void useModel(provider, selected, false)}
+                  type="button"
                 >
-                  {verdict}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+                  {zh ? "取消使用" : "Stop using"}
+                </button>
+              ) : test?.status === "ok" ? (
+                <button
+                  className="capability-row-test"
+                  onClick={() => void useModel(provider, selected, true)}
+                  type="button"
+                >
+                  {zh ? "使用" : "Use"}
+                </button>
+              ) : null}
+            </div>
+            <p
+              className={
+                test ? "model-finder-result " + test.status : "model-finder-result"
+              }
+            >
+              {verdict}
+            </p>
+          </>
+        ) : null}
       </div>
     );
   }
@@ -16073,18 +15680,6 @@ function ModelsPanel({
     }
   }
 
-  async function makeDefault(provider: ModelProviderInfo) {
-    setBusy(provider.id);
-    setError(null);
-    try {
-      const result = await setDefaultModelProvider(provider.id);
-      applyProviders(result.providers);
-    } catch {
-      setError(`Could not set ${provider.name} as the default.`);
-    } finally {
-      setBusy(null);
-    }
-  }
 
   // One-click Codex sign-in: kick off the official `codex login` browser flow
   // on the machine Vaenyx runs on, then poll until the CLI reports signed-in
@@ -16622,20 +16217,19 @@ function ModelsPanel({
                 </span>
               ) : null}
             </div>
-            {/* One line of what it does; the provider's own data terms stay as
-                the one small dated line the rules require (Oskar, 2026-09-05:
-                一两句话,最好就一句话). */}
-            <p className="model-card-line">
-              {capabilitySummary(provider, lang)}
-            </p>
             {(() => {
+              // The provider's data terms in a few words with the dated
+              // source — the one line the rules keep (Oskar, 2026-09-05:
+              // 非常非常短的一句话).
               const facts = PROVIDER_DATA_FACTS[provider.id];
               if (!facts) return null;
               return (
                 <small className="model-data-facts">
-                  {facts.en}{" "}
+                  {dataFactsBadge(provider.id, lang) ??
+                    (lang === "zh" ? "不用于训练" : "not used for training")}
+                  {" · "}
                   <a href={facts.sourceUrl} rel="noreferrer" target="_blank">
-                    source, {facts.checkedAt}
+                    {lang === "zh" ? "来源" : "source"}, {facts.checkedAt}
                   </a>
                 </small>
               );
@@ -16665,7 +16259,7 @@ function ModelsPanel({
                   </button>
                   {provider.kind === "cli-login" && !provider.healthy ? (
                     <button
-                      className="primary-button"
+                      className="capability-row-test"
                       disabled={codexWaiting}
                       onClick={() => void signInCodex()}
                       type="button"
@@ -16677,20 +16271,10 @@ function ModelsPanel({
                         : "Sign In With ChatGPT"}
                     </button>
                   ) : null}
-                  {!provider.isDefault ? (
-                    <button
-                      className="secondary-button"
-                      disabled={busy === provider.id}
-                      onClick={() => void makeDefault(provider)}
-                      type="button"
-                    >
-                      Set As Default
-                    </button>
-                  ) : null}
                   {provider.kind !== "cli-login" ? (
                     <>
                       <button
-                        className="text-button"
+                        className="capability-row-test"
                         onClick={() =>
                           setEditingId((current) =>
                             current === provider.id ? null : provider.id,
@@ -16709,7 +16293,7 @@ function ModelsPanel({
                       {confirmDisconnect === provider.id ? (
                         <>
                           <button
-                            className="text-button danger"
+                            className="capability-row-test danger"
                             disabled={busy === provider.id}
                             onClick={() => {
                               setConfirmDisconnect(null);
@@ -16720,7 +16304,7 @@ function ModelsPanel({
                             Really Disconnect
                           </button>
                           <button
-                            className="text-button"
+                            className="capability-row-test"
                             onClick={() => setConfirmDisconnect(null)}
                             type="button"
                           >
@@ -16729,7 +16313,7 @@ function ModelsPanel({
                         </>
                       ) : (
                         <button
-                          className="text-button"
+                          className="capability-row-test"
                           disabled={busy === provider.id}
                           onClick={() => setConfirmDisconnect(provider.id)}
                           type="button"
@@ -23963,24 +23547,6 @@ function peekCreateIntent(): {
 // still true — the one line the Models list is read for. Built from the
 // server's own capability list, so a backend that gains a job says so here
 // without anybody editing a second table.
-function capabilitySummary(
-  provider: { capabilities: string[] },
-  lang: string,
-): string {
-  const zh = lang === "zh";
-  const words: Record<string, { en: string; zh: string }> = {
-    chat: { en: "chat", zh: "聊天" },
-    "voice-in": { en: "hearing", zh: "听" },
-    "voice-out": { en: "speaking", zh: "念" },
-    vision: { en: "pictures in", zh: "看图" },
-    image: { en: "pictures out", zh: "生图" },
-  };
-  const parts = provider.capabilities
-    .map((capability) => words[capability])
-    .filter(Boolean)
-    .map((word) => (zh ? word!.zh : word!.en));
-  return parts.join(zh ? "、" : " · ");
-}
 
 const CONNECTABLE_MODELS: Array<{
   id: string;
