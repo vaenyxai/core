@@ -1506,8 +1506,17 @@ export function connectVoiceOutput(input: {
   });
 }
 
-export function synthesizeSpeech(text: string): Promise<{ audioId: string }> {
-  return requestJson<{ audioId: string }>("/v1/voice/speak", {
+export interface SpokenClip {
+  audioId: string;
+  /** Who really spoke; fellBackFrom is present when the backup stood in. */
+  note?: {
+    provider: string;
+    fellBackFrom?: { provider: string; reason: string };
+  } | null;
+}
+
+export function synthesizeSpeech(text: string): Promise<SpokenClip> {
+  return requestJson<SpokenClip>("/v1/voice/speak", {
     method: "POST",
     body: JSON.stringify({ text }),
   });
@@ -2751,3 +2760,6 @@ export function browseFolders(path: string): Promise<FolderBrowse> {
     `/v1/capabilities/folders/browse?path=${encodeURIComponent(path)}`,
   );
 }
+
+// A mode's own voice, re-exported for the mode editor.
+export type { ModeVoice } from "@vaenyx/contracts";

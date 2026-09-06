@@ -613,6 +613,10 @@ Read this inside the app: **Settings → Manual**.
   Hearing records three seconds from your microphone and shows what came back,
   Speaking says one line out loud. Hold the button to see what one press costs,
   because some of them spend real money.
+- **When the backup voice speaks, you are told** — Gemini's free tier allows
+  three spoken replies a minute; when it refuses, the Speaking row's backup
+  reads the reply and a notice names which voice stood in and why. A voice
+  that changes without a word was a bug, fixed 2026-09-06.
 - **A connected model that cannot do a job is greyed out, not hidden** — so you
   can see it is there and that it is not the tool for this.
 - **The main model is chosen once**, on its own row at the top of
@@ -864,6 +868,11 @@ Read this inside the app: **Settings → Manual**.
 - **Modes you already made** — a mode you made before this existed adds no
   restriction of its own until you open **What It May Do** and switch something
   off. Nothing changed underneath you.
+
+- **A voice of its own** — a Custom Mode can pick its own voice from the
+  voices the Speaking row's engine offers (a Gemini voice, or the English
+  and Chinese voices on this machine); blank keeps the same voice as User
+  Mode. The engine and the model are not the mode's to change.
 
 ## 14. Appearance and language
 

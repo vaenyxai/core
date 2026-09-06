@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createDatabase, type DatabaseHandle } from "../src/db/database.js";
 import {
   createMode,
+  getModeVoice,
   deleteMode,
   listModes,
   updateMode,
@@ -44,6 +45,28 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { force: true, recursive: true });
   }
+});
+
+describe("a mode's own voice (2026-09-06)", () => {
+  it("keeps a voice per mode, null for the same as User Mode, and drops junk", () => {
+    const database = createTestDatabase();
+    const plain = createMode(database, { name: "Plain" });
+    expect(plain.voice).toBeNull();
+    const own = createMode(database, {
+      name: "Yen",
+      voice: { gemini: "Aoede", en: "  " },
+    });
+    expect(own.voice).toEqual({ gemini: "Aoede" });
+    expect(getModeVoice(database, own.id)).toEqual({ gemini: "Aoede" });
+    const back = updateMode(database, own.id, { voice: null });
+    expect(back.voice).toBeNull();
+    const untouched = updateMode(database, own.id, { name: "Yen 2" });
+    expect(untouched.voice).toBeNull();
+    const local = updateMode(database, own.id, {
+      voice: { en: "af_heart", zh: "zf_xiaoxiao" },
+    });
+    expect(local.voice).toEqual({ en: "af_heart", zh: "zf_xiaoxiao" });
+  });
 });
 
 describe("Custom Mode M1", () => {

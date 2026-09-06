@@ -15,6 +15,7 @@ import {
   readEnginePair,
   runWithBackup,
   type EngineChoice,
+  type EngineRunNote,
 } from "../models/engine-slots.js";
 import { writeConnections } from "../models/provider-settings.js";
 import {
@@ -358,18 +359,27 @@ export async function synthesizeSpeech(
   secretsDirectory: string,
   dataDirectory: string,
   text: string,
-): Promise<string> {
+  options: {
+    /** A Custom Mode's own voice (Oskar, 2026-09-06): one of the voices the
+     *  Speaking row's engine offers. The engine itself never changes. */
+    voice?: { gemini?: string; en?: string; zh?: string } | null;
+  } = {},
+): Promise<{ audioId: string; note: EngineRunNote }> {
   const pair = readEnginePair(secretsDirectory, "voiceOutput");
   if (!pair.primary) throw new Error("VOICE_OUTPUT_NOT_CONNECTED");
   // Speaking is where a stand-in pays for itself fastest: Gemini's free tier
   // allows THREE speech requests a minute (measured 2026-08-07), so a family
   // reading a few replies aloud hits the wall in ordinary use.
+  // The note travels back with the clip: when the backup spoke, the client
+  // says so — a voice that changes without a word is the one thing a
+  // stand-in must never do (it did, until 2026-09-06).
   const spoken = await runWithBackup(
     pair,
-    (choice) => speakWith(secretsDirectory, dataDirectory, text, choice),
+    (choice) =>
+      speakWith(secretsDirectory, dataDirectory, text, choice, options.voice),
     "en",
   );
-  return spoken.value;
+  return { audioId: spoken.value, note: spoken.note };
 }
 
 async function speakWith(
@@ -377,6 +387,7 @@ async function speakWith(
   dataDirectory: string,
   text: string,
   choice: EngineChoice,
+  modeVoice?: { gemini?: string; en?: string; zh?: string } | null,
 ): Promise<string> {
   const resolved = resolveVoiceOutputFor(
     secretsDirectory,
@@ -386,8 +397,8 @@ async function speakWith(
   if (resolved.engine === "local") {
     const output = readProviderConnections(secretsDirectory).voiceOutput;
     return synthesizeLocalSpeech(dataDirectory, text, {
-      zhVoice: output?.zhVoice,
-      enVoice: output?.enVoice,
+      zhVoice: modeVoice?.zh ?? output?.zhVoice,
+      enVoice: modeVoice?.en ?? output?.enVoice,
     });
   }
   if (resolved.engine === "workersai" && resolved.apiKey) {
@@ -401,7 +412,7 @@ async function speakWith(
   if (resolved.engine !== "gemini" || !resolved.apiKey) {
     throw new Error("VOICE_OUTPUT_NOT_CONNECTED");
   }
-  const voice = resolved.voice;
+  const voice = modeVoice?.gemini ?? resolved.voice;
   const hash = createHash("sha256")
     .update(`${voice}\n${text}`)
     .digest("hex")

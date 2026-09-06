@@ -266,6 +266,8 @@ import {
   forgetDeviceMode,
   applyDeviceMode,
   type Mode,
+  type ModeVoice,
+  type SpokenClip,
   type ModeCapabilities,
   type DeviceMode,
   type LocalTtsStatus,
@@ -1570,7 +1572,7 @@ function SpeakButton({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // The clips to play in order (a recording is one clip; TTS is 1-2 sentence
   // chunks), synthesis already in flight. Built once, then replayable.
-  const pendingRef = useRef<Promise<{ audioId: string }>[] | null>(null);
+  const pendingRef = useRef<Promise<SpokenClip>[] | null>(null);
   const indexRef = useRef(0);
   // Bumped on stop/unmount so an in-flight chunk advance goes quiet.
   const sessionRef = useRef(0);
@@ -1621,8 +1623,25 @@ function SpeakButton({
       return;
     }
     try {
-      const { audioId: clipId } = await request;
+      const { audioId: clipId, note } = await request;
       if (sessionRef.current !== session) return;
+      // Said out loud, once per reply: which voice stood in and why. The
+      // stand-in itself is the Owner's own backup — the app never chose it.
+      if (index === 0 && note?.fellBackFrom) {
+        const names: Record<string, [string, string]> = {
+          gemini: ["Gemini", "Gemini"],
+          local: ["本机语音", "the voice on this machine"],
+          browser: ["本机浏览器", "this device's own voice"],
+          workersai: ["Workers AI", "Workers AI"],
+        };
+        const nameOf = (id: string) =>
+          names[id]?.[lang === "zh" ? 0 : 1] ?? id;
+        showErrorToast(
+          lang === "zh"
+            ? `${nameOf(note.fellBackFrom.provider)} 念不了(${note.fellBackFrom.reason}),这次由${nameOf(note.provider)}代念。`
+            : `${nameOf(note.fellBackFrom.provider)} could not speak (${note.fellBackFrom.reason}); ${nameOf(note.provider)} read this one.`,
+        );
+      }
       // Someone else started talking while this chunk generated — stay quiet.
       if (currentReplyAudio !== null && currentReplyAudio !== audio) {
         setState((current) => (current === "loading" ? "idle" : current));
@@ -4780,6 +4799,102 @@ function ModesPanel() {
   const [editDigest, setEditDigest] = useState<
     "off" | "daily" | "weekly" | "monthly"
   >("off");
+  // A voice of the mode's own (Oskar, 2026-09-06): one of the voices the
+  // Speaking row's engine offers right now — the engine and the model are
+  // not the mode's to change. Read once, when the editor opens.
+  const [editVoice, setEditVoice] = useState<ModeVoice | null>(null);
+  const [voiceOutput, setVoiceOutput] = useState<VoiceOutputStatus | null>(
+    null,
+  );
+  const [localVoices, setLocalVoices] = useState<LocalTtsStatus | null>(null);
+  useEffect(() => {
+    let active = true;
+    void fetchVoiceOutput()
+      .then((status) => {
+        if (active) setVoiceOutput(status);
+      })
+      .catch(() => undefined);
+    void fetchLocalTts()
+      .then((status) => {
+        if (active) setLocalVoices(status);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  function voiceField(): ReactNode {
+    const same = "Same as User Mode";
+    const engine = voiceOutput?.engine ?? "none";
+    if (engine === "gemini") {
+      return (
+        <div className="chat-font-field">
+          <span>Voice (Gemini)</span>
+          <Picker
+            ariaLabel="Voice"
+            className="task-select"
+            onChange={(next) =>
+              setEditVoice(next ? { gemini: next } : null)
+            }
+            options={[
+              { label: same, value: "" },
+              ...GEMINI_TTS_VOICES.map((option) => ({
+                label: option.label,
+                value: option.id,
+              })),
+            ]}
+            value={editVoice?.gemini ?? ""}
+          />
+        </div>
+      );
+    }
+    if (engine === "local") {
+      const options = (voiceLang: "en" | "zh") => [
+        { label: same, value: "" },
+        ...(localVoices?.voices ?? [])
+          .filter((voice) => voice.lang === voiceLang && voice.downloaded)
+          .map((voice) => ({ label: voice.label, value: voice.id })),
+      ];
+      const pick = (key: "en" | "zh", next: string) =>
+        setEditVoice((current) => {
+          const merged = { ...(current ?? {}) };
+          if (next) merged[key] = next;
+          else delete merged[key];
+          return Object.keys(merged).length > 0 ? merged : null;
+        });
+      return (
+        <div className="field-pair">
+          <div className="chat-font-field">
+            <span>English voice</span>
+            <Picker
+              ariaLabel="English voice"
+              className="task-select"
+              onChange={(next) => pick("en", next)}
+              options={options("en")}
+              value={editVoice?.en ?? ""}
+            />
+          </div>
+          <div className="chat-font-field">
+            <span>Chinese voice</span>
+            <Picker
+              ariaLabel="Chinese voice"
+              className="task-select"
+              onChange={(next) => pick("zh", next)}
+              options={options("zh")}
+              value={editVoice?.zh ?? ""}
+            />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <p className="settings-card-copy">
+        {engine === "none"
+          ? "Voice: nothing speaks yet — set the Speaking row under AI Settings first."
+          : "Voice: the Speaking row's engine has no voices to choose from, so this mode speaks like User Mode."}
+      </p>
+    );
+  }
   const [editEnterPin, setEditEnterPin] = useState("");
   const [editExitPin, setEditExitPin] = useState("");
   const [editClearEnterPin, setEditClearEnterPin] = useState(false);
@@ -4795,6 +4910,7 @@ function ModesPanel() {
     setEditLocalOnly(mode.localOnly);
     setEditAgentName(mode.agentName);
     setEditDigest(mode.digestCadence);
+    setEditVoice(mode.voice);
     setEditEnterPin("");
     setEditExitPin("");
     setEditClearEnterPin(false);
@@ -4812,6 +4928,7 @@ function ModesPanel() {
         localOnly: editLocalOnly,
         agentName: editAgentName.trim(),
         digestCadence: editDigest,
+        voice: editVoice,
         ...(editClearEnterPin
           ? { enterPin: "" }
           : editEnterPin.trim()
@@ -5212,6 +5329,7 @@ function ModesPanel() {
                         value={editDigest}
                       />
                     </div>
+                    {voiceField()}
                     <label>
                       Enter PIN — blank keeps the current one
                       <input

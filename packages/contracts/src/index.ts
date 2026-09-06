@@ -252,6 +252,8 @@ export {
   type LocalTtsStatus,
   type SetLocalVoiceRequest,
   type Mode,
+  type ModeVoice,
+  ModeVoiceSchema,
   type CreateModeRequest,
   type UpdateModeRequest,
   type ModeCapabilities,

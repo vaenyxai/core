@@ -1157,6 +1157,18 @@ const DigestCadenceSchema = Type.Union([
   Type.Literal("monthly"),
 ]);
 
+// A mode's own voice: one of the voices the Speaking row's engine offers.
+// Which key applies depends on that engine (Gemini names one voice; the
+// on-machine voice names one per language). null = the same as User Mode.
+export const ModeVoiceSchema = Type.Object(
+  {
+    gemini: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
+    en: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+    zh: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+  },
+  { additionalProperties: false },
+);
+
 export const ModeSchema = Type.Object(
   {
     id: Type.String(),
@@ -1169,6 +1181,7 @@ export const ModeSchema = Type.Object(
     // Empty = this mode uses the instance-wide Agent Name.
     agentName: Type.String(),
     digestCadence: DigestCadenceSchema,
+    voice: Type.Union([ModeVoiceSchema, Type.Null()]),
     createdAt: Type.String(),
     updatedAt: Type.String(),
   },
@@ -1185,6 +1198,7 @@ export const CreateModeRequestSchema = Type.Object(
     exitPin: Type.Optional(Type.String({ maxLength: 20 })),
     agentName: Type.Optional(Type.String({ maxLength: 100 })),
     digestCadence: Type.Optional(DigestCadenceSchema),
+    voice: Type.Optional(Type.Union([ModeVoiceSchema, Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -1200,6 +1214,7 @@ export const UpdateModeRequestSchema = Type.Object(
     exitPin: Type.Optional(Type.String({ maxLength: 20 })),
     agentName: Type.Optional(Type.String({ maxLength: 100 })),
     digestCadence: Type.Optional(DigestCadenceSchema),
+    voice: Type.Optional(Type.Union([ModeVoiceSchema, Type.Null()])),
   },
   { additionalProperties: false },
 );
@@ -1603,6 +1618,26 @@ export const SpeakRequestSchema = Type.Object(
 export const SpeakResponseSchema = Type.Object(
   {
     audioId: Type.String(),
+    // Who really spoke. Present with fellBackFrom when the Speaking row's
+    // backup stood in, so the client can say so — a voice that changes
+    // without a word is the one thing a stand-in must never do.
+    note: Type.Optional(
+      Type.Union([
+        Type.Object(
+          {
+            provider: Type.String(),
+            fellBackFrom: Type.Optional(
+              Type.Object(
+                { provider: Type.String(), reason: Type.String() },
+                { additionalProperties: false },
+              ),
+            ),
+          },
+          { additionalProperties: false },
+        ),
+        Type.Null(),
+      ]),
+    ),
   },
   { additionalProperties: false },
 );
@@ -3228,6 +3263,7 @@ export type SpeakRequest = Static<typeof SpeakRequestSchema>;
 export type LocalTtsStatus = Static<typeof LocalTtsStatusSchema>;
 export type SetLocalVoiceRequest = Static<typeof SetLocalVoiceRequestSchema>;
 export type Mode = Static<typeof ModeSchema>;
+export type ModeVoice = Static<typeof ModeVoiceSchema>;
 export type CreateModeRequest = Static<typeof CreateModeRequestSchema>;
 export type UpdateModeRequest = Static<typeof UpdateModeRequestSchema>;
 export type ModeCapabilities = Static<typeof ModeCapabilitiesSchema>;

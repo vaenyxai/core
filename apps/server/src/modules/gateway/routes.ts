@@ -375,6 +375,7 @@ import {
   forgetDevice,
   getDeviceDefaultMode,
   getModeRowById,
+  getModeVoice,
   listDeviceModes,
   listModes,
   modePinMatches,
@@ -8942,12 +8943,32 @@ export async function registerGatewayRoutes(
       );
       if (refused) return reply.code(403).send({ error: refused });
       try {
-        const audioId = await synthesizeSpeech(
+        // A Custom Mode speaks in its own voice when it has one; the engine
+        // is still the Speaking row's. And who really spoke rides back.
+        const spoken = await synthesizeSpeech(
           context.config.secretsDirectory,
           context.config.dataDirectory,
           request.body.text,
+          {
+            voice: owner.modeId
+              ? getModeVoice(context.database, owner.modeId)
+              : null,
+          },
         );
-        return { audioId };
+        return {
+          audioId: spoken.audioId,
+          note: {
+            provider: spoken.note.provider,
+            ...(spoken.note.fellBackFrom
+              ? {
+                  fellBackFrom: {
+                    provider: spoken.note.fellBackFrom.provider,
+                    reason: spoken.note.fellBackFrom.reason,
+                  },
+                }
+              : {}),
+          },
+        };
       } catch (error) {
         const message = error instanceof Error ? error.message : "";
         if (message === "VOICE_OUTPUT_NOT_CONNECTED") {

@@ -9,6 +9,7 @@ import type {
   CreateModeRequest,
   DeviceMode,
   Mode,
+  ModeVoice,
   UpdateModeRequest,
 } from "@vaenyx/contracts";
 
@@ -27,8 +28,46 @@ interface ModeRow {
   agent_name: string;
   digest_cadence: string;
   digest_last_at: string | null;
+  voice: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** The mode's own voice, or null for "the same as User Mode". A row that
+ *  holds something unreadable counts as null rather than breaking the list. */
+function parseModeVoice(raw: string | null): ModeVoice | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const voice: ModeVoice = {};
+    for (const key of ["gemini", "en", "zh"] as const) {
+      const value = parsed[key];
+      if (typeof value === "string" && value.trim()) voice[key] = value.trim();
+    }
+    return Object.keys(voice).length > 0 ? voice : null;
+  } catch {
+    return null;
+  }
+}
+
+function serializeModeVoice(voice: ModeVoice | null | undefined): string | null {
+  if (!voice) return null;
+  const clean: ModeVoice = {};
+  for (const key of ["gemini", "en", "zh"] as const) {
+    const value = voice[key]?.trim();
+    if (value) clean[key] = value;
+  }
+  return Object.keys(clean).length > 0 ? JSON.stringify(clean) : null;
+}
+
+export function getModeVoice(
+  database: DatabaseHandle,
+  modeId: string,
+): ModeVoice | null {
+  const row = database.sqlite
+    .prepare("SELECT voice FROM modes WHERE id = ?")
+    .get(modeId) as { voice?: string | null } | undefined;
+  return parseModeVoice(row?.voice ?? null);
 }
 
 function toMode(row: ModeRow): Mode {
@@ -47,6 +86,7 @@ function toMode(row: ModeRow): Mode {
       row.digest_cadence === "monthly"
         ? row.digest_cadence
         : "off",
+    voice: parseModeVoice(row.voice),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -119,8 +159,8 @@ export function createMode(
       `INSERT INTO modes (
         id, name, rules, lock_settings, local_only,
         enter_pin_hash, exit_pin_hash, agent_name, digest_cadence,
-        digest_last_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        digest_last_at, voice, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -135,6 +175,7 @@ export function createMode(
       // Start the digest clock now, so enabling it never fires a summary
       // covering everything that came before.
       now,
+      serializeModeVoice(input.voice),
       now,
       now,
     );
@@ -176,7 +217,7 @@ export function updateMode(
       `UPDATE modes
        SET name = ?, rules = ?, lock_settings = ?, local_only = ?,
            enter_pin_hash = ?, exit_pin_hash = ?, agent_name = ?,
-           digest_cadence = ?, digest_last_at = ?, updated_at = ?
+           digest_cadence = ?, digest_last_at = ?, voice = ?, updated_at = ?
        WHERE id = ?`,
     )
     .run(
@@ -194,6 +235,7 @@ export function updateMode(
       nextCadence !== "off" && existing.digest_cadence === "off"
         ? now
         : existing.digest_last_at,
+      input.voice === undefined ? existing.voice : serializeModeVoice(input.voice),
       now,
       modeId,
     );
