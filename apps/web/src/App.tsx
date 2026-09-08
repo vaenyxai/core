@@ -19550,8 +19550,8 @@ function VaenyxMeLedger({
                       ? "改成新的"
                       : "Change it"
                     : zh
-                      ? "对,记住"
-                      : "Yes, keep it"}
+                      ? "记下来"
+                      : "Record it"}
                 </button>
                 <button
                   className="secondary-button me-ledger-answer"
@@ -19563,8 +19563,8 @@ function VaenyxMeLedger({
                       ? "保持原来的"
                       : "Keep the old one"
                     : zh
-                      ? "这条不对"
-                      : "That's wrong"}
+                      ? "不记"
+                      : "Ignore it"}
                 </button>
               </div>
             </article>

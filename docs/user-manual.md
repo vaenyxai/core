@@ -276,13 +276,13 @@ Read this inside the app: **Settings → Manual**.
 - **Tell it yourself** — the **Me** door opens a conversation of its own. Put
   in anything about you: words, a recording, a photo, a document. Vaenyx
   answers with what it read, and a moment later the things worth keeping
-  appear under the reply as cards — one sentence each, keep it or say it is
-  wrong. Nothing enters Vaenyx Me without your yes. The conversation cannot
+  appear under the reply as cards — one sentence each, **Record it** or
+  **Ignore it**. Nothing enters Vaenyx Me without your yes. The conversation cannot
   be deleted or archived; **Profile** in its header opens the screen.
 - **Nothing is used until you approve it.** Each one leads with its grounds —
   a few short points, written in the language of the conversation they came
   from; for a fact, the sentence you actually said — then what Vaenyx made of
-  it. Two answers: keep it, or say it is wrong.
+  it. Two answers: **Record it**, or **Ignore it**.
 - **Every ground line can open its source.** A merged proposal cites each
   conversation it was seen in — one line per origin, each with its own View
   source.
