@@ -28,7 +28,7 @@
 
 ## Current Snapshot
 
-- Latest formal release: `v0.4.12.0` (verified 2026-09-01 by tag, changelog and
+- Latest formal release: `v0.4.13.0` (verified 2026-09-08 by tag, changelog and
   published GitHub Release); source may carry a later `-dev` internal build.
 - Updates are transactional: verified code/database snapshots and candidate
   migration, startup, integrity, foreign-key and health checks gate the switch;
