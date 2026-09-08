@@ -7514,6 +7514,12 @@ function AskVaenyxPanel({
   const pendingLandingRef = useRef<{ key: string } | null>(null);
   const landingFrameRef = useRef(0);
   const LANDING_HOLD_MS = 5000;
+  // Hidden until the first landing: the list is measured and placed unseen,
+  // so opening a chat shows the bottom (or the first unread) at once rather
+  // than the top sliding away (Oskar, 2026-09-08). A short grace covers a
+  // target that never appears, so nothing can stay hidden.
+  const [landingHidden, setLandingHidden] = useState(false);
+  const LANDING_REVEAL_GRACE_MS = 400;
 
   function requestLanding(
     key: string,
@@ -7524,10 +7530,12 @@ function AskVaenyxPanel({
     cancelAnimationFrame(landingFrameRef.current);
     const startedAt = Date.now();
     let heightAtLastLand = -1;
+    setLandingHidden(true);
     const cancel = () => {
       if (pendingLandingRef.current?.key === key) {
         pendingLandingRef.current = null;
       }
+      setLandingHidden(false);
       removeListeners();
     };
     const inputEvents = [
@@ -7545,11 +7553,13 @@ function AskVaenyxPanel({
     const attempt = () => {
       const pending = pendingLandingRef.current;
       if (!pending || pending.key !== key) {
+        setLandingHidden(false);
         removeListeners();
         return;
       }
       if (Date.now() - startedAt > LANDING_HOLD_MS) {
         pendingLandingRef.current = null;
+        setLandingHidden(false);
         removeListeners();
         return;
       }
@@ -7559,6 +7569,9 @@ function AskVaenyxPanel({
         heightAtLastLand = height;
         if (align === "end") element.scrollIntoView({ block: "end" });
         else scrollToMessageStart(element);
+        setLandingHidden(false);
+      } else if (!element && Date.now() - startedAt > LANDING_REVEAL_GRACE_MS) {
+        setLandingHidden(false);
       }
       landingFrameRef.current = requestAnimationFrame(attempt);
     };
@@ -10997,7 +11010,13 @@ This conversation is its home — feed it something to try it, and ask for chang
           </Modal>
         ) : null}
 
-        <div className="ask-vaenyx-messages">
+        <div
+          className={
+            landingHidden
+              ? "ask-vaenyx-messages is-landing"
+              : "ask-vaenyx-messages"
+          }
+        >
           {isRoutine ? (
             capabilityTab === "journal" ? (
               routineJournal.length === 0 ? (

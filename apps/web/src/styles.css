@@ -1819,7 +1819,7 @@ textarea::placeholder {
   position: absolute;
   z-index: 30;
   bottom: calc(100% + 8px);
-  left: 0;
+  right: 0;
   display: flex;
   flex-direction: column;
   visibility: hidden;
@@ -1831,7 +1831,7 @@ textarea::placeholder {
   box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
   opacity: 0;
   transform: translateY(6px) scale(0.94);
-  transform-origin: bottom left;
+  transform-origin: bottom right;
   transition:
     opacity 140ms ease,
     transform 140ms ease,
@@ -2905,6 +2905,17 @@ textarea::placeholder {
   margin-left: auto;
 }
 
+/* The + (tools) takes the auto margin itself (Oskar, 2026-09-08: 加号任何
+   时候都在右边 Send 的旁边): with the textarea hidden during a recording
+   nothing else pushed it right, and it sat alone on the left. Whatever
+   follows it sits flush beside it. */
+.ask-vaenyx-composer-box > .composer-tools,
+.simple-compose-box > .composer-tools {
+  margin-left: auto;
+}
+
+.ask-vaenyx-composer-box > .composer-tools ~ button,
+.simple-compose-box > .composer-tools ~ button,
 .ask-vaenyx-composer-box > .mic-button ~ button,
 .simple-compose-box > .mic-button ~ button,
 .ask-vaenyx-composer-box > .mic-record-group ~ button,
@@ -9419,6 +9430,14 @@ body {
   }
 }
 
+/* While a freshly opened conversation is being placed (bottom, or the first
+   unread), the list is laid out but not shown — the Owner never watches it
+   slide down from the top (Oskar, 2026-09-08). Revealed on the first landing
+   or within a beat if there is nothing to land on. */
+.ask-vaenyx-messages.is-landing {
+  visibility: hidden;
+}
+
 /* Cards inside the Vaenyx Me conversation: a quiet block after the last
    message, the ledger in its compact shape. */
 .me-chat-cards {
@@ -9556,10 +9575,17 @@ body {
    conversation on the right two thirds, a slanted divider between (Oskar,
    2026-09-08). The block carries the border and the background; the two
    buttons inside are flat so the divider is the only seam. */
+/* The seam between the two doors is the slant itself (Oskar, 2026-09-08:
+   分隔应该是跟着斜线分隔的): each button is clipped along the same diagonal
+   the divider line follows, so a highlight on either side ends at the slant
+   and no vertical edge ever shows. Geometry: the divider crosses the row's
+   centre line at one third of the width, leaning 32° (top-left to
+   bottom-right) — over a 40px row that is ±12.5px, hence the 25px run in
+   both polygons, the left door 12px wider than a third and the right door
+   starting 25px back under it. Checked against a rendered mock. */
 .sidebar-inbox-split {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  display: flex;
   overflow: hidden;
   min-height: 40px;
   margin-bottom: var(--space-2);
@@ -9571,13 +9597,13 @@ body {
 .sidebar-inbox-split::after {
   content: "";
   position: absolute;
-  top: -20%;
+  top: -30%;
   left: calc(100% / 3);
   width: 1px;
-  height: 140%;
+  height: 160%;
   background: var(--accent, #6ea8ff);
-  opacity: 0.7;
-  transform: rotate(-18deg);
+  opacity: 0.8;
+  transform: rotate(-32deg);
   transform-origin: center;
   pointer-events: none;
 }
@@ -9596,18 +9622,23 @@ body {
 }
 
 .sidebar nav .sidebar-inbox-me {
+  flex: 0 0 calc(100% / 3 + 12px);
   justify-content: center;
-  padding: 0 14px 0 8px;
+  padding: 0 18px 0 6px;
   font-size: var(--fs-sm, 13px);
   font-weight: 700;
   letter-spacing: 0.02em;
+  clip-path: polygon(0 0, calc(100% - 25px) 0, 100% 100%, 0 100%);
 }
 
 .sidebar nav .sidebar-inbox {
+  flex: 1 1 auto;
+  margin-left: -25px;
   justify-content: flex-start;
   gap: var(--space-2);
-  padding: 0 10px 0 14px;
+  padding: 0 10px 0 32px;
   text-align: left;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 25px 100%);
 }
 
 .sidebar nav .sidebar-inbox-me:hover,
