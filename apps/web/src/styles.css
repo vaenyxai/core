@@ -9265,6 +9265,160 @@ body {
 /* WHAT VAENYX NOTICED — a ledger, read like a diary. The quote is the biggest
    thing on the row because it is the Owner's own sentence, and it is the only
    part of the old card that was doing any work. */
+/* THE NAME THAT NEVER SITS STILL. Each character is its own span with a
+   staggered delay; the wrapper's class picks which keyframes run, drawn at
+   random by animated-name.tsx after every rest. All effects end where they
+   began so the name is legible between runs, and none lasts longer than a
+   blink per character. */
+.animated-name {
+  display: inline-block;
+  white-space: pre;
+}
+
+.animated-name-char {
+  display: inline-block;
+  animation-duration: 0.9s;
+  animation-fill-mode: both;
+  animation-timing-function: ease-in-out;
+  transform-origin: 50% 80%;
+}
+
+.animated-name--wave .animated-name-char {
+  animation-name: name-wave;
+}
+
+.animated-name--jelly .animated-name-char {
+  animation-name: name-jelly;
+}
+
+.animated-name--tilt .animated-name-char {
+  animation-name: name-tilt;
+}
+
+.animated-name--glow .animated-name-char {
+  animation-name: name-glow;
+  animation-duration: 1.1s;
+}
+
+.animated-name--flip .animated-name-char {
+  animation-name: name-flip;
+  animation-duration: 1s;
+}
+
+.animated-name--rise .animated-name-char {
+  animation-name: name-rise;
+}
+
+.animated-name--swing .animated-name-char {
+  animation-name: name-swing;
+  animation-duration: 1.1s;
+  transform-origin: 50% 0%;
+}
+
+@keyframes name-wave {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-0.28em);
+  }
+  70% {
+    transform: translateY(0.06em);
+  }
+}
+
+@keyframes name-jelly {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  30% {
+    transform: scale(1.25, 0.75);
+  }
+  55% {
+    transform: scale(0.8, 1.2);
+  }
+  80% {
+    transform: scale(1.08, 0.94);
+  }
+}
+
+@keyframes name-tilt {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(-14deg);
+  }
+  70% {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes name-glow {
+  0%,
+  100% {
+    color: inherit;
+    text-shadow: none;
+    transform: scale(1);
+  }
+  50% {
+    color: var(--accent, #6ea8ff);
+    text-shadow: 0 0 10px var(--accent-soft, rgba(110, 168, 255, 0.5));
+    transform: scale(1.12);
+  }
+}
+
+@keyframes name-flip {
+  0%,
+  100% {
+    transform: rotateX(0deg);
+  }
+  50% {
+    transform: rotateX(360deg);
+  }
+}
+
+@keyframes name-rise {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 0.2;
+    transform: translateY(0.35em);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-0.12em);
+  }
+}
+
+@keyframes name-swing {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(12deg);
+  }
+  55% {
+    transform: rotate(-9deg);
+  }
+  80% {
+    transform: rotate(4deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-name-char {
+    animation: none !important;
+  }
+}
+
 /* Cards inside the Vaenyx Me conversation: a quiet block after the last
    message, the ledger in its compact shape. */
 .me-chat-cards {

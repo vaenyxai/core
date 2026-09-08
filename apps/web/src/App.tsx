@@ -377,6 +377,7 @@ import {
 } from "./provider-facts.js";
 import { CAPABILITIES } from "./capabilities.js";
 import { getCodexAuthCopy } from "./status-copy.js";
+import { AnimatedName } from "./animated-name.js";
 
 type Screen =
   | "ask-vaenyx"
@@ -10245,11 +10246,15 @@ This conversation is its home — feed it something to try it, and ask for chang
         <header className="ask-vaenyx-chat-header">
           <div className="focused-title-line">
             <h2>
-              {isInboxChat
-                ? agentName
-                : isMeChat
-                  ? "Vaenyx Me"
-                  : activeConversation?.title?.trim() || "Vaenyx Chat"}
+              {isInboxChat ? (
+                /* The agent's name, and it never sits still (Oskar,
+                   2026-09-08): a different small move each run, any script. */
+                <AnimatedName text={agentName} />
+              ) : isMeChat ? (
+                "Vaenyx Me"
+              ) : (
+                activeConversation?.title?.trim() || "Vaenyx Chat"
+              )}
             </h2>
             <ThreadChipRow
               chips={chatChips}

@@ -247,8 +247,12 @@ Read this inside the app: **Settings → Manual**.
 
 ## 4a. The conversation Vaenyx speaks from
 
-- **Top of the sidebar, under New**, with a moon on it. It is always there and
-  it cannot be deleted, archived or duplicated.
+- **Top of the sidebar, under New**, with a moon on it — the right two thirds
+  of the split row; the left third, **Me**, is the Vaenyx Me conversation. It
+  is always there and it cannot be deleted, archived or duplicated.
+- **Its title moves.** The agent's name at the top of the conversation plays a
+  small animation, a different one each time, in any language. A device set
+  to reduce motion shows it still.
 - **One per Mode.** A Custom Mode has its own, and nothing crosses between them.
 - **A number appears on it** when something needs you, and only then. Opening
   the conversation does not clear it — looking is not the same as handling.
