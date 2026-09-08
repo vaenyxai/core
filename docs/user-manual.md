@@ -999,5 +999,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.12** · last updated 2026-09-08.
+Manual for **v0.4.13** · last updated 2026-09-08.
 Keep this file up to date whenever a feature changes.

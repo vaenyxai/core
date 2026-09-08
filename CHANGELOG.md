@@ -4,6 +4,52 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.13.0 — 2026-09-08
+
+**Vaenyx Me has a conversation of its own.** The permanent row in the sidebar
+is now two doors: **Me** on the left, your conversation with Vaenyx on the
+right. Tell the Me conversation anything about yourself — words, a recording,
+a photo, a document — and Vaenyx answers with what it read; a moment later the
+things worth keeping appear under the reply as one-sentence cards with two
+answers, **Record it** or **Ignore it**. Nothing enters Vaenyx Me without your
+yes. Review cards everywhere now read as one plain sentence in the language you
+spoke, with no internal field names.
+
+**Pick the model that does the work, then connect what it needs.** Settings →
+AI leads with one choice: the main model, drawn from the models you have tested
+and adopted. Text, Vision, Drawing, Speaking, Hearing and Reading each show a
+primary and a backup with their own Test buttons, and follow the main model
+unless you say otherwise. Each connected app is one card with one row of
+controls — find its models, test one, adopt it — and the subscription door
+folds per app. Subscription calls now name their model per request and report
+which engine actually answered.
+
+**Modes report in one line and keep their reports.** A mode's periodic summary
+says how many messages and chats and "all within the rules", or lists the
+questions its rules refused. Every report is kept: **Settings → Modes →
+Summary** shows a mode's history without entering it. A mode can also speak in
+a voice of its own, and when the backup voice reads instead, Vaenyx says so.
+
+**A tidier, faster sidebar.** The device name sits on the title line, the
+magnifier beside **New** is the search, and conversation rows are closer
+together so more fit. A conversation opens where it should — the bottom, or the
+start of the first unread — without sliding down from the top. The composer's
+**+** always sits beside Send. The agent's name at the top of your conversation
+never sits still: a different small move every few seconds, in any language.
+
+**Conversations got their own identity, search and memory safety.** Every
+conversation has a title and purpose you can edit; local search finds
+conversations by title, purpose or message with no model or cloud involved;
+Memory shows where each fact came from, and forgetting a conversation can take
+its identifiable Memory with it in one all-or-nothing step. Drafts typed on
+a phone survive a lost connection.
+
+**Errors and progress, explained safely.** Failures show owner-safe wording
+with a stable error code and a diagnostic id instead of raw internals, and
+long tasks keep a durable progress card in the conversation. The
+remote-address warning fires only after a sustained outage and says in one
+line who is affected and what to press.
+
 ## v0.4.12.0 — 2026-09-01
 
 **Archive now makes a scheduled Conversation quiet immediately.** Its next
