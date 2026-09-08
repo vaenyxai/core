@@ -1188,6 +1188,25 @@ export const ModeSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// One periodic report a mode sent to the main conversation, kept so the
+// Owner can read a mode's history from Settings → Modes without opening the
+// mode itself (Oskar, 2026-09-08).
+export const ModeDigestSchema = Type.Object(
+  {
+    id: Type.String(),
+    modeId: Type.String(),
+    cadence: DigestCadenceSchema,
+    periodStart: Type.String(),
+    periodEnd: Type.String(),
+    messages: Type.Integer(),
+    chats: Type.Integer(),
+    refusals: Type.Integer(),
+    summary: Type.String(),
+    createdAt: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 export const CreateModeRequestSchema = Type.Object(
   {
     name: Type.String({ minLength: 1, maxLength: 60 }),
@@ -3264,6 +3283,7 @@ export type LocalTtsStatus = Static<typeof LocalTtsStatusSchema>;
 export type SetLocalVoiceRequest = Static<typeof SetLocalVoiceRequestSchema>;
 export type Mode = Static<typeof ModeSchema>;
 export type ModeVoice = Static<typeof ModeVoiceSchema>;
+export type ModeDigest = Static<typeof ModeDigestSchema>;
 export type CreateModeRequest = Static<typeof CreateModeRequestSchema>;
 export type UpdateModeRequest = Static<typeof UpdateModeRequestSchema>;
 export type ModeCapabilities = Static<typeof ModeCapabilitiesSchema>;

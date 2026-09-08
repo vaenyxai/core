@@ -2260,7 +2260,9 @@ export async function createAskVaenyxMessage(
           actorName: getOwner(database)?.name ?? "Owner",
           action: "mode.rules.refused",
           decision: "denied",
-          reason: `Mode "${modeRow.name}" refused a question by its standing rules.`,
+          // The question rides in the reason so the periodic report can
+          // list it (modes.ts reads this exact prefix back).
+          reason: `Refused by the mode's rules: ${asked}`,
           resourceType: "mode",
           resourceId: modeRow.id,
         });

@@ -254,6 +254,8 @@ export {
   type Mode,
   type ModeVoice,
   ModeVoiceSchema,
+  type ModeDigest,
+  ModeDigestSchema,
   type CreateModeRequest,
   type UpdateModeRequest,
   type ModeCapabilities,

@@ -191,6 +191,7 @@ import {
   UpdateVaenyxThreadDetailsRequestSchema,
   VaenyxMeCandidateSchema,
   VaenyxThreadSchema,
+  ModeDigestSchema,
   WorkspaceSchema,
   type AppAskRequest,
   type ApproveVaenyxMeCandidateRequest,
@@ -377,6 +378,7 @@ import {
   getModeRowById,
   getModeVoice,
   listDeviceModes,
+  listModeDigests,
   listModes,
   modePinMatches,
   setDeviceMode,
@@ -8137,6 +8139,36 @@ export async function registerGatewayRoutes(
         return reply.code(404).send({ error: "Mode not found." });
       }
       return listVaenyxThreads(context.database, owner.id, request.params.id);
+    },
+  );
+
+  // A mode's past reports (Oskar, 2026-09-08): read from User Mode without
+  // opening the mode. Same authority as the thread list above.
+  app.get<{ Params: { id: string } }>(
+    "/v1/modes/:id/digests",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: Type.Array(ModeDigestSchema),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
+      }
+      if (!findMode(context.database, request.params.id)) {
+        return reply.code(404).send({ error: "Mode not found." });
+      }
+      return listModeDigests(context.database, request.params.id);
     },
   );
 

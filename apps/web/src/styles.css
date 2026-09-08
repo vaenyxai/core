@@ -651,6 +651,32 @@ textarea::placeholder {
   padding: 0 7px;
 }
 
+/* A mode's past reports, under its card. */
+.mode-digests {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.mode-digest {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.mode-digest-when {
+  margin: 0 0 4px;
+  color: var(--text-faint);
+  font-size: var(--fs-xs, 12px);
+}
+
+.mode-digest-summary {
+  margin: 0;
+  white-space: pre-line;
+  font-size: var(--fs-sm, 13px);
+}
+
 /* Which mode a paired device is in — under its name, readable at a glance,
    never fine print (Oskar, 2026-08-30). */
 .device-mode-line {
@@ -666,7 +692,8 @@ textarea::placeholder {
 /* The device's own (Owner-given) name, so a tablet in hand can say which one
    it is. Quiet on purpose: it identifies, it does not decorate. */
 .device-name-chip {
-  flex-basis: 100%;
+  margin-left: auto;
+  align-self: center;
   color: #87847b;
   font-size: 11px;
   font-weight: 600;
@@ -675,8 +702,8 @@ textarea::placeholder {
 
 .sidebar nav {
   display: grid;
-  gap: 10px;
-  margin-top: 30px;
+  gap: 4px;
+  margin-top: 18px;
 }
 
 .sidebar nav button {
@@ -718,7 +745,9 @@ textarea::placeholder {
 }
 
 .sidebar-compose-switch {
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 6px;
   margin-bottom: 4px;
 }
 
@@ -744,29 +773,23 @@ textarea::placeholder {
   background: var(--accent);
 }
 
-.sidebar nav button.conversation-search-trigger {
-  width: 100%;
-  min-height: 44px;
+/* The magnifier beside New: a square the height of the New button. It stays
+   quiet — the accent belongs to New alone. */
+.sidebar nav .sidebar-compose-switch button.conversation-search-trigger {
+  width: 42px;
+  min-height: 42px;
+  justify-content: center;
+  padding: 0;
   border-color: rgba(255, 255, 255, 0.07);
   color: var(--text-muted);
   background: rgba(255, 255, 255, 0.025);
   cursor: pointer;
 }
 
-.sidebar nav button.conversation-search-trigger:hover {
+.sidebar nav .sidebar-compose-switch button.conversation-search-trigger:hover {
   border-color: var(--border);
   color: var(--text);
   background: rgba(255, 255, 255, 0.045);
-}
-
-.conversation-search-trigger kbd {
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  color: var(--text-faint);
-  background: var(--bg);
-  font-family: inherit;
-  font-size: 10px;
 }
 
 .conversation-search-form {
@@ -933,9 +956,6 @@ textarea::placeholder {
     white-space: normal;
   }
 
-  .conversation-search-trigger kbd {
-    display: none;
-  }
 }
 
 .sidebar-scheduled {
@@ -1040,8 +1060,8 @@ textarea::placeholder {
 
 .thread-tree {
   display: grid;
-  gap: 7px;
-  margin: 10px 0 6px;
+  gap: 3px;
+  margin: 4px 0 4px;
 }
 
 .sidebar-section-heading {
@@ -1076,7 +1096,7 @@ textarea::placeholder {
 .thread-groups summary {
   display: flex;
   min-width: 0;
-  min-height: 28px;
+  min-height: 26px;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
@@ -1176,8 +1196,8 @@ textarea::placeholder {
 
 .thread-items {
   display: grid;
-  gap: 2px;
-  margin: 1px 0 8px 12px;
+  gap: 0;
+  margin: 0 0 4px 12px;
   padding-left: 10px;
   border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -1209,9 +1229,9 @@ textarea::placeholder {
 .sidebar nav .thread-item {
   display: flex;
   align-items: center;
-  min-height: 34px;
+  min-height: 28px;
   gap: 8px;
-  padding: 7px 6px;
+  padding: 3px 6px;
   border-radius: 8px;
   text-align: left;
 }
@@ -9357,32 +9377,77 @@ body {
 /* THE ONE ROW THAT IS ALWAYS THERE. Directly under New, above every folder,
    and visibly not one of the ordinary chats — it is where Vaenyx speaks from,
    and a fixed place only works if you can find it without looking. */
-.sidebar-inbox {
-  display: flex;
-  width: 100%;
-  min-height: 48px;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-  padding: 10px 12px;
+/* One bordered block holding two doors: Me on the left third, the permanent
+   conversation on the right two thirds, a slanted divider between (Oskar,
+   2026-09-08). The block carries the border and the background; the two
+   buttons inside are flat so the divider is the only seam. */
+.sidebar-inbox-split {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  overflow: hidden;
+  min-height: 40px;
+  margin-bottom: var(--space-2);
   border: 1px solid var(--accent, #6ea8ff);
   border-radius: var(--r-md, 10px);
   background: var(--accent-soft, rgba(110, 168, 255, 0.14));
+}
+
+.sidebar-inbox-split::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: calc(100% / 3);
+  width: 1px;
+  height: 140%;
+  background: var(--accent, #6ea8ff);
+  opacity: 0.7;
+  transform: rotate(-18deg);
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.sidebar nav .sidebar-inbox-me,
+.sidebar nav .sidebar-inbox {
+  display: flex;
+  min-width: 0;
+  min-height: 40px;
+  align-items: center;
+  border: 0;
+  border-radius: 0;
   color: inherit;
+  background: transparent;
   cursor: pointer;
+}
+
+.sidebar nav .sidebar-inbox-me {
+  justify-content: center;
+  padding: 0 14px 0 8px;
+  font-size: var(--fs-sm, 13px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.sidebar nav .sidebar-inbox {
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: 0 10px 0 14px;
   text-align: left;
 }
 
-.sidebar-inbox:hover,
-.sidebar-inbox.active {
-  background: var(--accent-soft, rgba(110, 168, 255, 0.16));
-  border-color: var(--accent, #6ea8ff);
+.sidebar nav .sidebar-inbox-me:hover,
+.sidebar nav .sidebar-inbox-me.active,
+.sidebar nav .sidebar-inbox:hover,
+.sidebar nav .sidebar-inbox.active {
+  border: 0;
+  color: var(--text, #eeebe2);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-inbox-title {
   overflow: hidden;
   flex: 1;
-  font-size: var(--fs-md, 15px);
+  font-size: var(--fs-sm, 14px);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;

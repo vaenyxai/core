@@ -432,6 +432,10 @@ const SENTINEL_ALERT_GAP_MS = 12 * 60 * 60 * 1000;
 // survives restarts; the 12 hours mean 12 hours.
 let sentinelStampPath: string | null = null;
 let sentinelTimer: ReturnType<typeof setInterval> | null = null;
+// Consecutive checks that found a resolver lying. One bad sample set is a
+// flap; two in a row (an hour) is an outage worth a message (Oskar,
+// 2026-09-08: the daily warning was becoming noise).
+let sentinelBadStreak = 0;
 
 function sentinelLastAlertAt(): number {
   if (!sentinelStampPath) return 0;
@@ -482,6 +486,7 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
       sampleResolver("https://cloudflare-dns.com/dns-query?name=", host),
     ]);
     if (google < 2 && cloudflare < 2) {
+      sentinelBadStreak = 0;
       // Healthy. Deliberately NOT resetting the throttle: this outage flaps
       // (a resolver's nodes disagree mid-incident), and reset-on-recovery
       // turned one incident into an alert per flap. One warning per 12 hours,
@@ -489,6 +494,8 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
       // in between.
       return;
     }
+    sentinelBadStreak += 1;
+    if (sentinelBadStreak < 2) return;
     if (Date.now() - sentinelLastAlertAt() < SENTINEL_ALERT_GAP_MS) return;
     recordSentinelAlert();
     const culprit =
@@ -505,16 +512,18 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
       google >= 2
         ? "dns.google/cache"
         : "one.one.one.one/purge-cache";
+    // One line (Oskar, 2026-09-08): what is wrong, who it affects, and that
+    // it heals itself. The purge page is the one thing worth pressing.
     const warning = zh
-      ? `${culprit} 这家公共 DNS 正把你的远程地址记成「不存在」。用它解析的设备暂时打不开 Vaenyx —— 设备没坏,通常几小时自愈。可以先到 ${purge} 清一下缓存(有时管用);可靠的修法是把那台设备的 DNS 换到健康的那家。`
-      : `The public resolver ${culprit} is currently answering "does not exist" for your remote address. Devices using it cannot open Vaenyx for now — nothing is broken on them, and it usually clears within hours. You can try ${purge} to clear the cache (sometimes works); the reliable fix is pointing that device at the healthy resolver.`;
+      ? `${culprit} 这家公共 DNS 暂时找不到你的远程地址,家里用它的设备暂时打不开 Vaenyx;通常几小时自愈,急的话到 ${purge} 清一下缓存。`
+      : `${culprit} cannot find your remote address right now, so devices using that DNS cannot open Vaenyx; it usually clears within hours, or press ${purge} to clear the cache.`;
     // The full warning lives in the Owner's main conversation (2026-08-30:
     // 任何通知都是主对话告诉我); the push announces it, to the Owner's own
     // (User Mode) devices.
     postInboxNote(
       database,
       null,
-      zh ? `远程地址预警:\n• ${warning}` : `Remote address warning:\n• ${warning}`,
+      zh ? `远程地址预警:${warning}` : `Remote address warning: ${warning}`,
     );
     // "test" category on purpose: it is the always-send lane, and a warning
     // that some devices cannot reach the app must not depend on a preference

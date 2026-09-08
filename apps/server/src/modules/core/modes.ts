@@ -9,6 +9,7 @@ import type {
   CreateModeRequest,
   DeviceMode,
   Mode,
+  ModeDigest,
   ModeVoice,
   UpdateModeRequest,
 } from "@vaenyx/contracts";
@@ -475,17 +476,20 @@ export function runDueModeDigests(database: DatabaseHandle): void {
         .get(row.id, since) as { n: number }
     ).n;
 
-    // Refusals since the last digest: the count of times this mode's rules
-    // made the model decline an answer (recorded by the chat path).
-    const refusals = (
-      database.sqlite
-        .prepare(
-          `SELECT COUNT(*) AS n FROM audit_events
-           WHERE action = 'mode.rules.refused' AND resource_id = ?
-             AND created_at > strftime('%Y-%m-%d %H:%M:%S', ?)`,
-        )
-        .get(row.id, since) as { n: number }
-    ).n;
+    // Refusals since the last digest: every time this mode's rules made the
+    // model decline an answer (recorded by the chat path, question included).
+    const refusedRows = database.sqlite
+      .prepare(
+        `SELECT reason FROM audit_events
+         WHERE action = 'mode.rules.refused' AND resource_id = ?
+           AND created_at > strftime('%Y-%m-%d %H:%M:%S', ?)
+         ORDER BY created_at ASC LIMIT 20`,
+      )
+      .all(row.id, since) as { reason: string }[];
+    const refusals = refusedRows.length;
+    const refusedQuestions = refusedRows
+      .map((item) => refusedQuestionFromReason(item.reason))
+      .filter((item): item is string => Boolean(item));
 
     database.sqlite
       .prepare("UPDATE modes SET digest_last_at = ? WHERE id = ?")
@@ -505,23 +509,44 @@ export function runDueModeDigests(database: DatabaseHandle): void {
     const cadenceWord = zh
       ? (cadenceWords[row.digest_cadence] ?? row.digest_cadence)
       : row.digest_cadence;
-    const note = zh
+    // The summary IS the report (Oskar, 2026-09-08: 不需要太具体的,就说发了
+    // 多少信息都 normal): one line when nothing left the rules, the refused
+    // questions listed when something did. No model, no reading of the
+    // mode's chats. Kept in mode_digests so Settings → Modes can show it.
+    const summary = zh
       ? [
-          `模式「${row.name}」${cadenceWord}汇报:`,
-          `• ${chats} 个对话里共 ${messages} 条消息`,
-          ...(refusals > 0 ? [`• ${refusals} 次提问被这个模式的规则拒答`] : []),
-          `• 打开 Modes → View Activity 可以看全部内容`,
+          refusals === 0
+            ? `${chats} 个对话共 ${messages} 条消息,全部在规则内。`
+            : `${chats} 个对话共 ${messages} 条消息,${refusals} 次被规则拒答:`,
+          ...refusedQuestions.map((question) => `• ${question}`),
         ].join("\n")
       : [
-          `Mode "${row.name}" — ${cadenceWord} report:`,
-          `• ${messages} message${messages === 1 ? "" : "s"} across ${chats} chat${chats === 1 ? "" : "s"}`,
-          ...(refusals > 0
-            ? [
-                `• ${refusals} question${refusals === 1 ? "" : "s"} refused by this mode's rules`,
-              ]
-            : []),
-          `• Open Modes → View Activity to read everything`,
+          refusals === 0
+            ? `${messages} message${messages === 1 ? "" : "s"} across ${chats} chat${chats === 1 ? "" : "s"}, all within the rules.`
+            : `${messages} message${messages === 1 ? "" : "s"} across ${chats} chat${chats === 1 ? "" : "s"}, ${refusals} refused by the rules:`,
+          ...refusedQuestions.map((question) => `• ${question}`),
         ].join("\n");
+    database.sqlite
+      .prepare(
+        `INSERT INTO mode_digests (id, mode_id, cadence, period_start, period_end,
+           messages, chats, refusals, summary, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        randomUUID(),
+        row.id,
+        row.digest_cadence,
+        since,
+        new Date(now).toISOString(),
+        messages,
+        chats,
+        refusals,
+        summary,
+        new Date(now).toISOString(),
+      );
+    const note = zh
+      ? `模式「${row.name}」${cadenceWord}汇报:${refusals === 0 ? "" : "\n"}${summary}`
+      : `Mode "${row.name}" — ${cadenceWord} report: ${refusals === 0 ? "" : "\n"}${summary}`;
     postInboxNote(database, null, note);
     void sendPushToAllDevices(
       database,
@@ -538,6 +563,51 @@ export function runDueModeDigests(database: DatabaseHandle): void {
       { modeId: null },
     ).catch(() => undefined);
   }
+}
+
+/** The question a refusal audit row carries, when it carries one. Older rows
+ *  (before 2026-09-08) hold only the fixed sentence and yield nothing. */
+function refusedQuestionFromReason(reason: string): string | null {
+  const marker = "Refused by the mode's rules: ";
+  return reason.startsWith(marker) ? reason.slice(marker.length).trim() : null;
+}
+
+/** A mode's past reports, newest first. */
+export function listModeDigests(
+  database: DatabaseHandle,
+  modeId: string,
+): ModeDigest[] {
+  const rows = database.sqlite
+    .prepare(
+      `SELECT id, mode_id, cadence, period_start, period_end, messages, chats,
+         refusals, summary, created_at
+       FROM mode_digests WHERE mode_id = ?
+       ORDER BY created_at DESC LIMIT 60`,
+    )
+    .all(modeId) as {
+    id: string;
+    mode_id: string;
+    cadence: string;
+    period_start: string;
+    period_end: string;
+    messages: number;
+    chats: number;
+    refusals: number;
+    summary: string;
+    created_at: string;
+  }[];
+  return rows.map((row) => ({
+    id: row.id,
+    modeId: row.mode_id,
+    cadence: row.cadence as ModeDigest["cadence"],
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    messages: row.messages,
+    chats: row.chats,
+    refusals: row.refusals,
+    summary: row.summary,
+    createdAt: row.created_at,
+  }));
 }
 
 // Deleting a mode returns its content to User Mode (spec's fallback rule —

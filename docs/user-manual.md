@@ -198,7 +198,7 @@ Read this inside the app: **Settings → Manual**.
   source remains. The chosen transcript and Memory change succeed together or
   neither does. Shared Routines, manual Project Memory, Project instructions
   and Owner connections are never removed by this choice.
-- **Search old Conversations** — press **Search Conversations** under **New**
+- **Search old Conversations** — press the magnifier beside **New**
   (or `Ctrl/Cmd + K`), type keywords, or put an exact phrase in double quotes.
   Search checks titles, purposes and messages. Results include active, pinned,
   Inbox and Archived Conversations; tap one to open the match. Search stays on
@@ -858,12 +858,14 @@ Read this inside the app: **Settings → Manual**.
   buzzes that mode's devices, and your own devices hear nothing of it — and
   the other way round. A device bound to no mode counts as yours (User Mode).
 - **The mode reports to your main conversation.** The periodic summary you set
-  on a mode's card (daily / weekly / monthly) arrives as a message in the
-  conversation Vaenyx speaks from — messages, chats, and how many questions
-  its rules refused — with a push that just says it is there. Every time the
-  rules refuse a question, a note lands there too, immediately, with the
-  question and the time. Anything Vaenyx needs to tell you arrives in that
-  same conversation.
+  on a mode's card (daily / weekly / monthly) arrives as one line in the
+  conversation Vaenyx speaks from: how many messages and chats, and "all
+  within the rules" — or the questions its rules refused, listed. A push just
+  says it is there. Every report is kept: **Settings → Modes → Summary** on
+  the mode's card shows them, so you never have to enter the mode to know
+  what happened. Every time the rules refuse a question, a note lands in the
+  main conversation too, immediately, with the question and the time.
+  Anything Vaenyx needs to tell you arrives in that same conversation.
 - **Leave a mode** — the badge at the top of the screen.
 - **Modes you already made** — a mode you made before this existed adds no
   restriction of its own until you open **What It May Do** and switch something
@@ -986,5 +988,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.12** · last updated 2026-09-05.
+Manual for **v0.4.12** · last updated 2026-09-08.
 Keep this file up to date whenever a feature changes.

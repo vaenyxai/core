@@ -62,6 +62,7 @@ import type {
   LibraryRoutineSummary,
   MethodDraft,
   Mode,
+  ModeDigest,
   CreateModeRequest,
   UpdateModeRequest,
   ModeCapabilities,
@@ -115,6 +116,7 @@ import { formatOwnerSafeError, type OwnerSafeError } from "@vaenyx/contracts";
 
 export type {
   Mode,
+  ModeDigest,
   ModeCapabilities,
   DeviceMode,
   UpdateStatus,
@@ -1678,6 +1680,11 @@ export function applyDeviceMode(
 
 export function fetchModeThreads(modeId: string): Promise<VaenyxThread[]> {
   return requestJson<VaenyxThread[]>(`/v1/modes/${modeId}/threads`);
+}
+
+/** A mode's past periodic reports, newest first. */
+export function fetchModeDigests(modeId: string): Promise<ModeDigest[]> {
+  return requestJson<ModeDigest[]>(`/v1/modes/${modeId}/digests`);
 }
 
 export function switchMode(

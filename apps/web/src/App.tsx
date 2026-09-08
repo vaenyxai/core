@@ -69,6 +69,7 @@ import type {
   TaskRunProgress,
   VaenyxMeCandidate,
   VaenyxThread,
+  ModeDigest,
   Workspace,
   RelayPanel as RelayPanelData,
   RelaySettings,
@@ -258,6 +259,7 @@ import {
   updateMode,
   switchMode,
   exitMode,
+  fetchModeDigests,
   fetchModeThreads,
   fetchModeCapabilities,
   updateModeCapabilities,
@@ -4803,6 +4805,23 @@ function ModesPanel() {
   // Speaking row's engine offers right now — the engine and the model are
   // not the mode's to change. Read once, when the editor opens.
   const [editVoice, setEditVoice] = useState<ModeVoice | null>(null);
+  // Past reports of one mode, opened from its card (Oskar, 2026-09-08): the
+  // Owner reads the summary here and never has to enter the mode.
+  const [digestFor, setDigestFor] = useState<string | null>(null);
+  const [digests, setDigests] = useState<ModeDigest[] | null>(null);
+  async function toggleDigests(modeId: string) {
+    if (digestFor === modeId) {
+      setDigestFor(null);
+      return;
+    }
+    setDigestFor(modeId);
+    setDigests(null);
+    try {
+      setDigests(await fetchModeDigests(modeId));
+    } catch {
+      setDigests([]);
+    }
+  }
   const [voiceOutput, setVoiceOutput] = useState<VoiceOutputStatus | null>(
     null,
   );
@@ -5227,6 +5246,13 @@ function ModesPanel() {
                   <span className="modes-card-buttons">
                     <button
                       className="text-button"
+                      onClick={() => void toggleDigests(mode.id)}
+                      type="button"
+                    >
+                      {digestFor === mode.id ? "Hide Summary" : "Summary"}
+                    </button>
+                    <button
+                      className="text-button"
                       disabled={busy}
                       onClick={() =>
                         editFor === mode.id ? setEditFor(null) : startEdit(mode)
@@ -5265,6 +5291,31 @@ function ModesPanel() {
                     )}
                   </span>
                 </div>
+                {digestFor === mode.id ? (
+                  <div className="mode-digests">
+                    {digests === null ? (
+                      <p className="library-note">
+                        {lang === "zh" ? "读取中…" : "Loading…"}
+                      </p>
+                    ) : digests.length === 0 ? (
+                      <p className="library-note">
+                        {lang === "zh"
+                          ? "还没有汇报。汇报按卡片上设的周期(每日 / 每周 / 每月)产生。"
+                          : "No reports yet. They arrive on the cadence set on this card (daily / weekly / monthly)."}
+                      </p>
+                    ) : (
+                      digests.map((digest) => (
+                        <article className="mode-digest" key={digest.id}>
+                          <p className="mode-digest-when">
+                            {digest.periodStart.slice(0, 10)} →{" "}
+                            {digest.periodEnd.slice(0, 10)}
+                          </p>
+                          <p className="mode-digest-summary">{digest.summary}</p>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                ) : null}
                 {editFor === mode.id ? (
                   <div className="memory-form">
                     <label>
@@ -19348,7 +19399,6 @@ function VaenyxMeLedger({
                   <span className="me-ledger-kind">
                     {zh ? "变化" : "Change"}
                   </span>
-                  <code>{candidate.proposedSlot}</code>
                   <span className="me-ledger-change-line me-ledger-change-old">
                     {zh ? "原来:" : "Was: "}
                     {candidate.currentValue}
@@ -19362,26 +19412,16 @@ function VaenyxMeLedger({
                   </span>
                 </p>
               ) : (
+                /* ONE SENTENCE (Oskar, 2026-09-08): the claim alone, in the
+                   language it was said in. The slot name is bookkeeping and
+                   never shown; "since" stays only when a date was said. */
                 <p className="me-ledger-claim">
-                  {candidate.proposedSlot ? (
-                    <>
-                      <span className="me-ledger-kind">
-                        {zh ? "想记住" : "Wants to remember"}
-                      </span>{" "}
-                      <code>{candidate.proposedSlot}</code> ={" "}
-                      {candidate.proposedValue}
-                      {candidate.proposedEventTime
-                        ? ` · ${zh ? "从" : "since"} ${candidate.proposedEventTime}`
-                        : ""}
-                    </>
-                  ) : (
-                    <>
-                      <span className="me-ledger-kind">
-                        {zh ? "读出来的" : "Read as"}
-                      </span>{" "}
-                      {candidate.proposedSummary}
-                    </>
-                  )}
+                  {candidate.proposedSlot
+                    ? candidate.proposedValue
+                    : candidate.proposedSummary}
+                  {candidate.proposedSlot && candidate.proposedEventTime
+                    ? ` · ${zh ? "从" : "since"} ${candidate.proposedEventTime}`
+                    : ""}
                 </p>
               )}
               {/* Two actions, not four, and no percentage. Real buttons, not
@@ -26365,12 +26405,13 @@ function ConversationSearch({
     <>
       <button
         aria-keyshortcuts="Control+K Meta+K"
+        aria-label={zh ? "搜索对话" : "Search Conversations"}
         className="conversation-search-trigger"
         onClick={() => setOpen(true)}
+        title={zh ? "搜索对话 (Ctrl K)" : "Search Conversations (Ctrl K)"}
         type="button"
       >
-        <span>{zh ? "搜索对话" : "Search Conversations"}</span>
-        <kbd>Ctrl K</kbd>
+        <IconSearch />
       </button>
       {open ? (
         <Modal
@@ -26716,6 +26757,26 @@ function ThreadList({
  *  every other icon in the app — the house rule is no emoji, and a moon is the
  *  quiet end of the icon set, which is the point: it is there at night, and it
  *  is not shouting. */
+function IconSearch() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="line-icon"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3.5-3.5" />
+    </svg>
+  );
+}
+
 function IconMoon() {
   return (
     <svg
@@ -26751,41 +26812,61 @@ function SidebarInboxRow({
   inbox,
   liveTitle,
   selected,
+  meSelected,
   onOpen,
+  onOpenMe,
 }: {
   inbox: InboxSummary | null;
   // The agent name as Settings has it RIGHT NOW. The stored title is only the
   // fallback, because it is written once and goes stale on rename.
   liveTitle: string | null;
   selected: boolean;
+  meSelected: boolean;
   onOpen: (conversationId: string, threadId: string) => void;
+  onOpenMe: () => void;
 }) {
   const { lang } = useI18n();
   const zh = lang === "zh";
   if (!inbox) return null;
+  // ONE BLOCK, TWO DOORS (Oskar, 2026-09-08): the left third is Vaenyx Me —
+  // what Vaenyx knows about the Owner — the right two thirds the permanent
+  // conversation, with a slanted divider between them so it reads as one
+  // object rather than two buttons. The waiting count stays at the far right.
   return (
-    <button
-      className={`sidebar-inbox${selected ? " active" : ""}`}
-      onClick={() => onOpen(inbox.conversationId, inbox.threadId)}
-      type="button"
-    >
-      <IconMoon />
-      <span className="sidebar-inbox-title">{liveTitle || inbox.title}</span>
-      {inbox.waiting > 0 ? (
-        <span
-          className="sidebar-inbox-count"
-          title={zh ? "等你看的" : "Waiting for you"}
-        >
-          {inbox.waiting}
-        </span>
-      ) : null}
-    </button>
+    <div className="sidebar-inbox-split">
+      <button
+        className={`sidebar-inbox-me${meSelected ? " active" : ""}`}
+        onClick={onOpenMe}
+        title="Vaenyx Me"
+        type="button"
+      >
+        <span>Me</span>
+      </button>
+      <button
+        className={`sidebar-inbox${selected ? " active" : ""}`}
+        onClick={() => onOpen(inbox.conversationId, inbox.threadId)}
+        type="button"
+      >
+        <IconMoon />
+        <span className="sidebar-inbox-title">{liveTitle || inbox.title}</span>
+        {inbox.waiting > 0 ? (
+          <span
+            className="sidebar-inbox-count"
+            title={zh ? "等你看的" : "Waiting for you"}
+          >
+            {inbox.waiting}
+          </span>
+        ) : null}
+      </button>
+    </div>
   );
 }
 
 function SidebarThreadTree({
   inbox,
   inboxTitle,
+  meSelected,
+  onOpenMe,
   selectedThreadId,
   workspace,
   onOpenChat,
@@ -26819,6 +26900,8 @@ function SidebarThreadTree({
     previews: ConversationForgetPreview[],
   ) => Promise<boolean>;
   onNewChatInProject: (projectId: string) => void;
+  meSelected: boolean;
+  onOpenMe: () => void;
 }) {
   const { lang, t } = useI18n();
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -26971,7 +27054,9 @@ function SidebarThreadTree({
       <SidebarInboxRow
         inbox={inbox}
         liveTitle={inboxTitle}
+        meSelected={meSelected}
         onOpen={onOpenChat}
+        onOpenMe={onOpenMe}
         selected={selectedThreadId === inbox?.threadId}
       />
       {namedProjects.length > 0 ? (
@@ -28259,13 +28344,18 @@ function VaenyxWorkspace({
             >
               <span className="nav-label">New</span>
             </button>
+            {/* The magnifier beside New IS the search (Oskar, 2026-09-08):
+                the full-width "Search Conversations" button spent a row on
+                a thing an icon says. Ctrl/Cmd+K still opens it. */}
+            <ConversationSearch onOpen={openConversationSearchResult} />
           </div>
-          <ConversationSearch onOpen={openConversationSearchResult} />
           {/* The Scheduled block is gone (Oskar, 2026-08-09). It sat between
               New and the permanent conversation, pushing both down for a list
               that lives on the Scheduled screen anyway. */}
           <SidebarThreadTree
             onNewChatInProject={(projectId) => void newChatInProject(projectId)}
+            meSelected={screen === "vaenyx-me"}
+            onOpenMe={() => openScreen("vaenyx-me")}
             inbox={inbox}
             inboxTitle={
               workspace.mode?.agentName?.trim() ||

@@ -386,6 +386,8 @@ export function extractionPrompt(
     "Skip anything passing, hypothetical, or about somebody who is not the Owner's household.",
     "Skip passwords, keys, card numbers and document numbers entirely.",
     "",
+    "value is ONE short complete sentence about the Owner, written in the same language as the message it came from (a Chinese message gives a Chinese sentence). No labels, no slot names inside it.",
+    "",
     "When the message says WHEN something became true, give event_time as far as it is stated:",
     '"we moved last March" in 2026 means event_time 2025-03. Leave it out if unstated.',
     "",
