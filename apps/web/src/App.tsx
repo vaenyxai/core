@@ -15537,10 +15537,11 @@ function ModelsPanel({
       );
     }
   }
-  function renderFinder(provider: ModelProviderInfo) {
+  // The finder's pieces live on the card's ONE row of controls (Oskar,
+  // 2026-09-06: 所有按钮选择放在第二行): the model menu, Test, Use / Stop
+  // using — then the card's own buttons. Its status is the line under it.
+  function finderSelection(provider: ModelProviderInfo) {
     const state = finderState(provider.id);
-    if (!state.open) return null;
-    const zh = lang === "zh";
     const adoptedIds = (adopted?.adopted[provider.id] ?? []).map(
       (entry) => entry.id,
     );
@@ -15556,101 +15557,117 @@ function ModelsPanel({
       state.selected && ids.includes(state.selected)
         ? state.selected
         : (ids[0] ?? null);
-    const test = selected ? tests[selected] : undefined;
-    const inUse = selected ? adoptedIds.includes(selected) : false;
-    let verdict = "";
-    if (selected) {
-      if (!test) verdict = zh ? "还没测过" : "Not tested yet";
-      else if (test.status === "ok") {
-        const who = test.model
-          ? test.modelReportedByEngine
-            ? (zh ? "引擎回报 " : "engine reported ") + test.model
-            : (zh ? "按 " : "as ") + test.model
-          : zh
-            ? "有回答"
-            : "answered";
-        verdict =
-          "✓ " +
-          who +
-          " · " +
-          (test.durationMs / 1000).toFixed(1) +
-          " s · " +
-          new Date(test.timestamp).toLocaleString();
-      } else verdict = "✗ " + test.message;
-    }
+    return {
+      state,
+      adoptedIds,
+      ids,
+      selected,
+      test: selected ? tests[selected] : undefined,
+      inUse: selected ? adoptedIds.includes(selected) : false,
+    };
+  }
+  function finderControls(provider: ModelProviderInfo) {
+    const { state, adoptedIds, ids, selected, test, inUse } =
+      finderSelection(provider);
+    if (!state.open || !selected) return null;
+    const zh = lang === "zh";
     return (
-      <div className="model-finder">
-        {state.loading ? (
-          <p className="settings-card-copy">
-            {zh ? "正在问这个账号…" : "Asking the account…"}
-          </p>
+      <>
+        <Picker
+          ariaLabel={zh ? "型号" : "Model"}
+          className="model-finder-select"
+          disabled={state.testing !== null}
+          onChange={(next) => patchFinder(provider.id, { selected: next })}
+          options={ids.map((id) => ({
+            label: adoptedIds.includes(id)
+              ? id + (zh ? " · 使用中" : " · in use")
+              : id,
+            value: id,
+          }))}
+          value={selected}
+        />
+        <button
+          className="capability-row-test"
+          disabled={state.testing !== null}
+          onClick={() => void testModel(provider, selected)}
+          type="button"
+        >
+          {state.testing === selected
+            ? zh
+              ? "测试中…"
+              : "Testing…"
+            : zh
+              ? "测一次"
+              : "Test"}
+        </button>
+        {inUse ? (
+          <button
+            className="capability-row-test"
+            onClick={() => void useModel(provider, selected, false)}
+            type="button"
+          >
+            {zh ? "取消使用" : "Stop using"}
+          </button>
+        ) : test?.status === "ok" ? (
+          <button
+            className="capability-row-test"
+            onClick={() => void useModel(provider, selected, true)}
+            type="button"
+          >
+            {zh ? "使用" : "Use"}
+          </button>
         ) : null}
-        {state.error ? <p className="form-error">{state.error}</p> : null}
-        {!state.loading && !state.error && ids.length === 0 ? (
-          <p className="settings-card-copy">
-            {zh ? "没有列出任何型号。" : "No models listed."}
-          </p>
-        ) : null}
-        {selected ? (
-          <>
-            <div className="model-finder-row">
-              <Picker
-                ariaLabel={zh ? "型号" : "Model"}
-                disabled={state.testing !== null}
-                onChange={(next) => patchFinder(provider.id, { selected: next })}
-                options={ids.map((id) => ({
-                  label: adoptedIds.includes(id)
-                    ? id + (zh ? " · 使用中" : " · in use")
-                    : id,
-                  value: id,
-                }))}
-                value={selected}
-              />
-              <button
-                className="capability-row-test"
-                disabled={state.testing !== null}
-                onClick={() => void testModel(provider, selected)}
-                type="button"
-              >
-                {state.testing === selected
-                  ? zh
-                    ? "测试中…"
-                    : "Testing…"
-                  : zh
-                    ? "测一次"
-                    : "Test"}
-              </button>
-              {inUse ? (
-                <button
-                  className="capability-row-test"
-                  onClick={() => void useModel(provider, selected, false)}
-                  type="button"
-                >
-                  {zh ? "取消使用" : "Stop using"}
-                </button>
-              ) : test?.status === "ok" ? (
-                <button
-                  className="capability-row-test"
-                  onClick={() => void useModel(provider, selected, true)}
-                  type="button"
-                >
-                  {zh ? "使用" : "Use"}
-                </button>
-              ) : null}
-            </div>
-            <p
-              className={
-                test ? "model-finder-result " + test.status : "model-finder-result"
-              }
-            >
-              {verdict}
-            </p>
-          </>
-        ) : null}
-      </div>
+      </>
     );
   }
-  const [editingId, setEditingId] = useState<string | null>(null);
+  function finderStatus(provider: ModelProviderInfo) {
+    const { state, ids, selected, test } = finderSelection(provider);
+    if (!state.open) return null;
+    const zh = lang === "zh";
+    if (state.loading) {
+      return (
+        <p className="model-finder-result">
+          {zh ? "正在问这个账号…" : "Asking the account…"}
+        </p>
+      );
+    }
+    if (state.error) return <p className="form-error">{state.error}</p>;
+    if (ids.length === 0) {
+      return (
+        <p className="model-finder-result">
+          {zh ? "没有列出任何型号。" : "No models listed."}
+        </p>
+      );
+    }
+    if (!selected) return null;
+    let verdict: string;
+    if (!test) verdict = zh ? "还没测过" : "Not tested yet";
+    else if (test.status === "ok") {
+      const who = test.model
+        ? test.modelReportedByEngine
+          ? (zh ? "引擎回报 " : "engine reported ") + test.model
+          : (zh ? "按 " : "as ") + test.model
+        : zh
+          ? "有回答"
+          : "answered";
+      verdict =
+        "✓ " +
+        who +
+        " · " +
+        (test.durationMs / 1000).toFixed(1) +
+        " s · " +
+        new Date(test.timestamp).toLocaleString();
+    } else verdict = "✗ " + test.message;
+    return (
+      <p
+        className={
+          test ? "model-finder-result " + test.status : "model-finder-result"
+        }
+      >
+        {verdict}
+      </p>
+    );
+  }  const [editingId, setEditingId] = useState<string | null>(null);
   // Disconnecting drops a stored key — ask first (Oskar, dev.171).
   const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(
     null,
@@ -16362,6 +16379,7 @@ function ModelsPanel({
                 {/* Every action in one row — find models, sign in, main, key,
                     disconnect. Test and Use sit on each found model below. */}
                 <div className="model-card-actions">
+                  {finderControls(provider)}
                   <button
                     className="capability-row-test"
                     onClick={() => void openFinder(provider)}
@@ -16469,7 +16487,7 @@ function ModelsPanel({
                     ) : null}
                   </>
                 ) : null}
-                {renderFinder(provider)}
+                {finderStatus(provider)}
                 {bodyOpen(provider) && provider.kind !== "cli-login"
                   ? renderConnectForm(provider)
                   : null}
