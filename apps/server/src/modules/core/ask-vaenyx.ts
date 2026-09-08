@@ -1388,7 +1388,6 @@ export async function createAskVaenyxMessage(
   // The analysed photo, echoed back with the answer (marked) — see the
   // parallel marking below.
   let echoImageId: string | null = null;
-  let echoMarks: Promise<unknown> | null = null;
 
   const baseContext = getConversationProjectContext(database, conversationId);
   let projectContext = baseContext;
@@ -1893,43 +1892,12 @@ export async function createAskVaenyxMessage(
       ? [projectContext, photoContext].filter(Boolean).join("\n\n")
       : projectContext;
 
-    // The photo is the Owner's message and the reply does NOT carry it again
-    // (Oskar, 2026-08-31: 不要再带照片了,照片就是我发的那一张图 — reversing
-    // 2026-07-29's echo). The MARKS survive: they key on the image id, and the
-    // Owner's own bubble shows the same picture, so the dots and names land on
-    // the photo he sent instead of on a duplicate. The marking still runs in
-    // parallel with the model call.
-    if (
-      options?.imageId &&
-      options.dataDirectory &&
-      options.secretsDirectory &&
-      !visionRefused
-    ) {
-      const photoId = options.imageId;
-      const found = readImage(options.dataDirectory, photoId);
-      const secrets = options.secretsDirectory;
-      if (found) {
-        echoMarks = annotateImage(
-          secrets,
-          found.image,
-          found.mimeType,
-          /[一-鿿]/.test(content) ? "zh" : "en",
-        )
-          .then(({ value: items }) => {
-            database.sqlite
-              .prepare(
-                `INSERT INTO image_annotations (image_id, items, created_at)
-                 VALUES (?, ?, ?)
-                 ON CONFLICT(image_id) DO UPDATE SET items = excluded.items,
-                   created_at = excluded.created_at`,
-              )
-              .run(photoId, JSON.stringify(items), new Date().toISOString());
-          })
-          .catch(() => {
-            // Best-effort: the reply still echoes the photo, just unmarked.
-          });
-      }
-    }
+    // A photo sent in chat is NOT marked on its own (Oskar, 2026-09-08: 用户
+    // 上传的图片没有必要把标注做出来). The model still reads the picture for
+    // its reply; the dots-and-names pass is a second vision call that only
+    // runs when the Owner asks for marks (below) or when a Routine's own step
+    // needs them. Every photo used to be marked in parallel with the reply,
+    // which doubled the vision traffic for pictures nobody wanted annotated.
 
     // Marking a photo — the judge understood the Owner wants the things in an
     // existing photo pointed out ON the picture ("标出来", any wording). Runs
@@ -2182,16 +2150,6 @@ export async function createAskVaenyxMessage(
     generatedImageId = null;
     echoImageId = null;
   }
-  // Let the parallel marking land before the reply is written, so the echoed
-  // photo appears already marked instead of popping its dots in a moment
-  // later. Best-effort — a slow engine never blocks the answer for long.
-  if (echoMarks) {
-    await Promise.race([
-      echoMarks,
-      new Promise((resolveRace) => setTimeout(resolveRace, 8000)),
-    ]);
-  }
-
   const assistantMessageId = randomUUID();
   const completedAt = new Date().toISOString();
 

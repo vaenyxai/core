@@ -938,7 +938,7 @@ the message first.
 | "the mode you are in does not allow it"                | That mode was narrowed, and nothing inside it can widen it. Leave the mode (the badge at the top), then Settings → Modes → that mode → What It May Do. |
 | "this app key was not given that"                      | The app knocked with its own Token. Library → Token → that key → What It May Do, and tick it.                                                          |
 | "no app key can ever be given that"                    | Fetching, and no key can hold it — not a setting, a rule. Do that job from a chat instead.                                                             |
-| Photo comes back with no marks                         | The Vision row has no engine or is switched off, or the model found nothing to mark.                                                                   |
+| You asked for marks and the photo has none             | The Vision row has no engine or is switched off, or the model found nothing to mark.                                                                   |
 | A PDF asks about pages first                           | Over ten pages, on purpose. It is telling you the cost before spending it.                                                                             |
 | Your app gets a free model instead of the subscription | The door is closed, the device is off the network, or the app has not signed in to a subscription yet.                                                 |
 | A Relay capability is grey                            | Press **Test all capabilities**. Read `NOT_CONNECTED`, `NOT_PROBED`, the probe failure, or the honest not-implemented reason on that engine.          |
