@@ -451,7 +451,7 @@ export function searchConversations(
        LEFT JOIN modes ON modes.id = conversations.mode_id
        WHERE conversations.owner_id = ?
          AND (? IS NULL OR conversations.mode_id = ?)
-         AND threads.kind IN ('chat', 'inbox')
+         AND threads.kind IN ('chat', 'inbox', 'me')
          AND ${metadataWhere}
        ORDER BY threads.updated_at DESC, threads.id ASC
        LIMIT ?`,

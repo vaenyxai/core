@@ -582,7 +582,11 @@ import {
   toFolderId,
 } from "../core/fork-method.js";
 import { listExampleProvenance } from "../core/example-origin.js";
-import { ensureInboxThread, postInboxNote } from "../core/inbox-thread.js";
+import {
+  ensureInboxThread,
+  ensureMeThread,
+  postInboxNote,
+} from "../core/inbox-thread.js";
 import {
   clearRegression,
   listRegressions,
@@ -12233,11 +12237,15 @@ export async function registerGatewayRoutes(
           .get(modeId) as { n: number }
       ).n;
 
+      const me = ensureMeThread(context.database, owner.id, modeId);
+
       return {
         conversationId: inbox.conversationId,
         threadId: inbox.id,
         title,
         waiting,
+        meConversationId: me.conversationId,
+        meThreadId: me.id,
       };
     },
   );

@@ -43,6 +43,14 @@ import {
 } from "./vaenyx-me-merge.js";
 
 import { getDefaultProvider } from "../models/registry.js";
+import { FACT_SLOTS } from "./fact-slots.js";
+import {
+  extractionPrompt,
+  markExtractionRun,
+  parseProposedFacts,
+  queueProposedFacts,
+  type OwnerMessage,
+} from "./facts-extract.js";
 
 interface VaenyxMeItemRow {
   id: string;
@@ -573,6 +581,81 @@ export async function scanVaenyxMeFromChats(
   }
 
   return { created };
+}
+
+/**
+ * The Vaenyx Me conversation (Oskar, 2026-09-08): the Owner puts something
+ * about themselves in, and every durable thing in it becomes a card to keep
+ * or refuse. Runs AFTER the reply has been sent, never on the reply path,
+ * and proposes only — nothing here is believed until approved.
+ *
+ * Two readings of the same message: facts (slot + value, the extractor the
+ * nightly pass uses) and one trait, both tied to the message they came from
+ * so the card can quote it. The nightly pass is told this message is done so
+ * it is not read twice.
+ */
+export async function learnFromMeMessage(
+  database: DatabaseHandle,
+  ownerId: string,
+  modeId: string | null,
+  conversationId: string,
+  message: OwnerMessage,
+): Promise<{ facts: number; traits: number }> {
+  const result = { facts: 0, traits: 0 };
+  if (!message.content.trim()) return result;
+  try {
+    const answer = await getDefaultProvider().sendChat(
+      [
+        {
+          content: extractionPrompt([...FACT_SLOTS], [message]),
+          role: "owner",
+        },
+      ],
+      undefined,
+      { allowWeb: false },
+    );
+    result.facts = queueProposedFacts(database, {
+      conversationId,
+      modeId,
+      ownerId,
+      proposals: parseProposedFacts(answer.answer),
+      sourceMessages: [message],
+    });
+  } catch {
+    // A failed reading proposes nothing; the Owner can say it again.
+  }
+  try {
+    const trait = await extractTrait(
+      `Something the Owner told Vaenyx about themselves:\n${message.content.slice(0, 2500)}`,
+      message.content.slice(0, 200),
+    );
+    if (trait) {
+      createVaenyxMeCandidate(
+        database,
+        {
+          category: trait.category,
+          title: trait.title,
+          proposedSummary: trait.summary,
+          proposedEvidence: trait.evidence,
+          sourceType: "chat_history",
+          sourceId: conversationId,
+          sourceMessageId: message.id,
+          confidence: 60,
+          modeId,
+        },
+        ownerId,
+      );
+      result.traits = 1;
+    }
+  } catch {
+    // Same: silence here costs one proposal, never the conversation.
+  }
+  try {
+    markExtractionRun(database, conversationId, message.id);
+  } catch {
+    // Bookkeeping only.
+  }
+  return result;
 }
 
 // Run every auto-learn source the Owner has, returning the total proposed.

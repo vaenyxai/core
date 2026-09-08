@@ -419,6 +419,7 @@ export const ConversationSearchResultSchema = Type.Object(
       Type.Literal("chat"),
       Type.Literal("task"),
       Type.Literal("inbox"),
+      Type.Literal("me"),
       Type.Null(),
     ]),
     taskId: Type.Union([Type.String(), Type.Null()]),
@@ -660,6 +661,9 @@ export const InboxSummarySchema = Type.Object(
     // Zero is a real answer and means the row shows with no number on it. An
     // empty badge is a badge nobody learns to read.
     waiting: Type.Integer({ minimum: 0 }),
+    // The Mode's Vaenyx Me conversation, made on first ask like the inbox.
+    meConversationId: Type.String(),
+    meThreadId: Type.String(),
   },
   { additionalProperties: false },
 );
@@ -674,6 +678,9 @@ export const VaenyxThreadKindSchema = Type.Union([
   // never inferred from a title or a hardcoded id, because both of those are
   // things an Owner can change.
   Type.Literal("inbox"),
+  // The Owner's Vaenyx Me conversation: what they tell Vaenyx about
+  // themselves. One per Mode, protected exactly like the inbox.
+  Type.Literal("me"),
 ]);
 
 export const VaenyxThreadStatusSchema = Type.Union([

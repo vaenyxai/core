@@ -15,7 +15,12 @@ import type {
 
 import type { DatabaseHandle } from "../../db/database.js";
 import { ownerSafeErrorText } from "../../runtime/owner-safe-errors.js";
-import { isProtectedThread, postInboxNote } from "./inbox-thread.js";
+import {
+  isProtectedThread,
+  permanentKindOf,
+  postInboxNote,
+} from "./inbox-thread.js";
+import { learnFromMeMessage } from "./vaenyx-me.js";
 import type { ModelProvider } from "../models/provider.js";
 import { getModelRegistry, resolveProvider } from "../models/registry.js";
 import {
@@ -1400,6 +1405,13 @@ export async function createAskVaenyxMessage(
       .filter(Boolean)
       .join("\n\n");
   }
+  // The Vaenyx Me conversation (Oskar, 2026-09-08): the Owner is telling
+  // Vaenyx about themselves, not asking for anything. The reply says what was
+  // read and stops; the cards that follow are made by learnFromMeMessage.
+  const isMeChat = permanentKindOf(database, conversationId) === "me";
+  if (isMeChat) {
+    projectContext = `This is the Owner's "Vaenyx Me" conversation. The Owner puts things about themselves here — notes, transcribed recordings, photos, documents — so that you learn who they are. Reply in the language the Owner wrote in, as at most three short lines, each starting with "• ", saying what this tells you about the Owner. No advice, no questions, no repeating the message back. If it reveals nothing about the Owner, say so in one line.${projectContext ? `\n\n${projectContext}` : ""}`;
+  }
   // A mode may name its own assistant (spec §6): tell the model who it is
   // here, so the name in the UI and the voice in the replies agree.
   if (modeRow?.agent_name.trim()) {
@@ -2240,6 +2252,18 @@ export async function createAskVaenyxMessage(
     )
     .run(completedAt, conversationId);
   touchChatThread(database, conversationId, completedAt);
+
+  // Vaenyx Me: read the message for facts and a trait AFTER the reply is
+  // out. Not awaited — the reply must never wait for the learning.
+  if (isMeChat && assistantStatus === "completed") {
+    void learnFromMeMessage(
+      database,
+      ownerId,
+      conversationModeId,
+      conversationId,
+      { id: ownerMessageId, content: trimmedContent, createdAt: now },
+    );
+  }
 
   // A mode-rules refusal tells the Owner, every time, in their main
   // conversation (Oskar, 2026-08-30: 每一次有这种情况发生,主对话都应该发一个

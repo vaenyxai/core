@@ -26,6 +26,12 @@ export interface InboxThread {
   modeId: string | null;
 }
 
+// The two permanent conversations a Mode has: the one Vaenyx speaks FROM
+// ('inbox') and the one the Owner speaks INTO about themselves ('me',
+// Oskar 2026-09-08). Both hang off kind, both are protected the same way.
+type PermanentKind = "inbox" | "me";
+export const ME_THREAD_TITLE = "Vaenyx Me";
+
 interface InboxRow {
   id: string;
   conversation_id: string | null;
@@ -37,20 +43,50 @@ export function findInboxThread(
   database: DatabaseHandle,
   modeId: string | null,
 ): InboxThread | null {
+  return findPermanentThread(database, modeId, "inbox");
+}
+
+/** The Mode's Vaenyx Me conversation, if it has been made yet. */
+export function findMeThread(
+  database: DatabaseHandle,
+  modeId: string | null,
+): InboxThread | null {
+  return findPermanentThread(database, modeId, "me");
+}
+
+function findPermanentThread(
+  database: DatabaseHandle,
+  modeId: string | null,
+  kind: PermanentKind,
+): InboxThread | null {
   const row = database.sqlite
     .prepare(
       // IS, not =, because User Mode is NULL and = never matches NULL.
       `SELECT id, conversation_id, mode_id
          FROM vaenyx_threads
-        WHERE kind = 'inbox' AND mode_id IS ?`,
+        WHERE kind = ? AND mode_id IS ?`,
     )
-    .get(modeId) as InboxRow | undefined;
+    .get(kind, modeId) as InboxRow | undefined;
   if (!row?.conversation_id) return null;
   return {
     id: row.id,
     conversationId: row.conversation_id,
     modeId: row.mode_id,
   };
+}
+
+/** Which permanent kind a conversation is, or null for an ordinary chat. */
+export function permanentKindOf(
+  database: DatabaseHandle,
+  conversationId: string,
+): PermanentKind | null {
+  const row = database.sqlite
+    .prepare(
+      `SELECT kind FROM vaenyx_threads
+        WHERE conversation_id = ? AND kind IN ('inbox', 'me')`,
+    )
+    .get(conversationId) as { kind: PermanentKind } | undefined;
+  return row?.kind ?? null;
 }
 
 /**
@@ -68,7 +104,32 @@ export function ensureInboxThread(
   modeId: string | null,
   title: string,
 ): InboxThread {
-  const existing = findInboxThread(database, modeId);
+  return ensurePermanentThread(database, ownerId, modeId, "inbox", title);
+}
+
+/** The Mode's Vaenyx Me conversation, made if it is not there yet. */
+export function ensureMeThread(
+  database: DatabaseHandle,
+  ownerId: string,
+  modeId: string | null,
+): InboxThread {
+  return ensurePermanentThread(
+    database,
+    ownerId,
+    modeId,
+    "me",
+    ME_THREAD_TITLE,
+  );
+}
+
+function ensurePermanentThread(
+  database: DatabaseHandle,
+  ownerId: string,
+  modeId: string | null,
+  kind: PermanentKind,
+  title: string,
+): InboxThread {
+  const existing = findPermanentThread(database, modeId, kind);
   if (existing) return existing;
 
   const id = randomUUID();
@@ -88,13 +149,13 @@ export function ensureInboxThread(
         `INSERT INTO vaenyx_threads
            (id, owner_id, kind, title, status, conversation_id, mode_id,
             created_at, updated_at, seen_at)
-         VALUES (?, ?, 'inbox', ?, 'pinned', ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, 'pinned', ?, ?, ?, ?, ?)`,
       )
-      .run(id, ownerId, title, id, modeId, now, now, now);
+      .run(id, ownerId, kind, title, id, modeId, now, now, now);
   } catch (error) {
     // Lost a race against another caller: the row the winner wrote is just as
     // good as the one this call wanted, so read it rather than throwing.
-    const winner = findInboxThread(database, modeId);
+    const winner = findPermanentThread(database, modeId, kind);
     if (winner) return winner;
     throw error;
   }
@@ -115,7 +176,7 @@ export function isProtectedThread(
   const row = database.sqlite
     .prepare(
       `SELECT 1 AS found FROM vaenyx_threads
-        WHERE conversation_id = ? AND kind = 'inbox'`,
+        WHERE conversation_id = ? AND kind IN ('inbox', 'me')`,
     )
     .get(conversationId) as { found: number } | undefined;
   return row !== undefined;
@@ -175,11 +236,14 @@ export function deleteInboxThreadForMode(
   database: DatabaseHandle,
   modeId: string,
 ): void {
-  const inbox = findInboxThread(database, modeId);
-  if (!inbox) return;
-  // The thread row cascades from the conversation (0013's FK), so deleting the
-  // conversation is enough and leaves nothing orphaned.
-  database.sqlite
-    .prepare("DELETE FROM ask_vaenyx_conversations WHERE id = ?")
-    .run(inbox.conversationId);
+  // Both permanent conversations go; the thread row cascades from the
+  // conversation (0013's FK), so deleting the conversation is enough and
+  // leaves nothing orphaned.
+  for (const kind of ["inbox", "me"] as const) {
+    const thread = findPermanentThread(database, modeId, kind);
+    if (!thread) continue;
+    database.sqlite
+      .prepare("DELETE FROM ask_vaenyx_conversations WHERE id = ?")
+      .run(thread.conversationId);
+  }
 }

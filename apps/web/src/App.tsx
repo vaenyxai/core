@@ -6517,6 +6517,34 @@ function AskVaenyxPanel({
   >(conversations[0]?.id ?? null);
   const activeConversationIdRef = useRef(activeConversationId);
   const [messages, setMessages] = useState<AskVaenyxMessage[]>([]);
+  // The Vaenyx Me conversation: its cards arrive a little AFTER the reply
+  // (the reading runs once the answer is out, never before it), so look
+  // again a few times after every exchange rather than once.
+  const meChatOpen =
+    inbox !== null && activeConversationId === inbox.meConversationId;
+  useEffect(() => {
+    if (!meChatOpen) return;
+    let cancelled = false;
+    const load = () => {
+      void fetchVaenyxMeCandidates()
+        .then((all) => {
+          if (cancelled) return;
+          setInboxCandidates(
+            all.filter((candidate) => candidate.status === "pending_review"),
+          );
+        })
+        .catch(() => undefined);
+    };
+    load();
+    const timers = [6_000, 15_000, 30_000, 60_000].map((ms) =>
+      window.setTimeout(load, ms),
+    );
+    return () => {
+      cancelled = true;
+      for (const timer of timers) window.clearTimeout(timer);
+    };
+  }, [meChatOpen, messages.length]);
+
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null);
@@ -10052,6 +10080,19 @@ This conversation is its home — feed it something to try it, and ask for chang
     // the Owner can change it to anything, including another chat's name.
     const isInboxChat =
       inbox !== null && activeConversationId === inbox.conversationId;
+    // The Vaenyx Me conversation, by id the same way. Its cards are the
+    // pending proposals that quote THIS conversation — nothing from elsewhere.
+    const isMeChat =
+      inbox !== null && activeConversationId === inbox.meConversationId;
+    const meCandidates = isMeChat
+      ? inboxCandidates.filter(
+          (candidate) =>
+            candidate.sourceId === inbox.meConversationId ||
+            (candidate.sources ?? []).some(
+              (source) => source.conversationId === inbox.meConversationId,
+            ),
+        )
+      : [];
     const isRoutine = Boolean(activeThread?.routineId);
     const activeRoutine = activeThread?.routineId
       ? (libraryRoutines.find(
@@ -10206,7 +10247,9 @@ This conversation is its home — feed it something to try it, and ask for chang
             <h2>
               {isInboxChat
                 ? agentName
-                : activeConversation?.title?.trim() || "Vaenyx Chat"}
+                : isMeChat
+                  ? "Vaenyx Me"
+                  : activeConversation?.title?.trim() || "Vaenyx Chat"}
             </h2>
             <ThreadChipRow
               chips={chatChips}
@@ -10230,6 +10273,15 @@ This conversation is its home — feed it something to try it, and ask for chang
                   type="button"
                 >
                   {zh ? "待确认" : "Review"} {inbox.waiting}
+                </button>
+              ) : null}
+              {isMeChat ? (
+                <button
+                  className="capability-tab"
+                  onClick={() => onGoTo("vaenyx-me")}
+                  type="button"
+                >
+                  {zh ? "我的档案" : "Profile"}
                 </button>
               ) : null}
               {renderThreadHeaderMenu(activeThread)}
@@ -11316,6 +11368,38 @@ This conversation is its home — feed it something to try it, and ask for chang
             <div className="thinking-block">
               <p className="thinking-text">{streamThinking}</p>
             </div>
+          ) : null}
+          {isMeChat && messages.length === 0 && !sending ? (
+            <div className="empty-state me-chat-intro">
+              <strong>
+                {zh ? "把关于你的东西放进来" : "Tell Vaenyx about yourself"}
+              </strong>
+              <p>
+                {zh
+                  ? "文字、录音、照片、文件都可以。Vaenyx 会说它读到了什么;值得记的每一条会变成一张卡,存不存由你定。"
+                  : "Words, a recording, a photo, a document. Vaenyx says what it read; anything worth keeping becomes a card, and only you decide what is kept."}
+              </p>
+            </div>
+          ) : null}
+          {/* THE CARDS LIVE IN THE CONVERSATION (Oskar, 2026-09-08): every
+              message in here can produce something to keep or refuse, and
+              the answer is given where the words were said. */}
+          {isMeChat && meCandidates.length > 0 ? (
+            <section className="me-chat-cards">
+              <p className="me-chat-cards-title">
+                {zh ? "要记住这些吗?" : "Keep these?"}
+              </p>
+              <VaenyxMeLedger
+                candidates={meCandidates}
+                compact
+                onApprove={(candidate) =>
+                  void answerInboxCandidate(candidate, true)
+                }
+                onReject={(candidate) =>
+                  void answerInboxCandidate(candidate, false)
+                }
+              />
+            </section>
           ) : null}
           <div className="chat-end-anchor" ref={chatEndRef} />
         </div>
@@ -26971,7 +27055,8 @@ function SidebarThreadTree({
       // Listed here too it would appear twice — and the second copy would sit
       // inside a folder that can collapse, which is everything the fixed row
       // exists to prevent (Oskar, 2026-08-09).
-      thread.kind !== "inbox",
+      thread.kind !== "inbox" &&
+      thread.kind !== "me",
   );
   const archivedThreads = workspace.threads.filter(
     (thread) => thread.status === "archived",
@@ -28354,8 +28439,19 @@ function VaenyxWorkspace({
               that lives on the Scheduled screen anyway. */}
           <SidebarThreadTree
             onNewChatInProject={(projectId) => void newChatInProject(projectId)}
-            meSelected={screen === "vaenyx-me"}
-            onOpenMe={() => openScreen("vaenyx-me")}
+            meSelected={
+              inbox !== null && selectedThreadId === inbox.meThreadId
+            }
+            onOpenMe={() => {
+              // The Me door is a conversation (Oskar, 2026-09-08), not the
+              // profile page: the Owner speaks into it and answers the cards
+              // it produces. The profile is a button in its header.
+              if (inbox) {
+                openSourceConversation(inbox.meConversationId, inbox.meThreadId);
+              } else {
+                openScreen("vaenyx-me");
+              }
+            }}
             inbox={inbox}
             inboxTitle={
               workspace.mode?.agentName?.trim() ||

@@ -11,7 +11,7 @@ import { cancelPresenceAwarePush } from "./push.js";
 
 interface VaenyxThreadRow {
   id: string;
-  kind: "chat" | "task" | "inbox";
+  kind: "chat" | "task" | "inbox" | "me";
   title: string;
   project_id: string | null;
   project_name: string | null;
@@ -189,7 +189,7 @@ export function updateVaenyxThreadStatus(
     // 🔴 The Mode's permanent conversation stays pinned. Archiving it would
     // take it off the screen, which is deleting it as far as anybody looking
     // can tell, and un-pinning it would bury the one place Vaenyx speaks from.
-    if (row.kind === "inbox") {
+    if (row.kind === "inbox" || row.kind === "me") {
       throw new Error("THREAD_PROTECTED");
     }
 

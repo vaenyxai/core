@@ -267,7 +267,14 @@ Read this inside the app: **Settings → Manual**.
 
 - **What it is** — facts about you that Vaenyx has noticed, which it then uses
   in every chat.
-- **Where** — the **Vaenyx Me** screen.
+- **Where** — the **Vaenyx Me** screen, and the **Me** door on the left of
+  the permanent row in the sidebar.
+- **Tell it yourself** — the **Me** door opens a conversation of its own. Put
+  in anything about you: words, a recording, a photo, a document. Vaenyx
+  answers with what it read, and a moment later the things worth keeping
+  appear under the reply as cards — one sentence each, keep it or say it is
+  wrong. Nothing enters Vaenyx Me without your yes. The conversation cannot
+  be deleted or archived; **Profile** in its header opens the screen.
 - **Nothing is used until you approve it.** Each one leads with its grounds —
   a few short points, written in the language of the conversation they came
   from; for a fact, the sentence you actually said — then what Vaenyx made of

@@ -9265,6 +9265,27 @@ body {
 /* WHAT VAENYX NOTICED — a ledger, read like a diary. The quote is the biggest
    thing on the row because it is the Owner's own sentence, and it is the only
    part of the old card that was doing any work. */
+/* Cards inside the Vaenyx Me conversation: a quiet block after the last
+   message, the ledger in its compact shape. */
+.me-chat-cards {
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent, #6ea8ff);
+  border-radius: var(--r-md, 10px);
+  background: var(--accent-soft, rgba(110, 168, 255, 0.1));
+}
+
+.me-chat-cards-title {
+  margin: 0 0 6px;
+  font-size: var(--fs-sm, 13px);
+  font-weight: 700;
+}
+
+.me-chat-intro {
+  margin: 24px auto;
+  max-width: 34em;
+}
+
 .me-ledger {
   display: grid;
   gap: var(--space-4);
