@@ -17861,6 +17861,11 @@ function PhoneAccessPanel() {
             {zh ? "用手机扫这个码" : "Scan This With The Phone"}
           </h3>
           <PhoneQrCode url={status.phoneUrl} />
+          {status.dnsWarning ? (
+            <p className="settings-card-copy phone-step-fine">
+              {status.dnsWarning}
+            </p>
+          ) : null}
           {status.publiclyResolvable === true ? (
             <p className="settings-card-copy phone-step-fine">
               {zh

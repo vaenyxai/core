@@ -798,8 +798,11 @@ Read this inside the app: **Settings → Manual**.
   (Cloudflare's own purge tool; Google's equivalent is a link) — worth one
   try, though it does not always take. The **reliable** fix is the steps
   under it: point that device at the healthy resolver the page names; the
-  waiting page then reloads by itself. Vaenyx also watches its own address
-  and sends a push warning when a resolver goes wrong.
+  waiting page then reloads by itself. Vaenyx also watches its own address:
+  one public resolver going wrong shows only as a line under the QR code on
+  the Phone Access card (it recurs and heals itself); both going wrong at
+  once — nobody can reach the app — earns a note in the main conversation and
+  a push.
 - **Notifications** — Settings → Notifications → allow, then **Test** to prove
   one arrives.
 - **Several results fold into one** — a notification arriving while another is

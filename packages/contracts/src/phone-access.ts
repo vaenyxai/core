@@ -36,6 +36,11 @@ export const PhoneAccessStatusSchema = Type.Object(
     publiclyResolvable: Type.Optional(
       Type.Union([Type.Boolean(), Type.Null()]),
     ),
+    // ONE public resolver caching "does not exist" for the funnel name,
+    // sustained for an hour (Oskar, 2026-09-10: 不重要的都要 filter 掉). Shown
+    // here, where the Owner looks on purpose — never in the main conversation,
+    // which is reserved for BOTH resolvers failing. null = all clear.
+    dnsWarning: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     // The one-time approval link Tailscale prints when the tailnet has not
     // allowed this node to Funnel — one click on that page fixes it.
     funnelEnableUrl: Type.Optional(Type.Union([Type.String(), Type.Null()])),

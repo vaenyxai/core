@@ -436,6 +436,9 @@ let sentinelTimer: ReturnType<typeof setInterval> | null = null;
 // flap; two in a row (an hour) is an outage worth a message (Oskar,
 // 2026-09-08: the daily warning was becoming noise).
 let sentinelBadStreak = 0;
+// The quiet line for a single lying resolver, read by getPhoneAccessStatus.
+let sentinelQuietWarning: string | null = null;
+
 
 function sentinelLastAlertAt(): number {
   if (!sentinelStampPath) return 0;
@@ -487,6 +490,7 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
     ]);
     if (google < 2 && cloudflare < 2) {
       sentinelBadStreak = 0;
+      sentinelQuietWarning = null;
       // Healthy. Deliberately NOT resetting the throttle: this outage flaps
       // (a resolver's nodes disagree mid-incident), and reset-on-recovery
       // turned one incident into an alert per flap. One warning per 12 hours,
@@ -496,8 +500,6 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
     }
     sentinelBadStreak += 1;
     if (sentinelBadStreak < 2) return;
-    if (Date.now() - sentinelLastAlertAt() < SENTINEL_ALERT_GAP_MS) return;
-    recordSentinelAlert();
     const culprit =
       google >= 2 && cloudflare >= 2
         ? "Google + Cloudflare"
@@ -505,6 +507,20 @@ async function sentinelTick(database: DatabaseHandle): Promise<void> {
           ? "Google (8.8.8.8)"
           : "Cloudflare (1.1.1.1)";
     const zh = pushLanguage() === "zh";
+    // ONE resolver lying is the ordinary weather of a .ts.net name (it recurs,
+    // heals itself, and there is nothing for the Owner to do) — it goes on
+    // the Phone Access status line and nowhere else (Oskar, 2026-09-10:
+    // 不重要的都要 filter 掉). Only BOTH resolvers failing means nobody can
+    // reach the app, and that alone earns the main conversation and a push.
+    if (!(google >= 2 && cloudflare >= 2)) {
+      sentinelQuietWarning = zh
+        ? `${culprit} 这家公共 DNS 暂时找不到远程地址;用它的设备暂时打不开,通常几小时自愈。`
+        : `${culprit} cannot find the remote address right now; devices using that DNS cannot open Vaenyx until it clears, usually within hours.`;
+      return;
+    }
+    sentinelQuietWarning = null;
+    if (Date.now() - sentinelLastAlertAt() < SENTINEL_ALERT_GAP_MS) return;
+    recordSentinelAlert();
     // The one-minute fix, named per culprit: both big resolvers run a public
     // "clear this name from our cache" page, and pressing it heals EVERY
     // device that uses that resolver — not just the one in your hand.
@@ -578,6 +594,7 @@ export async function getPhoneAccessStatus(): Promise<PhoneAccessStatus> {
     detail: installState.detail,
     publiclyResolvable: null,
     funnelEnableUrl: null,
+    dnsWarning: sentinelQuietWarning,
   };
   if (!command) return base;
 
