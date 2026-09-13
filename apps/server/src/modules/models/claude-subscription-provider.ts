@@ -44,6 +44,11 @@ import type {
   ModelProvider,
   ModelProviderStatus,
 } from "./provider.js";
+import {
+  CLAUDE_EFFORT_TIERS,
+  effortForModel,
+  rememberSubscriptionEfforts,
+} from "./subscription-efforts.js";
 
 // Auth = the OFFICIAL tool's output, never our own OAuth (private's red line,
 // 2026-07-29: re-implementing the handshake with another app's client id is
@@ -440,7 +445,7 @@ export async function claudeSubscriptionModels(
         >;
       }
     ).supportedModels();
-    return rows.map((row) => ({
+    const models = rows.map((row) => ({
       id: row.value,
       resolvedModel: row.resolvedModel ?? row.value,
       displayName: row.displayName,
@@ -448,6 +453,9 @@ export async function claudeSubscriptionModels(
       supportsEffort: row.supportsEffort === true,
       efforts: row.supportsEffort ? (row.supportedEffortLevels ?? []) : [],
     }));
+    // Every read teaches the chat path which levels each model takes.
+    rememberSubscriptionEfforts("claude-sub", models);
+    return models;
   } finally {
     // The catalogue is the whole errand: the turn itself never starts.
     abort.abort();
@@ -658,13 +666,22 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
             : this.#model
               ? { model: this.#model }
               : {}),
-          // The app's thinking tiers are the SDK's own effort words.
-          ...(options?.reasoningEffort &&
-          ["low", "medium", "high", "xhigh", "max"].includes(
-            options.reasoningEffort,
-          )
-            ? { effort: options.reasoningEffort as "low" | "medium" | "high" }
-            : {}),
+          // The model's OWN tiers (Oskar, 2026-09-13): the stored level when
+          // this model takes it, the highest it has below that otherwise, and
+          // none at all for a model with no levels (Haiku).
+          ...(() => {
+            const effort = effortForModel(
+              "claude-sub",
+              options?.model?.trim() || this.#model,
+              options?.reasoningEffort,
+              CLAUDE_EFFORT_TIERS,
+            );
+            return effort
+              ? {
+                  effort: effort as "low" | "medium" | "high" | "xhigh" | "max",
+                }
+              : {};
+          })(),
         },
       });
 

@@ -179,7 +179,10 @@ Read this inside the app: **Settings → Manual**.
     reach from inside.
 - **Stop a reply** — the **Stop** button while it is answering. It stops at once.
 - **Switch model or thinking level** — the two pickers under the message box.
-  They apply to this conversation only.
+  They apply to this conversation only. The levels are the ones the chosen
+  model itself offers — Codex models go from Low to Extra High, Claude from
+  Low to Max — and a model with no levels (or a key-based model, which Vaenyx
+  does not send a level to) shows no level picker.
 - **Name and describe a Conversation** — open its ⋮ menu → **Edit details**.
   The title is required; the optional one-line purpose helps you recognize and
   search for it. Purpose is organization text only — it is never a hidden

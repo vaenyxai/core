@@ -827,8 +827,14 @@ export function fetchModelProviders(): Promise<{
 
 /** What this provider says the Owner's key may use. Asked live — never a
  *  list we keep, because the ids move and a stale menu is a lie. */
-export function fetchProviderModels(id: string): Promise<{ models: string[] }> {
-  return requestJson<{ models: string[] }>(
+// The subscriptions also say which reasoning levels each model takes.
+export interface ProviderCatalogue {
+  models: string[];
+  efforts?: { id: string; efforts: string[]; isDefault: boolean }[];
+}
+
+export function fetchProviderModels(id: string): Promise<ProviderCatalogue> {
+  return requestJson<ProviderCatalogue>(
     `/v1/models/providers/${encodeURIComponent(id)}/catalogue`,
   );
 }

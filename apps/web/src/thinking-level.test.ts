@@ -1,56 +1,75 @@
-// The rule this file exists to hold (Oskar, 2026-08-16): a level control is
-// shown ONLY where the model in front of the Owner really has one. A picker
-// that changes nothing is worse than no picker — it teaches them to distrust
-// the ones that work.
+// The rule this file exists to hold (Oskar, 2026-08-16, extended 2026-09-13):
+// a level control is shown ONLY where the model in front of the Owner really
+// has one, and it offers exactly the levels that model reports.
 import { describe, expect, it } from "vitest";
 
 import {
-  clampThinkingLevel,
-  thinkingLevelOptions,
-  thinkingLevelShape,
+  clampEffort,
+  effortChoices,
+  effortOptions,
+  type EffortCatalogue,
 } from "./thinking-level.js";
 
-describe("which models have a thinking level", () => {
-  it("gives three levels to the models that take three", () => {
-    expect(thinkingLevelShape("codex", null)).toBe("three");
-    expect(thinkingLevelShape("claude-sub", null)).toBe("three");
-    expect(thinkingLevelShape("gemini", "gemini-3.7-flash")).toBe("three");
-    expect(thinkingLevelShape("groq", "openai/gpt-oss-120b")).toBe("three");
-    expect(thinkingLevelShape("openai", "o4-mini")).toBe("three");
+const catalogue: EffortCatalogue = {
+  codex: [
+    { id: "gpt-5.5", efforts: ["low", "medium", "high", "xhigh"], isDefault: true },
+    { id: "gpt-5.4-mini", efforts: ["low", "medium", "high", "xhigh"] },
+  ],
+  "claude-sub": [
+    { id: "default", efforts: ["low", "medium", "high", "xhigh", "max"] },
+    { id: "sonnet", efforts: ["low", "medium", "high", "xhigh", "max"] },
+    { id: "haiku", efforts: [] },
+  ],
+};
+
+describe("which levels a model offers", () => {
+  it("offers exactly the levels each subscription model reports", () => {
+    expect(effortChoices("codex", "gpt-5.5", catalogue)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(effortChoices("claude-sub", "sonnet", catalogue)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
   });
 
-  it("gives two to the models that can only think or not", () => {
-    expect(thinkingLevelShape("groq", "qwen/qwen3.6-27b")).toBe("toggle");
-    expect(thinkingLevelShape("mistral", "magistral-small-latest")).toBe(
-      "toggle",
-    );
+  it("reads the engine's default row when no model is pinned", () => {
+    expect(effortChoices("codex", null, catalogue)).toHaveLength(4);
+    expect(effortChoices("claude-sub", undefined, catalogue)).toHaveLength(5);
   });
 
-  // The important half: the same PROVIDER answers differently per model, which
-  // is exactly why this is not a per-provider table.
-  it("shows nothing for models with no such setting", () => {
-    expect(thinkingLevelShape("gemini", "gemini-2.5-flash")).toBe("none");
-    expect(thinkingLevelShape("groq", "llama-3.3-70b-versatile")).toBe("none");
-    expect(thinkingLevelShape("openai", "gpt-4o")).toBe("none");
-    expect(thinkingLevelShape("mistral", "mistral-small-latest")).toBe("none");
-    // A local server makes no claim, so neither do we.
-    expect(thinkingLevelShape("local", "whatever-they-loaded")).toBe("none");
-    expect(thinkingLevelShape(null, null)).toBe("none");
+  it("shows no picker where the level would change nothing", () => {
+    expect(effortChoices("claude-sub", "haiku", catalogue)).toEqual([]);
+    // Key-based providers are not sent a level at all.
+    expect(effortChoices("openai", "o4-mini", catalogue)).toEqual([]);
+    expect(effortChoices("gemini", "gemini-3.7-flash", catalogue)).toEqual([]);
+    // A model the catalogue does not list, or a catalogue not read yet.
+    expect(effortChoices("codex", "gpt-9", catalogue)).toEqual([]);
+    expect(effortChoices("codex", "gpt-5.5", {})).toEqual([]);
+    expect(effortChoices(null, null, catalogue)).toEqual([]);
   });
 
-  it("offers a matching number of choices, and none when hidden", () => {
-    expect(thinkingLevelOptions("three", "en")).toHaveLength(3);
-    expect(thinkingLevelOptions("toggle", "en")).toHaveLength(2);
-    expect(thinkingLevelOptions("none", "en")).toHaveLength(0);
-    expect(thinkingLevelOptions("three", "zh")[0]?.label).toBe("快");
+  it("labels the levels in the engine's own words", () => {
+    expect(
+      effortOptions(["low", "xhigh", "max"], "en").map((option) => option.label),
+    ).toEqual(["Low", "Extra High", "Max"]);
+    expect(effortOptions(["low"], "zh")[0]?.label).toBe("低");
   });
 
-  // Switching from a three-level model to a two-level one must not leave the
-  // picker showing a value it does not offer — that reads as a broken control.
+  // Switching from Claude on Max to Codex must not leave the picker showing a
+  // value it does not offer — that reads as a broken control.
   it("keeps a stored level legal for the model now chosen", () => {
-    expect(clampThinkingLevel("toggle", "medium")).toBe("high");
-    expect(clampThinkingLevel("toggle", "low")).toBe("low");
-    expect(clampThinkingLevel("three", "medium")).toBe("medium");
-    expect(clampThinkingLevel("three", null)).toBe("medium");
+    expect(clampEffort(["low", "medium", "high", "xhigh"], "max")).toBe("xhigh");
+    expect(clampEffort(["low", "medium", "high", "xhigh", "max"], null)).toBe(
+      "medium",
+    );
+    expect(clampEffort(["low", "high"], "medium")).toBe("low");
+    expect(clampEffort(["high", "xhigh"], "low")).toBe("high");
   });
 });

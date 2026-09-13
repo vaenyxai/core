@@ -228,10 +228,14 @@ export const ChatConnectionTestResultSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// The engines' own tiers (Oskar, 2026-09-13): Codex takes low…xhigh, the
+// Claude SDK low…max. Which ones a given model takes comes from its catalogue.
 export const ReasoningEffortSchema = Type.Union([
   Type.Literal("low"),
   Type.Literal("medium"),
   Type.Literal("high"),
+  Type.Literal("xhigh"),
+  Type.Literal("max"),
 ]);
 
 export const AskVaenyxConversationSchema = Type.Object(

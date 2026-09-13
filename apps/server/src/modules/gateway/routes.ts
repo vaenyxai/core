@@ -2345,7 +2345,23 @@ export async function registerGatewayRoutes(
         ),
         response: {
           200: Type.Object(
-            { models: Type.Array(Type.String()) },
+            {
+              models: Type.Array(Type.String()),
+              // The subscriptions only: which reasoning levels each model
+              // takes, straight from the engine's own catalogue.
+              efforts: Type.Optional(
+                Type.Array(
+                  Type.Object(
+                    {
+                      id: Type.String(),
+                      efforts: Type.Array(Type.String()),
+                      isDefault: Type.Boolean(),
+                    },
+                    { additionalProperties: false },
+                  ),
+                ),
+              ),
+            },
             { additionalProperties: false },
           ),
           401: ErrorResponseSchema,
@@ -2363,17 +2379,30 @@ export async function registerGatewayRoutes(
         // (contract 2.1): Codex's app-server model/list, the Claude SDK's
         // supportedModels — the Owner's own logins, never a stored list.
         if (request.params.id === "codex") {
+          const rows = (await listCodexRelayModels("core")).filter(
+            (model) => !model.hidden,
+          );
           return {
-            models: (await listCodexRelayModels("core"))
-              .filter((model) => !model.hidden)
-              .map((model) => model.id),
+            models: rows.map((model) => model.id),
+            efforts: rows.map((model) => ({
+              id: model.id,
+              efforts: model.efforts,
+              isDefault: model.isDefault,
+            })),
           };
         }
         if (request.params.id === "claude-sub") {
+          const rows = await claudeSubscriptionModels(
+            context.config.secretsDirectory,
+            "core",
+          );
           return {
-            models: (
-              await claudeSubscriptionModels(context.config.secretsDirectory, "core")
-            ).map((model) => model.id),
+            models: rows.map((model) => model.id),
+            efforts: rows.map((model) => ({
+              id: model.id,
+              efforts: model.efforts,
+              isDefault: model.id === "default",
+            })),
           };
         }
         return {

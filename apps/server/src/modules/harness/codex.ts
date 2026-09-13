@@ -25,6 +25,11 @@ import {
 } from "../core/component-install.js";
 import type { DocumentSpillAccess } from "../core/document-spill.js";
 import type { FetchAccess } from "../core/fetching.js";
+import {
+  CODEX_EFFORT_TIERS,
+  effortForModel,
+  rememberSubscriptionEfforts,
+} from "../models/subscription-efforts.js";
 
 export interface CodexStatus {
   installed: boolean;
@@ -1483,7 +1488,10 @@ export async function listCodexRelayModels(
         effort: RELAY_DEFAULT_EFFORT,
       });
     }
-    return await lane.session.listModels();
+    const rows = await lane.session.listModels();
+    // Every read teaches the chat path which levels each model takes.
+    rememberSubscriptionEfforts("codex", rows);
+    return rows;
   } finally {
     releaseQueue();
   }
@@ -2036,7 +2044,16 @@ export async function runAskVaenyxChat(
   let onAbort: (() => void) | undefined;
 
   try {
-    const wantEffort = options?.reasoningEffort ?? "medium";
+    // The model's OWN tiers (Oskar, 2026-09-13): a stored level this model
+    // does not take steps down to the highest one it has; the CLI refuses an
+    // effort word it does not know, so an unknown never reaches the flag.
+    const wantEffort =
+      effortForModel(
+        "codex",
+        options?.model,
+        options?.reasoningEffort ?? "medium",
+        CODEX_EFFORT_TIERS,
+      ) ?? "medium";
     if (
       askVaenyxSession &&
       !askVaenyxSession.closed &&

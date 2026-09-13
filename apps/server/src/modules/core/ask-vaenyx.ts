@@ -440,7 +440,7 @@ function toConversation(row: AskVaenyxConversationRow): AskVaenyxConversation {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     reasoningEffort:
-      (row.reasoning_effort as "low" | "medium" | "high" | null) ?? "medium",
+      (row.reasoning_effort as "low" | "medium" | "high" | "xhigh" | "max" | null) ?? "medium",
     modelProviderId: row.model_provider_id ?? null,
     modelName: row.model_name ?? null,
   };
@@ -728,7 +728,7 @@ export function setAskVaenyxReasoningEffort(
   database: DatabaseHandle,
   conversationId: string,
   ownerId: string,
-  effort: "low" | "medium" | "high",
+  effort: "low" | "medium" | "high" | "xhigh" | "max",
 ): AskVaenyxConversation {
   const result = database.sqlite
     .prepare(

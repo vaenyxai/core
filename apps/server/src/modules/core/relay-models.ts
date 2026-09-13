@@ -16,6 +16,10 @@
 //     says so per row, and a run's `model_evidence` names which case it is.
 import { listCodexRelayModels } from "../harness/codex.js";
 import { claudeSubscriptionModels } from "../models/claude-subscription-provider.js";
+import {
+  CLAUDE_EFFORT_TIERS,
+  CODEX_EFFORT_TIERS,
+} from "../models/subscription-efforts.js";
 
 export type RelayModelEngine = "openai-cli" | "claude-cli";
 
@@ -24,8 +28,8 @@ export type RelayModelEngine = "openai-cli" | "claude-cli";
 // does not support effort (Haiku) lists none, and a call naming one there is
 // refused rather than quietly dropped.
 export const RELAY_ENGINE_EFFORTS: Record<RelayModelEngine, string[]> = {
-  "openai-cli": ["low", "medium", "high", "xhigh"],
-  "claude-cli": ["low", "medium", "high", "xhigh", "max"],
+  "openai-cli": [...CODEX_EFFORT_TIERS],
+  "claude-cli": [...CLAUDE_EFFORT_TIERS],
 };
 
 export interface RelayCatalogueModel {

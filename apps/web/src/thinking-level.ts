@@ -1,95 +1,83 @@
-// HOW HARD SHOULD IT THINK — and whether that question exists at all for the
-// model in front of you (Oskar, 2026-08-16: 它有不同的 level…这个是不是只存在于
-// 聊天模型里面).
+// HOW HARD SHOULD IT THINK — and only where the answer is real.
 //
-// The honest answer is three states, not one:
-//   "three"  — the model takes low / medium / high
-//   "toggle" — the model can only think or not think
-//   "none"   — the question does not apply, so nothing is shown
+// The levels are the MODEL'S OWN (Oskar, 2026-09-13: 单位跟着他们选). The two
+// subscription channels report per model which reasoning efforts they take —
+// Codex low…xhigh, Claude low…max, Haiku none — and the picker offers exactly
+// those, in the engine's own words. Before that it offered Fast / Balanced /
+// Deep everywhere, which hid two real tiers and invented one where none existed.
 //
-// A picker offering Fast / Balanced / Deep to a model with no such setting is
-// a control that does nothing: the Owner turns it, nothing changes, and they
-// stop trusting the ones that DO work. So the shape is decided by the exact
-// (provider, model) actually chosen, and an unknown model gets the provider's
-// own default rather than a guess.
-//
-// Only chat reads this. The other capabilities have no reasoning setting to
-// offer — a transcriber, a speech voice and an image model do not think harder
-// on request — which is why they show no level control at all.
-export type ThinkingLevelShape = "three" | "toggle" | "none";
+// Every other backend gets no picker: Vaenyx does not pass a reasoning level
+// to key-based providers, and a control that changes nothing teaches the Owner
+// to distrust the ones that work (Oskar, 2026-08-16).
+export const EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORT_ORDER)[number];
 
-/** What levels this exact model accepts. Sources: each provider's own API
- *  reference as of 2026-08. Matched on the model id because within one
- *  provider it differs — Groq's gpt-oss takes three, its qwen takes on/off. */
-export function thinkingLevelShape(
+export interface ModelEfforts {
+  id: string;
+  efforts: string[];
+  isDefault?: boolean;
+}
+
+// Per provider id, the rows its live catalogue answered with.
+export type EffortCatalogue = Record<string, ModelEfforts[]>;
+
+const CHANNELS_THAT_TAKE_A_LEVEL = new Set(["codex", "claude-sub"]);
+
+function isEffort(value: string): value is Effort {
+  return (EFFORT_ORDER as readonly string[]).includes(value);
+}
+
+/** The levels this exact model takes, lowest first; empty = show no picker. */
+export function effortChoices(
   providerId: string | null | undefined,
   model: string | null | undefined,
-): ThinkingLevelShape {
-  const id = (model ?? "").toLowerCase();
-
-  // The two subscription channels: their CLI/SDK takes a reasoning effort.
-  if (providerId === "codex" || providerId === "claude-sub") return "three";
-
-  if (providerId === "openai") {
-    // The o-series and gpt-5+ reason on request; gpt-4o does not.
-    return /^(o\d|gpt-5)/.test(id) ? "three" : "none";
-  }
-  if (providerId === "anthropic") {
-    // Extended thinking is a budget, which we drive as low/medium/high.
-    return /sonnet-[45]|opus-[45]/.test(id) ? "three" : "none";
-  }
-  if (providerId === "gemini") {
-    // Gemini 3.x carries thinking_level; 2.x has no such control.
-    return /gemini-3/.test(id) ? "three" : "none";
-  }
-  if (providerId === "groq") {
-    if (id.includes("gpt-oss")) return "three";
-    // Qwen's reasoning is on or off, with nothing in between.
-    if (id.includes("qwen")) return "toggle";
-    return "none";
-  }
-  if (providerId === "grok") return /grok-\d+-mini/.test(id) ? "three" : "none";
-  if (providerId === "mistral")
-    return id.includes("magistral") ? "toggle" : "none";
-  if (providerId === "zhipu") return /glm-4\.[67]/.test(id) ? "toggle" : "none";
-
-  // A local server or anything unrecognised: no claim either way, so no
-  // control. Showing one would be inventing a capability on the Owner's
-  // behalf, which is the failure this whole file exists to avoid.
-  return "none";
+  catalogue: EffortCatalogue,
+): Effort[] {
+  if (!providerId || !CHANNELS_THAT_TAKE_A_LEVEL.has(providerId)) return [];
+  const rows = catalogue[providerId];
+  if (!rows) return [];
+  const id = model?.trim();
+  // No pinned model means the engine's own default row: Codex marks one,
+  // the Claude SDK names it "default".
+  const row = id
+    ? rows.find((candidate) => candidate.id === id)
+    : (rows.find((candidate) => candidate.isDefault) ??
+      rows.find((candidate) => candidate.id === "default"));
+  if (!row) return [];
+  return EFFORT_ORDER.filter((effort) => row.efforts.includes(effort));
 }
 
-/** The choices to offer for a shape. "toggle" borrows the same two words the
- *  Owner already reads elsewhere rather than inventing "on/off" for thinking. */
-export function thinkingLevelOptions(
-  shape: ThinkingLevelShape,
+const LABELS: Record<Effort, [string, string]> = {
+  low: ["Low", "低"],
+  medium: ["Medium", "中"],
+  high: ["High", "高"],
+  xhigh: ["Extra High", "超高"],
+  max: ["Max", "最大"],
+};
+
+/** The picker's options, in the engine's own words. */
+export function effortOptions(
+  choices: readonly Effort[],
   lang: string,
-): { label: string; value: string }[] {
+): { label: string; value: Effort }[] {
   const zh = lang === "zh";
-  if (shape === "three") {
-    return [
-      { label: zh ? "快" : "Fast", value: "low" },
-      { label: zh ? "均衡" : "Balanced", value: "medium" },
-      { label: zh ? "深" : "Deep", value: "high" },
-    ];
-  }
-  if (shape === "toggle") {
-    return [
-      { label: zh ? "快" : "Fast", value: "low" },
-      { label: zh ? "深" : "Deep", value: "high" },
-    ];
-  }
-  return [];
+  return choices.map((effort) => ({
+    label: LABELS[effort][zh ? 1 : 0],
+    value: effort,
+  }));
 }
 
-/** Keep a stored level legal for the model now in front of the Owner: a
- *  toggle model set to "medium" would otherwise show a blank picker. */
-export function clampThinkingLevel(
-  shape: ThinkingLevelShape,
-  level: string | null | undefined,
-): string {
-  const current = level ?? "medium";
-  if (shape === "three") return current;
-  if (shape === "toggle") return current === "low" ? "low" : "high";
-  return current;
+/** Keep a stored level legal for the model now chosen: itself when the model
+ *  takes it, else the highest level it has below, else its lowest. */
+export function clampEffort(
+  choices: readonly Effort[],
+  stored: string | null | undefined,
+): Effort {
+  const wanted: Effort = stored && isEffort(stored) ? stored : "medium";
+  if (choices.includes(wanted)) return wanted;
+  const wantedRank = EFFORT_ORDER.indexOf(wanted);
+  const below = choices.filter(
+    (effort) => EFFORT_ORDER.indexOf(effort) <= wantedRank,
+  );
+  return below[below.length - 1] ?? choices[0] ?? wanted;
 }

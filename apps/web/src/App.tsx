@@ -364,9 +364,10 @@ import {
   MODEL_DEFAULT_CHANGED,
 } from "./engine-pair.js";
 import {
-  clampThinkingLevel,
-  thinkingLevelOptions,
-  thinkingLevelShape,
+  clampEffort,
+  effortChoices,
+  effortOptions,
+  type EffortCatalogue,
 } from "./thinking-level.js";
 import { Picker, type PickerOption } from "./picker.js";
 import { PROVIDER_DATA_FACTS, dataFactsBadge } from "./data-facts.js";
@@ -6622,6 +6623,36 @@ function AskVaenyxPanel({
   const [adoptedModels, setAdoptedModels] = useState<Record<string, string[]>>(
     {},
   );
+  // The levels each subscription model takes, from its own live catalogue
+  // (Oskar, 2026-09-13: 单位跟着他们选). Read for the channels this household
+  // actually has, once per page and again when a model is adopted; a read
+  // that fails stays quiet and simply leaves the picker hidden.
+  const [effortCatalogue, setEffortCatalogue] = useState<EffortCatalogue>({});
+  const effortChannels = chatProviders
+    .map((provider) => provider.id)
+    .filter((id) => id === "codex" || id === "claude-sub")
+    .join(",");
+  useEffect(() => {
+    if (!effortChannels) return undefined;
+    let active = true;
+    function loadEfforts() {
+      for (const channel of effortChannels.split(",")) {
+        void fetchProviderModels(channel)
+          .then((result) => {
+            if (!active || !result.efforts) return;
+            const rows = result.efforts;
+            setEffortCatalogue((current) => ({ ...current, [channel]: rows }));
+          })
+          .catch(() => undefined);
+      }
+    }
+    loadEfforts();
+    window.addEventListener(ADOPTED_MODELS_CHANGED, loadEfforts);
+    return () => {
+      active = false;
+      window.removeEventListener(ADOPTED_MODELS_CHANGED, loadEfforts);
+    };
+  }, [effortChannels]);
   useEffect(() => {
     let active = true;
     function loadText() {
@@ -10018,11 +10049,12 @@ This conversation is its home — feed it something to try it, and ask for chang
               {(() => {
                 // Same rule as the open chat: the level appears only where the
                 // model actually has one.
-                const shape = thinkingLevelShape(
+                const choices = effortChoices(
                   newChatEffective?.id,
                   newChatModelName ?? newChatEffective?.model,
+                  effortCatalogue,
                 );
-                if (shape === "none") return null;
+                if (choices.length === 0) return null;
                 return (
                   <>
                     <span aria-hidden="true" className="composer-sep">
@@ -10034,8 +10066,8 @@ This conversation is its home — feed it something to try it, and ask for chang
                       onChange={(next) =>
                         setNewChatEffort(next as ReasoningEffort)
                       }
-                      options={thinkingLevelOptions(shape, lang)}
-                      value={clampThinkingLevel(shape, newChatEffort)}
+                      options={effortOptions(choices, lang)}
+                      value={clampEffort(choices, newChatEffort)}
                     />
                   </>
                 );
@@ -11577,23 +11609,22 @@ This conversation is its home — feed it something to try it, and ask for chang
                 );
               })()}
               {(() => {
-                // HOW HARD IT THINKS — shown only where the model in front of
-                // the Owner actually has the setting. Three states, decided by
-                // the exact (provider, model): a slider of three, a two-way
-                // fast/deep, or nothing at all. A picker that changes nothing
-                // teaches the Owner to distrust the ones that work.
+                // HOW HARD IT THINKS — the levels the model in front of the
+                // Owner itself reports (Codex low…xhigh, Claude low…max), and
+                // no picker at all where the level would change nothing.
                 const effective =
                   chatProviders.find(
                     (provider) =>
                       provider.id === activeConversation?.modelProviderId,
                   ) ?? defaultChatProvider;
-                const shape = thinkingLevelShape(
+                const choices = effortChoices(
                   effective?.id,
                   activeConversation?.modelName ?? effective?.model,
+                  effortCatalogue,
                 );
-                if (shape === "none") return null;
-                const level = clampThinkingLevel(
-                  shape,
+                if (choices.length === 0) return null;
+                const level = clampEffort(
+                  choices,
                   activeConversation?.reasoningEffort,
                 );
                 return (
@@ -11617,7 +11648,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                         );
                         void setReasoningEffort(activeConversationId, next);
                       }}
-                      options={thinkingLevelOptions(shape, lang)}
+                      options={effortOptions(choices, lang)}
                       value={level}
                     />
                   </>
