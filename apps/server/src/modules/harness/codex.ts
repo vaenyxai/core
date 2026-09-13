@@ -1542,6 +1542,51 @@ export async function runCodexMethodOffline(
   }
 }
 
+// THE QUICK LANE (Oskar, 2026-09-13): judgments before a reply and
+// conversation checkpoints. Its own session at LOW effort with its own queue.
+// On the chat session a judgment waited behind any running reply or scheduled
+// task, and — the session's effort being a spawn-time flag — a judgment at
+// medium followed by a reply at another level respawned Codex twice per
+// message, seconds each time.
+let quickSession: CodexChatSession | undefined;
+let quickSessionQueue: Promise<void> = Promise.resolve();
+
+export async function runCodexQuickOffline(
+  request: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const status = getCodexStatus();
+  if (!status.installed) throw new Error("CODEX_NOT_INSTALLED");
+  if (!status.loggedIn) throw new Error("CODEX_NOT_LOGGED_IN");
+  if (status.authMethod !== "chatgpt")
+    throw new Error("CODEX_CHATGPT_REQUIRED");
+
+  let releaseQueue: () => void = () => undefined;
+  const previous = quickSessionQueue;
+  quickSessionQueue = new Promise<void>((resolveQueue) => {
+    releaseQueue = resolveQueue;
+  });
+  await previous;
+
+  try {
+    if (!quickSession || quickSession.closed) {
+      quickSession = new CodexChatSession("core", {
+        web: false,
+        effort: "low",
+      });
+    }
+    if (signal?.aborted) throw new Error("CODEX_TURN_CANCELLED");
+    return (
+      await quickSession.run(request, {
+        instructions:
+          "You answer one short request for Vaenyx and stop. You have no tools: no files, no shell, no network. Output exactly what the request asks for and nothing else.",
+      })
+    ).text;
+  } finally {
+    releaseQueue();
+  }
+}
+
 function formatAskVaenyxTranscript(messages: AskVaenyxInputMessage[]): string {
   return messages
     .map((message) => {
@@ -1999,6 +2044,11 @@ export interface RunAskVaenyxOptions {
   // enforcement, not a label). Every backend must honour it or the guarantee is
   // only as strong as the backend nobody checked.
   allowWeb?: boolean;
+  // A short machine judgment, not a reply (Oskar, 2026-09-13: 回复前的判断
+  // 拖慢了回复): the engine's lowest effort, on a lane of its own, so it neither
+  // queues behind the chat session nor forces it to respawn with a different
+  // effort flag. Backends with no such distinction ignore it.
+  quick?: boolean;
   // A PDF the Owner fed to this turn, base64 with its media type. Only the
   // backends that read documents natively use it (Claude); the rest ignore it
   // and the caller falls back to extracted text.

@@ -292,6 +292,78 @@ export const CHECKPOINT_INSTRUCTION = [
 // runaway answer cannot ride every later turn.
 const MAX_CHECKPOINT_CHARS = 6000;
 
+function formatCheckpoint(summary: string): string {
+  return [
+    "Earlier in this conversation (a checkpoint of the earlier messages, which are no longer shown in full). Treat it as established background and build on it without restating it or mentioning it:",
+    summary,
+  ].join("\n");
+}
+
+// What rides THIS turn: the checkpoint as stored, never a fresh model call
+// (Oskar, 2026-09-13: 压缩卡在回复之前). A due refresh runs after the reply
+// (refreshCheckpointAfterReply); messages it has not folded in yet ride
+// verbatim through windowStartIndex, so nothing sits in neither.
+function storedConversationCheckpoint(
+  database: DatabaseHandle,
+  conversationId: string,
+  usableHistory: AskVaenyxMessage[],
+): { context: string | null; coveredCount: number } {
+  if (pairSafeCutIndex(usableHistory) === 0) {
+    return { context: null, coveredCount: 0 };
+  }
+  const row = database.sqlite
+    .prepare(
+      `SELECT history_summary, history_summary_count
+       FROM ask_vaenyx_conversations WHERE id = ?`,
+    )
+    .get(conversationId) as
+    | { history_summary: string | null; history_summary_count: number }
+    | undefined;
+  const summary = row?.history_summary?.trim() || null;
+  return summary
+    ? {
+        context: formatCheckpoint(summary),
+        coveredCount: row?.history_summary_count ?? 0,
+      }
+    : { context: null, coveredCount: 0 };
+}
+
+// One refresh per conversation at a time; a second finished reply while one
+// runs simply leaves it to the next turn.
+const checkpointRefreshes = new Set<string>();
+
+function refreshCheckpointAfterReply(
+  database: DatabaseHandle,
+  conversationId: string,
+  ownerId: string,
+  provider: ModelProvider,
+): void {
+  if (checkpointRefreshes.has(conversationId)) return;
+  checkpointRefreshes.add(conversationId);
+  void (async () => {
+    try {
+      const usable = listAskVaenyxMessages(
+        database,
+        conversationId,
+        ownerId,
+      ).filter(
+        (message) =>
+          !(message.role === "assistant" && message.status === "failed"),
+      );
+      await compactConversationHistory(
+        database,
+        conversationId,
+        usable,
+        provider,
+      );
+    } catch {
+      // Best-effort: the stored checkpoint stays, and the next turn tries.
+    } finally {
+      checkpointRefreshes.delete(conversationId);
+    }
+  })();
+}
+
 // The long-conversation memory (Oskar, 2026-07-29). A chat used to forget its
 // own beginning: only the last 30 messages reached the model and the rest were
 // simply dropped. Now everything that ages out is folded into a rolling
@@ -319,11 +391,7 @@ async function compactConversationHistory(
   const storedSummary = row?.history_summary?.trim() || null;
   const storedCount = row?.history_summary_count ?? 0;
 
-  const formatSummary = (summary: string): string =>
-    [
-      "Earlier in this conversation (a checkpoint of the earlier messages, which are no longer shown in full). Treat it as established background and build on it without restating it or mentioning it:",
-      summary,
-    ].join("\n");
+  const formatSummary = formatCheckpoint;
   // coveredCount is what the RETURNED context actually covers, so the caller
   // can start the verbatim window at that exact seam (windowStartIndex).
   const stored = () =>
@@ -358,7 +426,8 @@ async function compactConversationHistory(
         { role: "owner" as const, content: CHECKPOINT_INSTRUCTION },
       ],
       storedSummary ? formatSummary(storedSummary) : undefined,
-      { ...(signal ? { signal } : {}) },
+      // A checkpoint is housekeeping, not a reply: the quick lane.
+      { ...(signal ? { signal } : {}), allowWeb: false, quick: true },
     );
     const summary = result.answer.trim().slice(0, MAX_CHECKPOINT_CHARS);
     if (!summary) return stored();
@@ -1370,6 +1439,9 @@ export async function createAskVaenyxMessage(
   // means the checkpoint can lag the pair-safe cut by a few messages — and
   // those messages must ride verbatim, not vanish into the gap.
   let history: { content: string; role: "owner" | "assistant" }[];
+  // The provider this turn's checkpoint belongs to, for the refresh that runs
+  // after the reply is stored.
+  let compactionProvider: ModelProvider | null = null;
   let assistantContent: string;
   let assistantStatus: "completed" | "failed";
   let webSearchUsed = false;
@@ -1680,13 +1752,12 @@ export async function createAskVaenyxMessage(
     // message window rides along as a rolling summary, so a long thread stops
     // forgetting its own beginning. Regenerated only when enough new messages
     // have aged out — never on every turn.
-    const compaction = await compactConversationHistory(
+    const compaction = storedConversationCheckpoint(
       database,
       conversationId,
       usableHistory,
-      provider,
-      options?.signal,
     );
+    compactionProvider = provider;
     const historySummary = compaction.context;
     // Now the window: from the seam the checkpoint actually reached, so
     // nothing sits in neither (windowStartIndex bounds the failure case).
@@ -2210,6 +2281,17 @@ export async function createAskVaenyxMessage(
     )
     .run(completedAt, conversationId);
   touchChatThread(database, conversationId, completedAt);
+
+  // The checkpoint refresh this turn skipped: after the reply, never before
+  // it (see storedConversationCheckpoint).
+  if (compactionProvider && assistantStatus === "completed") {
+    refreshCheckpointAfterReply(
+      database,
+      conversationId,
+      ownerId,
+      compactionProvider,
+    );
+  }
 
   // Vaenyx Me: read the message for facts and a trait AFTER the reply is
   // out. Not awaited — the reply must never wait for the learning.

@@ -673,7 +673,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
             const effort = effortForModel(
               "claude-sub",
               options?.model?.trim() || this.#model,
-              options?.reasoningEffort,
+              options?.quick ? "low" : options?.reasoningEffort,
               CLAUDE_EFFORT_TIERS,
             );
             return effort

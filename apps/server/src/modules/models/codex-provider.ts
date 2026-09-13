@@ -5,6 +5,7 @@
 import {
   getCodexStatus,
   runAskVaenyxChat,
+  runCodexQuickOffline,
   runCodexMethodOffline,
 } from "../harness/codex.js";
 import { noteCoreUsage } from "../core/relay-usage.js";
@@ -41,6 +42,23 @@ export class CodexProvider implements ModelProvider {
     // reports no token counts, so Codex rows on the usage page carry calls
     // only — never an estimate.
     noteCoreUsage("openai-cli");
+    if (options?.quick) {
+      // Speakers kept: a checkpoint has to know who said what.
+      const transcript =
+        messages.length === 1
+          ? (messages[0]?.content ?? "")
+          : messages
+              .map(
+                (message) =>
+                  `${message.role === "owner" ? "Owner" : "Vaenyx"}: ${message.content}`,
+              )
+              .join("\n\n");
+      const answer = await runCodexQuickOffline(
+        [projectContext, transcript].filter(Boolean).join("\n\n"),
+        options.signal,
+      );
+      return { answer, webSearchUsed: false };
+    }
     if (options?.allowWeb === false) {
       const answer = await runCodexMethodOffline(
         [projectContext, messages.map((m) => m.content).join("\n\n")]

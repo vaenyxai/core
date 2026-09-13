@@ -263,7 +263,8 @@ export async function classifyRoutineIntent(
     const result = await getDefaultProvider().sendChat(
       [{ content: prompt, role: "owner" }],
       undefined,
-      { signal },
+      // A judgment, not a reply: the quick lane (see RunAskVaenyxOptions).
+      { signal, allowWeb: false, quick: true },
     );
     answer = result.answer;
   } catch {
@@ -604,7 +605,7 @@ export async function classifyRoutineChatMessage(
     const result = await getDefaultProvider().sendChat(
       [{ content: prompt, role: "owner" }],
       undefined,
-      { signal },
+      { signal, allowWeb: false, quick: true },
     );
     return parseRoutineChatDecision(result.answer);
   } catch {
