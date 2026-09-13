@@ -408,6 +408,26 @@ const RESTORABLE_SCREENS: Screen[] = [
 
 type PortalView = "chat" | "task" | "new";
 
+// A notification opens a cold app on ?chat=… — its messages are asked for the
+// moment this module loads, in parallel with the auth check and the workspace,
+// instead of after both (Oskar, 2026-09-13: 点推送要等一两秒). Used once, by
+// the first open of that conversation; a failed or signed-out read (a quiet
+// GET) simply falls back to the ordinary load.
+const BOOT_CHAT_PREFETCH: {
+  id: string;
+  messages: Promise<AskVaenyxMessage[] | null>;
+} | null = (() => {
+  try {
+    const id = new URLSearchParams(window.location.search).get("chat");
+    return id
+      ? { id, messages: fetchAskVaenyxMessages(id).catch(() => null) }
+      : null;
+  } catch {
+    return null;
+  }
+})();
+let bootChatPrefetchUsed = false;
+
 const GENERAL_PROJECT_ID = "general";
 
 // Force the very latest build: drop any service worker + cache entries, then
@@ -6766,11 +6786,20 @@ function AskVaenyxPanel({
   async function openConversation(conversationId: string) {
     setActiveConversationId(conversationId);
     setLoadingMessages(true);
+    // Hidden from the first frame of the switch (Oskar, 2026-09-13): the list
+    // is laid out and placed unseen, so the top never shows before the jump.
+    setLandingHidden(true);
     setError(null);
     clearNotificationsFor(`/?chat=${encodeURIComponent(conversationId)}`);
 
     try {
-      const loaded = await fetchAskVaenyxMessages(conversationId);
+      const prefetched =
+        !bootChatPrefetchUsed && BOOT_CHAT_PREFETCH?.id === conversationId
+          ? await BOOT_CHAT_PREFETCH.messages
+          : null;
+      if (BOOT_CHAT_PREFETCH?.id === conversationId) bootChatPrefetchUsed = true;
+      const loaded =
+        prefetched ?? (await fetchAskVaenyxMessages(conversationId));
       chatMessagesForRef.current = conversationId;
       setMessages(loaded);
     } catch (nextError) {
@@ -6781,6 +6810,11 @@ function AskVaenyxPanel({
       );
     } finally {
       setLoadingMessages(false);
+      // Whatever happened — a failed load, a path that lands nowhere — the
+      // list is never left invisible.
+      window.setTimeout(() => {
+        if (!pendingLandingRef.current) setLandingHidden(false);
+      }, 1200);
     }
   }
 
@@ -7551,6 +7585,11 @@ function AskVaenyxPanel({
   // target that never appears, so nothing can stay hidden.
   const [landingHidden, setLandingHidden] = useState(false);
   const LANDING_REVEAL_GRACE_MS = 400;
+  // Revealed once the page has held the same height for a few frames after
+  // landing — messages, cards and fonts arrive on their own clocks, and each
+  // one that lands after the reveal is a visible jump — or at this cap.
+  const LANDING_STABLE_FRAMES = 3;
+  const LANDING_REVEAL_CAP_MS = 900;
 
   function requestLanding(
     key: string,
@@ -7561,6 +7600,8 @@ function AskVaenyxPanel({
     cancelAnimationFrame(landingFrameRef.current);
     const startedAt = Date.now();
     let heightAtLastLand = -1;
+    let stableFrames = 0;
+    let landed = false;
     setLandingHidden(true);
     const cancel = () => {
       if (pendingLandingRef.current?.key === key) {
@@ -7596,12 +7637,20 @@ function AskVaenyxPanel({
       }
       const element = target();
       const height = document.documentElement.scrollHeight;
+      const elapsed = Date.now() - startedAt;
       if (element && height !== heightAtLastLand) {
         heightAtLastLand = height;
+        stableFrames = 0;
+        landed = true;
         if (align === "end") element.scrollIntoView({ block: "end" });
         else scrollToMessageStart(element);
+      } else if (landed) {
+        stableFrames += 1;
+        if (stableFrames >= LANDING_STABLE_FRAMES) setLandingHidden(false);
+      }
+      if (elapsed > LANDING_REVEAL_CAP_MS) {
         setLandingHidden(false);
-      } else if (!element && Date.now() - startedAt > LANDING_REVEAL_GRACE_MS) {
+      } else if (!element && elapsed > LANDING_REVEAL_GRACE_MS) {
         setLandingHidden(false);
       }
       landingFrameRef.current = requestAnimationFrame(attempt);
@@ -7703,6 +7752,13 @@ function AskVaenyxPanel({
     streamThinking,
     view,
   ]);
+
+  // Nothing to land on — an empty conversation — shows at once.
+  useEffect(() => {
+    if (landingHidden && !loadingMessages && messages.length === 0) {
+      setLandingHidden(false);
+    }
+  }, [landingHidden, loadingMessages, messages.length]);
 
   // 🔴 A MESSAGE THAT ARRIVES IN THE OPEN CONVERSATION IS SHOWN, not left
   // below the fold. The build-completion note ("✔ Routine built") landed
@@ -28131,6 +28187,48 @@ function VaenyxWorkspace({
     setMobileSidebarOpen(false);
   }
 
+  // A notification tap while this window is open switches IN PLACE (Oskar,
+  // 2026-09-13: 点推送要等一两秒). The service worker asks here first and
+  // reloads the page only when nothing answers. Read through a ref so the
+  // listener, attached once, always opens with the current workspace.
+  const openFromNotificationRef = useRef<(url: string) => boolean>(
+    () => false,
+  );
+  openFromNotificationRef.current = (raw: string) => {
+    let target: URL;
+    try {
+      target = new URL(raw, window.location.origin);
+    } catch {
+      return false;
+    }
+    const chatId = target.searchParams.get("chat");
+    const taskId = target.searchParams.get("task");
+    if (!chatId && !taskId) return false;
+    // A result that arrived after this page loaded may belong to a thread
+    // the sidebar has not seen yet.
+    void refreshWorkspace().catch(() => undefined);
+    void fetchAskVaenyxConversations()
+      .then(setAskVaenyxConversations)
+      .catch(() => undefined);
+    if (chatId) openSourceConversation(chatId);
+    else if (taskId) openThreadTask(taskId);
+    return true;
+  };
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: unknown; url?: unknown } | null;
+      if (!data || data.type !== "vaenyx:open" || typeof data.url !== "string") {
+        return;
+      }
+      const handled = openFromNotificationRef.current(data.url);
+      event.ports[0]?.postMessage({ ok: handled });
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () =>
+      navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, []);
+
   // The address bar mirrors where you are, and a load follows it — that is
   // what makes a notification's URL open the thing it is about, and a refresh
   // stay on the page you were on. The target states are initialised straight
@@ -29801,11 +29899,15 @@ export function App() {
   const [fatalError, setFatalError] = useState<string | null>(null);
 
   async function loadAuthenticatedWorkspace() {
+    // Asked in parallel with the auth check (Oskar, 2026-09-13: 点推送要等一两
+    // 秒): a signed-in Owner — the usual case — gets the workspace one round
+    // trip sooner; a signed-out one discards a quiet 401.
+    const workspaceEarly = fetchWorkspace().catch(() => null);
     const nextBootstrap = await fetchBootstrapStatus();
     setBootstrap(nextBootstrap);
 
     if (nextBootstrap.authenticated) {
-      setWorkspace(await fetchWorkspace());
+      setWorkspace((await workspaceEarly) ?? (await fetchWorkspace()));
     } else {
       setWorkspace(null);
     }

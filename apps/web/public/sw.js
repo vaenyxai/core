@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v17";
+const CACHE_NAME = "vaenyx-shell-v18";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -229,6 +229,14 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(fetch(event.request).catch(() => bootWaitPage()));
 });
 
+// The notification's pictures travel INSIDE this file (Oskar, 2026-09-13:
+// 推送有时是 Chrome 图标). A URL icon is downloaded the moment the
+// notification is shown, and when the phone cannot resolve this address right
+// then, Chrome silently shows its own logo instead. The badge is a white
+// crescent on transparent: Android draws the badge from its alpha alone.
+const NOTIFICATION_ICON = "data:image/png;base64,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";
+const NOTIFICATION_BADGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAACBklEQVR42u2dYY3DMAxGB6EQCiEQBiUQBiEMBqFQAqEQCqEQvDuplU6n6W6N3caJnqVP6r9Ffp3jOIl7E5EbqiecAAAAIAAAAAEAAAgAAEAAAAACAAAQAD5SEJH49ZxEJG/aLQLAXsPm2ElEVnlvayvObwlA+MfpP50fCEF2uv8KK1053zOA8YDjm4r5LQBIctwiWZBNnJ8LnD+RhuoVP5hg39nMOqBOyNkn3REAOk1Sbg9WwvWcnylF1Ak7u40A0E24GksU43Sp5qpw/rrVgwBQqJm3vx4Abdzv7u2/EsAoenuyIVOubABgBEB5SVlruUfnXwXA4u2PAChPOy1sAMD15Ybuw8/ZAAbloqurolsNANEo/AQA1As/ctGZorQ9h54ArE7j/7ejlz9+c7ky6/Ke/TyN56R8EP7QKgCr+P8wdH5JIXA+G4LXwttudweLwdwigOwoA4qeV+LeAViMZTEYx9IaAHECIBiOJQCgXjJwWhjqHUAyHEsCAAAIQQBgEiYNZSHGQoxSBMU4inGUo9mQYUOGLUk25dmU51gKB7MAwNFEDucCgOPpXNAAAFeUuKQHAK6pclEbALQqoFkHAGhXQ8MmANCyjKZ9AKBtZSsANCGJxq0n1I5oXexANO92ND/Qvt6B+ICDw38GnzBBAAAAAgAAEAAAgAAAAAQAACAAAAABwL1eepzSBxML5IEAAAAASUVORK5CYII=";
+
 // Web Push: something finished — show it. The payload is JSON
 // { title, body, url } sent by the local Vaenyx server.
 //
@@ -264,8 +272,8 @@ self.addEventListener("push", (event) => {
       const url = data.url || "/";
       await self.registration.showNotification(data.title || "Vaenyx", {
         body: data.body || "",
-        icon: "/vaenyx-icon-192.png",
-        badge: "/vaenyx-icon-192.png",
+        icon: NOTIFICATION_ICON,
+        badge: NOTIFICATION_BADGE,
         tag: "vaenyx-" + url,
         renotify: true,
         data: { url },
@@ -317,6 +325,33 @@ self.addEventListener("pushsubscriptionchange", (event) => {
   );
 });
 
+// A window that is already open switches to the target IN PLACE (Oskar,
+// 2026-09-13: 点推送要等一两秒): navigate() reloaded the whole app, one to two
+// seconds on a phone. The page answers on the port when it handled the open;
+// no answer in time (an older build, a sign-in screen) falls back to navigate.
+function askWindowToOpen(client, url) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (handled) => {
+      if (settled) return;
+      settled = true;
+      resolve(handled);
+    };
+    const timer = setTimeout(() => finish(false), 700);
+    try {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (message) => {
+        clearTimeout(timer);
+        finish(Boolean(message.data && message.data.ok));
+      };
+      client.postMessage({ type: "vaenyx:open", url }, [channel.port2]);
+    } catch {
+      clearTimeout(timer);
+      finish(false);
+    }
+  });
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   // A digest folds several results and its own url is "/" — which used to
@@ -346,12 +381,14 @@ self.addEventListener("notificationclick", (event) => {
           // finished task dropped you on the home screen and you had to go
           // find it (Oskar, 2026-07-27).
           await client.focus();
-          if ("navigate" in client && url !== "/") {
-            try {
-              await client.navigate(url);
-            } catch {
-              // Some browsers refuse navigate() on a focused client; the
-              // notification has still done its job of bringing the app up.
+          if (url !== "/" && !(await askWindowToOpen(client, url))) {
+            if ("navigate" in client) {
+              try {
+                await client.navigate(url);
+              } catch {
+                // Some browsers refuse navigate() on a focused client; the
+                // notification has still done its job of bringing the app up.
+              }
             }
           }
           return;
