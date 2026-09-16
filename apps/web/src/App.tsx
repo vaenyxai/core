@@ -6588,28 +6588,27 @@ function AskVaenyxPanel({
 
   // Every waiting photo uploaded, in order; null when one could not be (the
   // caller restores the draft). A photo already uploaded is not sent twice.
+  // The uploads run side by side (Oskar, 2026-09-16: 五张一起发不要慢), and
+  // the ids still come back in the order the photos were taken.
   async function ensurePhotosUploaded(
     draftLifecycle?: DraftSendLifecycle,
   ): Promise<string[] | null> {
-    const ids: string[] = [];
-    for (const photo of pendingPhotosRef.current) {
-      if (photo.local.serverId) {
-        ids.push(photo.local.serverId);
-        continue;
-      }
-      try {
-        const imageId = (await uploadPhoto(photo.local.blob)).imageId;
-        await draftLifecycle?.attachmentReady({
-          ...photo.local,
-          serverId: imageId,
-        });
-        finishPhotoUpload(photo.local.id, imageId);
-        ids.push(imageId);
-      } catch {
-        return null;
-      }
+    try {
+      return await Promise.all(
+        pendingPhotosRef.current.map(async (photo) => {
+          if (photo.local.serverId) return photo.local.serverId;
+          const imageId = (await uploadPhoto(photo.local.blob)).imageId;
+          await draftLifecycle?.attachmentReady({
+            ...photo.local,
+            serverId: imageId,
+          });
+          finishPhotoUpload(photo.local.id, imageId);
+          return imageId;
+        }),
+      );
+    } catch {
+      return null;
     }
-    return ids;
   }
 
   function holdLocalDocument(file: File) {
@@ -7473,8 +7472,10 @@ function AskVaenyxPanel({
       attachmentReady: async (attachment) => {
         saved = {
           ...saved,
+          // Matched by id, not kind: with several photos a kind match copied
+          // the first uploaded photo over all the others in the saved draft.
           attachments: saved.attachments.map((current) =>
-            current.kind === attachment.kind ? attachment : current,
+            current.id === attachment.id ? attachment : current,
           ),
         };
         await saveDraft(saved).catch(() => undefined);

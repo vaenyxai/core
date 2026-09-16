@@ -1951,28 +1951,35 @@ export async function createAskVaenyxMessage(
       !capabilityRefusedBy(database, "ocr", conversationModeId) &&
       ocrEngineConnected(options.secretsDirectory)
     ) {
-      const ocrParts: string[] = [];
-      for (const [index, photoId] of messagePhotoIds.entries()) {
-        try {
-          const found = readImage(options.dataDirectory, photoId);
-          if (!found) continue;
-          const read = await runOcr(options.secretsDirectory, {
-            base64: found.image.toString("base64"),
-            mediaType: found.mimeType,
-          });
-          recordEngineUsage(database, "core", "mistral-ocr");
-          const text = read.text.trim();
-          if (text) {
-            ocrParts.push(
-              messagePhotoIds.length > 1 ? `Photo ${index + 1}:\n${text}` : text,
-            );
+      // Every photo is read at the same time (Oskar, 2026-09-16: 五张一起发
+      // 不要慢); the parts are joined back in the order the photos were taken.
+      const dataDirectory = options.dataDirectory;
+      const secretsDirectory = options.secretsDirectory;
+      const ocrParts = await Promise.all(
+        messagePhotoIds.map(async (photoId, index) => {
+          try {
+            const found = readImage(dataDirectory, photoId);
+            if (!found) return null;
+            const read = await runOcr(secretsDirectory, {
+              base64: found.image.toString("base64"),
+              mediaType: found.mimeType,
+            });
+            recordEngineUsage(database, "core", "mistral-ocr");
+            const text = read.text.trim();
+            if (!text) return null;
+            return messagePhotoIds.length > 1
+              ? `Photo ${index + 1}:\n${text}`
+              : text;
+          } catch {
+            // A failed OCR call never costs the turn: the photo is still shown
+            // and vision still runs; only the exact-characters guarantee is lost.
+            return null;
           }
-        } catch {
-          // A failed OCR call never costs the turn: the photo is still shown
-          // and vision still runs; only the exact-characters guarantee is lost.
-        }
-      }
-      photoOcrText = ocrParts.join("\n\n");
+        }),
+      );
+      photoOcrText = ocrParts
+        .filter((part): part is string => Boolean(part))
+        .join("\n\n");
     }
     const attachedPhotos =
       messagePhotoIds.length > 1
@@ -2003,29 +2010,33 @@ export async function createAskVaenyxMessage(
       !visionRefused &&
       !imageAttachment
     ) {
-      const descriptions: string[] = [];
-      for (const [index, photoId] of messagePhotoIds.entries()) {
-        try {
-          const found = readImage(options.dataDirectory, photoId);
-          if (!found) continue;
-          const { value: described } = await describeImage(
-            options.secretsDirectory,
-            found.image,
-            found.mimeType,
-            "en",
-          );
-          if (described.trim()) {
-            descriptions.push(
-              messagePhotoIds.length > 1
+      // Described side by side, joined back in the order taken.
+      const dataDirectory = options.dataDirectory;
+      const secretsDirectory = options.secretsDirectory;
+      const descriptions = (
+        await Promise.all(
+          messagePhotoIds.map(async (photoId, index) => {
+            try {
+              const found = readImage(dataDirectory, photoId);
+              if (!found) return null;
+              const { value: described } = await describeImage(
+                secretsDirectory,
+                found.image,
+                found.mimeType,
+                "en",
+              );
+              if (!described.trim()) return null;
+              return messagePhotoIds.length > 1
                 ? `Photo ${index + 1}: ${described.trim()}`
-                : described.trim(),
-            );
-          }
-        } catch {
-          // No vision model, or it refused: the photo is still attached to the
-          // message and visible; the model simply does not get a description.
-        }
-      }
+                : described.trim();
+            } catch {
+              // No vision model, or it refused: the photo is still attached to
+              // the message and visible; the model simply gets no description.
+              return null;
+            }
+          }),
+        )
+      ).filter((part): part is string => Boolean(part));
       if (descriptions.length > 0) {
         // Same standing sentence: the answer about to be written is built on
         // somebody else's description, and the Owner is entitled to know
