@@ -377,6 +377,9 @@ export const AskVaenyxMessageSchema = Type.Object(
     // Phase B: a photo attached to the message (shown as a thumbnail; a
     // vision-capable main model sees the original directly).
     imageId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    // The second to fifth photos of the same message (Oskar, 2026-09-16);
+    // imageId stays the first. Absent = one photo or none.
+    extraImageIds: Type.Optional(Type.Array(Type.String())),
     // Generated pictures only: the exact English prompt that was sent to the
     // image provider, shown beside the picture (F5's promise — the main model
     // writes the prompt, so it can word things the Owner never typed).
@@ -510,6 +513,13 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     // Phase B: an uploaded photo's id — attached to the Owner message and
     // handed to the main model directly when it reads images.
     imageId: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    // Up to four more photos sent with the same message, in the order taken;
+    // they ride only when imageId is set.
+    extraImageIds: Type.Optional(
+      Type.Array(Type.String({ minLength: 1, maxLength: 100 }), {
+        maxItems: 4,
+      }),
+    ),
     // draw verdict: the classifier already judged this message as asking for a
     // picture and produced the English prompt — the turn generates with it
     // instead of judging again (one judgment per message).

@@ -517,9 +517,12 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     // first-hand — no describe-to-text middle layer. The same input takes a
     // native PDF document block (also probe-verified), which is how a document
     // gets read page-by-page as picture AND text.
-    const imageMatch = options?.imageDataUrl
-      ? /^data:([^;]+);base64,(.+)$/.exec(options.imageDataUrl)
-      : null;
+    const imageMatches = (
+      options?.imageDataUrls ??
+      (options?.imageDataUrl ? [options.imageDataUrl] : [])
+    )
+      .map((url) => /^data:([^;]+);base64,(.+)$/.exec(url))
+      .filter((match): match is RegExpExecArray => Boolean(match));
     const documentBase64 = options?.documentBase64 ?? null;
 
     const prompt = [
@@ -532,11 +535,15 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
             "Beyond the document tool described below you have no other file access — the rest of this machine is closed to you."
           : "You have no tools, no file access and no web access — answer from knowledge and the conversation alone, and say so plainly when something needs live data.",
       ...(docSpill ? [documentToolBriefing(docSpill)] : []),
-      ...(imageMatch
+      ...(imageMatches.length > 1
         ? [
-            "The attached image is the photo from the conversation's most recent photo message — you are seeing it first-hand.",
+            `The ${imageMatches.length} attached images are the photos from the conversation's most recent photo message, in the order taken — you are seeing them first-hand. Answer about all of them together.`,
           ]
-        : []),
+        : imageMatches.length === 1
+          ? [
+              "The attached image is the photo from the conversation's most recent photo message — you are seeing it first-hand.",
+            ]
+          : []),
       ...(documentBase64
         ? [
             `The attached document${options?.documentName ? ` (${options.documentName})` : ""} is the file the Owner just sent — you are reading it first-hand, page by page. Cite page numbers when it helps.`,
@@ -554,7 +561,7 @@ export class ClaudeSubscriptionProvider implements ModelProvider {
     // carrying the image and/or document block plus the text; plain turns stay
     // a simple string.
     const attachments: SdkUserMessage["message"]["content"] = [];
-    if (imageMatch) {
+    for (const imageMatch of imageMatches) {
       attachments.push({
         type: "image",
         source: {

@@ -133,6 +133,7 @@ interface AskVaenyxMessageRow extends StructuredQuestionJoinedRow {
   voice: 0 | 1;
   audio_id: string | null;
   image_id: string | null;
+  extra_image_ids?: string | null;
   image_prompt: string | null;
   image_annotations: string | null;
   document_id: string | null;
@@ -528,6 +529,10 @@ function toMessage(row: AskVaenyxMessageRow): AskVaenyxMessage {
     voice: row.voice === 1,
     audioId: row.audio_id ?? null,
     imageId: row.image_id ?? null,
+    ...(() => {
+      const extras = parseExtraImageIds(row.extra_image_ids);
+      return extras.length > 0 ? { extraImageIds: extras } : {};
+    })(),
     imagePrompt: row.image_prompt ?? null,
     imageAnnotations: parseAnnotations(row.image_annotations),
     documentId: row.document_id ?? null,
@@ -1011,6 +1016,7 @@ export function listAskVaenyxMessages(
     .prepare(
       `SELECT m.id, m.conversation_id, m.role, m.content, m.status,
               m.web_search_used, m.created_at, m.voice, m.audio_id, m.image_id,
+              m.extra_image_ids,
               m.image_prompt, m.document_id, m.document_name, m.document_pages,
               a.items AS image_annotations,
               q.id AS question_id, q.version AS question_version,
@@ -1035,6 +1041,22 @@ export function listAskVaenyxMessages(
     .all(conversationId) as unknown as AskVaenyxMessageRow[];
 
   return rows.map(toMessage);
+}
+
+/** The second to fifth photos of a message, read defensively: a row that
+ *  holds something unreadable counts as no extra photos. */
+export function parseExtraImageIds(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+          .slice(0, 4)
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 export interface CreateAskVaenyxMessageOptions {
@@ -1063,6 +1085,8 @@ export interface CreateAskVaenyxMessageOptions {
   // Phase B: an uploaded photo's id attached to this owner message; handed to
   // the main model directly when it reads images.
   imageId?: string;
+  // The second to fifth photos of the same message (Oskar, 2026-09-16).
+  extraImageIds?: string[];
   // draw verdict: the message classifier (the ONE per-message judgment) already
   // decided this asks for a picture and produced the English prompt. The turn
   // generates with it instead of judging again.
@@ -1131,7 +1155,8 @@ function existingIdempotentTurn(
 ): CreateAskVaenyxMessageResponse | null {
   const existing = database.sqlite
     .prepare(
-      `SELECT id, content, audio_id, image_id, document_id, document_name
+      `SELECT id, content, audio_id, image_id, extra_image_ids, document_id,
+         document_name
        FROM ask_vaenyx_messages
        WHERE conversation_id = ? AND role = 'owner'
          AND client_message_id = ?
@@ -1143,6 +1168,7 @@ function existingIdempotentTurn(
         content: string;
         document_id: string | null;
         document_name: string | null;
+        extra_image_ids: string | null;
         id: string;
         image_id: string | null;
       }
@@ -1153,6 +1179,12 @@ function existingIdempotentTurn(
     existing.content !== content ||
     existing.audio_id !== (options.voiceAudioId ?? null) ||
     existing.image_id !== (options.imageId ?? null) ||
+    JSON.stringify(parseExtraImageIds(existing.extra_image_ids)) !==
+      JSON.stringify(
+        options.imageId
+          ? (options.extraImageIds ?? []).filter(Boolean).slice(0, 4)
+          : [],
+      ) ||
     existing.document_id !== (options.documentId ?? null) ||
     existing.document_name !== (options.documentName ?? null)
   ) {
@@ -1237,9 +1269,21 @@ export async function createAskVaenyxMessage(
   // no photo stays refused.
   let trimmedContent =
     options?.structuredQuestionClaim?.content ?? content.trim();
+  // The photos of this message beyond the first, in the order taken — only
+  // ever with a first photo, and never more than four.
+  const extraImageIds = options?.imageId
+    ? (options.extraImageIds ?? []).filter(Boolean).slice(0, 4)
+    : [];
+  const photoCount = options?.imageId ? 1 + extraImageIds.length : 0;
   if (!trimmedContent && options?.imageId) {
     trimmedContent =
-      pushLanguage() === "zh" ? "(看看这张照片)" : "(Look at this photo.)";
+      pushLanguage() === "zh"
+        ? photoCount > 1
+          ? "(看看这几张照片)"
+          : "(看看这张照片)"
+        : photoCount > 1
+          ? "(Look at these photos.)"
+          : "(Look at this photo.)";
   }
   if (!trimmedContent) {
     throw new Error("EMPTY_MESSAGE");
@@ -1358,9 +1402,9 @@ export async function createAskVaenyxMessage(
         .prepare(
           `INSERT INTO ask_vaenyx_messages (
           id, conversation_id, role, content, status, web_search_used, created_at,
-          voice, audio_id, image_id, document_id, document_name, document_pages,
-          client_message_id
-        ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          voice, audio_id, image_id, extra_image_ids, document_id,
+          document_name, document_pages, client_message_id
+        ) VALUES (?, ?, 'owner', ?, 'completed', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           ownerMessageId,
@@ -1370,6 +1414,7 @@ export async function createAskVaenyxMessage(
           options?.voiceAudioId ? 1 : 0,
           options?.voiceAudioId ?? null,
           options?.imageId ?? null,
+          extraImageIds.length > 0 ? JSON.stringify(extraImageIds) : null,
           options?.documentId ?? null,
           options?.documentName ?? null,
           documentPages,
@@ -1424,6 +1469,7 @@ export async function createAskVaenyxMessage(
     voice: Boolean(options?.voiceAudioId),
     audioId: options?.voiceAudioId ?? null,
     imageId: options?.imageId ?? null,
+    ...(extraImageIds.length > 0 ? { extraImageIds } : {}),
   });
 
   const usableHistory = listAskVaenyxMessages(database, conversationId, ownerId)
@@ -1830,25 +1876,40 @@ export async function createAskVaenyxMessage(
     // questions about it ("what's the jar on the left?") keep working.
     // Codex takes the photo as a file path; key-based backends as a data URL —
     // both are offered and each provider reads its own form.
+    //
+    // A message may carry up to five photos (Oskar, 2026-09-16): all of them
+    // ride together, in the order taken, and the reply answers about the set.
     let imageAttachment: string | undefined;
     let imageAttachmentPath: string | undefined;
+    let imageAttachments: string[] = [];
+    let imageAttachmentPaths: string[] = [];
     if (
       options?.dataDirectory &&
       !visionRefused &&
       VISION_DIRECT_PROVIDER_IDS.includes(provider.id)
     ) {
-      const effectiveImageId =
-        options.imageId ??
-        (
-          database.sqlite
-            .prepare(
-              `SELECT image_id FROM ask_vaenyx_messages
-               WHERE conversation_id = ? AND image_id IS NOT NULL
-               ORDER BY created_at DESC LIMIT 1`,
-            )
-            .get(conversationId) as { image_id: string } | undefined
-        )?.image_id;
-      if (effectiveImageId) {
+      const dataDirectory = options.dataDirectory;
+      const recentPhotoSet = options.imageId
+        ? { first: options.imageId, extras: extraImageIds }
+        : (() => {
+            const row = database.sqlite
+              .prepare(
+                `SELECT image_id, extra_image_ids FROM ask_vaenyx_messages
+                 WHERE conversation_id = ? AND image_id IS NOT NULL
+                 ORDER BY created_at DESC LIMIT 1`,
+              )
+              .get(conversationId) as
+              | { image_id: string; extra_image_ids: string | null }
+              | undefined;
+            return row
+              ? {
+                  first: row.image_id,
+                  extras: parseExtraImageIds(row.extra_image_ids),
+                }
+              : null;
+          })();
+      const effectiveImageId = recentPhotoSet?.first;
+      if (effectiveImageId && recentPhotoSet) {
         const recentWithImage = listAskVaenyxMessages(
           database,
           conversationId,
@@ -1857,13 +1918,23 @@ export async function createAskVaenyxMessage(
           .slice(-10)
           .some((message) => message.imageId === effectiveImageId);
         if (recentWithImage) {
-          imageAttachment =
-            imageDataUrl(options.dataDirectory, effectiveImageId) ?? undefined;
-          imageAttachmentPath =
-            imageFilePath(options.dataDirectory, effectiveImageId) ?? undefined;
+          const setIds = [effectiveImageId, ...recentPhotoSet.extras];
+          imageAttachments = setIds
+            .map((id) => imageDataUrl(dataDirectory, id))
+            .filter((url): url is string => Boolean(url));
+          imageAttachmentPaths = setIds
+            .map((id) => imageFilePath(dataDirectory, id))
+            .filter((path): path is string => Boolean(path));
+          imageAttachment = imageAttachments[0];
+          imageAttachmentPath = imageAttachmentPaths[0];
         }
       }
     }
+    // Every photo of THIS message, for the readers below that only ever look
+    // at the photos just sent (OCR, the describe fallback).
+    const messagePhotoIds = options?.imageId
+      ? [options.imageId, ...extraImageIds]
+      : [];
     // The ocr capability on the PHOTO path — the other half of "a photo of a
     // page and a scan of the same page behave identically". Whatever else
     // happens to the picture (seen first-hand, described, or vision-refused),
@@ -1874,27 +1945,39 @@ export async function createAskVaenyxMessage(
     // description path.
     let photoOcrText = "";
     if (
-      options?.imageId &&
-      options.dataDirectory &&
+      messagePhotoIds.length > 0 &&
+      options?.dataDirectory &&
       options.secretsDirectory &&
       !capabilityRefusedBy(database, "ocr", conversationModeId) &&
       ocrEngineConnected(options.secretsDirectory)
     ) {
-      try {
-        const found = readImage(options.dataDirectory, options.imageId);
-        if (found) {
+      const ocrParts: string[] = [];
+      for (const [index, photoId] of messagePhotoIds.entries()) {
+        try {
+          const found = readImage(options.dataDirectory, photoId);
+          if (!found) continue;
           const read = await runOcr(options.secretsDirectory, {
             base64: found.image.toString("base64"),
             mediaType: found.mimeType,
           });
           recordEngineUsage(database, "core", "mistral-ocr");
-          photoOcrText = read.text.trim();
+          const text = read.text.trim();
+          if (text) {
+            ocrParts.push(
+              messagePhotoIds.length > 1 ? `Photo ${index + 1}:\n${text}` : text,
+            );
+          }
+        } catch {
+          // A failed OCR call never costs the turn: the photo is still shown
+          // and vision still runs; only the exact-characters guarantee is lost.
         }
-      } catch {
-        // A failed OCR call never costs the turn: the photo is still shown
-        // and vision still runs; only the exact-characters guarantee is lost.
       }
+      photoOcrText = ocrParts.join("\n\n");
     }
+    const attachedPhotos =
+      messagePhotoIds.length > 1
+        ? `The Owner attached ${messagePhotoIds.length} photos`
+        : "The Owner attached a photo";
     // The photo is kept and shown either way. What changes is how the model
     // gets to read it: a vision-capable backend sees the picture itself; any
     // other backend gets the vision model's description as context. The
@@ -1911,18 +1994,20 @@ export async function createAskVaenyxMessage(
         visionRefused,
         "a photo attached to a chat message was not looked at.",
       );
-      photoContext = `The Owner attached a photo, but nothing has looked at it and you cannot see it. ${refusedReason("picture-reading", visionRefused)} Never describe or guess at what is in the picture.`;
+      photoContext = `${attachedPhotos}, but nothing has looked at ${messagePhotoIds.length > 1 ? "them" : "it"} and you cannot see ${messagePhotoIds.length > 1 ? "them" : "it"}. ${refusedReason("picture-reading", visionRefused)} Never describe or guess at what is in the picture.`;
     }
     if (
-      options?.imageId &&
-      options.dataDirectory &&
+      messagePhotoIds.length > 0 &&
+      options?.dataDirectory &&
       options.secretsDirectory &&
       !visionRefused &&
       !imageAttachment
     ) {
-      try {
-        const found = readImage(options.dataDirectory, options.imageId);
-        if (found) {
+      const descriptions: string[] = [];
+      for (const [index, photoId] of messagePhotoIds.entries()) {
+        try {
+          const found = readImage(options.dataDirectory, photoId);
+          if (!found) continue;
           const { value: described } = await describeImage(
             options.secretsDirectory,
             found.image,
@@ -1930,23 +2015,30 @@ export async function createAskVaenyxMessage(
             "en",
           );
           if (described.trim()) {
-            // Same standing sentence: the answer about to be written is built on
-            // somebody else's description, and the Owner is entitled to know
-            // that before they trust a detail in it.
-            photoContext = `The Owner attached a photo with this message. ${backendCannotMessage(
-              provider.name,
-              "vision",
-              {
-                by: "a vision model",
-                cost: "you are reading its description, not the picture itself",
-              },
-              "en",
-            )} ${SAY_THE_STAND_IN}\nIts description:\n${described.trim()}`;
+            descriptions.push(
+              messagePhotoIds.length > 1
+                ? `Photo ${index + 1}: ${described.trim()}`
+                : described.trim(),
+            );
           }
+        } catch {
+          // No vision model, or it refused: the photo is still attached to the
+          // message and visible; the model simply does not get a description.
         }
-      } catch {
-        // No vision model, or it refused: the photo is still attached to the
-        // message and visible; the model simply does not get a description.
+      }
+      if (descriptions.length > 0) {
+        // Same standing sentence: the answer about to be written is built on
+        // somebody else's description, and the Owner is entitled to know
+        // that before they trust a detail in it.
+        photoContext = `${attachedPhotos} with this message. ${backendCannotMessage(
+          provider.name,
+          "vision",
+          {
+            by: "a vision model",
+            cost: "you are reading its description, not the picture itself",
+          },
+          "en",
+        )} ${SAY_THE_STAND_IN}\n${descriptions.length > 1 ? "Their descriptions" : "Its description"}:\n${descriptions.join("\n\n")}`;
       }
     }
     if (photoOcrText) {
@@ -1957,7 +2049,7 @@ export async function createAskVaenyxMessage(
       const exactWords = `The exact words printed in the Owner's photo, machine-read by the dedicated OCR engine (it anchors characters in the picture and does not invent — wherever you quote text or numbers from this photo, use THESE characters, never your own reading of the pixels):\n${photoOcrText}`;
       photoContext = photoContext
         ? `${photoContext}\n\n${exactWords}`
-        : `The Owner attached a photo with this message. ${exactWords}`;
+        : `${attachedPhotos} with this message. ${exactWords}`;
     }
     let contextWithPhoto = photoContext
       ? [projectContext, photoContext].filter(Boolean).join("\n\n")
@@ -2125,6 +2217,12 @@ export async function createAskVaenyxMessage(
       reasoningEffort: settingsRow?.reasoning_effort ?? "medium",
       ...(imageAttachment ? { imageDataUrl: imageAttachment } : {}),
       ...(imageAttachmentPath ? { imagePath: imageAttachmentPath } : {}),
+      ...(imageAttachments.length > 1
+        ? { imageDataUrls: imageAttachments }
+        : {}),
+      ...(imageAttachmentPaths.length > 1
+        ? { imagePaths: imageAttachmentPaths }
+        : {}),
       ...(documentBase64 ? { documentBase64 } : {}),
       ...(options?.documentName ? { documentName: options.documentName } : {}),
       ...(hasToolLoop && fetchAccess ? { fetchAccess } : {}),

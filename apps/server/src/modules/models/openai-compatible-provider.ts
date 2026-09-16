@@ -59,13 +59,19 @@ export class OpenAICompatibleProvider implements ModelProvider {
     }
     // Phase B: attach the photo to the LAST user message as content parts —
     // the model sees the original image first-hand.
-    if (options?.imageDataUrl) {
+    const imageUrls =
+      options?.imageDataUrls ??
+      (options?.imageDataUrl ? [options.imageDataUrl] : []);
+    if (imageUrls.length > 0) {
       for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
         const entry = chatMessages[index];
         if (entry && entry.role === "user") {
           entry.content = [
             { type: "text", text: String(entry.content) },
-            { type: "image_url", image_url: { url: options.imageDataUrl } },
+            ...imageUrls.map((url) => ({
+              type: "image_url",
+              image_url: { url },
+            })),
           ];
           break;
         }

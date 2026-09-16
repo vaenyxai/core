@@ -408,6 +408,15 @@ const RESTORABLE_SCREENS: Screen[] = [
 
 type PortalView = "chat" | "task" | "new";
 
+// Photos waiting to ride the next message (Oskar, 2026-09-16: 连续拍最多五张
+// 一起发). The preview is a local object URL shown the instant a photo is
+// taken; the blob stays on-device until Send (H-012).
+interface PendingPhoto {
+  local: DraftAttachment;
+  preview: string;
+}
+const MAX_CHAT_PHOTOS = 5;
+
 // A notification opens a cold app on ?chat=… — its messages are asked for the
 // moment this module loads, in parallel with the auth check and the workspace,
 // instead of after both (Oskar, 2026-09-13: 点推送要等一两秒). Used once, by
@@ -1211,12 +1220,15 @@ async function downscalePhoto(file: File): Promise<Blob> {
 function CameraButton({
   disabled,
   lang,
+  multiple = false,
   onLocalPhoto,
   onPreview,
   onText,
 }: {
   disabled?: boolean;
   lang: string;
+  // The album may pick several photos at once (up to the message's cap).
+  multiple?: boolean;
   onLocalPhoto?: (photo: {
     id: string;
     blob: Blob;
@@ -1309,10 +1321,14 @@ function CameraButton({
       <input
         accept="image/*"
         hidden
+        multiple={multiple}
         onChange={(event) => {
-          const file = event.target.files?.[0];
+          const files = Array.from(event.target.files ?? []).slice(
+            0,
+            multiple ? MAX_CHAT_PHOTOS : 1,
+          );
           event.target.value = "";
-          if (file) void handleFile(file);
+          for (const file of files) void handleFile(file);
         }}
         ref={inputRef}
         type="file"
@@ -2041,6 +2057,7 @@ function ComposerTools({
   canAttachPhoto = true,
   disabled,
   lang,
+  multiplePhotos = false,
   onLocalDocument,
   onLocalPhoto,
   onPhotoPreview,
@@ -2052,6 +2069,7 @@ function ComposerTools({
   canAttachPhoto?: boolean;
   disabled: boolean;
   lang: string;
+  multiplePhotos?: boolean;
   onLocalDocument: (file: File) => void;
   onLocalPhoto: (photo: {
     id: string;
@@ -2066,6 +2084,10 @@ function ComposerTools({
   showMic: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // A recording in progress keeps the row open whatever is tapped (Oskar,
+  // 2026-09-16: 语音输入时点外面不要关掉): its controls live in the row, and
+  // folding it away mid-recording hid the only way to send or cancel.
+  const [recording, setRecording] = useState(false);
   const shellRef = useRef<HTMLSpanElement>(null);
 
   // Anywhere else on the screen closes it. Without this the only way out was
@@ -2073,14 +2095,14 @@ function ComposerTools({
   // they have changed their mind (Oskar, 2026-08-07). Capture phase, so a tap
   // that lands on some other control both closes this and does its own job.
   useEffect(() => {
-    if (!open) return;
+    if (!open || recording) return;
     const closeIfOutside = (event: PointerEvent) => {
       if (!shellRef.current?.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", closeIfOutside, true);
     return () =>
       document.removeEventListener("pointerdown", closeIfOutside, true);
-  }, [open]);
+  }, [open, recording]);
 
   // A tool that DID something folds the row away (Oskar, 2026-08-16: 选完
   // 照片就收起来). The system pickers fire no pointerdown on the page, so
@@ -2099,7 +2121,7 @@ function ComposerTools({
   return (
     <span
       className="composer-tools"
-      data-open={open ? "true" : "false"}
+      data-open={open || recording ? "true" : "false"}
       ref={shellRef}
     >
       <button
@@ -2120,6 +2142,7 @@ function ComposerTools({
           <CameraButton
             disabled={disabled}
             lang={lang}
+            multiple={multiplePhotos}
             onLocalPhoto={canAttachPhoto ? closeThen(onLocalPhoto) : undefined}
             onPreview={canAttachPhoto ? closeThen(onPhotoPreview) : undefined}
             onText={closeThen(onTranscribed)}
@@ -2130,7 +2153,11 @@ function ComposerTools({
           onLocalPicked={closeThen(onLocalDocument)}
         />
         {showMic ? (
-          <MicButton disabled={disabled} onText={closeThen(onSpoken)} />
+          <MicButton
+            disabled={disabled}
+            onRecordingChange={setRecording}
+            onText={closeThen(onSpoken)}
+          />
         ) : null}
       </span>
     </span>
@@ -2155,6 +2182,7 @@ function Composer({
   children,
   documentTray,
   lang,
+  multiplePhotos = false,
   onLocalDocument,
   onLocalPhoto,
   onPhotoPreview,
@@ -2179,6 +2207,8 @@ function Composer({
   children?: React.ReactNode;
   documentTray: { name: string } | null;
   lang: string;
+  // Several photos may wait for this message (the album picks several too).
+  multiplePhotos?: boolean;
   onLocalDocument: (file: File) => void;
   onLocalPhoto: (photo: {
     id: string;
@@ -2188,12 +2218,12 @@ function Composer({
   }) => void;
   onPhotoPreview: (url: string) => void;
   onRemoveDocument: () => void;
-  onRemovePhoto: () => void;
+  onRemovePhoto: (id: string) => void;
   onSpoken: (text: string, audioId?: string) => void;
   onStop: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTranscribed: (text: string) => void;
-  photoTray: string | null;
+  photoTray: { id: string; url: string }[];
   placeholder: string;
   showCamera: boolean;
   showMic: boolean;
@@ -2202,7 +2232,7 @@ function Composer({
   onValueChange: (next: string) => void;
 }) {
   // A photo or a PDF on its own is a complete message, everywhere.
-  const hasAttachment = Boolean(photoTray || documentTray);
+  const hasAttachment = Boolean(photoTray.length > 0 || documentTray);
 
   // The <form> stays with the caller: the new-chat panel is already a form of
   // its own with a heading above the box, and a form inside a form is invalid.
@@ -2221,17 +2251,21 @@ function Composer({
           </button>
         </div>
       ) : null}
-      {photoTray ? (
-        <div className="composer-attachment">
-          <img alt="" src={photoTray} />
-          <button
-            aria-label="Remove photo"
-            className="composer-attachment-remove"
-            onClick={onRemovePhoto}
-            type="button"
-          >
-            <IconX />
-          </button>
+      {photoTray.length > 0 ? (
+        <div className="composer-photo-tray">
+          {photoTray.map((photo, index) => (
+            <div className="composer-attachment" key={photo.id}>
+              <img alt="" src={photo.url} />
+              <button
+                aria-label={`Remove photo ${index + 1}`}
+                className="composer-attachment-remove"
+                onClick={() => onRemovePhoto(photo.id)}
+                type="button"
+              >
+                <IconX />
+              </button>
+            </div>
+          ))}
         </div>
       ) : null}
       <div className={boxClassName}>
@@ -2294,6 +2328,7 @@ function Composer({
           canAttachPhoto={!attachDisabled}
           disabled={busy}
           lang={lang}
+          multiplePhotos={multiplePhotos}
           onLocalDocument={onLocalDocument}
           onLocalPhoto={onLocalPhoto}
           onPhotoPreview={onPhotoPreview}
@@ -2327,15 +2362,22 @@ function Composer({
 
 function MicButton({
   disabled,
+  onRecordingChange,
   onText,
 }: {
   disabled?: boolean;
+  // Told when a recording starts and ends, so the row it lives in can stay
+  // open for the whole of it.
+  onRecordingChange?: (recording: boolean) => void;
   onText: (text: string, audioId: string) => void;
 }) {
   // Only for the refusal the server may send back: a recording has no
   // language of its own until it has been transcribed.
   const { lang } = useI18n();
   const [state, setState] = useState<"idle" | "recording" | "busy">("idle");
+  useEffect(() => {
+    onRecordingChange?.(state === "recording");
+  }, [onRecordingChange, state]);
   const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -6400,23 +6442,40 @@ function AskVaenyxPanel({
   const [voiceReady, setVoiceReady] = useState(false);
   const [visionReady, setVisionReady] = useState(false);
   const [imageEngineReady, setImageEngineReady] = useState(false);
-  // Phase B: an uploaded photo waiting to ride on the next message (direct
-  // vision mode); null = no attachment pending.
-  const [pendingImageId, setPendingImageId] = useState<string | null>(null);
-  const [pendingPhotoLocal, setPendingPhotoLocal] =
-    useState<DraftAttachment | null>(null);
-  // Instant thumbnail: a local object URL shown the moment the photo is
-  // picked. H-012 keeps the blob on-device and uploads only after Send.
-  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(
-    null,
-  );
+  // Photos waiting to ride on the next message, in the order taken (Oskar,
+  // 2026-09-16: 连续拍最多五张一起发 — a second photo used to replace the
+  // first). Each keeps its blob on-device until Send (H-012).
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
+  const pendingPhotosRef = useRef<PendingPhoto[]>([]);
+  pendingPhotosRef.current = pendingPhotos;
+  // How many photos this composer takes: a chat takes five; a Routine's chat
+  // and a task take one, which a new photo replaces. Set once the thread in
+  // front of the Owner is known (see activeThread).
+  const photoLimitRef = useRef(MAX_CHAT_PHOTOS);
+  const photoTray = pendingPhotos.map((photo) => ({
+    id: photo.local.id,
+    url: photo.preview,
+  }));
   function clearPendingPhoto() {
-    setPendingImageId(null);
-    setPendingPhotoLocal(null);
-    setPendingPhotoPreview((current) => {
-      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
-      return null;
+    setPendingPhotos((current) => {
+      for (const photo of current) {
+        if (photo.preview.startsWith("blob:")) {
+          URL.revokeObjectURL(photo.preview);
+        }
+      }
+      return [];
     });
+  }
+  function removePendingPhoto(id: string) {
+    setPendingPhotos((current) =>
+      current.filter((photo) => {
+        if (photo.local.id !== id) return true;
+        if (photo.preview.startsWith("blob:")) {
+          URL.revokeObjectURL(photo.preview);
+        }
+        return false;
+      }),
+    );
   }
   // A PDF waiting to ride the next message, and the M1 cost gate it may have
   // to pass first. acknowledged is the Owner's answer — the server refuses a
@@ -6434,22 +6493,123 @@ function AskVaenyxPanel({
     name: string;
     type: string;
   }) {
-    setPendingPhotoLocal((current) => ({
-      id: photo.id,
-      kind: "photo",
-      name: photo.name,
-      type: photo.type,
-      size: photo.blob.size,
-      blob: photo.blob,
-      serverId: current?.id === photo.id ? current.serverId : null,
-    }));
+    const limit = photoLimitRef.current;
+    const known = pendingPhotosRef.current.some(
+      (item) => item.local.id === photo.id,
+    );
+    // The camera hands over each photo twice under one id — the original at
+    // once for the thumbnail, the downscaled copy a moment later — so only a
+    // NEW id counts toward the cap.
+    if (!known && limit > 1 && pendingPhotosRef.current.length >= limit) {
+      showErrorToast(
+        lang === "zh"
+          ? `一条消息最多 ${limit} 张照片。`
+          : `Up to ${limit} photos per message.`,
+      );
+      return;
+    }
+    setPendingPhotos((current) => {
+      const existing = current.find((item) => item.local.id === photo.id);
+      if (existing) {
+        return current.map((item) =>
+          item.local.id === photo.id
+            ? {
+                ...item,
+                local: {
+                  ...item.local,
+                  name: photo.name,
+                  type: photo.type,
+                  size: photo.blob.size,
+                  blob: photo.blob,
+                  serverId: null,
+                },
+              }
+            : item,
+        );
+      }
+      const added: PendingPhoto = {
+        local: {
+          id: photo.id,
+          kind: "photo",
+          name: photo.name,
+          type: photo.type,
+          size: photo.blob.size,
+          blob: photo.blob,
+          serverId: null,
+        },
+        preview: URL.createObjectURL(photo.blob),
+      };
+      if (limit <= 1) {
+        for (const item of current) {
+          if (item.preview.startsWith("blob:")) {
+            URL.revokeObjectURL(item.preview);
+          }
+        }
+        return [added];
+      }
+      if (current.length >= limit) {
+        URL.revokeObjectURL(added.preview);
+        return current;
+      }
+      return [...current, added];
+    });
   }
 
-  function finishPhotoUpload(imageId: string) {
-    setPendingImageId(imageId);
-    setPendingPhotoLocal((current) =>
-      current ? { ...current, serverId: imageId } : current,
+  // A photo that is already on the server goes back into the composer (a
+  // Routine confirm card closed without feeding): shown from its server copy,
+  // never uploaded again.
+  function restoreUploadedPhoto(imageId: string) {
+    clearPendingPhoto();
+    setPendingPhotos([
+      {
+        local: {
+          id: crypto.randomUUID(),
+          kind: "photo",
+          name: "photo.jpg",
+          type: "image/jpeg",
+          size: 0,
+          blob: new Blob(),
+          serverId: imageId,
+        },
+        preview: `/v1/vision/image/${imageId}`,
+      },
+    ]);
+  }
+
+  function finishPhotoUpload(localId: string, imageId: string) {
+    setPendingPhotos((current) =>
+      current.map((item) =>
+        item.local.id === localId
+          ? { ...item, local: { ...item.local, serverId: imageId } }
+          : item,
+      ),
     );
+  }
+
+  // Every waiting photo uploaded, in order; null when one could not be (the
+  // caller restores the draft). A photo already uploaded is not sent twice.
+  async function ensurePhotosUploaded(
+    draftLifecycle?: DraftSendLifecycle,
+  ): Promise<string[] | null> {
+    const ids: string[] = [];
+    for (const photo of pendingPhotosRef.current) {
+      if (photo.local.serverId) {
+        ids.push(photo.local.serverId);
+        continue;
+      }
+      try {
+        const imageId = (await uploadPhoto(photo.local.blob)).imageId;
+        await draftLifecycle?.attachmentReady({
+          ...photo.local,
+          serverId: imageId,
+        });
+        finishPhotoUpload(photo.local.id, imageId);
+        ids.push(imageId);
+      } catch {
+        return null;
+      }
+    }
+    return ids;
   }
 
   function holdLocalDocument(file: File) {
@@ -7088,11 +7248,14 @@ function AskVaenyxPanel({
   function restoreDraftAttachments(draft: ComposerDraft) {
     clearPendingPhoto();
     setPendingDocument(null);
-    const photo = draft.attachments.find((item) => item.kind === "photo");
-    if (photo) {
-      setPendingPhotoLocal(photo);
-      setPendingImageId(photo.serverId);
-      setPendingPhotoPreview(URL.createObjectURL(photo.blob));
+    const photos = draft.attachments.filter((item) => item.kind === "photo");
+    if (photos.length > 0) {
+      setPendingPhotos(
+        photos.map((photo) => ({
+          local: photo,
+          preview: URL.createObjectURL(photo.blob),
+        })),
+      );
     }
     const document = draft.attachments.find((item) => item.kind === "document");
     if (document) {
@@ -7178,10 +7341,10 @@ function AskVaenyxPanel({
 
   const currentDraftAttachments = useMemo(
     () =>
-      [pendingPhotoLocal, pendingDocument?.local].filter(
+      [...pendingPhotos.map((photo) => photo.local), pendingDocument?.local].filter(
         (item): item is DraftAttachment => Boolean(item),
       ),
-    [pendingDocument, pendingPhotoLocal],
+    [pendingDocument, pendingPhotos],
   );
 
   useEffect(() => {
@@ -8724,21 +8887,16 @@ This conversation is its home — feed it something to try it, and ask for chang
   ): Promise<void> {
     // Phase B: a pending photo rides on this message; a photo alone is a
     // valid message too. A Run pressed while the upload is still in flight
-    // waits for the imageId here instead of dropping the photo.
-    let imageId = pendingImageId ?? undefined;
-    if (!imageId && pendingPhotoLocal) {
-      try {
-        imageId = (await uploadPhoto(pendingPhotoLocal.blob)).imageId;
-        await draftLifecycle?.attachmentReady({
-          ...pendingPhotoLocal,
-          serverId: imageId,
-        });
-        finishPhotoUpload(imageId);
-      } catch {
-        await draftLifecycle?.restore(false);
-        return;
-      }
+    // waits for the imageId here instead of dropping the photo. Up to five
+    // photos ride one message (Oskar, 2026-09-16): the first is imageId, the
+    // rest go along as extraImageIds.
+    const photoIds = await ensurePhotosUploaded(draftLifecycle);
+    if (!photoIds) {
+      await draftLifecycle?.restore(false);
+      return;
     }
+    const imageId = photoIds[0];
+    const extraImageIds = photoIds.slice(1);
     const document = await ensureDocumentUploaded(
       pendingDocument,
       draftLifecycle,
@@ -8935,6 +9093,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           voice: false,
           audioId: null,
           imageId: imageId ?? null,
+          ...(extraImageIds.length > 0 ? { extraImageIds } : {}),
           imagePrompt: null,
         },
       ]);
@@ -9254,6 +9413,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           createdAt: startedAt,
           ...(voiceAudioId ? { voice: true, audioId: voiceAudioId } : {}),
           ...(imageId ? { imageId } : {}),
+          ...(imageId && extraImageIds.length > 0 ? { extraImageIds } : {}),
         },
         {
           id: tempAssistantId,
@@ -9357,6 +9517,7 @@ This conversation is its home — feed it something to try it, and ask for chang
             }
           : undefined,
         draftLifecycle?.clientMessageId,
+        extraImageIds,
       );
 
       // Voice replies: spoken in → spoken out ("我输入是语音,你的输出才是
@@ -9500,8 +9661,7 @@ This conversation is its home — feed it something to try it, and ask for chang
     const content = prompt.trim();
     if (
       !content &&
-      !pendingImageId &&
-      !pendingPhotoPreview &&
+      pendingPhotos.length === 0 &&
       !pendingDocument
     ) {
       return;
@@ -9542,21 +9702,13 @@ This conversation is its home — feed it something to try it, and ask for chang
     const taskId = focusedTaskId;
     // The same pending attachments the chat composer fills, because it is the
     // same composer: one photo tray, one document tray, one place they are
-    // cleared (Oskar, 2026-07-30).
-    let imageId = pendingImageId ?? undefined;
-    if (!imageId && pendingPhotoLocal) {
-      try {
-        imageId = (await uploadPhoto(pendingPhotoLocal.blob)).imageId;
-        await draftLifecycle?.attachmentReady({
-          ...pendingPhotoLocal,
-          serverId: imageId,
-        });
-        finishPhotoUpload(imageId);
-      } catch {
-        await draftLifecycle?.restore(false);
-        return;
-      }
+    // cleared (Oskar, 2026-07-30). A task takes one photo per message.
+    const photoIds = await ensurePhotosUploaded(draftLifecycle);
+    if (!photoIds) {
+      await draftLifecycle?.restore(false);
+      return;
     }
+    const imageId = photoIds[0];
     const document = await ensureDocumentUploaded(
       pendingDocument,
       draftLifecycle,
@@ -9788,7 +9940,7 @@ This conversation is its home — feed it something to try it, and ask for chang
   async function startWork(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = startWorkPrompt.trim();
-    if (!content && !pendingImageId && !pendingPhotoLocal && !pendingDocument)
+    if (!content && pendingPhotos.length === 0 && !pendingDocument)
       return;
     // Compose always opens a Chat now; new chats default to Unsorted. Work is
     // activated later from inside the chat ("Run as task"). See spec.md §2.
@@ -9809,6 +9961,10 @@ This conversation is its home — feed it something to try it, and ask for chang
       : (chatThreads.find(
           (thread) => thread.conversationId === activeConversation.id,
         ) ?? null);
+  // A Routine's chat and a task take one photo per message; a chat takes five.
+  const photoLimit =
+    view === "task" || activeThread?.routineId ? 1 : MAX_CHAT_PHOTOS;
+  photoLimitRef.current = photoLimit;
 
   function getThreadForTask(task: Task): VaenyxThread | null {
     return (
@@ -10016,10 +10172,11 @@ This conversation is its home — feed it something to try it, and ask for chang
             documentTray={pendingDocument}
             lang={lang}
             onLocalDocument={holdLocalDocument}
+            multiplePhotos={photoLimit > 1}
             onLocalPhoto={holdLocalPhoto}
-            onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+            onPhotoPreview={() => undefined}
             onRemoveDocument={() => setPendingDocument(null)}
-            onRemovePhoto={clearPendingPhoto}
+            onRemovePhoto={removePendingPhoto}
             onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
             onStop={stopStreaming}
             onSubmit={startWork}
@@ -10029,10 +10186,7 @@ This conversation is its home — feed it something to try it, and ask for chang
               )
             }
             onValueChange={setStartWorkPrompt}
-            photoTray={
-              pendingPhotoPreview ??
-              (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
-            }
+            photoTray={photoTray}
             placeholder="Ask anything"
             showCamera={visionReady}
             showMic={voiceReady}
@@ -10834,7 +10988,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                     : routineInputConfirm.typedContent,
                 );
                 if (routineInputConfirm.imageId) {
-                  setPendingImageId(routineInputConfirm.imageId);
+                  restoreUploadedPhoto(routineInputConfirm.imageId);
                 }
               }
               setRoutineInputConfirm(null);
@@ -11029,7 +11183,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                         : routineInputConfirm.typedContent,
                     );
                     if (routineInputConfirm.imageId) {
-                      setPendingImageId(routineInputConfirm.imageId);
+                      restoreUploadedPhoto(routineInputConfirm.imageId);
                     }
                   }
                   setRoutineInputConfirm(null);
@@ -11378,6 +11532,20 @@ This conversation is its home — feed it something to try it, and ask for chang
                     onLoad={reanchorAfterImageLoad}
                   />
                 ) : null}
+                {message.imageId &&
+                message.extraImageIds &&
+                message.extraImageIds.length > 0 ? (
+                  <div className="message-photo-set">
+                    {message.extraImageIds.map((extraId) => (
+                      <AnnotatedPhoto
+                        annotations={null}
+                        imageId={extraId}
+                        key={extraId}
+                        onLoad={reanchorAfterImageLoad}
+                      />
+                    ))}
+                  </div>
+                ) : null}
                 {/* F5's promise, kept: the exact prompt that went to the image
                     provider sits beside the picture — the main model wrote it,
                     so it can contain words the Owner never typed. */}
@@ -11527,10 +11695,11 @@ This conversation is its home — feed it something to try it, and ask for chang
             documentTray={pendingDocument}
             lang={lang}
             onLocalDocument={holdLocalDocument}
+            multiplePhotos={photoLimit > 1}
             onLocalPhoto={holdLocalPhoto}
-            onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+            onPhotoPreview={() => undefined}
             onRemoveDocument={() => setPendingDocument(null)}
-            onRemovePhoto={clearPendingPhoto}
+            onRemovePhoto={removePendingPhoto}
             onSpoken={(text, audioId) => void sendChatContent(text, audioId)}
             onStop={stopStreaming}
             onSubmit={sendMessage}
@@ -11538,10 +11707,7 @@ This conversation is its home — feed it something to try it, and ask for chang
               setPrompt((current) => (current ? `${current}\n${text}` : text))
             }
             onValueChange={setPrompt}
-            photoTray={
-              pendingPhotoPreview ??
-              (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
-            }
+            photoTray={photoTray}
             placeholder={isRoutine ? "Type or paste a note…" : "Ask anything"}
             showCamera={visionReady}
             showMic={voiceReady}
@@ -12173,10 +12339,11 @@ This conversation is its home — feed it something to try it, and ask for chang
               documentTray={pendingDocument}
               lang={lang}
               onLocalDocument={holdLocalDocument}
+              multiplePhotos={photoLimit > 1}
               onLocalPhoto={holdLocalPhoto}
-              onPhotoPreview={(url) => setPendingPhotoPreview(url || null)}
+              onPhotoPreview={() => undefined}
               onRemoveDocument={() => setPendingDocument(null)}
-              onRemovePhoto={clearPendingPhoto}
+              onRemovePhoto={removePendingPhoto}
               onSpoken={(text, audioId) => void sendTaskContent(text, audioId)}
               onStop={stopStreaming}
               onSubmit={sendFocusedTaskMessage}
@@ -12186,10 +12353,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                 )
               }
               onValueChange={setTaskPrompt}
-              photoTray={
-                pendingPhotoPreview ??
-                (pendingImageId ? `/v1/vision/image/${pendingImageId}` : null)
-              }
+              photoTray={photoTray}
               placeholder="Ask about this task"
               showCamera={visionReady}
               showMic={voiceReady}

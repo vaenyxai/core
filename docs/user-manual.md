@@ -148,6 +148,13 @@ Read this inside the app: **Settings → Manual**.
 - **Send a photo** — the camera button (take one) or the picture button (choose
   one), always available. The model reads the photo itself; you do not have to
   describe it — a photo with no words at all is a complete message.
+- **Send several photos at once** — take or choose up to five, one after
+  another (the picture button can pick several in one go). Each waits above the
+  message box as a thumbnail with its own ×; one Send carries them all with your
+  words, and the reply answers about the whole set. A Routine's conversation and
+  a task still take one photo per message.
+- **Recording a voice message** — tapping elsewhere on the screen does not close
+  the recorder; only its own buttons send or cancel.
 - **Mark things on a photo** — ask, in your own words, to point something out.
   Dots and names appear **on the photo you sent** — the reply does not repeat
   the picture. The layers button on the photo turns the marks on and off.

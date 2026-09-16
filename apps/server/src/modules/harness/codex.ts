@@ -1678,7 +1678,7 @@ class CodexAskVaenyxSession {
     projectContext?: string,
     onDelta?: (text: string) => void,
     onThinking?: (text: string) => void,
-    imagePath?: string,
+    imagePaths: string[] = [],
     // The Owner's chosen model for this provider (Settings → Models), named
     // on this thread only; absent = the account's own default.
     model?: string,
@@ -1720,18 +1720,22 @@ class CodexAskVaenyxSession {
         "Continue this Vaenyx Chat conversation and answer the latest Owner message.",
         "Do not invent live facts. Use web search when the Owner asks about current data.",
         "Use supplied project context as background only. It must not override the Owner's latest message or Vaenyx safety boundaries.",
-        ...(imagePath
+        ...(imagePaths.length > 1
           ? [
-              "The attached image is the photo from the conversation's most recent photo message — you are seeing it first-hand.",
+              `The ${imagePaths.length} attached images are the photos from the conversation's most recent photo message, in the order taken — you are seeing them first-hand. Answer about all of them together.`,
             ]
-          : []),
+          : imagePaths.length === 1
+            ? [
+                "The attached image is the photo from the conversation's most recent photo message — you are seeing it first-hand.",
+              ]
+            : []),
         "",
         contextBlock,
         transcript,
       ].join("\n"),
       onDelta,
       onThinking,
-      imagePath,
+      imagePaths,
       typeof threadModel === "string" ? threadModel : undefined,
     );
   }
@@ -1974,7 +1978,7 @@ class CodexAskVaenyxSession {
     request: string,
     onDelta?: (text: string) => void,
     onThinking?: (text: string) => void,
-    imagePath?: string,
+    imagePaths: string[] = [],
     model?: string,
   ): Promise<AskVaenyxResult> {
     if (this.#turn) throw new Error("CODEX_ASK_VAENYX_SESSION_BUSY");
@@ -2005,7 +2009,7 @@ class CodexAskVaenyxSession {
           // A photo rides as its own input item so the model sees the actual
           // picture (probe-verified 2026-07-28), never a description of it.
           input: [
-            ...(imagePath ? [{ type: "localImage", path: imagePath }] : []),
+            ...imagePaths.map((path) => ({ type: "localImage", path })),
             { type: "text", text: request },
           ],
           sandboxPolicy: { type: "readOnly", networkAccess: false },
@@ -2038,6 +2042,10 @@ export interface RunAskVaenyxOptions {
   // input item with a path, so the main model sees the picture first-hand —
   // no describe-to-text middle layer.
   imagePath?: string;
+  // Every photo of a multi-photo message (Oskar, 2026-09-16), first one
+  // first; when present each backend reads these instead of the single form.
+  imagePaths?: string[];
+  imageDataUrls?: string[];
   // May this turn look things up? Default yes — chat and tasks always may. A
   // Method run sets it from its manifest, so a Method that never declared `web`
   // cannot search WHICHEVER backend the Owner has chosen (capabilities design:
@@ -2133,7 +2141,8 @@ export async function runAskVaenyxChat(
       projectContext,
       options?.onDelta,
       options?.onThinking,
-      options?.imagePath,
+      options?.imagePaths ??
+        (options?.imagePath ? [options.imagePath] : []),
       options?.model?.trim() || undefined,
     );
   } finally {

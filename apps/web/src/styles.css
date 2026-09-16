@@ -2772,6 +2772,23 @@ textarea::placeholder {
   color: var(--accent);
 }
 
+/* Up to five waiting photos in a row, each with its own × (Oskar,
+   2026-09-16). The top padding leaves room for the × that overhangs. */
+.composer-photo-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+/* The second to fifth photos of a sent message, under the first. */
+.message-photo-set {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .composer-attachment {
   position: relative;
   display: inline-flex;

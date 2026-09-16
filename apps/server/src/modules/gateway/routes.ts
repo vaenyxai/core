@@ -4782,6 +4782,9 @@ export async function registerGatewayRoutes(
               ...(request.body.imageId
                 ? { imageId: request.body.imageId }
                 : {}),
+              ...(request.body.imageId && request.body.extraImageIds
+                ? { extraImageIds: request.body.extraImageIds }
+                : {}),
               ...(request.body.imagePrompt
                 ? { imagePrompt: request.body.imagePrompt }
                 : {}),
@@ -5330,6 +5333,9 @@ export async function registerGatewayRoutes(
               ? { voiceAudioId: request.body.voiceAudioId }
               : {}),
             ...(request.body.imageId ? { imageId: request.body.imageId } : {}),
+            ...(request.body.imageId && request.body.extraImageIds
+              ? { extraImageIds: request.body.extraImageIds }
+              : {}),
             ...(request.body.annotate ? { annotate: true } : {}),
             ...(request.body.documentId
               ? { documentId: request.body.documentId }
@@ -5432,6 +5438,9 @@ export async function registerGatewayRoutes(
                 : {}),
               ...(request.body.imageId
                 ? { imageId: request.body.imageId }
+                : {}),
+              ...(request.body.imageId && request.body.extraImageIds
+                ? { extraImageIds: request.body.extraImageIds }
                 : {}),
               ...(request.body.annotate ? { annotate: true } : {}),
               ...(request.body.documentId

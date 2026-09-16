@@ -948,6 +948,8 @@ async function streamMessageRequest(
   // A PDF fed with this message, plus the Owner's answer to the M1 cost gate.
   document?: { documentId: string; name: string; acknowledged: boolean },
   clientMessageId?: string,
+  // The second to fifth photos of this message (Oskar, 2026-09-16).
+  extraImageIds?: string[],
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -965,6 +967,9 @@ async function streamMessageRequest(
       ...(clarifyCreate ? { clarifyCreate } : {}),
       ...(voiceAudioId ? { voiceAudioId } : {}),
       ...(imageId ? { imageId } : {}),
+      ...(imageId && extraImageIds && extraImageIds.length > 0
+        ? { extraImageIds }
+        : {}),
       ...(imagePrompt ? { imagePrompt } : {}),
       ...(annotate ? { annotate: true } : {}),
       ...(document
@@ -1064,6 +1069,7 @@ export function streamAskVaenyxMessage(
   annotate?: boolean,
   document?: { documentId: string; name: string; acknowledged: boolean },
   clientMessageId?: string,
+  extraImageIds?: string[],
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -1079,6 +1085,7 @@ export function streamAskVaenyxMessage(
     annotate,
     document,
     clientMessageId,
+    extraImageIds,
   );
 }
 

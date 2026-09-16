@@ -58,8 +58,9 @@ export class AnthropicProvider implements ModelProvider {
     // OpenAI-style image_url. They ride on the LAST owner message as a block
     // array — a PDF sent this way is read page by page, as picture AND text.
     const attachmentBlocks: Record<string, unknown>[] = [];
-    if (options?.imageDataUrl) {
-      const match = /^data:([^;]+);base64,(.+)$/.exec(options.imageDataUrl);
+    for (const url of options?.imageDataUrls ??
+      (options?.imageDataUrl ? [options.imageDataUrl] : [])) {
+      const match = /^data:([^;]+);base64,(.+)$/.exec(url);
       if (match) {
         attachmentBlocks.push({
           type: "image",
