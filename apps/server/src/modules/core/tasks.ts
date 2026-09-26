@@ -23,6 +23,18 @@ import {
 import { listProjectMemories } from "./memory.js";
 import { schedulePresenceAwarePush } from "./push.js";
 import { pushLanguage } from "./push.js";
+import {
+  markRunWaitingForOwner,
+  reconcileAnsweredRuns,
+  RUN_QUESTION_INSTRUCTION,
+} from "./run-questions.js";
+import {
+  extractStructuredQuestion,
+  insertStructuredQuestion,
+  STRUCTURED_QUESTION_PROTOCOL_INSTRUCTION,
+  structuredQuestionAllowance,
+  type StructuredQuestionDraft,
+} from "./structured-questions.js";
 import { ensureTaskThread } from "./threads.js";
 import { ownerSafeErrorText } from "../../runtime/owner-safe-errors.js";
 
@@ -781,7 +793,12 @@ export function createResearchTask(
     updatedAt: now,
   });
 
-  const context = [buildResearchContext(memories), RUN_RESULT_INSTRUCTION]
+  const context = [
+    buildResearchContext(memories),
+    RUN_RESULT_INSTRUCTION,
+    RUN_QUESTION_INSTRUCTION,
+    STRUCTURED_QUESTION_PROTOCOL_INSTRUCTION,
+  ]
     .filter(Boolean)
     .join("\n\n");
   void executeTaskRun(database, id, "manual", (signal) =>
@@ -1082,10 +1099,17 @@ function finishTaskRun(
   id: string,
   runId: string,
   trigger: "manual" | "schedule",
-  result: string,
+  rawResult: string,
   status: "completed" | "failed",
 ): Promise<void> {
   const finishedAt = new Date().toISOString();
+  // H-013 addendum: a finished run may end by asking the Owner one structured
+  // question. The stored result is the readable text (question included as
+  // plain options), and the run then waits for the Owner's answer.
+  const question =
+    status === "completed" ? extractStructuredQuestion(rawResult) : null;
+  const result = question?.draft ? question.content : rawResult;
+  let waiting = false;
   try {
     const current = database.sqlite
       .prepare(
@@ -1147,14 +1171,22 @@ function finishTaskRun(
       throw error;
     }
 
-    const outcome = appendRunResultToConversation(
+    let outcome = appendRunResultToConversation(
       database,
       id,
       result,
       status,
       finishedAt,
     );
-    if (outcome) {
+    if (question?.draft) {
+      // An unopened task has no Conversation yet; the question needs one.
+      outcome ??= seedRunConversation(database, id, runId);
+      waiting = Boolean(
+        outcome &&
+        askRunQuestion(database, runId, outcome, question.draft, finishedAt),
+      );
+    }
+    if (outcome && !waiting) {
       advanceTaskRunProgress(database, runId, terminalRevision + 1, {
         state: progressState,
         currentStep: null,
@@ -1184,8 +1216,11 @@ function finishTaskRun(
         database,
         {
           title: titleRow?.title ?? (zh ? "Vaenyx 任务" : "Vaenyx task"),
-          body:
-            status === "completed"
+          body: waiting
+            ? zh
+              ? "Vaenyx 有个问题要问你,回答后继续。"
+              : "Vaenyx has a question for you. Answer it to continue."
+            : status === "completed"
               ? zh
                 ? "有新结果了。"
                 : "New result is ready."
@@ -1213,6 +1248,78 @@ function finishTaskRun(
     // Server shutting down (database closed); reconcile handles it next start.
   }
   return Promise.resolve();
+}
+
+// The Conversation for a run whose task was never opened: seeded the ordinary
+// way, with this run's result as its assistant message.
+function seedRunConversation(
+  database: DatabaseHandle,
+  taskId: string,
+  runId: string,
+): { conversationId: string; messageId: string } | null {
+  try {
+    const thread = database.sqlite
+      .prepare(
+        `SELECT owner_id FROM vaenyx_threads WHERE task_id = ? AND kind = 'task'`,
+      )
+      .get(taskId) as { owner_id: string } | undefined;
+    if (!thread) return null;
+    const conversationId = ensureTaskConversation(
+      database,
+      taskId,
+      thread.owner_id,
+    );
+    const run = database.sqlite
+      .prepare("SELECT progress_outcome_message_id FROM task_runs WHERE id = ?")
+      .get(runId) as { progress_outcome_message_id: string | null } | undefined;
+    return run?.progress_outcome_message_id
+      ? { conversationId, messageId: run.progress_outcome_message_id }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+// Register the run's question on its outcome message and mark it waiting, in
+// one transaction. False when the Conversation already holds the maximum open
+// questions; the run then completes with the question as plain text.
+function askRunQuestion(
+  database: DatabaseHandle,
+  runId: string,
+  outcome: { conversationId: string; messageId: string },
+  draft: StructuredQuestionDraft,
+  now: string,
+): boolean {
+  if (!structuredQuestionAllowance(database, outcome.conversationId).allowed) {
+    return false;
+  }
+  database.sqlite.exec("BEGIN IMMEDIATE");
+  try {
+    insertStructuredQuestion(database, {
+      id: randomUUID(),
+      conversationId: outcome.conversationId,
+      assistantMessageId: outcome.messageId,
+      draft,
+      loopDepth: 1,
+      createdAt: now,
+    });
+    markRunWaitingForOwner(
+      database,
+      runId,
+      outcome.conversationId,
+      outcome.messageId,
+      now,
+    );
+    database.sqlite.exec("COMMIT");
+    return true;
+  } catch {
+    try {
+      database.sqlite.exec("ROLLBACK");
+    } catch {
+      // Preserve the original failure.
+    }
+    return false;
+  }
 }
 
 function scheduledResultStillNotifiable(
@@ -1245,6 +1352,9 @@ function scheduledResultStillNotifiable(
 // On startup, any task left "running" was interrupted by a restart/crash. Mark
 // it failed so it is no longer stuck and the Owner can retry it.
 export function reconcileInterruptedTasks(database: DatabaseHandle): number {
+  // A run resumed by an answer whose reply the restart cut off. Runs still
+  // waiting for the Owner are untouched: their question is still open.
+  reconcileAnsweredRuns(database);
   const interrupted = database.sqlite
     .prepare("SELECT COUNT(*) AS total FROM tasks WHERE status = 'running'")
     .get() as { total: number };
@@ -1623,6 +1733,8 @@ function runTaskById(
       buildTaskConversationContext(database, task.id),
       buildDeliveredContext(database, task.id),
       RUN_RESULT_INSTRUCTION,
+      RUN_QUESTION_INSTRUCTION,
+      STRUCTURED_QUESTION_PROTOCOL_INSTRUCTION,
     ]
       .filter(Boolean)
       .join("\n\n");

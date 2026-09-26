@@ -7287,12 +7287,30 @@ function AskVaenyxPanel({
   ): Promise<void> {
     setResolvingQuestionIds((current) => new Set(current).add(questionId));
     setError(null);
+    // H-013 addendum: an answer resumes a waiting task run. Its task is not
+    // "running", so nothing polls the card; refresh it here.
+    const taskId = focusedTaskIdRef.current;
+    const refreshTaskCard = () => {
+      if (!taskId || taskProgress?.conversationId !== message.conversationId) {
+        return;
+      }
+      void fetchTaskProgress(taskId)
+        .then((next) =>
+          setTaskProgress((current) =>
+            acceptTaskProgressUpdate(current, next, taskId),
+          ),
+        )
+        .catch(() => undefined);
+    };
+    const resumedCheck = window.setTimeout(refreshTaskCard, 800);
     try {
       const response = await resolveStructuredQuestion(
         message.conversationId,
         questionId,
         resolution,
       );
+      window.clearTimeout(resumedCheck);
+      refreshTaskCard();
       // H-017: a Routine draft that was waiting on this answer. Skip means
       // the Owner did not answer — nothing is drafted or saved.
       if (routineDraftWaitingRef.current.has(message.conversationId)) {

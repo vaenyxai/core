@@ -7,6 +7,7 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import { resumeRunAfterAnswer } from "./run-questions.js";
 
 export const MAX_OPEN_STRUCTURED_QUESTIONS = 3;
 
@@ -438,6 +439,9 @@ export function claimStructuredQuestionResolution(
       if (!accepted) {
         throw new Error("STRUCTURED_QUESTION_RESOLUTION_RACE");
       }
+      // H-013 addendum: a run waiting on this question continues, in the
+      // same transaction as the answer.
+      resumeRunAfterAnswer(database, questionId, now);
     }
 
     database.sqlite

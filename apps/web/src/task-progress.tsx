@@ -26,7 +26,7 @@ function stateLabel(state: TaskRunProgress["state"], zh: boolean): string {
   const labels: Record<TaskRunProgress["state"], [string, string]> = {
     queued: ["Queued", "等待开始"],
     running: ["Running", "进行中"],
-    waiting_for_owner: ["Waiting for you", "等待你的回复"],
+    waiting_for_owner: ["Waiting for you", "等你处理"],
     completed: ["Completed", "已完成"],
     failed: ["Failed", "失败"],
     cancelled: ["Cancelled", "已取消"],
@@ -62,6 +62,16 @@ function displayProgressText(text: string, zh: boolean): string {
     "Prepared a safe retry": "已准备安全重试",
     "Worked on task": "已处理任务",
     "Result saved": "已保存结果",
+    // H-013 addendum: a run waiting on the Owner's answer.
+    "Vaenyx asked you a question. Answer it to continue.":
+      "Vaenyx 问了你一个问题,回答后继续。",
+    "Waiting for your answer": "等你回答",
+    "Asked you a question": "问了你一个问题",
+    "Got your answer": "收到你的回答",
+    "Continuing with your answer": "按你的回答继续",
+    "Got your answer. Continuing.": "收到你的回答,继续处理。",
+    "Your answer was saved, but the reply was interrupted by a restart. Retry when ready.":
+      "你的回答已保存,但回复被重启中断。准备好后可重试。",
   };
   return known[text] ?? text;
 }
@@ -125,8 +135,16 @@ export function TaskProgressCard({
         </p>
         <div className="task-progress-actions">
           {progress.state === "waiting_for_owner" ? (
-            <button onClick={onReply} type="button">
-              {zh ? "在下方回复" : "Reply below"}
+            // The card opens the question itself (H-013 addendum).
+            <button
+              onClick={() =>
+                progress.outcomeMessageId
+                  ? onOutcome(progress.outcomeMessageId)
+                  : onReply()
+              }
+              type="button"
+            >
+              {zh ? "去回答" : "Answer the question"}
             </button>
           ) : null}
           {canRetry ? (
@@ -134,7 +152,8 @@ export function TaskProgressCard({
               {zh ? "重试" : "Retry"}
             </button>
           ) : null}
-          {progress.outcomeMessageId ? (
+          {progress.outcomeMessageId &&
+          progress.state !== "waiting_for_owner" ? (
             <button
               onClick={() => onOutcome(progress.outcomeMessageId!)}
               type="button"

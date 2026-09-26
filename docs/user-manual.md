@@ -502,6 +502,10 @@ Read this inside the app: **Settings → Manual**.
   delayed updates cannot move it backwards. Failed or interrupted work offers
   **Retry**, and completed work can jump to its saved result. The card contains
   short status text only, never private model reasoning or raw logs.
+- **Waiting for you** — shown only while the run has asked you a question you
+  have not answered or skipped yet. **Answer the question** jumps to it; your
+  answer or Skip lets the run continue. Pending Inbox items never set it, and a
+  restart keeps the run waiting until you answer.
 - **Talk to a task** — the box at the bottom of a task takes everything the chat
   box takes: a photo, a PDF, something spoken. It is the same conversation
   underneath, so every task already has this, however long ago you made it.

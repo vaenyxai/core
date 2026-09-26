@@ -111,6 +111,7 @@ import {
   type StructuredQuestionDraft,
   type StructuredQuestionJoinedRow,
 } from "./structured-questions.js";
+import { settleRunAfterReply } from "./run-questions.js";
 
 interface AskVaenyxConversationRow {
   id: string;
@@ -2386,6 +2387,19 @@ export async function createAskVaenyxMessage(
         database,
         options.structuredQuestionClaim.questionId,
         assistantMessageId,
+      );
+      // H-013 addendum: the run that asked this question settles on the
+      // reply — or waits again if the reply asks a follow-up.
+      settleRunAfterReply(
+        database,
+        options.structuredQuestionClaim.questionId,
+        assistantMessageId,
+        assistantStatus === "failed"
+          ? "failed"
+          : structuredQuestionDraft
+            ? "waiting"
+            : "completed",
+        completedAt,
       );
     }
     database.sqlite.exec("COMMIT");
