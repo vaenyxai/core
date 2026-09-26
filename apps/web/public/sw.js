@@ -1,7 +1,7 @@
 // Bump this on any change so the browser sees a new service worker, reinstalls,
 // and the activate handler below purges every older cache — that is what stops a
 // device getting stuck on a stale app shell (phones have no Ctrl+Shift+R).
-const CACHE_NAME = "vaenyx-shell-v18";
+const CACHE_NAME = "vaenyx-shell-v19";
 
 self.addEventListener("install", () => {
   // v8 caches NOTHING (Oskar, 2026-08-15: the phone went white). The cached
@@ -217,7 +217,77 @@ function bootWaitPage() {
   });
 }
 
+// H-012 · SHARE TO VAENYX (Android, 2026-09-19). The Share sheet POSTs here
+// (manifest share_target). The payload goes into this device's IndexedDB —
+// the same database apps/web/src/share-inbox.ts reads — and NEVER into Cache
+// Storage; then the app opens on /?share=<id> and asks which Conversation it
+// belongs to. Nothing is sent from here: it becomes an unsent draft.
+const SHARE_DATABASE_NAME = "vaenyx-share-inbox";
+const SHARE_STORE_NAME = "shares";
+const SHARE_MAX_FILES = 20;
+
+function keepShare(share) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(SHARE_DATABASE_NAME, 1);
+    open.onupgradeneeded = () => {
+      const database = open.result;
+      if (!database.objectStoreNames.contains(SHARE_STORE_NAME)) {
+        database.createObjectStore(SHARE_STORE_NAME, { keyPath: "id" });
+      }
+    };
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const database = open.result;
+      const transaction = database.transaction(SHARE_STORE_NAME, "readwrite");
+      transaction.objectStore(SHARE_STORE_NAME).put(share);
+      transaction.oncomplete = () => {
+        database.close();
+        resolve();
+      };
+      transaction.onerror = () => {
+        database.close();
+        reject(transaction.error);
+      };
+    };
+  });
+}
+
+async function receiveShare(request) {
+  try {
+    const form = await request.formData();
+    const files = form
+      .getAll("files")
+      .filter((value) => typeof value !== "string")
+      .slice(0, SHARE_MAX_FILES)
+      .map((value) => ({
+        name: value.name || "shared-file",
+        type: value.type || "",
+        size: value.size,
+        blob: value,
+      }));
+    const id = crypto.randomUUID();
+    await keepShare({
+      id,
+      createdAt: new Date().toISOString(),
+      title: String(form.get("title") || ""),
+      text: String(form.get("text") || ""),
+      url: String(form.get("url") || ""),
+      files,
+    });
+    return Response.redirect("/?share=" + encodeURIComponent(id), 303);
+  } catch {
+    return Response.redirect("/?share=failed", 303);
+  }
+}
+
 self.addEventListener("fetch", (event) => {
+  if (
+    event.request.method === "POST" &&
+    new URL(event.request.url).pathname === "/share-target"
+  ) {
+    event.respondWith(receiveShare(event.request));
+    return;
+  }
   if (event.request.method !== "GET" || event.request.mode !== "navigate") {
     return;
   }

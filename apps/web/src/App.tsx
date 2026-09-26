@@ -384,6 +384,14 @@ import {
 import { CAPABILITIES } from "./capabilities.js";
 import { getCodexAuthCopy } from "./status-copy.js";
 import { AnimatedName } from "./animated-name.js";
+import {
+  deletePendingShare,
+  listPendingShares,
+  planShare,
+  SHARE_MAX_PHOTOS,
+  type PendingShare,
+  type SharedFile,
+} from "./share-inbox.js";
 
 type Screen =
   | "ask-vaenyx"
@@ -412,6 +420,31 @@ const RESTORABLE_SCREENS: Screen[] = [
 ];
 
 type PortalView = "chat" | "task" | "new";
+
+// H-012 · the shell hands a placed share to an open composer through this
+// event first; only when no composer claims it is it written as a draft.
+const SHARE_DRAFT_EVENT = "vaenyx:share-draft";
+interface ShareDraftDetail {
+  key: string;
+  text: string;
+  attachments: DraftAttachment[];
+  handled: boolean;
+}
+
+function sharedFileAttachment(
+  file: SharedFile,
+  kind: "photo" | "document",
+): DraftAttachment {
+  return {
+    id: crypto.randomUUID(),
+    kind,
+    name: file.name,
+    type: file.type || (kind === "photo" ? "image/jpeg" : "application/octet-stream"),
+    size: file.size,
+    blob: file.blob,
+    serverId: null,
+  };
+}
 
 // Plain names for the eight capabilities, [English, Chinese], for sentences
 // the Owner reads (never the internal ids).
@@ -7534,6 +7567,45 @@ function AskVaenyxPanel({
       }
     };
   }, [currentDraftKey]);
+
+  // H-012 · a share placed into the Conversation that is open right now joins
+  // this composer as it stands (text appended, attachments added), instead of
+  // being written underneath it and then overwritten when the composer saves.
+  useEffect(() => {
+    const onShare = (event: Event) => {
+      const detail = (event as CustomEvent<ShareDraftDetail>).detail;
+      if (!detail || detail.key !== currentDraftKey) return;
+      if (loadedDraftKey !== currentDraftKey) return;
+      detail.handled = true;
+      if (detail.text) {
+        const current =
+          view === "task" ? taskPrompt : view === "chat" ? prompt : startWorkPrompt;
+        setDraftText([current.trim(), detail.text].filter(Boolean).join("\n"));
+      }
+      for (const attachment of detail.attachments) {
+        if (attachment.kind === "photo") {
+          holdLocalPhoto({
+            id: attachment.id,
+            blob: attachment.blob,
+            name: attachment.name,
+            type: attachment.type,
+          });
+        } else if (!pendingDocument) {
+          setPendingDocument({
+            documentId: null,
+            local: attachment,
+            name: attachment.name,
+            pages: null,
+            acknowledged: false,
+            needsCostGate: false,
+          });
+        }
+      }
+      setDraftRecovered(true);
+    };
+    window.addEventListener(SHARE_DRAFT_EVENT, onShare);
+    return () => window.removeEventListener(SHARE_DRAFT_EVENT, onShare);
+  });
 
   const currentDraftAttachments = useMemo(
     () =>
@@ -27328,6 +27400,123 @@ function ThreadList({
  *  every other icon in the app — the house rule is no emoji, and a moon is the
  *  quiet end of the icon set, which is the point: it is there at night, and it
  *  is not shouting. */
+// H-012 · where a share goes: a recent Conversation, one found by name, or a
+// new one. It becomes an unsent draft there — never sent from here.
+function SharePicker({
+  busy,
+  conversations,
+  lang,
+  onDiscard,
+  onPlace,
+  onQuery,
+  query,
+  share,
+}: {
+  busy: boolean;
+  conversations: AskVaenyxConversation[];
+  lang: string;
+  onDiscard: () => void;
+  onPlace: (
+    target: { kind: "new" } | { kind: "conversation"; id: string },
+  ) => void;
+  onQuery: (query: string) => void;
+  query: string;
+  share: PendingShare;
+}) {
+  const zh = lang === "zh";
+  const plan = planShare(share);
+  const needle = query.trim().toLowerCase();
+  const matches = [...conversations]
+    .filter((conversation) =>
+      needle ? conversation.title.toLowerCase().includes(needle) : true,
+    )
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, 8);
+  const reasonText = (reason: "type" | "photo-limit" | "one-document") =>
+    reason === "type"
+      ? zh
+        ? "Vaenyx 收不了这种文件"
+        : "not a kind of file Vaenyx can take"
+      : reason === "photo-limit"
+        ? zh
+          ? `一条消息最多 ${SHARE_MAX_PHOTOS} 张照片`
+          : `one message takes up to ${SHARE_MAX_PHOTOS} photos`
+        : zh
+          ? "一条消息只能带一个文件"
+          : "one message takes one document";
+  return (
+    <Modal
+      onClose={onDiscard}
+      title={zh ? "分享到 Vaenyx" : "Share to Vaenyx"}
+    >
+      <div className="share-picker">
+        <ul className="share-picker-summary">
+          {plan.text ? <li>{plan.text.slice(0, 200)}</li> : null}
+          {plan.document ? <li>📄 {plan.document.name}</li> : null}
+          {plan.photos.length > 0 ? (
+            <li>
+              🖼 {zh ? `${plan.photos.length} 张照片` : `${plan.photos.length} photo${plan.photos.length === 1 ? "" : "s"}`}
+            </li>
+          ) : null}
+          {plan.refused.map((item) => (
+            <li className="share-picker-refused" key={item.name}>
+              {item.name} — {reasonText(item.reason)}
+            </li>
+          ))}
+        </ul>
+        <p className="share-picker-note">
+          {zh
+            ? "选一个对话,它会作为草稿放进去。按「发送」之前什么都不会发出。"
+            : "Pick a Conversation and it lands there as a draft. Nothing is sent until you press Send."}
+        </p>
+        <input
+          aria-label={zh ? "按名字找对话" : "Find a Conversation by name"}
+          onChange={(event) => onQuery(event.target.value)}
+          placeholder={zh ? "按名字找对话" : "Find a Conversation by name"}
+          type="search"
+          value={query}
+        />
+        <div className="share-picker-list">
+          <button
+            className="primary-button"
+            disabled={busy}
+            onClick={() => onPlace({ kind: "new" })}
+            type="button"
+          >
+            {zh ? "新对话" : "New Conversation"}
+          </button>
+          {matches.map((conversation) => (
+            <button
+              className="secondary-button share-picker-item"
+              disabled={busy}
+              key={conversation.id}
+              onClick={() => onPlace({ kind: "conversation", id: conversation.id })}
+              type="button"
+            >
+              {conversation.title || (zh ? "未命名对话" : "Untitled Conversation")}
+            </button>
+          ))}
+          {needle && matches.length === 0 ? (
+            <p className="library-note">
+              {zh ? "没有叫这个名字的对话。" : "No Conversation by that name."}
+            </p>
+          ) : null}
+        </div>
+        <div className="card-actions">
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={onDiscard}
+            type="button"
+          >
+            {zh ? "不要这次分享" : "Discard This Share"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function IconSearch() {
   return (
     <svg
@@ -28220,6 +28409,102 @@ function VaenyxWorkspace({
     startNewChatInProject(null);
   }
 
+  // H-012 · a share waiting on this device (from the Android Share sheet).
+  // Read once the Owner is signed in — which is also how a share made while
+  // signed out continues after sign-in — and one at a time.
+  const [pendingShare, setPendingShare] = useState<PendingShare | null>(null);
+  const [shareQuery, setShareQuery] = useState("");
+  const [shareBusy, setShareBusy] = useState(false);
+  useEffect(() => {
+    void listPendingShares()
+      .then((shares) => setPendingShare(shares[0] ?? null))
+      .catch(() => undefined);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("share") === "failed") {
+      showErrorToast(
+        lang === "zh"
+          ? "这次分享没能交给 Vaenyx。请再分享一次。"
+          : "That share did not reach Vaenyx. Please share it again.",
+      );
+    }
+  }, []);
+
+  async function placeShare(
+    share: PendingShare,
+    target: { kind: "new" } | { kind: "conversation"; id: string },
+  ) {
+    setShareBusy(true);
+    try {
+      const plan = planShare(share);
+      const incoming: DraftAttachment[] = [
+        ...plan.photos.map((file) => sharedFileAttachment(file, "photo")),
+        ...(plan.document ? [sharedFileAttachment(plan.document, "document")] : []),
+      ];
+      const scope: DraftScope = {
+        ownerId: workspace.owner.id,
+        modeId: workspace.owner.modeId ?? "__user__",
+        kind: target.kind === "new" ? "new" : "conversation",
+        scopeId: target.kind === "new" ? null : target.id,
+      };
+      const detail: ShareDraftDetail = {
+        key: draftKey(scope),
+        text: plan.text,
+        attachments: incoming,
+        handled: false,
+      };
+      window.dispatchEvent(new CustomEvent(SHARE_DRAFT_EVENT, { detail }));
+      if (!detail.handled) {
+        // Joined to whatever draft that Conversation already had, never
+        // written over it.
+        const existing = await loadDraft(scope);
+        const existingPhotos = (existing?.attachments ?? []).filter(
+          (item) => item.kind === "photo",
+        );
+        const existingDocument = (existing?.attachments ?? []).find(
+          (item) => item.kind === "document",
+        );
+        const photos = [
+          ...existingPhotos,
+          ...incoming.filter((item) => item.kind === "photo"),
+        ].slice(0, SHARE_MAX_PHOTOS);
+        const document =
+          existingDocument ?? incoming.find((item) => item.kind === "document");
+        await saveDraft(
+          createComposerDraft(scope, {
+            ...(existing
+              ? {
+                  clientMessageId: existing.clientMessageId,
+                  projectId: existing.projectId,
+                }
+              : {}),
+            text: [existing?.text.trim(), plan.text].filter(Boolean).join("\n"),
+            attachments: [...photos, ...(document ? [document] : [])],
+          }),
+        );
+      }
+      await deletePendingShare(share.id);
+      if (target.kind === "new") startSidebarNew();
+      else openSourceConversation(target.id);
+      const rest = await listPendingShares();
+      setPendingShare(rest[0] ?? null);
+      setShareQuery("");
+    } catch {
+      showErrorToast(
+        lang === "zh"
+          ? "没能把分享放进这个对话。它还在,稍后再试。"
+          : "Could not put the share into that Conversation. It is still waiting; try again.",
+      );
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function discardShare(share: PendingShare) {
+    await deletePendingShare(share.id).catch(() => undefined);
+    const rest = await listPendingShares().catch(() => []);
+    setPendingShare(rest[0] ?? null);
+  }
+
   function openDraftConversation(conversationId: string) {
     setSelectedThreadId(conversationId);
     setRequestedConversationId(conversationId);
@@ -28911,6 +29196,18 @@ function VaenyxWorkspace({
           over every screen and, worse, its reload dropped the URL params, so
           "refresh" meant "lose your place". Loading a genuinely new build is
           what the update banner below is for. */}
+      {pendingShare ? (
+        <SharePicker
+          busy={shareBusy}
+          conversations={askVaenyxConversations}
+          lang={lang}
+          onDiscard={() => void discardShare(pendingShare)}
+          onPlace={(target) => void placeShare(pendingShare, target)}
+          onQuery={setShareQuery}
+          query={shareQuery}
+          share={pendingShare}
+        />
+      ) : null}
       {systemStatus?.version ? (
         <span className="version-badge">v{systemStatus.version}</span>
       ) : null}

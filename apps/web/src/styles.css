@@ -664,6 +664,40 @@ textarea::placeholder {
   margin: 0 0 8px;
 }
 
+/* H-012 · the Share to Vaenyx picker. */
+.share-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.share-picker-summary {
+  margin: 0;
+  padding-left: 1.1em;
+  overflow-wrap: anywhere;
+}
+
+.share-picker-refused {
+  color: var(--text-faint);
+}
+
+.share-picker-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-sm, 13px);
+}
+
+.share-picker-list {
+  display: grid;
+  gap: 6px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.share-picker-item {
+  justify-content: flex-start;
+  text-align: left;
+}
+
 /* A mode's past reports, under its card. */
 .mode-digests {
   display: grid;

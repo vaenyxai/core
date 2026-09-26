@@ -152,6 +152,15 @@ Read this inside the app: **Settings → Manual**.
 - **Send a photo** — the camera button (take one) or the picture button (choose
   one), always available. The model reads the photo itself; you do not have to
   describe it — a photo with no words at all is a complete message.
+- **Share into Vaenyx (Android)** — with Vaenyx installed on an Android phone,
+  it appears in the system **Share** sheet. Share a PDF from a mail app, a link
+  from the browser or a few photos, pick a recent Conversation, find one by
+  name or start a new one, and it lands there as an unsent draft — nothing is
+  sent until you press Send. A share made while signed out waits for sign-in;
+  it goes only into the mode this phone is in. Anything a message cannot carry
+  (an unsupported file, more than five photos, a second document) is named
+  with the reason. iPhone does not let web apps receive shares yet — use the
+  camera and document buttons there.
 - **Send several photos at once** — take or choose up to five, one after
   another (the picture button can pick several in one go). Each waits above the
   message box as a thumbnail with its own ×; one Send carries them all with your
