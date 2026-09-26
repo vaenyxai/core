@@ -157,6 +157,12 @@ Read this inside the app: **Settings → Manual**.
   something essential is unclear it asks one question first; skipping it saves
   nothing. **Save Routine** saves it and makes this conversation its home, so
   the next one sent here is handled the same way; **Cancel** leaves nothing.
+- **Ask for a new Routine or Method in one sentence** — "make me a Routine that
+  sorts the school notices every week", or name a Method the same way. Vaenyx
+  drafts it and shows the same review: what it will do, what you give it, its
+  steps and Capabilities. If one essential detail is missing it asks one
+  question first; skipping it drafts nothing. Nothing is saved and nothing
+  appears in the Library until you press **Save**; **Cancel** leaves nothing.
 - **Send a photo** — the camera button (take one) or the picture button (choose
   one), always available. The model reads the photo itself; you do not have to
   describe it — a photo with no words at all is a complete message.
@@ -378,9 +384,9 @@ Read this inside the app: **Settings → Manual**.
   same history, and old results keep the look they were made with. Vaenyx
   numbers the versions itself. If the behaviour changed, any app keys granted
   to this Routine stop working until you re-grant them under Tokens — never
-  silently. Community Routines cannot be edited in place. And when a chat
-  conversation builds a new Routine, that conversation becomes the Routine's
-  first conversation — keep feeding it right there.
+  silently. Community Routines cannot be edited in place. And when you save a
+  new Routine drafted in a chat, that conversation becomes the Routine's first
+  conversation — keep feeding it right there.
 - **Where they live** — the **Library** screen, in four tabs: Routines, Tokens,
   Methods, Community. Each tab says what it is on its own first line, and each
   has the same two buttons above its list: make a new one, or find one in the

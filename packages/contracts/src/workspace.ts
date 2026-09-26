@@ -2387,18 +2387,40 @@ export const RoutinePlanSchema = Type.Object(
 
 // H-017 · a Routine drafted from what a Conversation actually did, for the
 // Owner to review in plain words before anything is saved.
+export const RoutineDraftSummarySchema = Type.Object(
+  {
+    does: Type.String(),
+    input: Type.String(),
+    corrections: Type.Array(Type.String()),
+    capabilities: Type.Array(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
 export const ConversationRoutineDraftSchema = Type.Object(
   {
     plan: RoutinePlanSchema,
-    summary: Type.Object(
-      {
-        does: Type.String(),
-        input: Type.String(),
-        corrections: Type.Array(Type.String()),
-        capabilities: Type.Array(Type.String()),
-      },
-      { additionalProperties: false },
-    ),
+    summary: RoutineDraftSummarySchema,
+  },
+  { additionalProperties: false },
+);
+
+// H-018 · a Method or Routine drafted from a one-sentence description, shown
+// in the same review as H-017; nothing is saved until the Owner presses Save.
+// A Method draft is a one-step plan whose step carries the Method.
+export const DescriptionDraftRequestSchema = Type.Object(
+  {
+    kind: Type.Union([Type.Literal("method"), Type.Literal("routine")]),
+    description: Type.String({ minLength: 1, maxLength: 4000 }),
+  },
+  { additionalProperties: false },
+);
+
+export const DescriptionDraftSchema = Type.Object(
+  {
+    kind: Type.Union([Type.Literal("method"), Type.Literal("routine")]),
+    plan: RoutinePlanSchema,
+    summary: RoutineDraftSummarySchema,
   },
   { additionalProperties: false },
 );
@@ -3579,6 +3601,10 @@ export type Owner = Static<typeof OwnerSchema>;
 export type Project = Static<typeof ProjectSchema>;
 export type ConversationRoutineDraft = Static<
   typeof ConversationRoutineDraftSchema
+>;
+export type DescriptionDraft = Static<typeof DescriptionDraftSchema>;
+export type DescriptionDraftRequest = Static<
+  typeof DescriptionDraftRequestSchema
 >;
 export type ProjectInstructionHold = Static<typeof ProjectInstructionHoldSchema>;
 export type ProjectInstructionHoldCategory = Static<

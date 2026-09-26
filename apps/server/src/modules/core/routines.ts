@@ -501,6 +501,26 @@ export async function planRoutineSpec(
   libraryDirectory: string,
   signal: AbortSignal,
 ): Promise<RoutinePlan> {
+  const prompt = routinePlanPrompt(description, libraryDirectory);
+
+  const result = await getDefaultProvider().sendChat(
+    [{ content: prompt, role: "owner" }],
+    undefined,
+    {
+      signal,
+    },
+  );
+
+  return parseRoutinePlanAnswer(result.answer).plan;
+}
+
+/** The description planner's prompt. `extraFields` adds JSON lines the
+ *  caller wants back too (H-018 asks for plain "does" / "input" lines). */
+export function routinePlanPrompt(
+  description: string,
+  libraryDirectory: string,
+  extraFields: string[] = [],
+): string {
   const available = listMethodSummaries(libraryDirectory)
     .map(
       (m) =>
@@ -508,7 +528,7 @@ export async function planRoutineSpec(
     )
     .join("\n");
 
-  const prompt = [
+  return [
     "You are planning a Vaenyx Routine — a user-facing product made of ordered",
     "steps. Each step is ONE Method (a single declarative capability). The steps",
     "run as a straight linear chain: step 1 gets the user's input, each later step",
@@ -522,6 +542,7 @@ export async function planRoutineSpec(
     "{",
     '  "name": short routine title,',
     '  "description": one plain-language line,',
+    ...extraFields,
     '  "mode": "accumulate" (keep feeding it over time) or "one-shot",',
     '  "steps": [',
     '    { "title": short step label, "reuse": "<existing method id>" }',
@@ -536,16 +557,6 @@ export async function planRoutineSpec(
     "Owner's description:",
     description.trim(),
   ].join("\n");
-
-  const result = await getDefaultProvider().sendChat(
-    [{ content: prompt, role: "owner" }],
-    undefined,
-    {
-      signal,
-    },
-  );
-
-  return parseRoutinePlanAnswer(result.answer).plan;
 }
 
 /** The planner's JSON answer as a RoutinePlan, plus the raw object for any

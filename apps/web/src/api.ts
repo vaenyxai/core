@@ -70,6 +70,7 @@ import type {
   SetDeviceModeRequest,
   Project,
   ConversationRoutineDraft,
+  DescriptionDraft,
   ProjectInstructionHold,
   RoutineGalleryItem,
   RoutineInputField,
@@ -1106,6 +1107,18 @@ export function draftRoutineFromConversation(
     `/v1/ask-vaenyx/conversations/${encodeURIComponent(conversationId)}/routine-draft`,
     { method: "POST" },
   );
+}
+
+// H-018: draft a Method or Routine from a one-sentence description for
+// review. Nothing is saved; Save goes through createMethod / createRoutine.
+export function draftFromDescription(
+  kind: "method" | "routine",
+  description: string,
+): Promise<DescriptionDraft> {
+  return requestJson<DescriptionDraft>("/v1/creation-drafts", {
+    method: "POST",
+    body: JSON.stringify({ kind, description }),
+  });
 }
 
 export function fetchChatClientMessageStatus(

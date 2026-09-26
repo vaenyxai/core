@@ -96,6 +96,7 @@ import {
   createProject,
   createRoutine,
   draftRoutineFromConversation,
+  draftFromDescription,
   createTask,
   createVaenyxMeCandidate,
   deleteMemory,
@@ -7212,14 +7213,29 @@ function AskVaenyxPanel({
   // H-017 · the Routine draft under review. Nothing is written until Save;
   // Cancel (or the × ) leaves nothing behind.
   const routineDraftWaitingRef = useRef<Set<string>>(new Set());
+  // H-018: a one-sentence create request whose reply asked ONE question
+  // drafts after the answer (a Skip drafts nothing).
+  const descriptionDraftWaitingRef = useRef<
+    Map<string, { kind: "method" | "routine"; description: string }>
+  >(new Map());
+  // One review for both: "以后都这样做" (source conversation, H-017) and a
+  // one-sentence create request (source description, H-018).
   const [routineDraft, setRoutineDraft] = useState<{
     conversationId: string;
+    kind: "method" | "routine";
+    source: "conversation" | "description";
     draft: ConversationRoutineDraft | null;
     saving: boolean;
   } | null>(null);
 
   async function openRoutineDraft(conversationId: string): Promise<void> {
-    setRoutineDraft({ conversationId, draft: null, saving: false });
+    setRoutineDraft({
+      conversationId,
+      kind: "routine",
+      source: "conversation",
+      draft: null,
+      saving: false,
+    });
     try {
       const draft = await draftRoutineFromConversation(conversationId);
       setRoutineDraft((current) =>
@@ -7237,6 +7253,26 @@ function AskVaenyxPanel({
     const pending = routineDraft;
     if (!pending?.draft) return;
     setRoutineDraft({ ...pending, saving: true });
+    if (pending.source === "description") {
+      try {
+        await saveDescribedCreation(
+          pending.conversationId,
+          pending.kind,
+          pending.draft.plan,
+        );
+        setRoutineDraft(null);
+      } catch (saveError) {
+        setError(
+          saveError instanceof Error
+            ? saveError.message
+            : lang === "zh"
+              ? "没能保存。"
+              : "It could not be saved.",
+        );
+        setRoutineDraft({ ...pending, saving: false });
+      }
+      return;
+    }
     try {
       const created = await createRoutine(pending.draft.plan);
       // The Conversation that taught it becomes its home, the same way the
@@ -7317,6 +7353,28 @@ function AskVaenyxPanel({
         routineDraftWaitingRef.current.delete(message.conversationId);
         if (resolution.kind !== "skip") {
           void openRoutineDraft(message.conversationId);
+        }
+      }
+      const describing = descriptionDraftWaitingRef.current.get(
+        message.conversationId,
+      );
+      if (describing) {
+        descriptionDraftWaitingRef.current.delete(message.conversationId);
+        if (resolution.kind !== "skip") {
+          const asked = questionPart(message);
+          const answer =
+            resolution.kind === "choice"
+              ? (asked?.options.find(
+                  (option) => option.id === resolution.optionId,
+                )?.label ?? "")
+              : (resolution.text ?? "");
+          void openDescriptionDraft(
+            message.conversationId,
+            describing.kind,
+            [describing.description, asked ? `${asked.prompt} ${answer}` : answer]
+              .filter(Boolean)
+              .join("\n"),
+          );
         }
       }
       const fresh = await fetchAskVaenyxMessages(message.conversationId);
@@ -9111,43 +9169,70 @@ function AskVaenyxPanel({
     }
   }
 
-  async function buildFromChat(
+  // H-018 (Oskar, 2026-09-27): a one-sentence create request drafts first.
+  // The Building… chip covers drafting; the draft opens in the same review as
+  // H-017, and nothing is written until Save. A failed draft says so in the
+  // Conversation and leaves nothing behind.
+  async function openDescriptionDraft(
     conversationId: string,
     kind: "method" | "routine",
     description: string,
   ): Promise<void> {
     setBuilding({ conversationId, kind });
-    // The "building in the background" line used to be a banner OUTSIDE the
-    // message list — the one thing on screen the scroll-to-new-message rule
-    // could not reach, and it vanished when the build ended (Oskar,
-    // 2026-08-21: 完全可以是对话里面的一句话). As a message it scrolls into
-    // view, and the ✔/⚠ that follows completes the story in place.
     try {
-      const started = await appendConversationNote(
+      const draft = await draftFromDescription(kind, description);
+      setRoutineDraft({
         conversationId,
-        lang === "zh"
-          ? `⏳ 正在后台创建这个 ${kind === "method" ? "Method" : "Routine"} —— 建好我会在这里说一声。`
-          : `⏳ Building the ${kind === "method" ? "Method" : "Routine"} in the background — I will say here when it is ready.`,
+        kind,
+        source: "description",
+        draft,
+        saving: false,
+      });
+    } catch (draftError) {
+      const reason =
+        draftError instanceof Error ? draftError.message : "unknown error";
+      try {
+        const message = await appendConversationNote(
+          conversationId,
+          lang === "zh"
+            ? `⚠ 这次没拟成草稿(${reason}),什么都没有保存。把需求再说一遍,我重新拟。`
+            : `⚠ No draft this time (${reason}), and nothing was saved. Describe it again and I'll redraft.`,
+        );
+        setMessages((current) =>
+          activeConversationId === conversationId
+            ? [...current, message]
+            : current,
+        );
+      } catch {
+        // The error note is a courtesy; nothing was saved either way.
+      }
+    } finally {
+      setBuilding((current) =>
+        current?.conversationId === conversationId ? null : current,
       );
-      setMessages((current) =>
-        activeConversationId === conversationId
-          ? [...current, started]
-          : current,
-      );
-    } catch {
-      // The header chip still shows Building…; the note is a nicety.
     }
+  }
+
+  // Save a reviewed description draft: what the background build used to do
+  // straight after drafting, now only on the Owner's Save. A failure throws
+  // back to the review, which stays open.
+  async function saveDescribedCreation(
+    conversationId: string,
+    kind: "method" | "routine",
+    plan: RoutinePlan,
+  ): Promise<void> {
+    setBuilding({ conversationId, kind });
     let note: string;
     try {
       let builtName: string;
       let boundHere = false;
       let openedHome = false;
       if (kind === "method") {
-        const draft = await draftMethod(description);
-        const created = await createMethod(draft);
+        const method = plan.steps[0]?.method;
+        if (!method) throw new Error("ROUTINE_DRAFT_INVALID");
+        const created = await createMethod(method);
         builtName = created.name;
       } else {
-        const plan = await planRoutine(description);
         const created = await createRoutine(plan);
         builtName = created.name;
         // Owner model (2026-08-16): the conversation that created a Routine
@@ -9223,13 +9308,10 @@ This conversation is its home — feed it something to try it, and ask for chang
           : lang === "zh"
             ? `✔ ${kind === "method" ? "Method" : "Routine"}「${builtName}」已建好,已存入你的资源库。直接说"用它"就可以开始用;想细调,去 Settings → Library 打开它。`
             : `✔ The ${kind === "method" ? "Method" : "Routine"} "${builtName}" is built and saved to your Library. Just ask to use it; to fine-tune it, open it under Settings → Library.`;
-    } catch (buildError) {
-      const reason =
-        buildError instanceof Error ? buildError.message : "unknown error";
-      note =
-        lang === "zh"
-          ? `⚠ 这次没建成(${reason})。把需求再说一遍,我重新建。`
-          : `⚠ The build failed (${reason}). Describe it again and I'll retry.`;
+    } finally {
+      setBuilding((current) =>
+        current?.conversationId === conversationId ? null : current,
+      );
     }
     try {
       const message = await appendConversationNote(conversationId, note);
@@ -9241,9 +9323,6 @@ This conversation is its home — feed it something to try it, and ask for chang
     } catch {
       // The note could not be stored; the Library still has the result.
     } finally {
-      setBuilding((current) =>
-        current?.conversationId === conversationId ? null : current,
-      );
       void onWorkspaceRefresh();
       onLibraryRefresh();
     }
@@ -9930,14 +10009,27 @@ This conversation is its home — feed it something to try it, and ask for chang
         }
       }
 
-      // The reply landed: build the described Method/Routine in the background
-      // and post the confirmation note when it is saved (spec §2a).
+      // H-018: the reply landed — draft the described Method/Routine for
+      // review; nothing is saved until Save. If the reply asked ONE question,
+      // the draft waits for the answer (a Skip drafts nothing).
       if (suggestCreate) {
-        void buildFromChat(
-          conversationId,
-          suggestCreate,
-          createDescription ?? content,
-        );
+        const reply = [...response.messages]
+          .reverse()
+          .find((message) => message.role === "assistant");
+        const asked = reply ? questionPart(reply) : null;
+        const describing = {
+          kind: suggestCreate,
+          description: createDescription ?? content,
+        };
+        if (asked && asked.state.status !== "resolved") {
+          descriptionDraftWaitingRef.current.set(conversationId, describing);
+        } else {
+          void openDescriptionDraft(
+            conversationId,
+            describing.kind,
+            describing.description,
+          );
+        }
       }
       if (editMethodId && editRequest) {
         void proposeRecipeEdit(conversationId, editMethodId, editRequest);
@@ -11380,7 +11472,15 @@ This conversation is its home — feed it something to try it, and ask for chang
             onClose={() => {
               if (!routineDraft.saving) setRoutineDraft(null);
             }}
-            title={zh ? "存成 Routine 之前先看一眼" : "Check Before Saving As A Routine"}
+            title={
+              routineDraft.source === "description"
+                ? zh
+                  ? `保存这个 ${routineDraft.kind === "method" ? "Method" : "Routine"} 之前先看一眼`
+                  : `Check This ${routineDraft.kind === "method" ? "Method" : "Routine"} Before Saving`
+                : zh
+                  ? "存成 Routine 之前先看一眼"
+                  : "Check Before Saving As A Routine"
+            }
           >
             {routineDraft.draft ? (
               <div className="routine-draft-review">
@@ -11393,22 +11493,34 @@ This conversation is its home — feed it something to try it, and ask for chang
                   <dt>{zh ? "你要给它什么" : "What you give it"}</dt>
                   <dd>
                     {routineDraft.draft.summary.input ||
-                      (zh ? "跟这次一样的内容" : "The same kind of input as this time")}
+                      (routineDraft.source === "description"
+                        ? zh
+                          ? "见下面的步骤"
+                          : "See the steps below"
+                        : zh
+                          ? "跟这次一样的内容"
+                          : "The same kind of input as this time")}
                   </dd>
-                  <dt>{zh ? "你这次的纠正" : "Your corrections it keeps"}</dt>
-                  <dd>
-                    {routineDraft.draft.summary.corrections.length > 0 ? (
-                      <ul>
-                        {routineDraft.draft.summary.corrections.map((line) => (
-                          <li key={line}>{line}</li>
-                        ))}
-                      </ul>
-                    ) : zh ? (
-                      "这次没有纠正。"
-                    ) : (
-                      "No corrections this time."
-                    )}
-                  </dd>
+                  {routineDraft.source === "conversation" ? (
+                    <>
+                      <dt>{zh ? "你这次的纠正" : "Your corrections it keeps"}</dt>
+                      <dd>
+                        {routineDraft.draft.summary.corrections.length > 0 ? (
+                          <ul>
+                            {routineDraft.draft.summary.corrections.map(
+                              (line) => (
+                                <li key={line}>{line}</li>
+                              ),
+                            )}
+                          </ul>
+                        ) : zh ? (
+                          "这次没有纠正。"
+                        ) : (
+                          "No corrections this time."
+                        )}
+                      </dd>
+                    </>
+                  ) : null}
                   <dt>{zh ? "步骤" : "Steps"}</dt>
                   <dd>
                     <ol>
@@ -11451,8 +11563,8 @@ This conversation is its home — feed it something to try it, and ask for chang
                         ? "保存中…"
                         : "Saving…"
                       : zh
-                        ? "保存 Routine"
-                        : "Save Routine"}
+                        ? `保存 ${routineDraft.kind === "method" ? "Method" : "Routine"}`
+                        : `Save ${routineDraft.kind === "method" ? "Method" : "Routine"}`}
                   </button>
                 </div>
               </div>

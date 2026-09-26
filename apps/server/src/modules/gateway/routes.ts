@@ -68,6 +68,7 @@ import {
   DeleteConversationRequestSchema,
   ClientMessageStatusSchema,
   RecordFactRequestSchema,
+  type DescriptionDraftRequest,
   type RecordFactRequest,
   type MemoryKind,
   type SetMemorySourceExclusionRequest,
@@ -158,6 +159,8 @@ import {
   ProjectMemorySchema,
   ProjectSchema,
   ConversationRoutineDraftSchema,
+  DescriptionDraftRequestSchema,
+  DescriptionDraftSchema,
   ProjectInstructionHoldSchema,
   RejectVaenyxMeCandidateRequestSchema,
   RenameMethodRequestSchema,
@@ -662,6 +665,7 @@ import {
   updateVaenyxThreadTitle,
 } from "../core/threads.js";
 import { planRoutineFromConversation } from "../core/conversation-routine.js";
+import { draftFromDescription } from "../core/description-draft.js";
 import {
   createProject,
   findProjectById,
@@ -6208,6 +6212,60 @@ export async function registerGatewayRoutes(
             error: zh
               ? "这次没能拟出一份可用的草稿,什么都没有保存。再说一次「以后都这样做」试试。"
               : "Vaenyx could not draft a usable Routine this time, and nothing was saved. Say it again to try once more.",
+          });
+        }
+        const safe = ownerSafeErrorResponse(error, "model-response", pushLanguage());
+        return reply.code(400).send({ error: safe.error });
+      }
+    },
+  );
+
+  // H-018 · draft a Method or Routine from a one-sentence description for the
+  // same review as H-017. Nothing is saved: Save goes through POST
+  // /v1/methods or POST /v1/routines like any other create.
+  app.post<{ Body: DescriptionDraftRequest }>(
+    "/v1/creation-drafts",
+    {
+      schema: {
+        body: DescriptionDraftRequestSchema,
+        response: {
+          200: DescriptionDraftSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request)) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+      try {
+        return await draftFromDescription(
+          request.body.kind,
+          request.body.description,
+          context.config.libraryDirectory,
+          controller.signal,
+        );
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        if (
+          code === "ROUTINE_DRAFT_EMPTY" ||
+          code === "ROUTINE_DRAFT_INVALID" ||
+          code === "DESCRIPTION_DRAFT_EMPTY" ||
+          code === "PLAN_PARSE_FAILED" ||
+          code === "DRAFT_PARSE_FAILED" ||
+          code.startsWith("PLAN_METHOD_NOT_FOUND") ||
+          error instanceof SyntaxError
+        ) {
+          return reply.code(400).send({
+            error:
+              pushLanguage() === "zh"
+                ? "这次没能拟出一份可用的草稿,什么都没有保存。把需求再说一遍试试。"
+                : "Vaenyx could not draft a usable one this time, and nothing was saved. Describe it again to try once more.",
           });
         }
         const safe = ownerSafeErrorResponse(error, "model-response", pushLanguage());

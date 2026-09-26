@@ -141,24 +141,7 @@ export async function planRoutineFromConversation(
       ).answer;
 
   const { plan, raw } = parseRoutinePlanAnswer(answer);
-  if (plan.steps.length === 0) throw new Error("ROUTINE_DRAFT_EMPTY");
-  // A reused Method must exist, and its declared Capabilities are what the
-  // Owner is told the Routine will reach for. A drafted Method declares none.
-  const capabilities = new Set<string>();
-  for (const step of plan.steps) {
-    if (!step.reuse) continue;
-    const method = loadMethod(libraryDirectory, step.reuse);
-    if (!method) throw new Error(`PLAN_METHOD_NOT_FOUND:${step.reuse}`);
-    for (const capability of capabilitiesFromManifest(method.manifest)
-      .capabilities) {
-      capabilities.add(capability);
-    }
-  }
-  for (const step of plan.steps) {
-    if (step.method && !step.method.recipe.trim()) {
-      throw new Error("ROUTINE_DRAFT_INVALID");
-    }
-  }
+  const capabilities = checkRoutineDraft(plan, libraryDirectory);
   const corrections = Array.isArray(raw.corrections)
     ? raw.corrections
         .map((item) => plainLine(item, 200))
@@ -171,7 +154,34 @@ export async function planRoutineFromConversation(
       does: plainLine(raw.does) || plan.description,
       input: plainLine(raw.input),
       corrections,
-      capabilities: [...capabilities],
+      capabilities,
     },
   };
+}
+
+/**
+ * Every draft the Owner reviews (H-017 and H-018) passes the same check: at
+ * least one step, reused Methods exist, drafted Methods carry a recipe. The
+ * result is the Capabilities the Owner is told it will use — a reused
+ * Method's declared ones; a freshly drafted Method declares none.
+ */
+export function checkRoutineDraft(
+  plan: RoutinePlan,
+  libraryDirectory: string,
+): string[] {
+  if (plan.steps.length === 0) throw new Error("ROUTINE_DRAFT_EMPTY");
+  const capabilities = new Set<string>();
+  for (const step of plan.steps) {
+    if (step.method && !step.method.recipe.trim()) {
+      throw new Error("ROUTINE_DRAFT_INVALID");
+    }
+    if (!step.reuse) continue;
+    const method = loadMethod(libraryDirectory, step.reuse);
+    if (!method) throw new Error(`PLAN_METHOD_NOT_FOUND:${step.reuse}`);
+    for (const capability of capabilitiesFromManifest(method.manifest)
+      .capabilities) {
+      capabilities.add(capability);
+    }
+  }
+  return [...capabilities];
 }
