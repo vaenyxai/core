@@ -1,0 +1,12 @@
+-- H-007 · Custom Mode capability isolation (Oskar, 2026-09-19).
+--
+-- A Custom Mode's capability list becomes explicit: turning a capability on
+-- for yourself no longer hands it to a family member's Mode. Modes still at
+-- NULL ("adds no restriction") are migrated once, at startup, to the ship
+-- defaults the instance has switched on (capabilities.ts ·
+-- migrateLegacyModeCapabilities) — SQL cannot read the global switches.
+--
+-- When that migration takes away something a Mode was actually receiving,
+-- this column holds the one-time notice for the Owner, JSON
+-- {"lost": ["fetching"], "at": "..."}, cleared once they re-enable or dismiss.
+ALTER TABLE modes ADD COLUMN capability_notice TEXT;

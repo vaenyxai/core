@@ -1696,6 +1696,17 @@ export function fetchModeThreads(modeId: string): Promise<VaenyxThread[]> {
   return requestJson<VaenyxThread[]>(`/v1/modes/${modeId}/threads`);
 }
 
+// H-007 · answer the one-time capability notice on a mode's card.
+export function answerModeCapabilityNotice(
+  modeId: string,
+  reenable: boolean,
+): Promise<{ capabilities: string[] }> {
+  return requestJson<{ capabilities: string[] }>(
+    `/v1/modes/${encodeURIComponent(modeId)}/capability-notice/${reenable ? "reenable" : "dismiss"}`,
+    { method: "POST" },
+  );
+}
+
 /** A mode's past periodic reports, newest first. */
 export function fetchModeDigests(modeId: string): Promise<ModeDigest[]> {
   return requestJson<ModeDigest[]>(`/v1/modes/${modeId}/digests`);

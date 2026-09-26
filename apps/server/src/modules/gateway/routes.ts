@@ -745,6 +745,7 @@ import {
   NEVER_VIA_TOKEN,
   readGlobalCapabilities,
   readModeCapabilities,
+  answerModeCapabilityNotice,
   readProfileCapabilities,
   recordCapabilityWanted,
   refusedCapabilityMessage,
@@ -1084,6 +1085,42 @@ export async function registerGatewayRoutes(
       { modeId: null },
     ).catch(() => undefined);
   };
+
+  // H-007 · ACCOUNT-LEVEL DOORS BELONG TO USER MODE. App tokens, relay keys
+  // and logins, and the model connections (adding or removing a provider's
+  // key) are the Owner's account, not a mode's content. The locked-mode floor
+  // above only bit when "lock settings" was ticked, so an UNLOCKED family mode
+  // could list app tokens, reveal one, or disconnect a provider. Any session
+  // inside a Custom Mode is refused here, locked or not. Reading the provider
+  // list stays open — the chat's model picker needs it, and it carries no key.
+  const ACCOUNT_PREFIXES = ["/v1/app-profiles", "/v1/relay/"];
+  app.addHook("preHandler", async (request, reply) => {
+    const path = request.url.split("?")[0] ?? "";
+    const accountDoor =
+      ACCOUNT_PREFIXES.some((prefix) => path.startsWith(prefix)) ||
+      (path === "/v1/relay" && request.method === "GET") ||
+      (path.startsWith("/v1/models/providers") && request.method !== "GET");
+    if (!accountDoor) return;
+    const owner = requireOwner(request);
+    if (!owner?.modeId) return;
+    const mode = findMode(context.database, owner.modeId);
+    recordAudit(context.database, {
+      actorType: "owner",
+      actorId: owner.id,
+      actorName: owner.name,
+      action: "mode.account.blocked",
+      decision: "denied",
+      reason: `Account-level request refused inside mode "${mode?.name ?? owner.modeId}": ${request.method} ${path}`,
+      resourceType: "mode",
+      resourceId: owner.modeId,
+    });
+    return reply.code(403).send({
+      error:
+        pushLanguage() === "zh"
+          ? "App 密钥、relay 和模型连接属于 User Mode。回到 User Mode 再管理它们。"
+          : "App keys, the relay and model connections belong to User Mode. Switch back to User Mode to manage them.",
+    });
+  });
 
   // Custom Mode sandbox hardening: direct-id access respects the mode
   // boundary — a conversation, thread or task belonging to ANOTHER mode is
@@ -7149,6 +7186,59 @@ export async function registerGatewayRoutes(
         });
       }
       return next;
+    },
+  );
+
+  // H-007 · the one-time notice on a mode's card: put back what the explicit
+  // list took away, or just dismiss it. User Mode only.
+  app.post<{ Params: { id: string; answer: string } }>(
+    "/v1/modes/:id/capability-notice/:answer",
+    {
+      schema: {
+        params: Type.Object({
+          id: Type.String({ minLength: 1 }),
+          answer: Type.Union([Type.Literal("reenable"), Type.Literal("dismiss")]),
+        }),
+        response: {
+          200: Type.Object({ capabilities: Type.Array(Type.String()) }),
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      if (owner.modeId) {
+        return reply.code(403).send({ error: MODE_SETTINGS_LOCKED });
+      }
+      if (!findMode(context.database, request.params.id)) {
+        return reply.code(404).send({ error: "Mode not found." });
+      }
+      const reenable = request.params.answer === "reenable";
+      const capabilities = answerModeCapabilityNotice(
+        context.database,
+        request.params.id,
+        reenable,
+      );
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: reenable
+          ? "mode.capabilities.notice.reenable"
+          : "mode.capabilities.notice.dismiss",
+        decision: "allowed",
+        reason: reenable
+          ? "Owner re-enabled what the explicit capability list took away from this mode."
+          : "Owner dismissed the capability notice for this mode.",
+        resourceType: "mode",
+        resourceId: request.params.id,
+      });
+      return { capabilities };
     },
   );
 

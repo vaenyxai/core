@@ -211,9 +211,17 @@ describe("capabilities", () => {
       .prepare("INSERT INTO modes (id, name) VALUES (?, ?)")
       .run(modeId, "Guest");
 
-    // Nothing stored yet: the mode adds no restriction of its own, which is
-    // what every mode made before this screen existed still says.
-    expect(readModeCapabilities(database, modeId)).toBeNull();
+    // Nothing stored yet reads as the ship defaults the instance allows — never
+    // as "no restriction" (H-007, 2026-09-19): `fetching` ships off.
+    expect(readModeCapabilities(database, modeId)).toEqual([
+      "hearing",
+      "speaking",
+      "vision",
+      "drawing",
+      "reading",
+      "ocr",
+      "web",
+    ]);
 
     // The first switch the Owner touches turns the mode explicit — and the
     // change set is a DELTA, so what it did not mention stays.

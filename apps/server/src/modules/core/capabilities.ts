@@ -405,11 +405,33 @@ export function writeGlobalCapabilities(
   return next;
 }
 
-// A mode's own list. NULL/absent means "this mode adds no restriction", which is
-// deliberately different from an empty list ("this mode allows nothing").
+// H-007 · A CUSTOM MODE'S LIST IS EXPLICIT (Oskar, 2026-09-19).
 //
-// Every mode created before the Owner had a screen to narrow one sits at NULL,
-// so nothing they already made changes behaviour the day this arrives.
+// It used to be that NULL meant "this mode adds no restriction", so a mode
+// received whatever the Owner switched on for themselves — the Owner turning
+// `fetching` on for their own work handed a family member's mode the Owner's
+// folders too. Now:
+//   - a new mode starts from the capabilities that ship on by default, as far
+//     as the instance currently allows them (never from "no restriction");
+//   - global stays a ceiling: off globally is off in every mode;
+//   - on globally never ADDS anything to a mode — the Owner widens a mode
+//     explicitly in Settings.
+// Modes still at NULL are migrated once (migrateLegacyModeCapabilities). A
+// NULL that somehow survives reads as the same starting list, never as "no
+// restriction".
+export const SHIP_DEFAULT_MODE_CAPABILITIES: readonly Capability[] =
+  CAPABILITIES.filter((capability) => CAPABILITY_DEFAULT_ON[capability]);
+
+/** Where a Custom Mode starts: the ship defaults the instance allows now. */
+export function defaultModeCapabilities(
+  database: DatabaseHandle,
+): Capability[] {
+  const global = readGlobalCapabilities(database);
+  return SHIP_DEFAULT_MODE_CAPABILITIES.filter((capability) => global[capability]);
+}
+
+// A mode's own list; null only for "no mode" (User Mode) or a mode id that no
+// longer exists. An empty list means "this mode allows nothing".
 export function readModeCapabilities(
   database: DatabaseHandle,
   modeId: string | null,
@@ -418,14 +440,147 @@ export function readModeCapabilities(
   const row = database.sqlite
     .prepare("SELECT capabilities FROM modes WHERE id = ?")
     .get(modeId) as { capabilities?: string | null } | undefined;
-  if (!row?.capabilities) return null;
+  if (!row) return null;
+  if (!row.capabilities) return defaultModeCapabilities(database);
   try {
     const parsed = JSON.parse(row.capabilities) as unknown;
-    if (!Array.isArray(parsed)) return null;
+    if (!Array.isArray(parsed)) return defaultModeCapabilities(database);
     return parsed.filter(isCapability);
+  } catch {
+    return defaultModeCapabilities(database);
+  }
+}
+
+const MODE_MIGRATION_LOG_KEY = "modes.capabilities.explicit_migration";
+
+export interface ModeCapabilityMigration {
+  modeId: string;
+  modeName: string;
+  after: Capability[];
+  lost: Capability[];
+  at: string;
+}
+
+/**
+ * The one-time migration of Custom Modes still at NULL ("adds no restriction")
+ * to an explicit list: the ship defaults intersected with what is globally on
+ * right now. Idempotent — a second run finds no NULL and changes nothing.
+ *
+ * What changed is recorded in instance_settings, and a mode that loses
+ * something it was actually receiving (in practice `fetching`, when the
+ * Owner had switched it on) gets a one-time notice with a one-action
+ * re-enable.
+ */
+export function migrateLegacyModeCapabilities(
+  database: DatabaseHandle,
+): ModeCapabilityMigration[] {
+  const legacy = database.sqlite
+    .prepare("SELECT id, name FROM modes WHERE capabilities IS NULL")
+    .all() as { id: string; name: string }[];
+  if (legacy.length === 0) return [];
+  const global = readGlobalCapabilities(database);
+  const after = defaultModeCapabilities(database);
+  const lost = CAPABILITIES.filter(
+    (capability) => global[capability] && !after.includes(capability),
+  );
+  const at = new Date().toISOString();
+  const changes: ModeCapabilityMigration[] = legacy.map((mode) => ({
+    modeId: mode.id,
+    modeName: mode.name,
+    after,
+    lost,
+    at,
+  }));
+
+  database.sqlite.exec("BEGIN IMMEDIATE");
+  try {
+    const update = database.sqlite.prepare(
+      `UPDATE modes SET capabilities = ?, capability_notice = ?
+       WHERE id = ? AND capabilities IS NULL`,
+    );
+    for (const change of changes) {
+      update.run(
+        JSON.stringify(change.after),
+        change.lost.length > 0 ? JSON.stringify({ lost: change.lost, at }) : null,
+        change.modeId,
+      );
+    }
+    const previous = database.sqlite
+      .prepare("SELECT value FROM instance_settings WHERE key = ?")
+      .get(MODE_MIGRATION_LOG_KEY) as { value: string } | undefined;
+    let log: unknown[] = [];
+    try {
+      const parsed = previous ? (JSON.parse(previous.value) as unknown) : [];
+      log = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      log = [];
+    }
+    database.sqlite
+      .prepare(
+        `INSERT INTO instance_settings (key, value, updated_at)
+         VALUES (?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                                        updated_at = CURRENT_TIMESTAMP`,
+      )
+      .run(MODE_MIGRATION_LOG_KEY, JSON.stringify([...log, ...changes]));
+    database.sqlite.exec("COMMIT");
+  } catch (error) {
+    database.sqlite.exec("ROLLBACK");
+    throw error;
+  }
+  return changes;
+}
+
+/** The pending one-time notice for a mode, if the migration left one. */
+export function readModeCapabilityNotice(
+  database: DatabaseHandle,
+  modeId: string,
+): { lost: Capability[]; at: string } | null {
+  const row = database.sqlite
+    .prepare("SELECT capability_notice FROM modes WHERE id = ?")
+    .get(modeId) as { capability_notice: string | null } | undefined;
+  if (!row?.capability_notice) return null;
+  try {
+    const parsed = JSON.parse(row.capability_notice) as {
+      lost?: unknown;
+      at?: unknown;
+    };
+    const lost = Array.isArray(parsed.lost) ? parsed.lost.filter(isCapability) : [];
+    return lost.length > 0
+      ? { lost, at: typeof parsed.at === "string" ? parsed.at : "" }
+      : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Answer the one-time notice. Re-enable puts back, for this mode only, what
+ * the migration took away — as far as the instance still allows it — and the
+ * notice is gone either way.
+ */
+export function answerModeCapabilityNotice(
+  database: DatabaseHandle,
+  modeId: string,
+  reenable: boolean,
+): Capability[] {
+  const notice = readModeCapabilityNotice(database, modeId);
+  let result = readModeCapabilities(database, modeId) ?? [];
+  if (reenable && notice) {
+    const global = readGlobalCapabilities(database);
+    const changes: Partial<Record<Capability, boolean>> = {};
+    for (const capability of notice.lost) {
+      if (global[capability]) changes[capability] = true;
+    }
+    if (Object.keys(changes).length > 0) {
+      result = writeModeCapabilities(database, modeId, changes);
+    }
+  }
+  const cleared = database.sqlite
+    .prepare("UPDATE modes SET capability_notice = NULL WHERE id = ?")
+    .run(modeId);
+  if (cleared.changes === 0) throw new Error("MODE_NOT_FOUND");
+  return result;
 }
 
 // WHICH layer said no. A session can only ever meet the first two — it has a
@@ -523,19 +678,13 @@ export function writeModeCapabilities(
   );
   if (aboveCeiling.length > 0) throw new ModeAboveCeilingError(aboveCeiling);
 
-  // NULL so far means "adds no restriction of its own", so the starting point
-  // is everything — everything the CEILING allows, which is the whole point of
-  // the filter. Seeding from all eight would quietly write down capabilities
-  // the instance currently refuses, and the mode would then be handed them by
-  // itself the day that global switch went back on. Narrowing is sticky: a
-  // mode gains a capability only when the Owner ticks it here, looking at it.
-  //
-  // From the first switch the Owner touches, this mode carries an explicit list
-  // and keeps one, so a mode somebody deliberately narrowed also never gains a
-  // capability that is added to the vocabulary later.
+  // Every Custom Mode carries an explicit list (H-007); the fallback below
+  // only covers a mode id that no longer exists, which the UPDATE then
+  // reports as MODE_NOT_FOUND. Narrowing is sticky: a mode gains a capability
+  // only when the Owner ticks it here, looking at it, and a mode never gains
+  // a capability that is added to the vocabulary later.
   const current =
-    readModeCapabilities(database, modeId) ??
-    CAPABILITIES.filter((capability) => global[capability]);
+    readModeCapabilities(database, modeId) ?? defaultModeCapabilities(database);
   const next = CAPABILITIES.filter((capability) =>
     typeof changes[capability] === "boolean"
       ? changes[capability] === true

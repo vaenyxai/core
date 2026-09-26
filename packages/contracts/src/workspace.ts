@@ -1256,6 +1256,14 @@ export const ModeSchema = Type.Object(
     agentName: Type.String(),
     digestCadence: DigestCadenceSchema,
     voice: Type.Union([ModeVoiceSchema, Type.Null()]),
+    // H-007: present only while a one-time notice waits — the capabilities
+    // this mode stopped receiving when its list became explicit.
+    capabilityNotice: Type.Optional(
+      Type.Object(
+        { lost: Type.Array(Type.String()) },
+        { additionalProperties: false },
+      ),
+    ),
     createdAt: Type.String(),
     updatedAt: Type.String(),
   },

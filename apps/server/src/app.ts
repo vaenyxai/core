@@ -47,6 +47,8 @@ import {
   ownerSafeErrorResponse,
 } from "./runtime/owner-safe-errors.js";
 import { pushLanguage } from "./modules/core/push.js";
+import { migrateLegacyModeCapabilities } from "./modules/core/capabilities.js";
+import { postInboxNote } from "./modules/core/inbox-thread.js";
 
 export async function buildApp(
   config: AppConfig = loadConfig(),
@@ -119,6 +121,31 @@ export async function buildApp(
   initPushService(config);
 
   const database = createDatabase(config);
+  // H-007: Custom Modes still at "adds no restriction" get an explicit list,
+  // once. A mode that lost something it was receiving gets a one-time notice
+  // on its card, and the main conversation says so once.
+  try {
+    const migrated = migrateLegacyModeCapabilities(database);
+    const withLoss = migrated.filter((change) => change.lost.length > 0);
+    if (withLoss.length > 0) {
+      const zh = pushLanguage() === "zh";
+      postInboxNote(
+        database,
+        null,
+        zh
+          ? `模式能力改成了明确列表:${withLoss.map((change) => `「${change.modeName}」`).join("、")}不再自动跟着你打开的能力走,这次少了:${withLoss[0]?.lost.join(", ")}。到 设置 → Modes 的模式卡片上可以一键重新打开。`
+          : `Custom Modes now have their own explicit capability lists. ${withLoss.map((change) => `"${change.modeName}"`).join(", ")} no longer pick up what you switch on for yourself, and stopped receiving: ${withLoss[0]?.lost.join(", ")}. Settings → Modes has a one-tap re-enable on each card.`,
+      );
+    }
+    if (migrated.length > 0) {
+      app.log.info(
+        { modes: migrated.length, withLoss: withLoss.length },
+        "custom mode capability lists made explicit",
+      );
+    }
+  } catch (error) {
+    app.log.warn({ err: error }, "custom mode capability migration failed");
+  }
   // H-016: once per instance, move risky lines already sitting in automatic
   // Project documents into the Inbox for review — never deleting them.
   try {

@@ -500,21 +500,21 @@ describe("the mode ceiling", () => {
     return (mode.json() as { id: string }).id;
   }
 
-  it("starts with no restriction of its own, and narrows when the Owner says so", async () => {
+  it("starts from the ship defaults, explicitly, and narrows when the Owner says so", async () => {
     const { app, cookie } = await startWithOwner();
     const modeId = await makeMode(app, cookie, "Guest");
 
-    // A mode nobody has narrowed adds nothing: every row starts where the
-    // instance leaves it, which is what every mode made before this screen
-    // existed still says.
+    // H-007 (2026-09-19): a new mode carries an explicit list from the first
+    // moment — the capabilities that ship on — never "no restriction".
     const fresh = await app.inject({
       method: "GET",
       url: `/v1/capabilities/modes/${modeId}`,
       headers: { cookie },
     });
     expect(fresh.statusCode).toBe(200);
-    expect(fresh.json().narrowed).toBe(false);
+    expect(fresh.json().narrowed).toBe(true);
     expect(fresh.json().capabilities.drawing).toBe(true);
+    expect(fresh.json().capabilities.fetching).toBe(false);
     // The instance's own switches ride along, because a mode row is meaningless
     // without the ceiling it is measured against. Fetching ships off.
     expect(fresh.json().global.fetching).toBe(false);
@@ -557,7 +557,8 @@ describe("the mode ceiling", () => {
       url: `/v1/capabilities/modes/${modeId}`,
       headers: { cookie },
     });
-    expect(after.json().narrowed).toBe(false);
+    // The refused widening wrote nothing: the mode still does not have it.
+    expect(after.json().capabilities.fetching).toBe(false);
 
     await app.close();
   });

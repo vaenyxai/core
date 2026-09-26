@@ -651,6 +651,19 @@ textarea::placeholder {
   padding: 0 7px;
 }
 
+/* H-007 · the one-time capability notice on a legacy mode's card. */
+.mode-capability-notice {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent, #6ea8ff);
+  border-radius: var(--r-md, 10px);
+  background: var(--accent-soft, rgba(110, 168, 255, 0.1));
+}
+
+.mode-capability-notice p {
+  margin: 0 0 8px;
+}
+
 /* A mode's past reports, under its card. */
 .mode-digests {
   display: grid;

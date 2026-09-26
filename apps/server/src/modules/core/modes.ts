@@ -15,6 +15,10 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import {
+  defaultModeCapabilities,
+  readModeCapabilityNotice,
+} from "./capabilities.js";
 import { deleteInboxThreadForMode, postInboxNote } from "./inbox-thread.js";
 import { pushLanguage, sendPushToAllDevices } from "./push.js";
 
@@ -30,6 +34,7 @@ interface ModeRow {
   digest_cadence: string;
   digest_last_at: string | null;
   voice: string | null;
+  capability_notice?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +98,13 @@ function toMode(row: ModeRow): Mode {
   };
 }
 
+// The Mode as the Settings screen shows it: plus the one-time capability
+// notice the H-007 migration may have left for the Owner.
+function withCapabilityNotice(database: DatabaseHandle, mode: Mode): Mode {
+  const notice = readModeCapabilityNotice(database, mode.id);
+  return notice ? { ...mode, capabilityNotice: { lost: notice.lost } } : mode;
+}
+
 // Local PINs are convenience locks, not account security (the main login
 // always overrides them) — a per-mode salted hash keeps them out of plain
 // sight without pretending to be more than they are.
@@ -142,7 +154,9 @@ export function listModes(database: DatabaseHandle): Mode[] {
   const rows = database.sqlite
     .prepare("SELECT * FROM modes ORDER BY created_at ASC")
     .all();
-  return (rows as unknown as ModeRow[]).map(toMode);
+  return (rows as unknown as ModeRow[]).map((row) =>
+    withCapabilityNotice(database, toMode(row)),
+  );
 }
 
 export function createMode(
@@ -160,8 +174,8 @@ export function createMode(
       `INSERT INTO modes (
         id, name, rules, lock_settings, local_only,
         enter_pin_hash, exit_pin_hash, agent_name, digest_cadence,
-        digest_last_at, voice, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        digest_last_at, voice, capabilities, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
@@ -177,6 +191,8 @@ export function createMode(
       // covering everything that came before.
       now,
       serializeModeVoice(input.voice),
+      // H-007: an explicit list from the first moment, never "no restriction".
+      JSON.stringify(defaultModeCapabilities(database)),
       now,
       now,
     );

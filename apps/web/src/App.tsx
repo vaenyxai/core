@@ -264,6 +264,7 @@ import {
   switchMode,
   exitMode,
   fetchModeDigests,
+  answerModeCapabilityNotice,
   fetchModeThreads,
   fetchModeCapabilities,
   updateModeCapabilities,
@@ -411,6 +412,19 @@ const RESTORABLE_SCREENS: Screen[] = [
 ];
 
 type PortalView = "chat" | "task" | "new";
+
+// Plain names for the eight capabilities, [English, Chinese], for sentences
+// the Owner reads (never the internal ids).
+const CAPABILITY_WORDS: Record<string, [string, string]> = {
+  hearing: ["Hearing", "听语音"],
+  speaking: ["Speaking", "朗读"],
+  vision: ["Vision", "看图"],
+  drawing: ["Drawing", "画图"],
+  reading: ["Reading documents", "读文档"],
+  ocr: ["OCR", "图转文"],
+  fetching: ["Opening your files", "打开你的文件"],
+  web: ["Web", "上网"],
+};
 
 // Photos waiting to ride the next message (Oskar, 2026-09-16: 连续拍最多五张
 // 一起发). The preview is a local object URL shown the instant a photo is
@@ -4875,6 +4889,27 @@ function ModesPanel() {
   const [editVoice, setEditVoice] = useState<ModeVoice | null>(null);
   // Past reports of one mode, opened from its card (Oskar, 2026-09-08): the
   // Owner reads the summary here and never has to enter the mode.
+  // H-007: the one-time notice a legacy mode may carry after its capability
+  // list became explicit. Answering clears it for good.
+  const [noticeBusy, setNoticeBusy] = useState<string | null>(null);
+  async function answerCapabilityNotice(modeId: string, reenable: boolean) {
+    setNoticeBusy(modeId);
+    try {
+      await answerModeCapabilityNotice(modeId, reenable);
+      setModes((current) =>
+        current.map((item) =>
+          item.id === modeId ? { ...item, capabilityNotice: undefined } : item,
+        ),
+      );
+      if (capsFor === modeId) {
+        setCaps(await fetchModeCapabilities(modeId));
+      }
+    } catch {
+      // The failed request already raised a toast; the notice stays.
+    } finally {
+      setNoticeBusy(null);
+    }
+  }
   const [digestFor, setDigestFor] = useState<string | null>(null);
   const [digests, setDigests] = useState<ModeDigest[] | null>(null);
   async function toggleDigests(modeId: string) {
@@ -5359,6 +5394,33 @@ function ModesPanel() {
                     )}
                   </span>
                 </div>
+                {mode.capabilityNotice?.lost.length ? (
+                  <div className="mode-capability-notice" role="status">
+                    <p>
+                      {lang === "zh"
+                        ? `这个模式的能力现在是一张明确的清单,不再自动跟着你给自己打开的能力走。这次它不再有:${mode.capabilityNotice.lost.map((name) => CAPABILITY_WORDS[name]?.[1] ?? name).join("、")}。`
+                        : `This mode now has its own explicit list of capabilities and no longer picks up what you switch on for yourself. It no longer has: ${mode.capabilityNotice.lost.map((name) => CAPABILITY_WORDS[name]?.[0] ?? name).join(", ")}.`}
+                    </p>
+                    <div className="card-actions">
+                      <button
+                        className="secondary-button"
+                        disabled={noticeBusy === mode.id}
+                        onClick={() => void answerCapabilityNotice(mode.id, true)}
+                        type="button"
+                      >
+                        {lang === "zh" ? "为这个模式重新打开" : "Turn It Back On For This Mode"}
+                      </button>
+                      <button
+                        className="text-button"
+                        disabled={noticeBusy === mode.id}
+                        onClick={() => void answerCapabilityNotice(mode.id, false)}
+                        type="button"
+                      >
+                        {lang === "zh" ? "知道了" : "Keep It Off"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {digestFor === mode.id ? (
                   <div className="mode-digests">
                     {digests === null ? (

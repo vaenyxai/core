@@ -896,6 +896,17 @@ Read this inside the app: **Settings → Manual**.
   belong to the mode it is bound to: a reply or task result inside a mode
   buzzes that mode's devices, and your own devices hear nothing of it — and
   the other way round. A device bound to no mode counts as yours (User Mode).
+- **A mode has its own list of capabilities.** Switching a capability on for
+  yourself (Settings → AI → Capabilities) never hands it to a Custom Mode: a
+  new mode starts from the capabilities that ship on, and you widen a mode
+  only on its own card (**What It May Do**). Switching a capability off for
+  yourself still turns it off in every mode. Modes made before this change got
+  their own list once, automatically; if one of them lost something it was
+  receiving (for example opening your files), its card says so once, with
+  **Turn It Back On For This Mode**.
+- **App keys, the relay and model connections stay in User Mode.** A session
+  inside any Custom Mode — locked or not — cannot list or reveal app keys,
+  manage the relay, or add or remove a provider's key.
 - **The mode reports to your main conversation.** The periodic summary you set
   on a mode's card (daily / weekly / monthly) arrives as one line in the
   conversation Vaenyx speaks from: how many messages and chats, and "all
