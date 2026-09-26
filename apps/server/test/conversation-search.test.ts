@@ -257,6 +257,34 @@ describe("local conversation search", () => {
     expect(ensureConversationSearchIndex(database.sqlite)).toBe(false);
   });
 
+  it("a full rebuild from a populated database matches incremental indexing", () => {
+    addConversation({ id: "a", title: "Groceries" });
+    addConversation({ id: "b", title: "Old plans", status: "archived" });
+    addConversation({ id: "c", title: "Kid chat", modeId: "kid" });
+    addMessage("a1", "a", "We bought fresh milk at the corner market.");
+    addMessage("a2", "a", "我们也在超市买了牛奶。", "2026-08-01T02:00:00.000Z");
+    addMessage("b1", "b", "The corner market closes early on Sunday.");
+    addMessage("c1", "c", "牛奶 and cereal for breakfast");
+    const queries = ["milk", "牛奶", '"corner market"', "sunday", "cereal"];
+    const scopes: (string | null)[] = [null, "kid"];
+    const snapshot = () =>
+      scopes.flatMap((scope) =>
+        queries.map((query) =>
+          searchConversations(database, "owner", scope, query).map(
+            (result) => [scope, query, result.messageId, result.highlights],
+          ),
+        ),
+      );
+
+    const incremental = snapshot();
+    expect(incremental.flat().length).toBeGreaterThan(0);
+
+    // Throw the whole index away and let the automatic repair rebuild it.
+    database.sqlite.exec("DELETE FROM conversation_message_search;");
+    expect(ensureConversationSearchIndex(database.sqlite)).toBe(true);
+    expect(snapshot()).toEqual(incremental);
+  });
+
   it("never indexes or previews credential values", () => {
     addConversation({ id: "secrets" });
     addMessage(
