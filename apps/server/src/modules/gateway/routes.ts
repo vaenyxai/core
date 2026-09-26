@@ -157,6 +157,7 @@ import {
   type BackupConfigUpdate,
   ProjectMemorySchema,
   ProjectSchema,
+  ProjectInstructionHoldSchema,
   RejectVaenyxMeCandidateRequestSchema,
   RenameMethodRequestSchema,
   DraftMethodRequestSchema,
@@ -661,10 +662,17 @@ import {
 } from "../core/threads.js";
 import {
   createProject,
+  findProjectById,
   listProjects,
   updateProject,
   updateProjectInstructions,
 } from "../core/projects.js";
+import {
+  answerInstructionHold,
+  countPendingInstructionHolds,
+  listPendingInstructionHolds,
+  restorePreviousAutoDocument,
+} from "../core/project-instruction-guard.js";
 import {
   approveVaenyxMeCandidate,
   createVaenyxMeCandidate,
@@ -5978,6 +5986,123 @@ export async function registerGatewayRoutes(
         }
         throw error;
       }
+    },
+  );
+
+  // H-016 · lines from automatic Project rewrites that wait for the Owner, in
+  // the current Mode's Inbox. Mode-guarded: another Mode's item is not found.
+  app.get(
+    "/v1/projects/instruction-holds",
+    {
+      schema: {
+        response: {
+          200: Type.Array(ProjectInstructionHoldSchema),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      return listPendingInstructionHolds(context.database, owner.modeId ?? null);
+    },
+  );
+
+  app.post<{ Params: { id: string; answer: string } }>(
+    "/v1/projects/instruction-holds/:id/:answer",
+    {
+      schema: {
+        params: Type.Object({
+          id: Type.String({ minLength: 1 }),
+          answer: Type.Union([Type.Literal("approve"), Type.Literal("reject")]),
+        }),
+        response: {
+          200: Type.Object({ ok: Type.Boolean() }),
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const approve = request.params.answer === "approve";
+      try {
+        answerInstructionHold(
+          context.database,
+          request.params.id,
+          owner.modeId ?? null,
+          approve,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "HOLD_NOT_FOUND") {
+          return reply.code(404).send({ error: "That item is not waiting any more." });
+        }
+        throw error;
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: approve
+          ? "project.instructions.hold.approve"
+          : "project.instructions.hold.reject",
+        decision: "allowed",
+        reason: approve
+          ? "Owner approved a held line into the project's automatic notes."
+          : "Owner rejected a held line; its Conversation can no longer propose such lines for this project.",
+        resourceType: "project-instruction-hold",
+        resourceId: request.params.id,
+      });
+      return { ok: true };
+    },
+  );
+
+  // H-016 · put the previous automatic document back, in one action.
+  app.post<{ Params: { id: string } }>(
+    "/v1/projects/:id/instructions/restore",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: ProjectSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      const project = findProjectById(context.database, request.params.id);
+      if (!project || project.modeId !== (owner.modeId ?? null)) {
+        return reply.code(404).send({ error: "Project not found." });
+      }
+      if (!restorePreviousAutoDocument(context.database, project.id)) {
+        return reply.code(404).send({ error: "There is no earlier version." });
+      }
+      recordAudit(context.database, {
+        actorType: "owner",
+        actorId: owner.id,
+        actorName: owner.name,
+        action: "project.instructions.restore",
+        decision: "allowed",
+        reason: "Owner restored the previous version of the project's automatic notes.",
+        projectId: project.id,
+        resourceType: "project",
+        resourceId: project.id,
+      });
+      const restored = findProjectById(context.database, project.id);
+      if (!restored) return reply.code(404).send({ error: "Project not found." });
+      const { modeId: _modeId, ...body } = restored;
+      void _modeId;
+      return body;
     },
   );
 
@@ -12266,14 +12391,17 @@ export async function registerGatewayRoutes(
       // Scoped to this Mode, with IS rather than = because User Mode is NULL
       // and = never matches NULL — the version of this filter that reads
       // correctly returns zero for the Mode every household actually uses.
-      const waiting = (
-        context.database.sqlite
-          .prepare(
-            `SELECT COUNT(*) AS n FROM vaenyx_me_candidates
-              WHERE status = 'pending_review' AND mode_id IS ?`,
-          )
-          .get(modeId) as { n: number }
-      ).n;
+      const waiting =
+        (
+          context.database.sqlite
+            .prepare(
+              `SELECT COUNT(*) AS n FROM vaenyx_me_candidates
+                WHERE status = 'pending_review' AND mode_id IS ?`,
+            )
+            .get(modeId) as { n: number }
+        ).n +
+        // H-016: held Project lines wait in the same Inbox.
+        countPendingInstructionHolds(context.database, modeId);
 
       const me = ensureMeThread(context.database, owner.id, modeId);
 

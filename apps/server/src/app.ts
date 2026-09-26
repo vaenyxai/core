@@ -37,6 +37,7 @@ import {
 import { sweepOrphanDocuments } from "./modules/core/document-gc.js";
 import { migrateLegacyRoutineTokenLocks } from "./modules/core/app-profiles.js";
 import { runDueModeDigests } from "./modules/core/modes.js";
+import { scanLegacyAutoDocuments } from "./modules/core/project-instruction-guard.js";
 import { bindUsageDatabase } from "./modules/core/relay-usage.js";
 import { sweepFlywheel } from "./modules/core/flywheel-send.js";
 import { registerGatewayRoutes } from "./modules/gateway/routes.js";
@@ -118,6 +119,19 @@ export async function buildApp(
   initPushService(config);
 
   const database = createDatabase(config);
+  // H-016: once per instance, move risky lines already sitting in automatic
+  // Project documents into the Inbox for review — never deleting them.
+  try {
+    const scanned = scanLegacyAutoDocuments(database);
+    if (scanned.held > 0) {
+      app.log.info(
+        { projects: scanned.projects, held: scanned.held },
+        "project auto-instruction guard held existing risky lines for review",
+      );
+    }
+  } catch (error) {
+    app.log.warn({ err: error }, "project auto-instruction legacy scan failed");
+  }
   // Watches the funnel hostname in public DNS and pushes one warning when a
   // resolver starts denying it exists — see phone-access.ts, the sentinel.
   // The data directory carries the throttle stamp across restarts.

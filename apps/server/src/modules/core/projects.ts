@@ -8,6 +8,10 @@ import type {
 } from "@vaenyx/contracts";
 
 import type { DatabaseHandle } from "../../db/database.js";
+import {
+  lastAutoDocumentChange,
+  recordAutoVersion,
+} from "./project-instruction-guard.js";
 
 const GENERAL_PROJECT_ID = "general";
 
@@ -70,7 +74,34 @@ export function listProjects(
            projects.name`,
       )
       .all(modeId, modeId, GENERAL_PROJECT_ID) as unknown as ProjectRow[]
-  ).map(toProject);
+  ).map((row) => withAutoHistory(database, toProject(row)));
+}
+
+// H-016: who last changed the automatic document, and whether the previous
+// version can be put back.
+function withAutoHistory(database: DatabaseHandle, project: Project): Project {
+  if (project.id === GENERAL_PROJECT_ID) return project;
+  const lastChange = lastAutoDocumentChange(database, project.id);
+  return {
+    ...project,
+    instructionsAutoLastChange: lastChange,
+    instructionsAutoCanRestore: lastChange !== null,
+  };
+}
+
+/** One project by id, whatever its Mode — the caller guards the Mode. */
+export function findProjectById(
+  database: DatabaseHandle,
+  projectId: string,
+): (Project & { modeId: string | null }) | null {
+  const row = database.sqlite
+    .prepare(`${projectSelect} WHERE projects.id = ?`)
+    .get(projectId) as unknown as ProjectRow | undefined;
+  if (!row) return null;
+  const mode = database.sqlite
+    .prepare("SELECT mode_id FROM projects WHERE id = ?")
+    .get(projectId) as { mode_id: string | null };
+  return { ...withAutoHistory(database, toProject(row)), modeId: mode.mode_id };
 }
 
 export function createProject(
@@ -128,7 +159,19 @@ export function updateProjectInstructions(
 
   if (input.auto !== undefined) {
     const auto = input.auto.trim();
-    const result = database.sqlite
+    const before = database.sqlite
+      .prepare("SELECT instructions_auto FROM projects WHERE id = ?")
+      .get(projectId) as { instructions_auto: string } | undefined;
+    if (!before) throw new Error("PROJECT_NOT_FOUND");
+    // The Owner's own edit is kept as a version too, so "restore previous"
+    // can undo it in one action (H-016).
+    if (before.instructions_auto.trim() !== auto) {
+      recordAutoVersion(database, projectId, before.instructions_auto, {
+        by: "owner",
+        kind: "edit",
+      });
+    }
+    database.sqlite
       .prepare(
         `UPDATE projects
          SET instructions_auto = ?,
@@ -136,12 +179,11 @@ export function updateProjectInstructions(
          WHERE id = ?`,
       )
       .run(auto, auto === "" ? null : new Date().toISOString(), projectId);
-    if (result.changes === 0) throw new Error("PROJECT_NOT_FOUND");
   }
 
-  const project = listProjects(database).find(
-    (candidate) => candidate.id === projectId,
-  );
+  const project = findProjectById(database, projectId);
   if (!project) throw new Error("PROJECT_NOT_FOUND");
-  return project;
+  const { modeId: _modeId, ...rest } = project;
+  void _modeId;
+  return rest;
 }

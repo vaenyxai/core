@@ -9565,6 +9565,29 @@ body {
    on the row rather than the smallest. Both answers are the same size on
    purpose: making "wrong" the lesser-looking one is how you collect agreement
    by default instead of a decision. */
+/* H-016 · held Project lines, under the Vaenyx Me cards in the same tray. */
+.project-holds {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.project-holds-intro,
+.project-hold-source {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-sm, 13px);
+}
+
+.project-hold-meta {
+  margin: 0 0 4px;
+  font-size: var(--fs-sm, 13px);
+}
+
+.project-hold-line {
+  overflow-wrap: anywhere;
+}
+
 .me-ledger-actions {
   display: flex;
   flex-wrap: wrap;

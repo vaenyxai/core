@@ -69,6 +69,7 @@ import type {
   DeviceMode,
   SetDeviceModeRequest,
   Project,
+  ProjectInstructionHold,
   RoutineGalleryItem,
   RoutineInputField,
   RoutineJournalEntry,
@@ -2603,6 +2604,29 @@ export function updateProject(
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+// H-016 · lines from automatic Project rewrites waiting in this Mode's Inbox.
+export function fetchProjectInstructionHolds(): Promise<ProjectInstructionHold[]> {
+  return requestJson<ProjectInstructionHold[]>("/v1/projects/instruction-holds");
+}
+
+export function answerProjectInstructionHold(
+  holdId: string,
+  approve: boolean,
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(
+    `/v1/projects/instruction-holds/${encodeURIComponent(holdId)}/${approve ? "approve" : "reject"}`,
+    { method: "POST" },
+  );
+}
+
+// H-016 · put the previous automatic document back, in one action.
+export function restoreProjectInstructions(projectId: string): Promise<Project> {
+  return requestJson<Project>(
+    `/v1/projects/${encodeURIComponent(projectId)}/instructions/restore`,
+    { method: "POST" },
+  );
 }
 
 export function updateProjectInstructions(

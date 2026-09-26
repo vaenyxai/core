@@ -69,6 +69,7 @@ import type {
   TaskRunProgress,
   VaenyxMeCandidate,
   VaenyxThread,
+  ProjectInstructionHold,
   ModeDigest,
   Workspace,
   RelayPanel as RelayPanelData,
@@ -151,6 +152,9 @@ import {
   type UpdateOffer,
   fetchFacts,
   approveFactCandidate,
+  answerProjectInstructionHold,
+  fetchProjectInstructionHolds,
+  restoreProjectInstructions,
   fetchInbox,
   fetchInstalledComponents,
   fetchPendingCorrections,
@@ -5738,6 +5742,70 @@ function ModesPanel() {
 // Owner writes and an automatic Document Vaenyx rewrites from this project's
 // chats. Both are injected into the project's chat context. The automatic
 // window carries the B3 legal notice and is fully Owner-editable/deletable.
+// H-016 · one card per held Project line: which Project, the exact line, where
+// it came from, and the two answers. Same shape as the Vaenyx Me cards beside
+// it — one tray, one way of answering.
+function ProjectHoldList({
+  holds,
+  onAnswer,
+  onViewSource,
+}: {
+  holds: ProjectInstructionHold[];
+  onAnswer: (hold: ProjectInstructionHold, approve: boolean) => void;
+  onViewSource: (conversationId: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <section className="project-holds">
+      <p className="me-ledger-date">{t("projectHold.title")}</p>
+      <p className="project-holds-intro">{t("projectHold.intro")}</p>
+      {holds.map((hold) => (
+        <article className="me-ledger-item" key={hold.id}>
+          <p className="project-hold-meta">
+            <strong>{hold.projectName}</strong>
+            {" · "}
+            {t(`projectHold.category.${hold.category}`)}
+          </p>
+          <p className="me-ledger-claim project-hold-line">{hold.line}</p>
+          <p className="project-hold-source">
+            {hold.conversationId ? (
+              <>
+                {t("projectHold.from")} {hold.conversationTitle ?? ""}
+                {" · "}
+                <button
+                  className="text-button"
+                  onClick={() => onViewSource(hold.conversationId!)}
+                  type="button"
+                >
+                  {t("projectHold.viewSource")}
+                </button>
+              </>
+            ) : (
+              t("projectHold.foundInOldNotes")
+            )}
+          </p>
+          <div className="me-ledger-actions">
+            <button
+              className="secondary-button me-ledger-answer"
+              onClick={() => onAnswer(hold, true)}
+              type="button"
+            >
+              {t("projectHold.approve")}
+            </button>
+            <button
+              className="secondary-button me-ledger-answer"
+              onClick={() => onAnswer(hold, false)}
+              type="button"
+            >
+              {t("projectHold.reject")}
+            </button>
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
 function ProjectInstructionsSection({
   project,
   onUpdate,
@@ -5749,7 +5817,30 @@ function ProjectInstructionsSection({
   const [manual, setManual] = useState(project.instructionsManual);
   const [auto, setAuto] = useState(project.instructionsAuto);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState<"manual" | "auto" | null>(null);
+  const [saving, setSaving] = useState<
+    "manual" | "auto" | "restore" | null
+  >(null);
+
+  // H-016: put the previous automatic notes back in one action.
+  async function restorePrevious() {
+    setError(null);
+    setSaving("restore");
+    try {
+      const updated = await restoreProjectInstructions(project.id);
+      onUpdate(updated);
+      setAuto(updated.instructionsAuto);
+      setSeenAuto(updated.instructionsAuto);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "The previous version could not be restored.",
+      );
+    } finally {
+      setSaving(null);
+    }
+  }
+  const lastChange = project.instructionsAutoLastChange ?? null;
 
   // A background rewrite may land while the panel is open; follow the server
   // value unless the Owner has local unsaved edits.
@@ -5823,7 +5914,20 @@ function ProjectInstructionsSection({
         />
       </label>
       <p className="legal-note">{t("legal.notice.project.autoSummary")}</p>
-      {project.instructionsAutoUpdatedAt ? (
+      {lastChange ? (
+        <p className="panel-description">
+          {t(
+            lastChange.changedBy === "vaenyx"
+              ? "projectNotes.lastChange.vaenyx"
+              : "projectNotes.lastChange.owner",
+          )}
+          {lastChange.conversationTitle
+            ? ` ${t("projectNotes.lastChange.after")} “${lastChange.conversationTitle}”`
+            : ""}
+          {" · "}
+          {new Date(lastChange.at).toLocaleString()}
+        </p>
+      ) : project.instructionsAutoUpdatedAt ? (
         <p className="panel-description">
           Updated {new Date(project.instructionsAutoUpdatedAt).toLocaleString()}
         </p>
@@ -5845,6 +5949,18 @@ function ProjectInstructionsSection({
             type="button"
           >
             Delete Summary
+          </button>
+        ) : null}
+        {project.instructionsAutoCanRestore ? (
+          <button
+            className="text-button"
+            disabled={saving !== null}
+            onClick={() => void restorePrevious()}
+            type="button"
+          >
+            {saving === "restore"
+              ? t("projectNotes.restoring")
+              : t("projectNotes.restore")}
           </button>
         ) : null}
       </div>
@@ -6354,6 +6470,8 @@ function AskVaenyxPanel({
     [],
   );
 
+  // H-016: Project lines held for the Owner wait in the same tray.
+  const [inboxHolds, setInboxHolds] = useState<ProjectInstructionHold[]>([]);
   useEffect(() => {
     if (!inboxTrayOpen) return;
     void fetchVaenyxMeCandidates()
@@ -6363,7 +6481,24 @@ function AskVaenyxPanel({
         ),
       )
       .catch(() => undefined);
+    void fetchProjectInstructionHolds()
+      .then(setInboxHolds)
+      .catch(() => undefined);
   }, [inboxTrayOpen]);
+
+  async function answerInboxHold(
+    hold: ProjectInstructionHold,
+    approve: boolean,
+  ): Promise<void> {
+    try {
+      await answerProjectInstructionHold(hold.id, approve);
+    } catch {
+      // The failed request already raised a toast; the list is re-read below.
+    }
+    setInboxHolds((current) => current.filter((item) => item.id !== hold.id));
+    onInboxChange();
+    void onWorkspaceRefresh();
+  }
 
   /**
    * One item answered, without leaving the conversation.
@@ -10644,6 +10779,15 @@ This conversation is its home — feed it something to try it, and ask for chang
                   void answerInboxCandidate(candidate, false)
                 }
               />
+              {inboxHolds.length > 0 ? (
+                <ProjectHoldList
+                  holds={inboxHolds}
+                  onAnswer={(hold, approve) => void answerInboxHold(hold, approve)}
+                  onViewSource={(conversationId) =>
+                    void openConversation(conversationId)
+                  }
+                />
+              ) : null}
             </aside>
           </>
         ) : null}

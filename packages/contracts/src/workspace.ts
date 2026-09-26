@@ -60,6 +60,59 @@ export const ProjectSchema = Type.Object(
     instructionsManual: Type.String(),
     instructionsAuto: Type.String(),
     instructionsAutoUpdatedAt: Type.Union([Type.String(), Type.Null()]),
+    // H-016: the most recent change to the automatic document — who made it,
+    // what kind, when, and which Conversation triggered it — and whether a
+    // previous version can be put back in one action.
+    instructionsAutoLastChange: Type.Optional(
+      Type.Union([
+        Type.Object(
+          {
+            changedBy: Type.Union([Type.Literal("vaenyx"), Type.Literal("owner")]),
+            kind: Type.Union([
+              Type.Literal("rewrite"),
+              Type.Literal("approve"),
+              Type.Literal("edit"),
+              Type.Literal("restore"),
+              Type.Literal("legacy-scan"),
+            ]),
+            at: Type.String(),
+            conversationId: Type.Union([Type.String(), Type.Null()]),
+            conversationTitle: Type.Union([Type.String(), Type.Null()]),
+          },
+          { additionalProperties: false },
+        ),
+        Type.Null(),
+      ]),
+    ),
+    instructionsAutoCanRestore: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
+// H-016 · a line from an automatic Project rewrite that could make Vaenyx take
+// or steer an action, waiting in the Mode's Inbox for the Owner.
+export const ProjectInstructionHoldCategorySchema = Type.Union([
+  Type.Literal("link"),
+  Type.Literal("payment"),
+  Type.Literal("contact"),
+  Type.Literal("account"),
+  Type.Literal("directive"),
+]);
+
+export const ProjectInstructionHoldSchema = Type.Object(
+  {
+    id: Type.String(),
+    projectId: Type.String(),
+    projectName: Type.String(),
+    // The exact proposed line, as it would enter the document.
+    line: Type.String(),
+    category: ProjectInstructionHoldCategorySchema,
+    // The Conversation whose rewrite proposed it; null for lines found in a
+    // document written before the guard existed.
+    conversationId: Type.Union([Type.String(), Type.Null()]),
+    conversationTitle: Type.Union([Type.String(), Type.Null()]),
+    origin: Type.Union([Type.Literal("rewrite"), Type.Literal("legacy")]),
+    createdAt: Type.String(),
   },
   { additionalProperties: false },
 );
@@ -3489,6 +3542,10 @@ export type ChangePasswordRequest = Static<typeof ChangePasswordRequestSchema>;
 export type InstanceSettings = Static<typeof InstanceSettingsSchema>;
 export type Owner = Static<typeof OwnerSchema>;
 export type Project = Static<typeof ProjectSchema>;
+export type ProjectInstructionHold = Static<typeof ProjectInstructionHoldSchema>;
+export type ProjectInstructionHoldCategory = Static<
+  typeof ProjectInstructionHoldCategorySchema
+>;
 export type ProjectMemory = Static<typeof ProjectMemorySchema>;
 export type RejectVaenyxMeCandidateRequest = Static<
   typeof RejectVaenyxMeCandidateRequestSchema

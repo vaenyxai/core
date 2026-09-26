@@ -251,6 +251,17 @@ Read this inside the app: **Settings → Manual**.
 - **Manage Projects** — Settings → **Organization**. Creation, names,
   instructions and Memory all live there; Vaenyx never creates or renames one
   without your explicit confirmation.
+- **Vaenyx's automatic notes** — as you chat in a Project, Vaenyx keeps short
+  background notes about your preferences for it. They are notes, not orders:
+  your own messages and your instructions always win. Ordinary preferences
+  ("reply in Chinese") update by themselves. A line that could lead to an
+  action — a link, payment or bank details, an amount to pay, an email address
+  or phone number, account or login details, or a direction to send, share,
+  buy or click — waits in your Inbox (**Review** on the main conversation) with
+  the Project's name, the exact line and a link to the conversation it came
+  from. **Approve** adds it; **Reject** keeps it out, and that conversation
+  cannot propose such lines for the Project again. The notes show who changed
+  them last, and **Restore Previous Version** puts the earlier version back.
 - **Organize an existing Conversation** — its ⋮ menu → **Move to group**.
 - **Inbox is separate** — the protected Conversation under **New** is not
   Unsorted and is never filed into a Project.
@@ -1012,5 +1023,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.13** · last updated 2026-09-08.
+Manual for **v0.4.13** · last updated 2026-09-26.
 Keep this file up to date whenever a feature changes.
