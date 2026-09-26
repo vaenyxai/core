@@ -109,7 +109,11 @@ Read this inside the app: **Settings → Manual**.
 
 ## 2. Updating
 
-- **Check for an update** — Settings → System → **Check for updates**.
+- **Check for an update** — Settings → System → **Check for updates**. If the
+  update server cannot be reached, you are told so within seconds ("couldn't
+  reach the update server") and nothing is changed; try again later. A slow
+  download keeps going as long as it is still moving; one that stops dead is
+  cancelled and cleaned up, so the next try starts fresh.
 - **Install it** — **Download**, then **Restart**. The version number is in the
   bottom-left corner, and what changed is on the update card itself.
 - **A banner appears at the bottom** when a newer build is ready. It never

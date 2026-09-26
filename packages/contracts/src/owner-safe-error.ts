@@ -14,6 +14,7 @@ export const OWNER_SAFE_ERROR_CODES = [
   "VX-REQUEST",
   "VX-SAFETY-BOUNDARY",
   "VX-UPDATE",
+  "VX-UPDATE-NETWORK",
 ] as const;
 
 export type OwnerSafeErrorCode = (typeof OWNER_SAFE_ERROR_CODES)[number];
@@ -124,6 +125,14 @@ const COPY: Record<
     retryable: true,
     en: "Vaenyx stopped this run because it crossed a safety boundary. Review the request and press Retry. No action outside the boundary was performed and your data is safe.",
     zh: "这次运行越过了安全边界,Vaenyx 已将它停止。检查请求后点重试。边界之外没有执行任何动作,数据是安全的。",
+  },
+  // H-006 update network budget (2026-09-19): a stalled or unreachable
+  // update server answers quickly, in plain words, instead of sitting silent.
+  "VX-UPDATE-NETWORK": {
+    action: "retry",
+    retryable: true,
+    en: "Vaenyx couldn't reach the update server, so nothing was changed. Check the internet connection and try again later.",
+    zh: "Vaenyx 连不上更新服务器,所以什么都没有改动。请检查网络,稍后再试。",
   },
   "VX-UPDATE": {
     action: "retry",

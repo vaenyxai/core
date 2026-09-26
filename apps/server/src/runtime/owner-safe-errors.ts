@@ -91,7 +91,11 @@ function publicCodeFor(
 ): OwnerSafeErrorCode {
   if (context === "component-install") return "VX-COMPONENT-INSTALL";
   if (context === "phone-setup") return "VX-PHONE-CONNECT";
-  if (context === "update-launch") return "VX-UPDATE";
+  if (context === "update-launch") {
+    return internalCode(error).startsWith("UPDATE_NETWORK")
+      ? "VX-UPDATE-NETWORK"
+      : "VX-UPDATE";
+  }
 
   const code = internalCode(error).toUpperCase();
   if (code.includes("BOUNDARY")) return "VX-SAFETY-BOUNDARY";

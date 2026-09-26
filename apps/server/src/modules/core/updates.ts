@@ -22,7 +22,7 @@ import {
 import { rename } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import type { UpdateStatus } from "@vaenyx/contracts";
@@ -32,9 +32,42 @@ import { pushLanguage } from "./push.js";
 // Overridable so the whole update path (check, download, checksum, unpack,
 // stage) can be rehearsed against a local stand-in release before a real one
 // exists. Unset in normal use.
-const RELEASE_API =
-  process.env.VAENYX_UPDATE_API ??
-  "https://api.github.com/repos/vaenyxai/core/releases/latest";
+// Read at call time so a rehearsal (or a test) can point it elsewhere.
+function releaseApi(): string {
+  return (
+    process.env.VAENYX_UPDATE_API ??
+    "https://api.github.com/repos/vaenyxai/core/releases/latest"
+  );
+}
+
+// H-006 network budget (Oskar, 2026-09-19): checking for or downloading an
+// update must never sit silent for minutes on a stalled network. Node's own
+// defaults only give up after roughly five minutes per phase.
+//   - The release check has a short deadline for the whole request.
+//   - The download has a NO-PROGRESS deadline rather than a whole-file wall
+//     clock: every chunk resets it, so a slow connection that keeps moving
+//     still finishes, and only a stall fails.
+// Both overridable for tests; the defaults are the product's.
+function budgetMs(name: string, fallback: number): number {
+  const raw = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isInteger(raw) && raw > 0 ? raw : fallback;
+}
+const UPDATE_CHECK_TIMEOUT_MS = 15_000;
+const UPDATE_DOWNLOAD_STALL_MS = 30_000;
+
+/** A network failure on the update path, as one stable internal code. */
+function isNetworkFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "AbortError" ||
+    error.name === "TimeoutError" ||
+    error.message === "fetch failed" ||
+    error.message.startsWith("UPDATE_NETWORK") ||
+    /ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR/i.test(
+      `${error.message} ${String((error as { cause?: { code?: string } }).cause?.code ?? "")}`,
+    )
+  );
+}
 const ASSET_NAME = "vaenyx-setup.zip";
 const HASH_ASSET_NAME = "vaenyx-setup.zip.sha256";
 
@@ -148,19 +181,31 @@ interface ReleaseInfo {
 }
 
 async function fetchLatestRelease(): Promise<ReleaseInfo> {
-  const response = await fetch(RELEASE_API, {
-    headers: {
-      accept: "application/vnd.github+json",
-      "user-agent": "vaenyx-updater",
-    },
-  });
-  if (response.status === 404) {
-    throw new Error("UPDATE_NO_RELEASE");
+  // One deadline for the whole check — headers AND body.
+  const signal = AbortSignal.timeout(
+    budgetMs("VAENYX_UPDATE_CHECK_TIMEOUT_MS", UPDATE_CHECK_TIMEOUT_MS),
+  );
+  try {
+    const response = await fetch(releaseApi(), {
+      headers: {
+        accept: "application/vnd.github+json",
+        "user-agent": "vaenyx-updater",
+      },
+      signal,
+    });
+    if (response.status === 404) {
+      throw new Error("UPDATE_NO_RELEASE");
+    }
+    if (!response.ok) {
+      throw new Error(`UPDATE_CHECK_FAILED:${response.status}`);
+    }
+    return (await response.json()) as ReleaseInfo;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      throw new Error("UPDATE_NETWORK_CHECK", { cause: error });
+    }
+    throw error;
   }
-  if (!response.ok) {
-    throw new Error(`UPDATE_CHECK_FAILED:${response.status}`);
-  }
-  return (await response.json()) as ReleaseInfo;
 }
 
 export async function checkForUpdate(
@@ -202,20 +247,58 @@ export async function checkForUpdate(
   return getUpdateStatus(currentVersion, repositoryRoot, dataDirectory);
 }
 
-async function downloadTo(url: string, destination: string): Promise<void> {
-  const response = await fetch(url, {
-    redirect: "follow",
-    headers: { "user-agent": "vaenyx-updater" },
-  });
-  if (!response.ok || !response.body) {
-    throw new Error(`UPDATE_DOWNLOAD_FAILED:${response.status}`);
-  }
+export async function downloadTo(
+  url: string,
+  destination: string,
+): Promise<void> {
   const partial = `${destination}.part`;
-  await pipeline(
-    Readable.fromWeb(response.body as import("node:stream/web").ReadableStream),
-    createWriteStream(partial),
-  );
-  await rename(partial, destination);
+  const stallMs = budgetMs("VAENYX_UPDATE_STALL_MS", UPDATE_DOWNLOAD_STALL_MS);
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Every byte that arrives pushes the deadline back; silence trips it.
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(
+      () => controller.abort(new Error("UPDATE_NETWORK_STALLED")),
+      stallMs,
+    );
+  };
+  arm();
+  try {
+    const response = await fetch(url, {
+      redirect: "follow",
+      headers: { "user-agent": "vaenyx-updater" },
+      signal: controller.signal,
+    });
+    if (!response.ok || !response.body) {
+      throw new Error(`UPDATE_DOWNLOAD_FAILED:${response.status}`);
+    }
+    arm();
+    const progress = new Transform({
+      transform(chunk, _encoding, done) {
+        arm();
+        done(null, chunk);
+      },
+    });
+    await pipeline(
+      Readable.fromWeb(
+        response.body as import("node:stream/web").ReadableStream,
+      ),
+      progress,
+      createWriteStream(partial),
+      { signal: controller.signal },
+    );
+    await rename(partial, destination);
+  } catch (error) {
+    // Never leave a half file behind: the next attempt must start clean.
+    rmSync(partial, { force: true });
+    if (controller.signal.aborted || isNetworkFailure(error)) {
+      throw new Error("UPDATE_NETWORK_STALLED", { cause: error });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function sha256(path: string): string {
