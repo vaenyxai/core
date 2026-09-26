@@ -157,6 +157,7 @@ import {
   type BackupConfigUpdate,
   ProjectMemorySchema,
   ProjectSchema,
+  ConversationRoutineDraftSchema,
   ProjectInstructionHoldSchema,
   RejectVaenyxMeCandidateRequestSchema,
   RenameMethodRequestSchema,
@@ -660,6 +661,7 @@ import {
   updateVaenyxThreadStatus,
   updateVaenyxThreadTitle,
 } from "../core/threads.js";
+import { planRoutineFromConversation } from "../core/conversation-routine.js";
 import {
   createProject,
   findProjectById,
@@ -4821,6 +4823,7 @@ export async function registerGatewayRoutes(
               ...(request.body.clarifyCreate
                 ? { clarifyCreate: request.body.clarifyCreate }
                 : {}),
+              ...(request.body.saveAsRoutine ? { saveAsRoutine: true } : {}),
               ...(request.body.voiceAudioId
                 ? { voiceAudioId: request.body.voiceAudioId }
                 : {}),
@@ -6140,6 +6143,76 @@ export async function registerGatewayRoutes(
       const { modeId: _modeId, ...body } = restored;
       void _modeId;
       return body;
+    },
+  );
+
+  // H-017 · draft a Routine from what this Conversation actually did. Nothing
+  // is saved: the Owner reviews the draft and Saves through POST /v1/routines.
+  // The Mode sandbox hook above already answers 404 for another Mode's id.
+  app.post<{ Params: { id: string } }>(
+    "/v1/ask-vaenyx/conversations/:id/routine-draft",
+    {
+      schema: {
+        params: Type.Object({ id: Type.String({ minLength: 1 }) }),
+        response: {
+          200: ConversationRoutineDraftSchema,
+          400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const owner = requireOwner(request);
+      if (!owner) {
+        return reply.code(401).send({ error: "Owner login required." });
+      }
+      let messages;
+      try {
+        messages = listAskVaenyxMessages(
+          context.database,
+          request.params.id,
+          owner.id,
+        );
+      } catch {
+        return reply.code(404).send({ error: "Conversation not found." });
+      }
+      const controller = new AbortController();
+      reply.raw.on("close", () => {
+        if (!reply.raw.writableEnded) controller.abort();
+      });
+      try {
+        return await planRoutineFromConversation(
+          messages,
+          context.config.libraryDirectory,
+          controller.signal,
+        );
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        const zh = pushLanguage() === "zh";
+        if (code === "ROUTINE_DRAFT_NOTHING_DONE") {
+          return reply.code(400).send({
+            error: zh
+              ? "这个对话里还没有做完的事可以存成 Routine。先让 Vaenyx 做一次,再说「以后都这样做」。"
+              : "Nothing has been done in this conversation yet to save as a Routine. Have Vaenyx do it once, then say \"do it like this from now on\".",
+          });
+        }
+        if (
+          code === "ROUTINE_DRAFT_EMPTY" ||
+          code === "ROUTINE_DRAFT_INVALID" ||
+          code === "PLAN_PARSE_FAILED" ||
+          code.startsWith("PLAN_METHOD_NOT_FOUND") ||
+          error instanceof SyntaxError
+        ) {
+          return reply.code(400).send({
+            error: zh
+              ? "这次没能拟出一份可用的草稿,什么都没有保存。再说一次「以后都这样做」试试。"
+              : "Vaenyx could not draft a usable Routine this time, and nothing was saved. Say it again to try once more.",
+          });
+        }
+        const safe = ownerSafeErrorResponse(error, "model-response", pushLanguage());
+        return reply.code(400).send({ error: safe.error });
+      }
     },
   );
 

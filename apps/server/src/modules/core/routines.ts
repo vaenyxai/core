@@ -545,7 +545,16 @@ export async function planRoutineSpec(
     },
   );
 
-  const parsed = extractPlanJson(result.answer) as Record<string, unknown>;
+  return parseRoutinePlanAnswer(result.answer).plan;
+}
+
+/** The planner's JSON answer as a RoutinePlan, plus the raw object for any
+ *  extra fields a caller asked for (H-017 reads does / input / corrections). */
+export function parseRoutinePlanAnswer(answer: string): {
+  plan: RoutinePlan;
+  raw: Record<string, unknown>;
+} {
+  const parsed = extractPlanJson(answer) as Record<string, unknown>;
   const rawSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
   const steps = rawSteps
     .map((entry): RoutinePlan["steps"][number] | null => {
@@ -582,14 +591,19 @@ export async function planRoutineSpec(
     .filter((step): step is RoutinePlan["steps"][number] => step !== null);
 
   return {
-    name:
-      typeof parsed.name === "string" && parsed.name.trim()
-        ? parsed.name.trim()
-        : "New Routine",
-    description:
-      typeof parsed.description === "string" ? parsed.description.trim() : "",
-    mode: parsed.mode === "one-shot" ? "one-shot" : "accumulate",
-    steps,
+    plan: {
+      name:
+        typeof parsed.name === "string" && parsed.name.trim()
+          ? parsed.name.trim().slice(0, 120)
+          : "New Routine",
+      description:
+        typeof parsed.description === "string"
+          ? parsed.description.trim().slice(0, 2000)
+          : "",
+      mode: parsed.mode === "one-shot" ? "one-shot" : "accumulate",
+      steps,
+    },
+    raw: parsed,
   };
 }
 

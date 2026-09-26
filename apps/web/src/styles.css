@@ -698,6 +698,33 @@ textarea::placeholder {
   text-align: left;
 }
 
+/* H-017 · the Routine draft review card. */
+.routine-draft-review dl {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.routine-draft-review dt {
+  color: var(--text-faint);
+  font-size: var(--fs-sm, 13px);
+}
+
+.routine-draft-review dd {
+  margin: 0 0 6px;
+}
+
+.routine-draft-review ul,
+.routine-draft-review ol {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.routine-draft-note {
+  color: var(--text-faint);
+  font-size: var(--fs-sm, 13px);
+}
+
 /* A mode's past reports, under its card. */
 .mode-digests {
   display: grid;

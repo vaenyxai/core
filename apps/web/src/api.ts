@@ -69,6 +69,7 @@ import type {
   DeviceMode,
   SetDeviceModeRequest,
   Project,
+  ConversationRoutineDraft,
   ProjectInstructionHold,
   RoutineGalleryItem,
   RoutineInputField,
@@ -951,6 +952,9 @@ async function streamMessageRequest(
   clientMessageId?: string,
   // The second to fifth photos of this message (Oskar, 2026-09-16).
   extraImageIds?: string[],
+  // H-017: this message asks for the Conversation's way of working to be
+  // saved as a Routine; the reply points at the draft (or asks one question).
+  saveAsRoutine?: boolean,
 ): Promise<CreateAskVaenyxMessageResponse> {
   const response = await fetch(path, {
     method: "POST",
@@ -971,6 +975,7 @@ async function streamMessageRequest(
       ...(imageId && extraImageIds && extraImageIds.length > 0
         ? { extraImageIds }
         : {}),
+      ...(saveAsRoutine ? { saveAsRoutine: true } : {}),
       ...(imagePrompt ? { imagePrompt } : {}),
       ...(annotate ? { annotate: true } : {}),
       ...(document
@@ -1071,6 +1076,7 @@ export function streamAskVaenyxMessage(
   document?: { documentId: string; name: string; acknowledged: boolean },
   clientMessageId?: string,
   extraImageIds?: string[],
+  saveAsRoutine?: boolean,
 ): Promise<CreateAskVaenyxMessageResponse> {
   return streamMessageRequest(
     `/v1/ask-vaenyx/conversations/${conversationId}/messages/stream`,
@@ -1087,6 +1093,18 @@ export function streamAskVaenyxMessage(
     document,
     clientMessageId,
     extraImageIds,
+    saveAsRoutine,
+  );
+}
+
+// H-017 · a Routine drafted from what this Conversation actually did.
+// Nothing is saved; the Owner reviews it and Saves through createRoutine.
+export function draftRoutineFromConversation(
+  conversationId: string,
+): Promise<ConversationRoutineDraft> {
+  return requestJson<ConversationRoutineDraft>(
+    `/v1/ask-vaenyx/conversations/${encodeURIComponent(conversationId)}/routine-draft`,
+    { method: "POST" },
   );
 }
 

@@ -69,6 +69,7 @@ import type {
   TaskRunProgress,
   VaenyxMeCandidate,
   VaenyxThread,
+  ConversationRoutineDraft,
   ProjectInstructionHold,
   ModeDigest,
   Workspace,
@@ -94,6 +95,7 @@ import {
   createMethod,
   createProject,
   createRoutine,
+  draftRoutineFromConversation,
   createTask,
   createVaenyxMeCandidate,
   deleteMemory,
@@ -7207,6 +7209,77 @@ function AskVaenyxPanel({
     }
   }
 
+  // H-017 · the Routine draft under review. Nothing is written until Save;
+  // Cancel (or the × ) leaves nothing behind.
+  const routineDraftWaitingRef = useRef<Set<string>>(new Set());
+  const [routineDraft, setRoutineDraft] = useState<{
+    conversationId: string;
+    draft: ConversationRoutineDraft | null;
+    saving: boolean;
+  } | null>(null);
+
+  async function openRoutineDraft(conversationId: string): Promise<void> {
+    setRoutineDraft({ conversationId, draft: null, saving: false });
+    try {
+      const draft = await draftRoutineFromConversation(conversationId);
+      setRoutineDraft((current) =>
+        current?.conversationId === conversationId
+          ? { ...current, draft }
+          : current,
+      );
+    } catch {
+      // The failed request already said why in the Owner's words.
+      setRoutineDraft(null);
+    }
+  }
+
+  async function saveRoutineDraft(): Promise<void> {
+    const pending = routineDraft;
+    if (!pending?.draft) return;
+    setRoutineDraft({ ...pending, saving: true });
+    try {
+      const created = await createRoutine(pending.draft.plan);
+      // The Conversation that taught it becomes its home, the same way the
+      // create-from-description path binds it — never stealing a chat that
+      // already belongs to another Routine, and never the permanent one.
+      const thread = workspace.threads.find(
+        (candidate) => candidate.conversationId === pending.conversationId,
+      );
+      let bound = false;
+      if (thread && thread.kind === "chat" && !thread.routineId) {
+        try {
+          await attachRoutineToChat(pending.conversationId, created.id);
+          bound = true;
+        } catch {
+          // Saved either way; binding is the convenience.
+        }
+      }
+      const note =
+        lang === "zh"
+          ? bound
+            ? `✔ Routine「${created.name}」已保存,这个对话现在就是它的对话 —— 下次同样的内容直接发在这里,就会照这次的做法处理。`
+            : `✔ Routine「${created.name}」已保存到资源库。说「用 ${created.name}」就能用它。`
+          : bound
+            ? `✔ The Routine "${created.name}" is saved, and this conversation is now its home — send the next one here and it is handled the same way.`
+            : `✔ The Routine "${created.name}" is saved to your Library. Say "use ${created.name}" to run it.`;
+      try {
+        const saved = await appendConversationNote(pending.conversationId, note);
+        setMessages((current) =>
+          activeConversationId === pending.conversationId
+            ? [...current, saved]
+            : current,
+        );
+      } catch {
+        // The Routine is saved; the note is a courtesy.
+      }
+      setRoutineDraft(null);
+      void onWorkspaceRefresh();
+      onLibraryRefresh();
+    } catch {
+      setRoutineDraft({ ...pending, saving: false });
+    }
+  }
+
   async function answerStructuredQuestion(
     message: AskVaenyxMessage,
     questionId: string,
@@ -7220,6 +7293,14 @@ function AskVaenyxPanel({
         questionId,
         resolution,
       );
+      // H-017: a Routine draft that was waiting on this answer. Skip means
+      // the Owner did not answer — nothing is drafted or saved.
+      if (routineDraftWaitingRef.current.has(message.conversationId)) {
+        routineDraftWaitingRef.current.delete(message.conversationId);
+        if (resolution.kind !== "skip") {
+          void openRoutineDraft(message.conversationId);
+        }
+      }
       const fresh = await fetchAskVaenyxMessages(message.conversationId);
       if (activeConversationIdRef.current === message.conversationId) {
         setMessages(fresh);
@@ -9290,6 +9371,8 @@ This conversation is its home — feed it something to try it, and ask for chang
     let suggestRoutineId: string | undefined;
     let suggestTask = false;
     let suggestCreate: "method" | "routine" | undefined;
+    // H-017: "以后都这样做" after a finished job — draft, never auto-save.
+    let saveRoutine = false;
     let editMethodId: string | null = null;
     let editRequest: string | null = null;
     let createDescription: string | null = null;
@@ -9610,6 +9693,9 @@ This conversation is its home — feed it something to try it, and ask for chang
       // clarify-create (spec §2a phase 2): too vague to build — this reply asks
       // ONE clarifying question instead, and nothing is built this turn. The
       // answered follow-up classifies as create-* and builds as usual.
+      if (verdict?.decision === "save-routine") {
+        saveRoutine = true;
+      }
       if (verdict?.decision === "clarify-create" && verdict.clarifyQuestion) {
         clarifyCreateQuestion = verdict.clarifyQuestion;
       }
@@ -9788,6 +9874,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           : undefined,
         draftLifecycle?.clientMessageId,
         extraImageIds,
+        saveRoutine,
       );
 
       // Voice replies: spoken in → spoken out ("我输入是语音,你的输出才是
@@ -9807,6 +9894,21 @@ This conversation is its home — feed it something to try it, and ask for chang
             messageId: assistantReply.id,
             prewarm: voicePrewarm,
           });
+        }
+      }
+
+      // H-017: the reply either asked ONE structured question — then the
+      // draft waits for the answer (a Skip saves nothing) — or said the draft
+      // is ready, which opens it for review now.
+      if (saveRoutine) {
+        const reply = [...response.messages]
+          .reverse()
+          .find((message) => message.role === "assistant");
+        const asked = reply ? questionPart(reply) : null;
+        if (asked && asked.state.status !== "resolved") {
+          routineDraftWaitingRef.current.add(conversationId);
+        } else {
+          void openRoutineDraft(conversationId);
         }
       }
 
@@ -11255,6 +11357,96 @@ This conversation is its home — feed it something to try it, and ask for chang
           </div>
         ) : null}
 
+        {routineDraft ? (
+          <Modal
+            onClose={() => {
+              if (!routineDraft.saving) setRoutineDraft(null);
+            }}
+            title={zh ? "存成 Routine 之前先看一眼" : "Check Before Saving As A Routine"}
+          >
+            {routineDraft.draft ? (
+              <div className="routine-draft-review">
+                <p className="routine-draft-name">
+                  <strong>{routineDraft.draft.plan.name}</strong>
+                </p>
+                <dl>
+                  <dt>{zh ? "它会做什么" : "What it will do"}</dt>
+                  <dd>{routineDraft.draft.summary.does}</dd>
+                  <dt>{zh ? "你要给它什么" : "What you give it"}</dt>
+                  <dd>
+                    {routineDraft.draft.summary.input ||
+                      (zh ? "跟这次一样的内容" : "The same kind of input as this time")}
+                  </dd>
+                  <dt>{zh ? "你这次的纠正" : "Your corrections it keeps"}</dt>
+                  <dd>
+                    {routineDraft.draft.summary.corrections.length > 0 ? (
+                      <ul>
+                        {routineDraft.draft.summary.corrections.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : zh ? (
+                      "这次没有纠正。"
+                    ) : (
+                      "No corrections this time."
+                    )}
+                  </dd>
+                  <dt>{zh ? "步骤" : "Steps"}</dt>
+                  <dd>
+                    <ol>
+                      {routineDraft.draft.plan.steps.map((step, index) => (
+                        <li key={`${index}-${step.title}`}>{step.title}</li>
+                      ))}
+                    </ol>
+                  </dd>
+                  <dt>{zh ? "能力" : "Capabilities"}</dt>
+                  <dd>
+                    {routineDraft.draft.summary.capabilities.length > 0
+                      ? routineDraft.draft.summary.capabilities.join(", ")
+                      : zh
+                        ? "未请求任何能力"
+                        : "No Capabilities requested"}
+                  </dd>
+                </dl>
+                <p className="routine-draft-note">
+                  {zh
+                    ? "按「保存」之前什么都不会存。它只是菜谱和格式说明,不含任何可以运行的代码,也不会被分享出去。"
+                    : "Nothing is saved until you press Save. It is a recipe and a format description only — no code that can run — and it is not shared anywhere."}
+                </p>
+                <div className="modal-actions">
+                  <button
+                    className="text-button"
+                    disabled={routineDraft.saving}
+                    onClick={() => setRoutineDraft(null)}
+                    type="button"
+                  >
+                    {zh ? "取消" : "Cancel"}
+                  </button>
+                  <button
+                    className="primary-button"
+                    disabled={routineDraft.saving}
+                    onClick={() => void saveRoutineDraft()}
+                    type="button"
+                  >
+                    {routineDraft.saving
+                      ? zh
+                        ? "保存中…"
+                        : "Saving…"
+                      : zh
+                        ? "保存 Routine"
+                        : "Save Routine"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="library-note">
+                {zh
+                  ? "正在按这个对话里的实际做法拟草稿…"
+                  : "Drafting from what this conversation actually did…"}
+              </p>
+            )}
+          </Modal>
+        ) : null}
         {routineInputConfirm ? (
           <Modal
             onClose={() => {
@@ -24603,6 +24795,17 @@ function messageMaybeIntent(
   // A recurring ask ("every morning at 7", 每天早上七点) is a scheduled-task
   // intent by itself — it describes something that does not exist yet, so it
   // must classify without needing to match an installed Routine.
+  //
+  // H-017: "do it like this from now on" after a finished job must reach the
+  // judge even with no picture engines connected — it offers a Routine draft
+  // built from this conversation, never an automatic save.
+  if (
+    /(以后都这样|以后就这样|以后照这|以后也这样|以后都照|存成\s*routine|from now on|save (?:this|it) as a routine|do it like this|remember how we did)/i.test(
+      content,
+    )
+  ) {
+    return true;
+  }
   if (
     /(每天|每日|每周|每週|每月|每小时|每小時|天天|定时|定時|每.{0,3}早上|每.{0,3}晚上|every ?(day|morning|week|month|hour)|daily|weekly|monthly|hourly)/i.test(
       content,

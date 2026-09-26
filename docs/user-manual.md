@@ -149,6 +149,14 @@ Read this inside the app: **Settings → Manual**.
   spoke to it. With **Speaking** switched off (AI Settings → Capabilities) the
   button is not there at all — replaying a voice message you recorded yourself
   still works, because that is your voice, not Vaenyx speaking.
+- **"Do it like this from now on"** — after Vaenyx has done a job in a
+  conversation (and you corrected it, if needed), say so in your own words
+  ("以后都这样做" works too). Vaenyx drafts a Routine from what actually
+  happened — your corrections included — and shows it: what it will do, what
+  you give it, the corrections it keeps, its steps and Capabilities. If
+  something essential is unclear it asks one question first; skipping it saves
+  nothing. **Save Routine** saves it and makes this conversation its home, so
+  the next one sent here is handled the same way; **Cancel** leaves nothing.
 - **Send a photo** — the camera button (take one) or the picture button (choose
   one), always available. The model reads the photo itself; you do not have to
   describe it — a photo with no words at all is a complete message.

@@ -556,6 +556,10 @@ export const CreateAskVaenyxMessageRequestSchema = Type.Object(
     suggestCreate: Type.Optional(
       Type.Union([Type.Literal("method"), Type.Literal("routine")]),
     ),
+    // H-017: the Owner wants this Conversation's way of doing the job saved as
+    // a Routine. The reply either asks ONE structured question or says a draft
+    // is ready to review; it never claims anything was saved.
+    saveAsRoutine: Type.Optional(Type.Boolean()),
     // clarify-create (spec §2a phase 2): the Owner wants something built but the
     // description is not enough to build from yet. The reply must only ask this
     // clarifying question — nothing is built on this turn.
@@ -632,6 +636,11 @@ export const ClassifyRoutineResponseSchema = Type.Object(
       // build from. The reply asks ONE clarifying question first; the answered
       // follow-up classifies as create-* and builds (spec §2a phase 2).
       Type.Literal("clarify-create"),
+      // H-017: after a job was done in this Conversation, the Owner wants it
+      // done THE SAME WAY from now on ("以后都这样做"). The chat drafts a
+      // Routine from the Conversation's real work and shows it for review;
+      // nothing is saved until the Owner confirms.
+      Type.Literal("save-routine"),
       // The Owner wants an installed Method to behave differently ("make the
       // quote one include GST"). The chat proposes the edit and shows what
       // changed; nothing is written until they approve it (copy pack B4).
@@ -2376,6 +2385,24 @@ export const RoutinePlanSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// H-017 · a Routine drafted from what a Conversation actually did, for the
+// Owner to review in plain words before anything is saved.
+export const ConversationRoutineDraftSchema = Type.Object(
+  {
+    plan: RoutinePlanSchema,
+    summary: Type.Object(
+      {
+        does: Type.String(),
+        input: Type.String(),
+        corrections: Type.Array(Type.String()),
+        capabilities: Type.Array(Type.String()),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
 // ── Edit Routine v1 — upgrade an origin:self Routine in place ─────────────────
 // The Owner opens a full editable draft, optionally asks Vaenyx for a
 // proposal, reviews, try-runs the draft (nothing written), then saves. The
@@ -3550,6 +3577,9 @@ export type ChangePasswordRequest = Static<typeof ChangePasswordRequestSchema>;
 export type InstanceSettings = Static<typeof InstanceSettingsSchema>;
 export type Owner = Static<typeof OwnerSchema>;
 export type Project = Static<typeof ProjectSchema>;
+export type ConversationRoutineDraft = Static<
+  typeof ConversationRoutineDraftSchema
+>;
 export type ProjectInstructionHold = Static<typeof ProjectInstructionHoldSchema>;
 export type ProjectInstructionHoldCategory = Static<
   typeof ProjectInstructionHoldCategorySchema

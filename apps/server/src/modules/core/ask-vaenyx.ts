@@ -1086,6 +1086,8 @@ export interface CreateAskVaenyxMessageOptions {
   // card under the reply opens the real creation flow — the model must point
   // there and never claim to have created anything itself.
   suggestCreate?: "method" | "routine";
+  // H-017: the Owner wants this Conversation's way of doing the job saved.
+  saveAsRoutine?: boolean;
   // clarify-create (spec §2a phase 2): the Owner wants something built but the
   // description is not enough to build from. This reply must only ask the given
   // clarifying question — nothing is built on this turn.
@@ -1563,6 +1565,9 @@ export async function createAskVaenyxMessage(
   if (options?.suggestCreate) {
     const kind = options.suggestCreate === "method" ? "Method" : "Routine";
     projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner asked Vaenyx to CREATE a new ${kind}, and Vaenyx has ALREADY STARTED building it in the background — a confirmation message will appear in this chat when it is saved to the Library. Briefly tell the Owner it is being built now and the confirmation will show up here shortly. Do NOT claim it is already finished, do NOT output configuration JSON, and do NOT invent admin tools or extra steps.`;
+  }
+  if (options?.saveAsRoutine) {
+    projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner wants the way this conversation's job was done saved as a reusable Routine, so the next similar input is handled the same way. Vaenyx will show them a DRAFT to review below this reply, built from what actually happened here, including their corrections; nothing is saved until they press Save. If something essential about how to repeat the job is genuinely unclear from this conversation, ask exactly ONE structured question now (use the structured question format) and nothing else. Otherwise reply in one short line, in the Owner's language, that the draft is ready to review below. Never claim anything was saved or built, and never output configuration.`;
   }
   if (options?.clarifyCreate) {
     projectContext = `${projectContext ? `${projectContext}\n\n` : ""}The Owner asked Vaenyx to BUILD something, but the description is not yet enough to build from. Reply ONLY with one short clarifying question, in the Owner's language, so the build can start from their answer. A good question to ask (use it as-is or sharpen it): "${options.clarifyCreate}". Nothing is being built yet — do NOT claim anything was created or started, do NOT output configuration, and do NOT ask more than one question.`;
