@@ -1,0 +1,38 @@
+{
+  "input": {
+    "sourceLabel": "Kitchen sketch A, dimensions 1-3",
+    "projectName": "Kitchen splashback",
+    "measurements": [
+      "Splashback rectangle: 3.2 m × 0.6 m",
+      "Power outlet opening: 0.12 m × 0.08 m"
+    ],
+    "assumptions": ["Subtract the outlet opening"],
+    "unitSystem": "metric",
+    "uncertainFields": []
+  },
+  "output": {
+    "title": "Preliminary material takeoff",
+    "quantities": [
+      {
+        "item": "Net splashback area",
+        "quantity": 1.9104,
+        "unit": "m²",
+        "evidence": "Kitchen sketch A, dimensions 1-3: 3.2 m × 0.6 m minus 0.12 m × 0.08 m",
+        "certainty": "inferred"
+      }
+    ],
+    "assumptions": [
+      {
+        "assumption": "Subtract the outlet opening",
+        "evidence": "Kitchen sketch A, dimensions 1-3: supplied assumption",
+        "certainty": "confirmed"
+      }
+    ],
+    "warnings": [
+      "Check drawing scale, units, openings, waste allowance, product coverage, and site conditions before use."
+    ],
+    "humanCheckRequired": "A competent person must verify every quantity against current drawings and site conditions before ordering or construction."
+  },
+  "source": "synthetic",
+  "time": "2026-09-03"
+}

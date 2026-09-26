@@ -30,8 +30,7 @@
     ],
     "warnings": [
       "Check drawing scale, units, openings, waste allowance, product coverage, and site conditions before use."
-    ],
-    "humanCheckRequired": "A competent person must verify every quantity against current drawings and site conditions before ordering or construction."
+    ]
   },
   "source": "synthetic",
   "time": "2026-09-03"

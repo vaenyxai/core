@@ -53,8 +53,7 @@
       "totalCertainty",
       "facts",
       "items",
-      "warnings",
-      "disclaimer"
+      "warnings"
     ],
     "properties": {
       "title": { "type": "string" },
@@ -95,8 +94,7 @@
         "type": "array",
         "maxItems": 10,
         "items": { "type": "string" }
-      },
-      "disclaimer": { "type": "string" }
+      }
     }
   }
 }

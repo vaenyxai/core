@@ -179,7 +179,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     // 2.6 here while the app recorded 3.0 against every acknowledgement, so a
     // record said one thing and this table another; both now say 3.1, which is
     // the version that ships Part N.
-    "legal.copyVersion": "3.1",
+    "legal.copyVersion": "3.2",
     "legal.disclaimer.aiGeneral.composer":
       "AI can make mistakes. Check important information.",
     "legal.disclaimer.community.browse":
@@ -192,6 +192,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
       "Not tax advice. Check important figures with a registered tax agent or accountant.",
     "legal.disclaimer.legal":
       "Not legal advice. For contracts and legal matters, consult a qualified lawyer.",
+    "legal.disclaimer.quantities":
+      "Quantities may be wrong. Before ordering or building, have a competent person check each one against the current drawings and site.",
     "legal.disclaimer.health.reminderReliability":
       "Reminders can fail or be delayed. Never rely on Vaenyx as your only reminder for critical medication.",
     "legal.disclaimer.health.gateTitle": "Before Discussing Health Topics",
@@ -599,7 +601,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "routine.confirm.onePerLine": "一行一个",
     "routine.confirm.run": "运行",
     "routine.confirm.cancel": "取消",
-    "legal.copyVersion": "3.1",
+    "legal.copyVersion": "3.2",
     "legal.disclaimer.aiGeneral.composer": "AI 可能出错,重要信息请自行核对。",
     "legal.disclaimer.community.browse":
       "社区 Method 与 Routine 由社区成员制作,Vaenyx 不为其背书,也不构成专业建议;'Verified' 仅表示已通过自动检查。",
@@ -610,6 +612,8 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     "legal.disclaimer.tax":
       "这不是税务建议。重要数字请与注册税务代理或会计师核对。",
     "legal.disclaimer.legal": "这不是法律意见。合同与法律事务请咨询合格律师。",
+    "legal.disclaimer.quantities":
+      "数量可能有误。下单或施工前,请由懂行的人对照最新图纸和现场逐项核对。",
     "legal.disclaimer.health.reminderReliability":
       "提醒可能失败或延迟。关键用药切勿只依赖 Vaenyx 提醒。",
     "legal.disclaimer.health.gateTitle": "谈及健康话题前",
@@ -920,6 +924,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+// A result footnote outside the provider's reach (the result view renders in
+// several trees). Same lookup and gating as t(); the key is an allowlisted
+// legal key, so the text is always the synced pack copy.
+export function legalFootnote(lang: Lang, key: string): string {
+  return isKeyRenderable(key) ? (STRINGS[lang][key] ?? STRINGS.en[key] ?? "") : "";
 }
 
 export function useI18n(): I18nValue {

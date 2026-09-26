@@ -363,7 +363,9 @@ Read this inside the app: **Settings → Manual**.
   each important value beside its source and certainty. Receipt records are for
   organisation, not tax/accounting advice; warranty records do not decide your
   legal rights; takeoffs are preliminary and must be checked by a competent
-  person before ordering or building.
+  person before ordering or building. The line under each result is fixed
+  wording from Vaenyx's legal copy, the same every time and never written by
+  the model — results saved earlier show it too.
 - **Fix or repeat a result** — on a result made by the current version, press
   **Correct & Rerun** to reopen its original confirmed fields, or **Rerun** to
   repeat the exact input. A correction makes a new Journal entry and Gallery

@@ -44,8 +44,7 @@
       "title",
       "quantities",
       "assumptions",
-      "warnings",
-      "humanCheckRequired"
+      "warnings"
     ],
     "properties": {
       "title": { "type": "string" },
@@ -87,8 +86,7 @@
         "minItems": 1,
         "maxItems": 15,
         "items": { "type": "string" }
-      },
-      "humanCheckRequired": { "type": "string" }
+      }
     }
   }
 }

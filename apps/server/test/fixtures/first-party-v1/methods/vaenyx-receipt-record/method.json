@@ -1,0 +1,6 @@
+{
+  "name": "Receipt Record",
+  "description": "Turns confirmed receipt details into a traceable household record without inventing tax or purchase facts.",
+  "version": "1.0.0",
+  "category": "household"
+}

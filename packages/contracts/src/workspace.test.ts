@@ -65,6 +65,30 @@ describe("M1 contracts", () => {
     );
   });
 
+  // H-014 addendum: a footnote is an allowlisted legal key, never free text.
+  it("names a result footnote only by an allowlisted legal key", () => {
+    const fields = [{ key: "title", as: "title" }];
+    for (const footnote of [
+      "legal.disclaimer.tax",
+      "legal.disclaimer.legal",
+      "legal.disclaimer.quantities",
+    ]) {
+      expect(Value.Check(RoutineViewSchema, { footnote, fields })).toBe(true);
+    }
+    expect(
+      Value.Check(RoutineViewSchema, {
+        footnote: "Not advice, written by a model.",
+        fields,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(RoutineViewSchema, {
+        footnote: "legal.disclaimer.health.banner",
+        fields,
+      }),
+    ).toBe(false);
+  });
+
   it("accepts a simple owner task request", () => {
     expect(
       Value.Check(CreateTaskRequestSchema, {

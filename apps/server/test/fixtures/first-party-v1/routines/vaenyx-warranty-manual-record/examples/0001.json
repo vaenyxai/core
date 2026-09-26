@@ -1,0 +1,21 @@
+{
+  "journal": {
+    "sourceLabel": "Manual and receipt",
+    "product": "Heat pump dryer",
+    "model": "HPD-8",
+    "purchaseDate": "2026-06-12",
+    "warrantyEnds": "2028-06-12",
+    "manualReference": "dryer-manual.pdf",
+    "maintenanceNotes": ["Clean lint filter after every cycle"],
+    "uncertainFields": []
+  },
+  "gallery": {
+    "title": "Warranty & manual record",
+    "facts": [],
+    "maintenance": [],
+    "warnings": [],
+    "disclaimer": "This record does not determine legal warranty rights; check the original source and manufacturer."
+  },
+  "source": "synthetic",
+  "time": "2026-09-03"
+}

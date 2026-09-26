@@ -1,0 +1,75 @@
+{
+  "name": "Receipt Record",
+  "description": "Organises confirmed receipt details into a source-linked household record.",
+  "owner": "vaenyx",
+  "version": "1.0.0",
+  "tags": ["first-party", "household", "receipts"],
+  "mode": "accumulate",
+  "storage": { "journal": true, "gallery": true },
+  "deps": [{ "methodId": "vaenyx-receipt-record", "version": "1.0.0" }],
+  "flow": [
+    { "id": "record", "methodId": "vaenyx-receipt-record", "from": "journal" }
+  ],
+  "view": {
+    "version": 1,
+    "fields": [
+      { "key": "title", "as": "title" },
+      {
+        "key": "total",
+        "as": "amount",
+        "label": "Total",
+        "labelZh": "总额",
+        "format": "currency",
+        "currencyKey": "currency",
+        "evidenceKey": "totalEvidence",
+        "certaintyKey": "totalCertainty",
+        "showWhenMissing": true
+      },
+      {
+        "key": "facts",
+        "as": "table",
+        "label": "Receipt Details",
+        "labelZh": "收据详情",
+        "columns": [
+          { "key": "field", "label": "Field", "labelZh": "字段" },
+          { "key": "value", "label": "Value", "labelZh": "内容" },
+          { "key": "evidence", "label": "Source", "labelZh": "依据" },
+          {
+            "key": "certainty",
+            "label": "Certainty",
+            "labelZh": "确定性",
+            "format": "certainty"
+          }
+        ]
+      },
+      {
+        "key": "items",
+        "as": "table",
+        "label": "Line Items",
+        "labelZh": "明细",
+        "columns": [
+          { "key": "item", "label": "Item", "labelZh": "项目" },
+          { "key": "evidence", "label": "Source", "labelZh": "依据" },
+          {
+            "key": "certainty",
+            "label": "Certainty",
+            "labelZh": "确定性",
+            "format": "certainty"
+          }
+        ]
+      },
+      {
+        "key": "warnings",
+        "as": "bullets",
+        "label": "Check",
+        "labelZh": "请检查"
+      },
+      {
+        "key": "disclaimer",
+        "as": "note",
+        "label": "Important",
+        "labelZh": "重要说明"
+      }
+    ]
+  }
+}

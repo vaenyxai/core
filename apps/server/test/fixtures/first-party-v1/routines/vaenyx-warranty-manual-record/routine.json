@@ -1,0 +1,68 @@
+{
+  "name": "Warranty & Manual Record",
+  "description": "Keeps product, warranty, manual, and maintenance details together with their source.",
+  "owner": "vaenyx",
+  "version": "1.0.0",
+  "tags": ["first-party", "household", "warranty", "manual"],
+  "mode": "accumulate",
+  "storage": { "journal": true, "gallery": true },
+  "deps": [{ "methodId": "vaenyx-warranty-manual-record", "version": "1.0.0" }],
+  "flow": [
+    {
+      "id": "record",
+      "methodId": "vaenyx-warranty-manual-record",
+      "from": "journal"
+    }
+  ],
+  "view": {
+    "version": 1,
+    "fields": [
+      { "key": "title", "as": "title" },
+      {
+        "key": "facts",
+        "as": "table",
+        "label": "Product & Warranty",
+        "labelZh": "产品与保修",
+        "columns": [
+          { "key": "field", "label": "Field", "labelZh": "字段" },
+          { "key": "value", "label": "Value", "labelZh": "内容" },
+          { "key": "evidence", "label": "Source", "labelZh": "依据" },
+          {
+            "key": "certainty",
+            "label": "Certainty",
+            "labelZh": "确定性",
+            "format": "certainty"
+          }
+        ]
+      },
+      {
+        "key": "maintenance",
+        "as": "table",
+        "label": "Maintenance",
+        "labelZh": "维护",
+        "columns": [
+          { "key": "instruction", "label": "Instruction", "labelZh": "说明" },
+          { "key": "evidence", "label": "Source", "labelZh": "依据" },
+          {
+            "key": "certainty",
+            "label": "Certainty",
+            "labelZh": "确定性",
+            "format": "certainty"
+          }
+        ]
+      },
+      {
+        "key": "warnings",
+        "as": "bullets",
+        "label": "Check",
+        "labelZh": "请检查"
+      },
+      {
+        "key": "disclaimer",
+        "as": "note",
+        "label": "Important",
+        "labelZh": "重要说明"
+      }
+    ]
+  }
+}

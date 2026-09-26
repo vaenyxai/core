@@ -1,8 +1,10 @@
-import type {
-  RoutineView,
-  RoutineViewColumn,
-  RoutineViewField,
-  RoutineViewFormat,
+import {
+  ROUTINE_VIEW_FOOTNOTE_KEYS,
+  type RoutineView,
+  type RoutineViewColumn,
+  type RoutineViewField,
+  type RoutineViewFootnote,
+  type RoutineViewFormat,
 } from "@vaenyx/contracts";
 
 export type ResultLanguage = "en" | "zh";
@@ -143,9 +145,17 @@ export function parseRoutineView(raw: unknown): RoutineView | null {
       ...(columns.length > 0 ? { columns } : {}),
     });
   }
+  // H-014: a footnote is a legal KEY from the allowlist, never text. Anything
+  // else is dropped, so free text cannot reach the footnote slot.
+  const footnote = (ROUTINE_VIEW_FOOTNOTE_KEYS as readonly string[]).includes(
+    candidateView.footnote as string,
+  )
+    ? (candidateView.footnote as RoutineViewFootnote)
+    : undefined;
   return fields.length > 0
     ? {
         ...(candidateView.version === 1 ? { version: 1 as const } : {}),
+        ...(footnote ? { footnote } : {}),
         fields,
       }
     : null;

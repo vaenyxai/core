@@ -60,6 +60,7 @@ import type {
   RoutineInputField,
   RoutineJournalEntry,
   RoutinePlan,
+  RoutineViewFootnote,
   RoutineEditSaveRequest,
   RunMethodResponse,
   PublishState,
@@ -23544,6 +23545,10 @@ function EditRoutinePanel({
   const [annotateFocus, setAnnotateFocus] = useState("");
   const [resultImage, setResultImage] = useState("");
   const [viewFields, setViewFields] = useState<EditableViewField[]>([]);
+  // H-014: the fixed footnote key rides through an edit untouched.
+  const [viewFootnote, setViewFootnote] = useState<
+    RoutineViewFootnote | undefined
+  >(undefined);
   const [steps, setSteps] = useState<EditableRoutineStep[]>([]);
   const [addMethodId, setAddMethodId] = useState("");
   const [addingStep, setAddingStep] = useState(false);
@@ -23575,6 +23580,7 @@ function EditRoutinePanel({
     setAnnotateFocus(next.routine.annotateFocus ?? "");
     setResultImage(next.routine.resultImage ?? "");
     const parsedView = parseRoutineView(next.routine.view);
+    setViewFootnote(parsedView?.footnote);
     setViewFields(
       parsedView
         ? parsedView.fields.map((field) => ({
@@ -23708,7 +23714,13 @@ function EditRoutinePanel({
           .map((tag) => tag.trim())
           .filter(Boolean)
           .slice(0, 20),
-        view: realViewFields.length > 0 ? { fields: realViewFields } : null,
+        view:
+          realViewFields.length > 0
+            ? {
+                ...(viewFootnote ? { footnote: viewFootnote } : {}),
+                fields: realViewFields,
+              }
+            : null,
         annotateFocus: annotateFocus.trim() ? annotateFocus.trim() : null,
         resultImage: resultImage.trim() ? resultImage.trim() : null,
         flow,
@@ -23788,6 +23800,7 @@ function EditRoutinePanel({
     setAnnotateFocus(proposed.annotateFocus ?? "");
     setResultImage(proposed.resultImage ?? "");
     const parsedView = parseRoutineView(proposed.view);
+    setViewFootnote(parsedView?.footnote);
     setViewFields(
       parsedView
         ? parsedView.fields.map((field) => ({
@@ -24408,6 +24421,7 @@ function EditRoutinePanel({
             view={
               viewFields.some((field) => field.key.trim())
                 ? {
+                    ...(viewFootnote ? { footnote: viewFootnote } : {}),
                     fields: viewFields
                       .filter((field) => field.key.trim())
                       .map((field) => ({
@@ -24490,6 +24504,7 @@ function EditRoutinePanel({
               view={
                 viewFields.length > 0
                   ? {
+                      ...(viewFootnote ? { footnote: viewFootnote } : {}),
                       fields: viewFields
                         .filter((field) => field.key.trim())
                         .map((field) => ({
@@ -24616,7 +24631,10 @@ function buildRoutineInputSkeleton(schema: unknown): Record<string, unknown> {
 // wording (N4) and the cost note (N5). All ADDITIONS; no existing string
 // changed, and the one new consent string has nobody's answer recorded against
 // it yet, so LEGAL_CONSENT_FLOOR stays where it is and nobody is re-asked.
-const LEGAL_COPY_VERSION = "3.1";
+// 3.1 → 3.2 (2026-09-27): C6 (the takeoff quantities footnote) is added and
+// F4 adopts the wording the app already ships. No consent string changed, so
+// LEGAL_CONSENT_FLOOR stays where it is and nobody is re-asked.
+const LEGAL_COPY_VERSION = "3.2";
 
 // The K3 activation floor: a recorded activation below this is treated as not
 // given — re-opening sharing walks through K3 again instead of silently

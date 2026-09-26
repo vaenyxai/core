@@ -6,6 +6,7 @@ import {
   type ResultLanguage,
   type ValueRecord,
 } from "./routine-result-format";
+import { legalFootnote } from "./i18n";
 import { DeclaredRoutineField } from "./routine-result-fields";
 
 export {
@@ -98,6 +99,13 @@ export function RoutineResultView({
             record={record}
           />
         ))}
+        {declared.footnote ? (
+          // Fixed copy from the legal pack, by key — never the model's words.
+          // Older results that carried a model-written line show this too.
+          <p className="routine-result-footnote">
+            {legalFootnote(language, declared.footnote)}
+          </p>
+        ) : null}
         {actions}
       </div>
     );

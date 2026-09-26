@@ -9,4 +9,3 @@ Create a source-linked household product record from Owner-confirmed fields.
 - `maintenance` preserves source instructions in order and references the source plus instruction number.
 - Mark fields named in `uncertainFields` as `uncertain`; otherwise use `confirmed`. Do not create clickable or remote links.
 - Warn when warranty dates or manual references are missing.
-- `disclaimer` says the record does not determine legal warranty rights and the Owner should check the source/manufacturer.

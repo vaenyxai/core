@@ -42,7 +42,7 @@
   "output": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["title", "facts", "maintenance", "warnings", "disclaimer"],
+    "required": ["title", "facts", "maintenance", "warnings"],
     "properties": {
       "title": { "type": "string" },
       "facts": {
@@ -78,8 +78,7 @@
         "type": "array",
         "maxItems": 10,
         "items": { "type": "string" }
-      },
-      "disclaimer": { "type": "string" }
+      }
     }
   }
 }

@@ -2,11 +2,11 @@
   "name": "Warranty & Manual Record",
   "description": "Keeps product, warranty, manual, and maintenance details together with their source.",
   "owner": "vaenyx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "tags": ["first-party", "household", "warranty", "manual"],
   "mode": "accumulate",
   "storage": { "journal": true, "gallery": true },
-  "deps": [{ "methodId": "vaenyx-warranty-manual-record", "version": "1.0.0" }],
+  "deps": [{ "methodId": "vaenyx-warranty-manual-record", "version": "1.0.1" }],
   "flow": [
     {
       "id": "record",
@@ -16,6 +16,7 @@
   ],
   "view": {
     "version": 1,
+    "footnote": "legal.disclaimer.legal",
     "fields": [
       { "key": "title", "as": "title" },
       {
@@ -56,12 +57,6 @@
         "as": "bullets",
         "label": "Check",
         "labelZh": "请检查"
-      },
-      {
-        "key": "disclaimer",
-        "as": "note",
-        "label": "Important",
-        "labelZh": "重要说明"
       }
     ]
   }

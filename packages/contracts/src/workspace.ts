@@ -2216,12 +2216,27 @@ export const RoutineViewFieldSchema = Type.Object(
   { additionalProperties: false },
 );
 
+// H-014 addendum (Oskar, 2026-09-27): a result's footnote is FIXED copy from
+// the legal pack, named by key. Only these keys are allowed, so no model- or
+// Community-written text can ever reach a footnote.
+export const ROUTINE_VIEW_FOOTNOTE_KEYS = [
+  "legal.disclaimer.finance",
+  "legal.disclaimer.tax",
+  "legal.disclaimer.legal",
+  "legal.disclaimer.quantities",
+] as const;
+
+export const RoutineViewFootnoteSchema = Type.Union(
+  ROUTINE_VIEW_FOOTNOTE_KEYS.map((key) => Type.Literal(key)),
+);
+
 export const RoutineViewSchema = Type.Object(
   {
     // Version 1 adds locale-safe formatting, explicit table columns and plain
     // evidence/certainty references. Omitted remains the original compatible
     // shape; an unknown future version falls back to the automatic view.
     version: Type.Optional(Type.Literal(1)),
+    footnote: Type.Optional(RoutineViewFootnoteSchema),
     fields: Type.Array(RoutineViewFieldSchema, { minItems: 1, maxItems: 24 }),
   },
   { additionalProperties: false },
@@ -3539,6 +3554,7 @@ export type RoutineViewFormat = Static<typeof RoutineViewFormatSchema>;
 export type RoutineViewColumn = Static<typeof RoutineViewColumnSchema>;
 export type RoutineViewField = Static<typeof RoutineViewFieldSchema>;
 export type RoutineView = Static<typeof RoutineViewSchema>;
+export type RoutineViewFootnote = Static<typeof RoutineViewFootnoteSchema>;
 export type LibraryRoutineSummary = Static<typeof LibraryRoutineSummarySchema>;
 export type LibraryRoutine = Static<typeof LibraryRoutineSchema>;
 export type RoutineJournalEntry = Static<typeof RoutineJournalEntrySchema>;
