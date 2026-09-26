@@ -1,7 +1,7 @@
 # Vaenyx — Current Implementation and Data-Handling Schedule
 
 > **Generated from `implementation-status.json` — do not hand-edit.**
-> Schedule version **2026-07-29.4** · effective from **2026-07-26** · verified **2026-07-29**
+> Schedule version **2026-09-27.1** · effective from **2026-07-26** · verified **2026-07-29**
 > Client **0.2.1-dev.35** · Server **vaenyx-core-cloud (migrations 0001-0007)**
 > Legal set **v3.1** · minimum legal set **v3.0** · minimum copy version **3.0**
 
@@ -96,7 +96,9 @@ Required gates: `legal.notice.modelConnect.cloud`, `legal.notice.modelConnect.lo
 
 **`feature.backup`** — Manual and scheduled backup, destination choice, optional AES-256-GCM encryption, keep-most-recent-N retention. Local only.
 
-**`feature.remote-access`** — Tailscale Funnel, configured outside the app under the user's own Tailscale account.
+**`feature.remote-access`** — Tailscale Funnel, set up and switched on from inside the product (Settings -> Phone Access). Vaenyx installs the Tailscale client, drives the sign-in, and runs the funnel for its own port; the tunnel it opens is reachable from the public internet until the Owner turns it off. The Tailscale account is the user's own and the Operator receives nothing.
+Required gates: `legal.notice.remoteAccess.enable`, `legal.notice.remoteAccess.status`
+Evidence: apps/server/src/modules/core/phone-access.ts (installs the client, drives sign-in, runs `tailscale funnel --bg 3000`)
 
 **`feature.community.discord`** — The official Vaenyx Discord server is live and administered by the Operator. Participation is optional and requires a Discord account, which Vaenyx never requires. The in-product notice for this surface is copy pack string D5; it must ship wherever the product links to the server.
 Required gates: `legal.notice.community.discord`
@@ -137,7 +139,6 @@ Two versions are tracked separately. The copy version moves whenever any string 
 | `legal.notice.community.discord` | The product does not link to the Discord server. The server itself is live and is recorded as flow.community.discord; this string ships if and when a link appears in the product. |
 | `legal.disclaimer.merit` | Merit is not built. |
 | `legal.disclaimer.merit.creatorPage` | Merit is not built. |
-| `legal.notice.remoteAccess.status` | There is no remote-access panel in the product. |
 | `legal.consent.flywheel.sensitiveAsk` | Community sharing is not built, so there is no sensitive-content gate to consent to. |
 
 **Limit of the copy audit.** The copy audit compares the copy pack against the app's string table. It does not check that a string is actually rendered on a surface, so "matches verbatim" means the wording is right, not that the wording is on screen. A string can sit in the table with no interface using it.

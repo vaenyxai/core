@@ -1,7 +1,7 @@
 # Vaenyx — 当前实现与数据处理明细表
 
 > **由 `implementation-status.json` 与 `implementation-status.zh.json` 生成 —— 请勿手工编辑。**
-> 明细表版本 **2026-07-29.4** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-29**
+> 明细表版本 **2026-09-27.1** · 自以下日期起生效 **2026-07-26** · 核实于 **2026-07-29**
 > 客户端 **0.2.1-dev.35** · 服务端 **vaenyx-core-cloud (migrations 0001-0007)**
 > 法律文件集 **v3.1** · 最低法律文件集 **v3.0** · 最低文案版本 **3.0**
 
@@ -96,7 +96,9 @@
 
 **`feature.backup`** — 手动与定时备份、目的地选择、可选 AES-256-GCM 加密、保留最近 N 份。仅本地。
 
-**`feature.remote-access`** — 远程访问在应用之外配置,使用用户自己在该服务商的账户。
+**`feature.remote-access`** — Tailscale Funnel,在产品内设置并开启(设置 → 手机访问)。Vaenyx 会安装 Tailscale 客户端、引导登录,并为自己的端口运行 funnel;开启后该隧道在公网上可达,直到 Owner 关闭为止。所用的 Tailscale 账户属于用户本人,运营方不接收任何内容。
+必需的门槛: `legal.notice.remoteAccess.enable`, `legal.notice.remoteAccess.status`
+实现证据: apps/server/src/modules/core/phone-access.ts (installs the client, drives sign-in, runs `tailscale funnel --bg 3000`)
 
 **`feature.community.discord`** — 官方 Vaenyx Discord 服务器已上线,由运营方管理。参与是可选的,且需要 Discord 账户 —— Vaenyx 本身从不要求该账户。本界面的应用内告知为文案包字符串 D5;凡产品链接到该服务器之处,均须一并呈示。
 必需的门槛: `legal.notice.community.discord`
@@ -137,7 +139,6 @@
 | `legal.notice.community.discord` | 产品中没有指向 Discord 服务器的入口。服务器本身是运行中的,已记为 flow.community.discord;一旦产品中出现入口,本字符串即须上线。 |
 | `legal.disclaimer.merit` | Merit 尚未建成。 |
 | `legal.disclaimer.merit.creatorPage` | Merit 尚未建成。 |
-| `legal.notice.remoteAccess.status` | 产品中没有远程访问面板。 |
 | `legal.consent.flywheel.sensitiveAsk` | 社区分享尚未建成,因此不存在需要同意的敏感内容关卡。 |
 
 **文案审计的局限。** 文案审计比对的是文案包与 app 的字符串表。它不检查某个字符串是否真的被渲染在某个界面上,所以「逐字一致」只说明措辞正确,不说明它出现在屏幕上。字符串可以躺在表里而没有任何界面使用它。

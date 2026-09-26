@@ -8,7 +8,9 @@
 | Governing law | Victoria, Australia |
 | Contact | hello@vaenyx.ai |
 | Effective | 26 July 2026 |
-| Copy pack version | `legal.copyVersion = "3.1"` |
+| Copy pack version | `legal.copyVersion = "3.2"` |
+
+Copy version 3.2 (27 September 2026) adds C6, names C4 and C5 as the footnotes for receipt and warranty results, and updates the wording of F4.
 
 Placeholders — all resolved 2026-07-25:
 - **Operator** = **Vae Foundry Pty Ltd (ACN 700 703 724, ABN 28 700 703 724)**, incorporated 25 July 2026.
@@ -205,16 +207,22 @@ the publish service's accepted-copy floor moves to 2.6.
 - **Behaviour:** Persistent.
 
 **C4 — `legal.disclaimer.tax`**
-- **Placement:** Persistent footnote on tax-related Method/Routine views and tax-flagged results.
+- **Placement:** Persistent footnote on tax-related Method/Routine views and tax-flagged results, including receipt record results (from 2026-09-27).
 - **EN:** "Not tax advice. Check important figures with a registered tax agent or accountant."
 - **ZH:** "这不是税务建议。重要数字请与注册税务代理或会计师核对。"
 - **Behaviour:** Persistent.
 
 **C5 — `legal.disclaimer.legal`**
-- **Placement:** Persistent footnote on legal/contract-related Method/Routine views (e.g. lease or contract review) and legal-flagged results.
+- **Placement:** Persistent footnote on legal/contract-related Method/Routine views (e.g. lease or contract review) and legal-flagged results, including warranty and manual record results (from 2026-09-27).
 - **EN:** "Not legal advice. For contracts and legal matters, consult a qualified lawyer."
 - **ZH:** "这不是法律意见。合同与法律事务请咨询合格律师。"
 - **Behaviour:** Persistent.
+
+**C6 — `legal.disclaimer.quantities`**
+- **Placement:** Persistent footnote under quantity-takeoff results: counted or measured quantities that may be used for ordering or building.
+- **EN:** "Quantities may be wrong. Before ordering or building, have a competent person check each one against the current drawings and site."
+- **ZH:** "数量可能有误。下单或施工前,请由懂行的人对照最新图纸和现场逐项核对。"
+- **Behaviour:** Persistent. The result view names this footnote by key; the model never writes or rewrites it.
 
 ### Part D — Library (Browse and Install)
 
@@ -479,8 +487,8 @@ with great confidence and no knowledge of it.
 
 **F4 — `legal.notice.remoteAccess.status`**
 - **Placement:** Persistent line on the remote-access Settings panel while remote access is on.
-- **EN:** "Remote access is on. Your instance has an internet-reachable address; your Vaenyx login protects access."
-- **ZH:** "远程访问已开启。你的实例拥有一个互联网可达的地址;访问由你的 Vaenyx 登录保护。"
+- **EN:** "This Vaenyx has an internet-reachable address. Anyone who knows it reaches the sign-in screen, and your Vaenyx password is what protects everything behind it."
+- **ZH:** "这台 Vaenyx 有一个互联网可达的地址。任何知道它的人都能打开登录页,后面的一切由你的 Vaenyx 密码保护。"
 - **Behaviour:** Persistent while enabled.
 
 ### Part G — Publishing and Community Sharing
