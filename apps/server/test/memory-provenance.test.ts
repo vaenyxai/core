@@ -241,6 +241,58 @@ describe("source exclusion", () => {
   });
 });
 
+describe("source exclusion after a merge, and inside a Mode", () => {
+  it("an excluded source keeps a merged candidate out, in any Mode", () => {
+    addConversation("chat-a");
+    addConversation("chat-b");
+    const proposal = { evidence: "I have a dog.", slot: "pet", value: "a dog" };
+    for (const conversationId of ["chat-a", "chat-b"]) {
+      queueProposedFacts(database, {
+        conversationId,
+        modeId: null,
+        ownerId: "owner-1",
+        proposals: [proposal],
+      });
+    }
+    const candidates = database.sqlite
+      .prepare(
+        `SELECT id FROM vaenyx_me_candidates
+         WHERE proposed_slot = 'pet' AND status = 'pending_review'`,
+      )
+      .all() as { id: string }[];
+    // The same fact from two Conversations is one candidate with both sources.
+    expect(candidates).toHaveLength(1);
+
+    setConversationSourceExcluded(database, {
+      conversationId: "chat-a",
+      excluded: true,
+      modeId: null,
+      ownerId: "owner-1",
+    });
+    expect(() =>
+      approveFactCandidate(database, candidates[0]!.id, "owner-1", null),
+    ).toThrow("MEMORY_SOURCE_EXCLUDED");
+    expect(listCurrentFacts(database)).toEqual([]);
+
+    // Inside a Custom Mode the same rule holds, scoped to that Mode.
+    addConversation("kid-chat", "active", "kid");
+    setConversationSourceExcluded(database, {
+      conversationId: "kid-chat",
+      excluded: true,
+      modeId: "kid",
+      ownerId: "owner-1",
+    });
+    expect(
+      queueProposedFacts(database, {
+        conversationId: "kid-chat",
+        modeId: "kid",
+        ownerId: "owner-1",
+        proposals: [{ evidence: "I like trains.", slot: "preference:toy", value: "trains" }],
+      }),
+    ).toBe(0);
+  });
+});
+
 describe("permanent Conversation deletion", () => {
   it("rolls back a stale preview and atomically forgets with a current one", () => {
     addConversation("delete-chat", "archived");
