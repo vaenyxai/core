@@ -347,7 +347,7 @@ Read this inside the app: **Settings → Manual**.
 
 ## 6. Methods and Routines
 
-- **Dinner Planner** — open **Library → Routines → Dinner Planner → Use**. Its conversation opens a modular **Plan Dinner** screen. Add ingredients (or up to five photos), review any photo suggestions, set servings and total time, then press **Plan My Dinner**. Avoidances, equipment and preferences are optional and visible before running.
+- **Dinner Planner** — open **Library → Routines → Dinner Planner → Start This Routine**. Its conversation opens a modular **Plan Dinner** screen. Add ingredients (or up to five photos), review any photo suggestions, set servings and total time, then press **Plan My Dinner**. Avoidances, equipment and preferences are optional and visible before running.
 - **Dinner results** — see quantities, available ingredients, things to buy or check, and numbered cooking steps. Changing an input marks the previous result as out of date; **Plan Dinner Again** creates a new saved result. **Journal** and **Gallery** keep previous runs; **Correct & Rerun** brings a saved input back into the planner. Shopping ticks are a temporary checklist. Photo reading requires a connected Vision model; typing works without it. The connected text model generates the dinner. Failed generation keeps the current inputs. Unsubmitted input changes stay while switching planner/history tabs, but are not saved when leaving the conversation or refreshing.
 
 - **Method** — one small job Vaenyx knows how to do, described in plain steps.
@@ -558,6 +558,8 @@ Read this inside the app: **Settings → Manual**.
   the backup does answer, the reply ends with one plain sentence saying which
   model stood in, why the main one could not, and the error code — never a
   quiet swap you meet later as "why does this answer look different".
+- **Text model consistency** — Dinner Planner, other Methods and quick text processing use the model selected on the Text row (or the main model it follows). A per-call test uses the model named on that test. An unavailable model fails; it is never silently replaced.
+- **Test results belong to a selection** — changing the provider or model hides results for the old selection. Test is disabled while its choice is being saved.
 - **The main model is a preselection** — the first row of Capabilities. Every
   other row may **follow the main model** instead of naming a backend: it then
   uses the main model's account and model, and the main model's backup too, so
@@ -1070,5 +1072,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.13.17-dev** · last updated 2026-10-21.
+Manual for **v0.4.13.18-dev** · last updated 2026-10-21.
 Keep this file up to date whenever a feature changes.

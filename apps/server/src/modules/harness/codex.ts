@@ -13,6 +13,8 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
+import { codexTurnFailure } from "./codex-turn-error.js";
+
 import { loadConfig } from "../../config.js";
 import {
   appendBoundedDiagnostic,
@@ -1190,26 +1192,9 @@ class CodexChatSession {
         this.#close(this.#turn.safetyViolation);
         return;
       }
-      // A turn app-server marks FAILED ends with the backend's own words — a
-      // model the plan does not allow is the case that matters: it used to
-      // surface as "returned no answer", which hid the real reason.
-      const turn = (
-        message.params as
-          | { turn?: { status?: unknown; error?: { message?: unknown } } }
-          | undefined
-      )?.turn;
-      if (turn?.status === "failed") {
-        const detail =
-          typeof turn.error?.message === "string" ? turn.error.message : "";
-        this.#finishTurn(
-          /model .* is not supported|not supported when using Codex|unsupported model/i.test(
-            detail,
-          )
-            ? new Error(
-                `RELAY_MODEL_NOT_AVAILABLE:openai-cli:${this.#turn?.model ?? "unknown"}`,
-              )
-            : new OwnerDiagnosticError("CODEX_TURN_FAILED", detail),
-        );
+      const failure = codexTurnFailure(message.params, this.#turn?.model);
+      if (failure) {
+        this.#finishTurn(failure);
         return;
       }
       this.#finishTurn();
@@ -1508,7 +1493,8 @@ let methodSessionQueue: Promise<void> = Promise.resolve();
 export async function runCodexMethodOffline(
   request: string,
   signal?: AbortSignal,
-): Promise<string> {
+  model?: string,
+): Promise<CodexRelayResult> {
   const status = getCodexStatus();
   if (!status.installed) throw new Error("CODEX_NOT_INSTALLED");
   if (!status.loggedIn) throw new Error("CODEX_NOT_LOGGED_IN");
@@ -1531,12 +1517,11 @@ export async function runCodexMethodOffline(
     // thread, and Stop is handled by the caller abandoning the promise. The
     // signal is still honoured before the turn starts.
     if (signal?.aborted) throw new Error("CODEX_TURN_CANCELLED");
-    return (
-      await session.run(request, {
+    return await session.run(request, {
+      model,
       instructions:
         "You are running a Vaenyx Method. Follow its recipe and answer with the requested JSON only. You have no tools: no files, no shell, no network. If the recipe needs something you cannot reach, say so plainly instead of guessing.",
-      })
-    ).text;
+    });
   } finally {
     releaseQueue();
   }
@@ -1554,7 +1539,8 @@ let quickSessionQueue: Promise<void> = Promise.resolve();
 export async function runCodexQuickOffline(
   request: string,
   signal?: AbortSignal,
-): Promise<string> {
+  model?: string,
+): Promise<CodexRelayResult> {
   const status = getCodexStatus();
   if (!status.installed) throw new Error("CODEX_NOT_INSTALLED");
   if (!status.loggedIn) throw new Error("CODEX_NOT_LOGGED_IN");
@@ -1576,12 +1562,11 @@ export async function runCodexQuickOffline(
       });
     }
     if (signal?.aborted) throw new Error("CODEX_TURN_CANCELLED");
-    return (
-      await quickSession.run(request, {
-        instructions:
-          "You answer one short request for Vaenyx and stop. You have no tools: no files, no shell, no network. Output exactly what the request asks for and nothing else.",
-      })
-    ).text;
+    return await quickSession.run(request, {
+      model,
+      instructions:
+        "You answer one short request for Vaenyx and stop. You have no tools: no files, no shell, no network. Output exactly what the request asks for and nothing else.",
+    });
   } finally {
     releaseQueue();
   }
@@ -1852,7 +1837,7 @@ class CodexAskVaenyxSession {
         this.#close(this.#turn.safetyViolation);
         return;
       }
-      this.#finishTurn();
+      this.#finishTurn(codexTurnFailure(message.params, this.#turn?.model));
     }
   }
 

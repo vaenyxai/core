@@ -42,6 +42,7 @@ export class CodexProvider implements ModelProvider {
     // reports no token counts, so Codex rows on the usage page carry calls
     // only — never an estimate.
     noteCoreUsage("openai-cli");
+    const model = options?.model?.trim() || this.#model || undefined;
     if (options?.quick) {
       // Speakers kept: a checkpoint has to know who said what.
       const transcript =
@@ -56,8 +57,9 @@ export class CodexProvider implements ModelProvider {
       const answer = await runCodexQuickOffline(
         [projectContext, transcript].filter(Boolean).join("\n\n"),
         options.signal,
+        model,
       );
-      return { answer, webSearchUsed: false };
+      return { answer: answer.text, model: answer.model, webSearchUsed: false };
     }
     if (options?.allowWeb === false) {
       const answer = await runCodexMethodOffline(
@@ -65,16 +67,13 @@ export class CodexProvider implements ModelProvider {
           .filter(Boolean)
           .join("\n\n"),
         options.signal,
+        model,
       );
-      return { answer, webSearchUsed: false };
+      return { answer: answer.text, model: answer.model, webSearchUsed: false };
     }
     return runAskVaenyxChat(messages, projectContext, {
       ...options,
-      ...(options?.model?.trim()
-        ? { model: options.model.trim() }
-        : this.#model
-          ? { model: this.#model }
-          : {}),
+      ...(model ? { model } : {}),
     });
   }
 

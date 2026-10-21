@@ -41,6 +41,15 @@ export const MODEL_DEFAULT_CHANGED = "vaenyx:model-default-changed";
  *  offering "which model" refreshes its list. */
 export const ADOPTED_MODELS_CHANGED = "vaenyx:adopted-models-changed";
 
+/** A test belongs to the exact selection, never just the row it sits under. */
+export function engineTestKey(
+  slot: string,
+  which: string,
+  choice: EngineChoiceValue,
+): string {
+  return JSON.stringify([slot, which, choice.provider, choice.model ?? null]);
+}
+
 export function EnginePairPicker({
   slot,
   providerOptions,
@@ -229,8 +238,7 @@ export function EnginePairPicker({
     <div className="engine-pair">
       {rows.map((row) => {
         const choice = row.which === "primary" ? pair.primary : pair.backup;
-        const follows =
-          !isMain && (pair.follows?.[row.which] ?? false);
+        const follows = !isMain && (pair.follows?.[row.which] ?? false);
         const providerValue = follows
           ? FOLLOW_MAIN
           : (choice?.provider ?? NONE);
@@ -242,7 +250,9 @@ export function EnginePairPicker({
           !choice ||
           providerOptions.some((option) => option.value === choice.provider);
         const modelMenu =
-          choice && !follows ? modelOptions(choice.provider, choice.model) : null;
+          choice && !follows
+            ? modelOptions(choice.provider, choice.model)
+            : null;
         return (
           <div className="engine-pair-side" key={row.which}>
             <div className="engine-pair-row">
@@ -316,7 +326,11 @@ export function EnginePairPicker({
                     ? "→ " +
                       providerLabel(choice.provider) +
                       (choice.model ? " / " + choice.model : "") +
-                      (canServe ? "" : zh ? "(做不了这项)" : " (cannot do this)")
+                      (canServe
+                        ? ""
+                        : zh
+                          ? "(做不了这项)"
+                          : " (cannot do this)")
                     : row.which === "backup"
                       ? zh
                         ? "→ 主模型没设备用"
@@ -330,9 +344,13 @@ export function EnginePairPicker({
                 <span className="engine-pair-model-empty" />
               )}
               {renderTest ? (
-                <span className="engine-pair-test">
+                <fieldset
+                  className="engine-pair-test"
+                  disabled={busy !== null}
+                  style={{ border: 0, padding: 0, margin: 0 }}
+                >
                   {renderTest(row.which, choice)}
-                </span>
+                </fieldset>
               ) : null}
             </div>
             {renderTestResult?.(row.which, choice) ? (

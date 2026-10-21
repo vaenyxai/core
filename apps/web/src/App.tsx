@@ -373,6 +373,7 @@ import {
 import {
   ADOPTED_MODELS_CHANGED,
   EnginePairPicker,
+  engineTestKey,
   MODEL_DEFAULT_CHANGED,
 } from "./engine-pair.js";
 import {
@@ -15078,7 +15079,7 @@ function CapabilitiesPanel({
   function sideTest(id: string) {
     return (which: "primary" | "backup", choice: EngineChoiceValue | null) => {
       if (!choice) return null;
-      const key = id + ":" + which;
+      const key = engineTestKey(id, which, choice);
       const running = testing === key;
       // Speaking and Hearing are tested from this device through the row as
       // it stands; their backup cannot be singled out yet, and says so.
@@ -15108,7 +15109,7 @@ function CapabilitiesPanel({
   function sideResult(id: string) {
     return (which: "primary" | "backup", choice: EngineChoiceValue | null) => {
       if (!choice) return null;
-      const result = testResults[id + ":" + which];
+      const result = testResults[engineTestKey(id, which, choice)];
       const separable = !(
         which === "backup" && (id === "speaking" || id === "hearing")
       );
@@ -15136,7 +15137,7 @@ function CapabilitiesPanel({
     which: "primary" | "backup",
     choice: EngineChoiceValue,
   ) {
-    const key = id + ":" + which;
+    const key = engineTestKey(id, which, choice);
     setTesting(key);
     try {
       let result: CapabilityTestResult;
