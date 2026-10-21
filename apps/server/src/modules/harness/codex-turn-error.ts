@@ -1,4 +1,7 @@
-import { OwnerDiagnosticError } from "../../runtime/owner-safe-errors.js";
+import {
+  OwnerDiagnosticError,
+  OwnerModelSelectionError,
+} from "../../runtime/owner-safe-errors.js";
 
 // Both Codex transports must reject a failed/interrupted turn, even if it
 // emitted a partial answer. Only provider messages, never stderr, are classified.
@@ -20,7 +23,7 @@ export function codexTurnFailure(
       detail,
     )
   ) {
-    return new Error("RELAY_MODEL_NOT_AVAILABLE:openai-cli:" + model);
+    return new OwnerModelSelectionError(model, detail);
   }
   if (
     /token.*(expired|revoked)|refresh.*token|unauthorized|authentication|sign in|log in|401/i.test(

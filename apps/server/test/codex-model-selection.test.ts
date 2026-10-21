@@ -124,6 +124,11 @@ describe("selected model reaches Codex on every transport", () => {
       expect(second.model).toBe("screen-choice");
       expect(
         wire.requests
+          .filter((r) => r.method === "turn/start")
+          .map((r) => r.params.model),
+      ).toEqual(["owner-choice", "screen-choice"]);
+      expect(
+        wire.requests
           .filter((r) => r.method === "thread/start")
           .map((r) => r.params.model),
       ).toEqual(["owner-choice", "screen-choice"]);

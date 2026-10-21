@@ -44,22 +44,32 @@ export class OwnerDiagnosticError extends Error {
   }
 }
 
+/** A model refusal is safe to explain without exposing the provider payload. */
+export class OwnerModelSelectionError extends OwnerDiagnosticError {
+  readonly requestedModel: string;
+  readonly refusedModel: string | null;
+  constructor(model: string, detail: string) {
+    super("RELAY_MODEL_NOT_AVAILABLE:openai-cli:" + model, detail);
+    const safeId = (value: string) =>
+      /^[a-zA-Z0-9._:[\]/-]{1,120}$/.test(value) ? value : "selected model";
+    this.requestedModel = safeId(model);
+    const refused = detail.match(
+      /["']([^"'\r\n]{1,120})["']\s+model is not supported/i,
+    )?.[1];
+    this.refusedModel = refused ? safeId(refused) : null;
+    this.message += this.refusedModel ? ":refused=" + this.refusedModel : "";
+  }
+}
+
 export function configureOwnerErrorLog(dataDirectory: string): void {
-  diagnosticLogPath = resolve(
-    dataDirectory,
-    "..",
-    "logs",
-    "owner-errors.log",
-  );
+  diagnosticLogPath = resolve(dataDirectory, "..", "logs", "owner-errors.log");
 }
 
 export function appendBoundedDiagnostic(
   current: string,
   chunk: unknown,
 ): string {
-  return `${current}${String(chunk ?? "")}`.slice(
-    -MAX_CAPTURED_PROCESS_OUTPUT,
-  );
+  return `${current}${String(chunk ?? "")}`.slice(-MAX_CAPTURED_PROCESS_OUTPUT);
 }
 
 /** Remove terminal control codes, likely credentials, and local absolute paths
@@ -188,6 +198,16 @@ export function captureOwnerSafeError(
   writeDiagnostic(diagnosticId, context, error);
   return {
     ...copy,
+    ...(error instanceof OwnerModelSelectionError
+      ? {
+          action: "open_settings" as const,
+          retryable: false,
+          message:
+            language === "zh"
+              ? `Codex 拒绝使用模型 ${error.refusedModel ?? error.requestedModel}（本次选择：${error.requestedModel}）。请到设置 → AI Settings → Models 测试模型并检查连接。没有改用其他模型。`
+              : `Codex refused model ${error.refusedModel ?? error.requestedModel} (selected: ${error.requestedModel}). Open Settings → AI Settings → Models to test the model and check the connection. No other model was used.`,
+        }
+      : {}),
     code,
     dataSafe: true,
     diagnosticId,

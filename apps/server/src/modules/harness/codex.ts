@@ -1320,6 +1320,7 @@ class CodexChatSession {
         method: "turn/start",
         params: {
           approvalPolicy: "never",
+          ...(model && model !== "unknown" ? { model } : {}),
           cwd: this.#cwd,
           input: [
             ...imagePaths.map((path) => ({ type: "localImage", path })),
@@ -1990,6 +1991,7 @@ class CodexAskVaenyxSession {
         method: "turn/start",
         params: {
           approvalPolicy: "never",
+          ...(model && model !== "unknown" ? { model } : {}),
           cwd: this.#cwd,
           // A photo rides as its own input item so the model sees the actual
           // picture (probe-verified 2026-07-28), never a description of it.

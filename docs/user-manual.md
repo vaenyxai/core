@@ -559,6 +559,7 @@ Read this inside the app: **Settings → Manual**.
   model stood in, why the main one could not, and the error code — never a
   quiet swap you meet later as "why does this answer look different".
 - **Text model consistency** — Dinner Planner, other Methods and quick text processing use the model selected on the Text row (or the main model it follows). A per-call test uses the model named on that test. An unavailable model fails; it is never silently replaced.
+- **A refused model is named** — the error identifies the requested model and the model Codex refused, with directions to AI Settings. Retrying does not silently select a different model.
 - **Test results belong to a selection** — changing the provider or model hides results for the old selection. Test is disabled while its choice is being saved.
 - **The main model is a preselection** — the first row of Capabilities. Every
   other row may **follow the main model** instead of naming a backend: it then
@@ -1072,5 +1073,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.13.18-dev** · last updated 2026-10-21.
+Manual for **v0.4.13.19-dev** · last updated 2026-10-21.
 Keep this file up to date whenever a feature changes.

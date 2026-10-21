@@ -13,6 +13,7 @@ import {
   appendBoundedDiagnostic,
   configureOwnerErrorLog,
   OwnerDiagnosticError,
+  OwnerModelSelectionError,
   ownerSafeErrorResponse,
   redactDiagnosticText,
 } from "../src/runtime/owner-safe-errors.js";
@@ -72,6 +73,29 @@ describe("owner-safe error boundary", () => {
     expect(log).not.toContain("top-secret-bearer");
     expect(log).not.toContain("sk-supersecret");
     expect(log).not.toContain("\u001b");
+  });
+
+  it("names the requested and refused models without exposing diagnostics", () => {
+    scratchDataDirectory();
+    const raw =
+      "The 'refused-model' model is not supported when using Codex with a ChatGPT account. api_key=sk-supersecret123456";
+    const error = new OwnerModelSelectionError("chosen-model", raw);
+    for (const language of ["en", "zh"] as const) {
+      const result = ownerSafeErrorResponse(error, "model-response", language);
+      expect(result.ownerError.message).toContain("chosen-model");
+      expect(result.ownerError.message).toContain("refused-model");
+      expect(result.ownerError.action).toBe("open_settings");
+      expect(result.ownerError.retryable).toBe(false);
+      expect(JSON.stringify(result)).not.toContain("sk-supersecret");
+    }
+    const unsafe = ownerSafeErrorResponse(
+      new OwnerModelSelectionError(
+        "C:\\private\\file",
+        "The 'private text' model is not supported",
+      ),
+      "model-response",
+    );
+    expect(unsafe.error).not.toContain("private");
   });
 
   it("bounds accumulated subprocess output and retained diagnostic text", () => {

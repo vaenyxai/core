@@ -2560,10 +2560,9 @@ export async function registerGatewayRoutes(
           requestedModel: model,
           model: null,
           modelReportedByEngine: false,
-          message: (error instanceof Error ? error.message : String(error)).slice(
-            0,
-            300,
-          ),
+          message: error instanceof Error && error.message.startsWith("RELAY_MODEL_NOT_AVAILABLE:")
+            ? ownerSafeErrorText(error, "model-response", pushLanguage()).text
+            : (error instanceof Error ? error.message : String(error)).slice(0, 300),
           durationMs: Date.now() - startedAt,
           timestamp: new Date().toISOString(),
         };
