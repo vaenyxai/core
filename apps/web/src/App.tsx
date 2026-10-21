@@ -1,3 +1,6 @@
+import { DinnerPlanner } from "./dinner-planner";
+import { isDinnerView, readDinnerInput } from "./dinner-planner-data";
+import { downscalePhoto } from "./photo-upload";
 import {
   type CSSProperties,
   type FormEvent,
@@ -1247,27 +1250,6 @@ function IconDocument() {
 }
 
 // (The layers icon moved with the marks tool — see photo-marks.tsx.)
-
-// Downscale a picked/taken photo before upload: phone originals are 5-15MB;
-// 1280px JPEG keeps every fridge item recognisable at a fraction of the size.
-async function downscalePhoto(file: File): Promise<Blob> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
-    if (scale === 1 && file.size < 1_500_000) return file;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const context = canvas.getContext("2d");
-    if (!context) return file;
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return await new Promise<Blob>((resolvePhoto) =>
-      canvas.toBlob((blob) => resolvePhoto(blob ?? file), "image/jpeg", 0.85),
-    );
-  } catch {
-    return file;
-  }
-}
 
 // Take/pick a photo → the vision engine turns it into useful text → the text
 // lands in the composer for the Owner to top up and send (so Routines like
@@ -6975,6 +6957,9 @@ function AskVaenyxPanel({
   const [capabilityTab, setCapabilityTab] = useState<
     "chat" | "journal" | "gallery"
   >("chat");
+  const [dinnerChatMode, setDinnerChatMode] = useState(false);
+  const [dinnerRestore, setDinnerRestore] =
+    useState<RoutineJournalEntry | null>(null);
   // Friendly input (Library v2 ③): a multi-field routine returns a
   // needs-confirmation payload instead of running; this holds the editable
   // confirm card (AI-parsed values as strings, booleans as checks).
@@ -7022,6 +7007,8 @@ function AskVaenyxPanel({
   // Reset the capability tab to Chat when switching chats.
   useEffect(() => {
     setCapabilityTab("chat");
+    setDinnerChatMode(false);
+    setDinnerRestore(null);
   }, [activeConversationId]);
   // Connected model backends, for the composer's provider picker. Fetched once;
   // an empty/failed fetch just hides the picker (Codex-only stays the default).
@@ -8782,6 +8769,12 @@ function AskVaenyxPanel({
   function correctAndRerunRoutineResult(item: RoutineGalleryItem): void {
     const source = sourceForRoutineResult(item);
     if (!source?.chatId || routineInputFields.length === 0) return;
+    if (isDinnerView(item.viewSnapshot) && readDinnerInput(source.content)) {
+      setDinnerRestore({ ...source });
+      setDinnerChatMode(false);
+      setCapabilityTab("chat");
+      return;
+    }
     const input =
       source.content !== null &&
       typeof source.content === "object" &&
@@ -10838,6 +10831,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           (routine) => routine.id === activeThread.routineId,
         ) ?? null)
       : null;
+    const isDinner = isDinnerView(activeRoutine?.view);
     // Header chips (spec §2a): same real-state chips as the sidebar, but the
     // Routine chip shows the Routine's actual name, and an in-flight build adds
     // a Building chip alongside the in-conversation banner.
@@ -11038,18 +11032,26 @@ This conversation is its home — feed it something to try it, and ask for chang
               {(["chat", "journal", "gallery"] as const).map((tab) => (
                 <button
                   className={
-                    capabilityTab === tab
+                    capabilityTab === tab &&
+                    !(isDinner && dinnerChatMode && tab === "chat")
                       ? "capability-tab capability-tab--active"
                       : "capability-tab"
                   }
                   key={tab}
-                  onClick={() => setCapabilityTab(tab)}
+                  onClick={() => {
+                    setCapabilityTab(tab);
+                    if (tab === "chat") setDinnerChatMode(false);
+                  }}
                   type="button"
                 >
                   {tab === "chat"
-                    ? lang === "zh"
-                      ? "对话"
-                      : "Chat"
+                    ? isDinner
+                      ? zh
+                        ? "安排晚餐"
+                        : "Plan Dinner"
+                      : lang === "zh"
+                        ? "对话"
+                        : "Chat"
                     : tab === "journal"
                       ? lang === "zh"
                         ? "记录"
@@ -11059,6 +11061,22 @@ This conversation is its home — feed it something to try it, and ask for chang
                         : "Gallery"}
                 </button>
               ))}
+              {isDinner && (
+                <button
+                  type="button"
+                  className={
+                    dinnerChatMode && capabilityTab === "chat"
+                      ? "capability-tab capability-tab--active dinner-chat-toggle"
+                      : "capability-tab dinner-chat-toggle"
+                  }
+                  onClick={() => {
+                    setDinnerChatMode(true);
+                    setCapabilityTab("chat");
+                  }}
+                >
+                  {zh ? "对话" : "Chat"}
+                </button>
+              )}
             </div>
           ) : null}
         </header>
@@ -11861,8 +11879,32 @@ This conversation is its home — feed it something to try it, and ask for chang
               : "ask-vaenyx-messages"
           }
         >
+          {isDinner && activeConversationId && (
+            <div hidden={capabilityTab !== "chat" || dinnerChatMode}>
+              <DinnerPlanner
+                key={activeConversationId}
+                conversationId={activeConversationId}
+                language={lang}
+                journal={routineJournal}
+                gallery={routineGallery}
+                visionReady={visionReady}
+                restore={dinnerRestore}
+                onSaved={async () => {
+                  const id = activeConversationId;
+                  const data = await fetchChatRoutineData(id);
+                  if (activeConversationIdRef.current !== id) return;
+                  setRoutineJournal(data.journal);
+                  setRoutineGallery(data.gallery);
+                  setRoutineInputFields(data.inputFields);
+                  await onWorkspaceRefresh();
+                }}
+              />
+            </div>
+          )}
           {isRoutine ? (
-            capabilityTab === "journal" ? (
+            isDinner &&
+            capabilityTab === "chat" &&
+            !dinnerChatMode ? null : capabilityTab === "journal" ? (
               routineJournal.length === 0 ? (
                 <div className="empty-state">
                   <strong>
@@ -11942,6 +11984,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                             : undefined
                         }
                         output={item.output}
+                        outputValid={item.outputValid}
                         view={
                           "viewSnapshot" in item
                             ? item.viewSnapshot
@@ -12047,6 +12090,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                             : undefined
                         }
                         output={node.item.output}
+                        outputValid={node.item.outputValid}
                         view={
                           "viewSnapshot" in node.item
                             ? node.item.viewSnapshot
@@ -12285,12 +12329,18 @@ This conversation is its home — feed it something to try it, and ask for chang
           ) : null}
           <div className="chat-end-anchor" ref={chatEndRef} />
         </div>
-        <JumpToLatest
-          resetKey={activeConversationId ?? ""}
-          targetRef={chatEndRef}
-        />
+        {!(isDinner && !dinnerChatMode) && (
+          <JumpToLatest
+            resetKey={activeConversationId ?? ""}
+            targetRef={chatEndRef}
+          />
+        )}
 
-        <form className="ask-vaenyx-composer" onSubmit={sendMessage}>
+        <form
+          className="ask-vaenyx-composer"
+          hidden={isDinner && !dinnerChatMode}
+          onSubmit={sendMessage}
+        >
           {renderDraftRecoveryNotice()}
           <Composer
             busy={sending}

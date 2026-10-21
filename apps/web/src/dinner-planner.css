@@ -1,0 +1,419 @@
+.dinner-planner {
+  --dinner-accent: #557659;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  color: var(--text, inherit);
+  padding: 8px 4px 32px;
+}
+.dinner-intro {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0 22px;
+}
+.dinner-intro h2 {
+  margin: 5px 0 8px;
+  font-size: clamp(23px, 3vw, 32px);
+  letter-spacing: -0.03em;
+}
+.dinner-intro p {
+  margin: 0;
+  opacity: 0.72;
+  line-height: 1.6;
+  max-width: 560px;
+}
+.dinner-eyebrow {
+  color: var(--dinner-accent);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.dinner-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.1fr);
+  gap: 20px;
+  align-items: start;
+}
+.dinner-form {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.dinner-module,
+.dinner-output {
+  border: 1px solid color-mix(in srgb, currentColor 13%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--dinner-accent) 3%, transparent);
+  overflow: hidden;
+}
+.dinner-module {
+  padding: 20px;
+}
+.dinner-module legend {
+  padding: 0 8px;
+  font-size: 15px;
+  font-weight: 650;
+}
+.dinner-module legend span {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dinner-accent) 14%, transparent);
+  color: var(--dinner-accent);
+  margin-right: 8px;
+  font-size: 12px;
+}
+.dinner-module label:not(.dinner-photo-picker) {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.dinner-module input,
+.dinner-module textarea,
+.dinner-module select {
+  color: inherit;
+  background: var(--surface, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 10px;
+  padding: 11px 12px;
+  font: inherit;
+  font-weight: 400;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+.dinner-module textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+.dinner-module :is(input, textarea, select):focus-visible,
+.dinner-planner button:focus-visible,
+.dinner-photo-picker:focus-within {
+  outline: 2px solid var(--dinner-accent);
+  outline-offset: 3px;
+}
+.dinner-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.dinner-module small,
+.dinner-save-note {
+  display: block;
+  font-size: 12px;
+  opacity: 0.68;
+  line-height: 1.6;
+  font-weight: 400;
+}
+.dinner-planner button {
+  min-height: 44px;
+}
+.dinner-generate {
+  width: 100%;
+  padding: 15px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--dinner-accent);
+  color: white;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.dinner-planner button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dinner-save-note {
+  text-align: center;
+  margin: -4px 0 0;
+}
+.dinner-photo-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  min-height: 44px;
+  border: 1px dashed color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.dinner-photo-picker input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.dinner-photo-picker.is-disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dinner-photos p:empty {
+  display: none;
+}
+.dinner-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.dinner-photo-grid figure {
+  position: relative;
+  margin: 0;
+}
+.dinner-photo-grid img {
+  width: 100%;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.dinner-photo-grid button {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  min-width: 44px;
+  background: #fff;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  font-size: 20px;
+}
+.dinner-output {
+  min-width: 0;
+}
+.dinner-empty {
+  min-height: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  text-align: center;
+}
+.dinner-empty > span {
+  display: grid;
+  place-items: center;
+  font-size: 40px;
+  background: color-mix(in srgb, var(--dinner-accent) 9%, transparent);
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  margin-bottom: 12px;
+}
+.dinner-empty h3 {
+  font-size: 21px;
+  margin-bottom: 6px;
+}
+.dinner-empty p {
+  opacity: 0.68;
+  line-height: 1.7;
+  max-width: 280px;
+}
+.dinner-result-heading {
+  padding: 26px;
+  background: color-mix(in srgb, var(--dinner-accent) 9%, transparent);
+}
+.dinner-result h2 {
+  font-size: 25px;
+  letter-spacing: -0.025em;
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+.dinner-result p {
+  line-height: 1.7;
+  margin: 8px 0;
+}
+.dinner-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.dinner-pills span {
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 30px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+.dinner-result section {
+  padding: 0 24px 16px;
+}
+.dinner-result h3 {
+  font-size: 15px;
+  margin: 24px 0 12px;
+}
+.dinner-ingredient-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.dinner-ingredient-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 9%, transparent);
+  font-size: 13px;
+}
+.dinner-ingredient-list small {
+  display: block;
+  opacity: 0.65;
+  margin-top: 4px;
+}
+.dinner-source {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.dinner-source--available {
+  color: var(--dinner-accent);
+}
+.dinner-source--buy,
+.dinner-source--check {
+  color: #a36a29;
+}
+.dinner-shopping label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dinner-shopping input {
+  accent-color: var(--dinner-accent);
+  width: 18px;
+  height: 18px;
+}
+.dinner-shopping label:has(input:checked) span {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+.dinner-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dinner-steps li {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.dinner-steps li > span {
+  flex: 0 0 26px;
+  height: 26px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+}
+.dinner-steps p {
+  margin: 0;
+}
+.dinner-notes ul {
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.dinner-error,
+.dinner-stale {
+  margin: 0;
+  padding: 14px 18px;
+  background: color-mix(in srgb, #c48d3e 12%, transparent);
+  line-height: 1.6;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.dinner-result-footer {
+  padding: 12px 24px;
+  font-size: 11px;
+  opacity: 0.6;
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.dinner-result,
+.dinner-module {
+  overflow-wrap: anywhere;
+}
+.dinner-chat-toggle {
+  margin-left: auto;
+}
+@media (max-width: 760px) {
+  .dinner-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dinner-intro {
+    display: block;
+  }
+  .dinner-intro button {
+    margin-top: 8px;
+  }
+  .dinner-module {
+    padding: 15px;
+  }
+  .dinner-result-heading {
+    padding: 22px;
+  }
+  .dinner-planner {
+    padding: 4px 0 24px;
+  }
+  .dinner-empty {
+    min-height: 230px;
+  }
+  .dinner-result section {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  .dinner-planner {
+    --dinner-accent: #8baa86;
+  }
+  .dinner-generate {
+    background: #526c50;
+  }
+}
+
+.dinner-module .dinner-review {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.dinner-review input {
+  width: 18px;
+  min-height: 18px;
+  flex: 0 0 18px;
+  accent-color: var(--dinner-accent);
+}
+.ask-vaenyx-composer[hidden] {
+  display: none;
+}
+
+.dinner-output,
+.dinner-form {
+  scroll-margin-top: 150px;
+}
+@media (max-width: 760px) {
+  .dinner-intro {
+    padding-bottom: 12px;
+  }
+  .dinner-generate {
+    position: sticky;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 2;
+    box-shadow: 0 5px 20px #0003;
+  }
+}

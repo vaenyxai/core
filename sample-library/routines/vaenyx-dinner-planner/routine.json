@@ -1,0 +1,81 @@
+{
+  "name": "Dinner Planner",
+  "description": "Turn ingredients, a photo and tonight's preferences into one practical dinner, with a shopping list and cooking steps.",
+  "owner": "vaenyx",
+  "version": "1.0.0",
+  "tags": [
+    "first-party",
+    "household",
+    "dinner"
+  ],
+  "mode": "accumulate",
+  "storage": {
+    "journal": true,
+    "gallery": true
+  },
+  "deps": [
+    {
+      "methodId": "vaenyx-dinner-planner",
+      "version": "1.0.0"
+    }
+  ],
+  "flow": [
+    {
+      "id": "plan-dinner",
+      "methodId": "vaenyx-dinner-planner",
+      "from": "journal"
+    }
+  ],
+  "annotateFocus": "Visible food ingredients only. Do not infer hidden contents, quantities, freshness, or allergy safety.",
+  "view": {
+    "version": 1,
+    "layout": "dinner-planner-v1",
+    "fields": [
+      {
+        "key": "title",
+        "as": "title"
+      },
+      {
+        "key": "summary",
+        "as": "text",
+        "label": "Tonight",
+        "labelZh": "今晚"
+      },
+      {
+        "key": "ingredients",
+        "as": "table",
+        "label": "Ingredients",
+        "labelZh": "食材",
+        "columns": [
+          {
+            "key": "name",
+            "label": "Ingredient",
+            "labelZh": "食材"
+          },
+          {
+            "key": "quantity",
+            "label": "Quantity",
+            "labelZh": "用量"
+          },
+          {
+            "key": "source",
+            "label": "Source",
+            "labelZh": "来源"
+          }
+        ]
+      },
+      {
+        "key": "steps",
+        "as": "bullets",
+        "label": "Cook",
+        "labelZh": "烹饪步骤"
+      },
+      {
+        "key": "notes",
+        "as": "bullets",
+        "label": "Check",
+        "labelZh": "请确认"
+      }
+    ]
+  }
+}

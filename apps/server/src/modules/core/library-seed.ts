@@ -1,4 +1,5 @@
-﻿import { createHash } from "node:crypto";
+import { seedDinnerPlanner } from "./library-seed-dinner.js";
+import { createHash } from "node:crypto";
 import {
   copyFileSync,
   cpSync,
@@ -249,5 +250,6 @@ export function seedLibraryIfEmpty(config: AppConfig): boolean {
   ) {
     copied = true;
   }
+  if (seedDinnerPlanner(config, sampleMethods, sampleRoutines)) copied = true;
   return copied;
 }

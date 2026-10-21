@@ -3765,6 +3765,11 @@ export async function registerGatewayRoutes(
         !request.body.input &&
         capabilityRefusal("vision", owner, runLanguage),
       );
+      if (visionRefused)
+        photoError =
+          runLanguage === "zh"
+            ? "照片识别已关闭，请手动填写。"
+            : "Vision is switched off. Enter the ingredients manually.";
       if (request.body.imageId && !request.body.input && !visionRefused) {
         const found = readImage(
           context.config.dataDirectory,

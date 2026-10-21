@@ -17,3 +17,7 @@ routines/*
 !routines/vaenyx-receipt-record/
 !routines/vaenyx-warranty-manual-record/
 !routines/vaenyx-material-takeoff/
+
+# Modular dinner planning package:
+!methods/vaenyx-dinner-planner/
+!routines/vaenyx-dinner-planner/

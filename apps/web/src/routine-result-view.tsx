@@ -1,3 +1,6 @@
+import { DinnerResult } from "./dinner-result";
+import { isDinnerView } from "./dinner-planner-data";
+import "./dinner-planner.css";
 import {
   MAX_FIELDS,
   MAX_LIST_ITEMS,
@@ -51,13 +54,29 @@ export function RoutineResultView({
   language = "en",
   onCorrectAndRerun,
   onRerun,
+  outputValid,
 }: {
   output: unknown;
+  outputValid?: boolean;
   view?: unknown;
   language?: ResultLanguage;
   onCorrectAndRerun?: () => void;
   onRerun?: () => void;
 }) {
+  if (isDinnerView(view))
+    return (
+      <div className="dinner-planner">
+        <DinnerResult
+          output={outputValid === false ? null : output}
+          language={language}
+        />
+        <ResultActions
+          language={language}
+          onCorrectAndRerun={onCorrectAndRerun}
+          onRerun={onRerun}
+        />
+      </div>
+    );
   const noResult = language === "zh" ? "没有结果。" : "No result.";
   if (output === null || output === undefined) {
     return <p className="settings-card-copy">{noResult}</p>;

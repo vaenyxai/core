@@ -1,0 +1,196 @@
+{
+  "input": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "ingredients",
+      "servings",
+      "minutes"
+    ],
+    "properties": {
+      "ingredients": {
+        "type": "string",
+        "maxLength": 6000,
+        "minLength": 1,
+        "description": "Confirmed available ingredients, including quantities when known. Photo guesses must be reviewed."
+      },
+      "servings": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 12,
+        "description": "Number of people eating."
+      },
+      "minutes": {
+        "type": "integer",
+        "minimum": 10,
+        "maximum": 180,
+        "description": "Maximum total preparation and cooking time in minutes."
+      },
+      "avoid": {
+        "type": "string",
+        "maxLength": 2000,
+        "description": "Ingredients to avoid, allergies and dietary restrictions. Empty means not specified, not allergy-free."
+      },
+      "equipment": {
+        "type": "string",
+        "maxLength": 1000,
+        "description": "Available kitchen equipment."
+      },
+      "preferences": {
+        "type": "string",
+        "maxLength": 2000,
+        "description": "Cuisine, taste or other requests."
+      },
+      "language": {
+        "type": "string",
+        "enum": [
+          "en",
+          "zh"
+        ],
+        "readOnly": true
+      },
+      "attachments": {
+        "type": "array",
+        "maxItems": 5,
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "assetId",
+            "name",
+            "role"
+          ],
+          "properties": {
+            "assetId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "role": {
+              "const": "ingredients"
+            }
+          }
+        }
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "status",
+      "title",
+      "summary",
+      "servings",
+      "minutes",
+      "ingredients",
+      "steps",
+      "notes"
+    ],
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": [
+          "ready",
+          "needs-input"
+        ]
+      },
+      "title": {
+        "type": "string",
+        "maxLength": 160,
+        "minLength": 1
+      },
+      "summary": {
+        "type": "string",
+        "maxLength": 800,
+        "minLength": 1
+      },
+      "servings": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 12
+      },
+      "minutes": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 180
+      },
+      "ingredients": {
+        "type": "array",
+        "maxItems": 30,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "quantity",
+            "source"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 120,
+              "minLength": 1
+            },
+            "quantity": {
+              "type": "string",
+              "maxLength": 120,
+              "minLength": 1
+            },
+            "source": {
+              "enum": [
+                "available",
+                "buy",
+                "check"
+              ]
+            }
+          }
+        }
+      },
+      "steps": {
+        "type": "array",
+        "maxItems": 12,
+        "items": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1
+        }
+      },
+      "notes": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+          "type": "string",
+          "maxLength": 500,
+          "minLength": 1
+        }
+      }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "status": {
+              "const": "ready"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "ingredients": {
+              "minItems": 1
+            },
+            "steps": {
+              "minItems": 1
+            }
+          }
+        }
+      }
+    ]
+  }
+}

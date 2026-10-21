@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "network": false,
+    "readFiles": false
+  },
+  "learning": {
+    "enabled": true,
+    "captures": [
+      "owner-corrected-input"
+    ]
+  }
+}

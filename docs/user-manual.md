@@ -347,6 +347,9 @@ Read this inside the app: **Settings → Manual**.
 
 ## 6. Methods and Routines
 
+- **Dinner Planner** — open **Library → Routines → Dinner Planner → Use**. Its conversation opens a modular **Plan Dinner** screen. Add ingredients (or up to five photos), review any photo suggestions, set servings and total time, then press **Plan My Dinner**. Avoidances, equipment and preferences are optional and visible before running.
+- **Dinner results** — see quantities, available ingredients, things to buy or check, and numbered cooking steps. Changing an input marks the previous result as out of date; **Plan Dinner Again** creates a new saved result. **Journal** and **Gallery** keep previous runs; **Correct & Rerun** brings a saved input back into the planner. Shopping ticks are a temporary checklist. Photo reading requires a connected Vision model; typing works without it. The connected text model generates the dinner. Failed generation keeps the current inputs. Unsubmitted input changes stay while switching planner/history tabs, but are not saved when leaving the conversation or refreshing.
+
 - **Method** — one small job Vaenyx knows how to do, described in plain steps.
 - **Routine** — a finished thing you use, made of one or more Methods. It looks
   like a chat that grows extra buttons (Journal, Gallery) as you use it. When a
@@ -1067,5 +1070,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.13** · last updated 2026-09-26.
+Manual for **v0.4.13.17-dev** · last updated 2026-10-21.
 Keep this file up to date whenever a feature changes.
