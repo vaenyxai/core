@@ -6,6 +6,7 @@ export {
   OwnerSafeErrorSchema,
   formatOwnerSafeError,
   ownerSafeErrorCopy,
+  ownerModelRefusalCopy,
   type OwnerSafeError,
   type OwnerSafeErrorAction,
   type OwnerSafeErrorCode,

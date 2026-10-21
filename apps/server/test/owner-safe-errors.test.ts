@@ -82,6 +82,8 @@ describe("owner-safe error boundary", () => {
     const error = new OwnerModelSelectionError("chosen-model", raw);
     for (const language of ["en", "zh"] as const) {
       const result = ownerSafeErrorResponse(error, "model-response", language);
+      expect(result.error).toContain("chosen-model");
+      expect(result.error).toContain("refused-model");
       expect(result.ownerError.message).toContain("chosen-model");
       expect(result.ownerError.message).toContain("refused-model");
       expect(result.ownerError.action).toBe("open_settings");

@@ -38,6 +38,18 @@ export const OwnerSafeErrorSchema = Type.Object(
     diagnosticId: Type.String({ minLength: 8, maxLength: 40 }),
     message: Type.String(),
     retryable: Type.Boolean(),
+    modelRefusal: Type.Optional(
+      Type.Object(
+        {
+          requestedModel: Type.String({ maxLength: 120 }),
+          refusedModel: Type.Union([
+            Type.String({ maxLength: 120 }),
+            Type.Null(),
+          ]),
+        },
+        { additionalProperties: false },
+      ),
+    ),
   },
   { additionalProperties: false },
 );
@@ -154,11 +166,27 @@ export function ownerSafeErrorCopy(
   };
 }
 
+export function ownerModelRefusalCopy(
+  model: { requestedModel: string; refusedModel: string | null },
+  language: "en" | "zh",
+): Pick<OwnerSafeError, "action" | "message" | "retryable"> {
+  return {
+    action: "open_settings",
+    retryable: false,
+    message:
+      language === "zh"
+        ? `Codex 拒绝使用模型 ${model.refusedModel ?? model.requestedModel}（本次选择：${model.requestedModel}）。请到设置 → AI Settings → Models 测试模型并检查连接。没有改用其他模型。`
+        : `Codex refused model ${model.refusedModel ?? model.requestedModel} (selected: ${model.requestedModel}). Open Settings → AI Settings → Models to test the model and check the connection. No other model was used.`,
+  };
+}
+
 export function formatOwnerSafeError(
   error: OwnerSafeError,
   language: "en" | "zh",
 ): string {
-  const copy = ownerSafeErrorCopy(error.code, language);
+  const copy = error.modelRefusal
+    ? ownerModelRefusalCopy(error.modelRefusal, language)
+    : ownerSafeErrorCopy(error.code, language);
   return language === "zh"
     ? `${copy.message} 错误 ${error.code} · 诊断编号 ${error.diagnosticId}`
     : `${copy.message} Error ${error.code} · Diagnostic ${error.diagnosticId}`;

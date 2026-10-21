@@ -27,6 +27,26 @@ describe("OwnerSafeError", () => {
     );
   });
 
+  it("keeps named model refusals when the browser changes language", () => {
+    const error = {
+      ...ownerSafeErrorCopy("VX-MODEL-RESPONSE", "en"),
+      code: "VX-MODEL-RESPONSE" as const,
+      dataSafe: true as const,
+      diagnosticId: "vx-test-model-refusal",
+      modelRefusal: {
+        requestedModel: "chosen-model",
+        refusedModel: "refused-model",
+      },
+    };
+    expect(Value.Check(OwnerSafeErrorSchema, error)).toBe(true);
+    expect(formatOwnerSafeError(error, "en")).toContain(
+      "Codex refused model refused-model (selected: chosen-model)",
+    );
+    expect(formatOwnerSafeError(error, "zh")).toContain(
+      "Codex 拒绝使用模型 refused-model（本次选择：chosen-model）",
+    );
+  });
+
   it("gives equivalent English and Chinese remedies", () => {
     const en = ownerSafeErrorCopy("VX-MODEL-CONNECT", "en");
     const zh = ownerSafeErrorCopy("VX-MODEL-CONNECT", "zh");

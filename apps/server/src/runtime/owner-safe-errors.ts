@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import {
   formatOwnerSafeError,
   ownerSafeErrorCopy,
+  ownerModelRefusalCopy,
   type OwnerSafeError,
   type OwnerSafeErrorCode,
 } from "@vaenyx/contracts";
@@ -200,12 +201,11 @@ export function captureOwnerSafeError(
     ...copy,
     ...(error instanceof OwnerModelSelectionError
       ? {
-          action: "open_settings" as const,
-          retryable: false,
-          message:
-            language === "zh"
-              ? `Codex 拒绝使用模型 ${error.refusedModel ?? error.requestedModel}（本次选择：${error.requestedModel}）。请到设置 → AI Settings → Models 测试模型并检查连接。没有改用其他模型。`
-              : `Codex refused model ${error.refusedModel ?? error.requestedModel} (selected: ${error.requestedModel}). Open Settings → AI Settings → Models to test the model and check the connection. No other model was used.`,
+          ...ownerModelRefusalCopy(error, language),
+          modelRefusal: {
+            requestedModel: error.requestedModel,
+            refusedModel: error.refusedModel,
+          },
         }
       : {}),
     code,
