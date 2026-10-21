@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const wire = vi.hoisted(() => ({
+  version: "0.137.0",
+  installs: [] as { packageName: string; prefix: string }[],
   requests: [] as { method: string; params: Record<string, unknown> }[],
   starts: [] as string[][],
   echoedModel: null as string | null,
@@ -17,6 +19,13 @@ vi.mock("node:fs", async (original) => ({
 vi.mock("../src/modules/core/relay-usage.js", () => ({
   noteCoreUsage: vi.fn(),
 }));
+vi.mock("../src/modules/core/component-install.js", () => ({
+  installComponent: async (options: { packageName: string; prefix: string }) => {
+    wire.installs.push(options);
+    wire.version = "0.163.0";
+    return { ok: true, detail: "installed" };
+  },
+}));
 vi.mock("node:child_process", async () => {
   const { EventEmitter } = await import("node:events");
   const { PassThrough, Writable } = await import("node:stream");
@@ -24,7 +33,7 @@ vi.mock("node:child_process", async () => {
     spawnSync: (_command: unknown, args: string[]) => ({
       status: 0,
       stdout: args.includes("--version")
-        ? "codex 0.0.0-test"
+        ? "codex-cli " + wire.version
         : "Logged in using ChatGPT",
       stderr: "",
     }),
@@ -216,5 +225,34 @@ describe("selected model reaches Codex on every transport", () => {
         { allowWeb: false },
       ),
     ).rejects.toThrow("CODEX_CHAT_BOUNDARY_VIOLATION");
+  });
+});
+
+const { ensureCodexInstalled, invalidateCodexStatus } = await import("../src/modules/harness/codex.js");
+describe("managed Codex component update", () => {
+  it("keeps an existing component until the Owner requests an update", async () => {
+    wire.version = "0.137.0";
+    wire.installs.length = 0;
+    invalidateCodexStatus();
+    expect(await ensureCodexInstalled()).toEqual({ status: "ready" });
+    expect(wire.installs).toHaveLength(0);
+  });
+  it("updates the official version in a separate folder and reuses the connection", async () => {
+    wire.version = "0.137.0";
+    wire.installs.length = 0;
+    invalidateCodexStatus();
+    expect(await ensureCodexInstalled(true)).toEqual({ status: "installed" });
+    expect(wire.installs).toHaveLength(1);
+    expect(wire.installs[0]?.packageName).toBe("@openai/codex@0.163.0");
+    expect(wire.installs[0]?.prefix).toMatch(/codex-0\.163\.0$/);
+    expect(await ensureCodexInstalled(true)).toEqual({ status: "ready" });
+    expect(wire.installs).toHaveLength(1);
+  });
+  it("does not downgrade a newer working CLI", async () => {
+    wire.version = "0.164.0";
+    wire.installs.length = 0;
+    invalidateCodexStatus();
+    expect(await ensureCodexInstalled(true)).toEqual({ status: "ready" });
+    expect(wire.installs).toHaveLength(0);
   });
 });

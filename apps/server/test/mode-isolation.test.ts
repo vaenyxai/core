@@ -270,6 +270,7 @@ describe("the cross-Mode audit", () => {
       ["POST", "/v1/models/providers/openai", { apiKey: "sk-test-not-real" }],
       ["DELETE", "/v1/models/providers/openai"],
       ["POST", "/v1/models/codex/login"],
+      ["POST", "/v1/models/codex/component"],
       ["GET", "/v1/models/codex/login/00000000-0000-4000-8000-000000000000"],
       ["PUT", "/v1/capabilities", { fetching: true }],
       ["GET", `/v1/capabilities/modes/${modeId}`],

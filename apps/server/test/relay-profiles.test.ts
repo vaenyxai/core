@@ -213,6 +213,7 @@ describe("relay profiles", () => {
       { method: "GET", url: "/v1/settings" },
       { method: "GET", url: "/v1/models/providers" },
       { method: "POST", url: "/v1/models/codex/login" },
+      { method: "POST", url: "/v1/models/codex/component" },
       { method: "GET", url: "/v1/models/codex/login/00000000-0000-4000-8000-000000000000" },
       { method: "GET", url: "/v1/app-profiles" },
     ] as const) {

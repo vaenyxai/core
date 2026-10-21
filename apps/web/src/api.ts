@@ -877,6 +877,10 @@ export function startCodexLogin(): Promise<{
   }>("/v1/models/codex/login", { method: "POST" });
 }
 
+export function updateCodexComponent(): Promise<{ providers: ModelProviderInfo[] }> {
+  return requestJson("/v1/models/codex/component", { method: "POST" });
+}
+
 export function fetchCodexLoginStatus(attemptId: string): Promise<{
   status: "pending" | "succeeded" | "failed" | "unknown";
 }> {

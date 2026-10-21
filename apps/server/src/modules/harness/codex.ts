@@ -120,6 +120,22 @@ export function codexToolsRoot(dataDirectory: string): string {
   return resolve(dataDirectory, "..", "tools");
 }
 
+// Pin the component this integration was checked against. Versioned folders
+// let an old process finish without overwriting its executable or credentials.
+export const CODEX_COMPONENT_VERSION = "0.163.0";
+function codexComponentIsCurrent(version: string | null): boolean {
+  const match = version?.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return false;
+  const installed = match.slice(1, 4).map(Number);
+  const wanted = CODEX_COMPONENT_VERSION.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (installed[index] !== wanted[index]) return installed[index]! > wanted[index]!;
+  }
+  return true;
+}
+function codexComponentPrefix(toolsRoot: string): string {
+  return resolve(toolsRoot, "codex-" + CODEX_COMPONENT_VERSION);
+}
 let vaenyxCodexHome: string | null = null;
 
 /** Told to the harness once the config is known, so the lookup can prefer
@@ -145,6 +161,7 @@ function findNpmGlobalCodexScript(): string | null {
   const candidates: string[] = [];
   // Vaenyx's own copy first: it is the one this build installs.
   if (vaenyxCodexHome) {
+    candidates.push(resolve(codexComponentPrefix(vaenyxCodexHome), "node_modules", "@openai", "codex", "bin", "codex.js"));
     candidates.push(resolve(vaenyxCodexHome, ...npmSuffix));
     // npm on Windows puts a --prefix install directly under the prefix.
     candidates.push(
@@ -468,21 +485,22 @@ function probeCodexStatus(): CodexStatus {
 // the first's promise and gets the same answer.
 let codexInstallInFlight: Promise<ComponentEnsureResult> | null = null;
 
-export function ensureCodexInstalled(): Promise<ComponentEnsureResult> {
+export function ensureCodexInstalled(update = false): Promise<ComponentEnsureResult> {
   if (codexInstallInFlight) return codexInstallInFlight;
-  codexInstallInFlight = installCodexOnce().finally(() => {
+  codexInstallInFlight = installCodexOnce(update).finally(() => {
     codexInstallInFlight = null;
   });
   return codexInstallInFlight;
 }
 
-async function installCodexOnce(): Promise<ComponentEnsureResult> {
-  if (getCodexStatus().installed) return { status: "ready" };
+async function installCodexOnce(update: boolean): Promise<ComponentEnsureResult> {
+  const before = getCodexStatus();
+  if (before.installed && (!update || codexComponentIsCurrent(before.version))) return { status: "ready" };
   // --prefix, so the component lands in userdata/tools rather than in the
   // profile of whichever account happens to be running the server. Without
   // it, a SYSTEM-run install goes somewhere the next lookup may not reach,
   // and the button reports "not installed" after installing.
-  const prefix = vaenyxCodexHome ?? codexToolsRoot(loadConfig().dataDirectory);
+  const prefix = codexComponentPrefix(vaenyxCodexHome ?? codexToolsRoot(loadConfig().dataDirectory));
   try {
     mkdirSync(prefix, { recursive: true });
   } catch {
@@ -491,7 +509,7 @@ async function installCodexOnce(): Promise<ComponentEnsureResult> {
   const result = await installComponent({
     dataDirectory: loadConfig().dataDirectory,
     environment: codexEnvironment(),
-    packageName: "@openai/codex",
+    packageName: "@openai/codex@" + CODEX_COMPONENT_VERSION,
     prefix,
     timeoutMs: 5 * 60_000,
   });
@@ -504,7 +522,15 @@ async function installCodexOnce(): Promise<ComponentEnsureResult> {
   // answer has to go as well as the status.
   cachedCodexScript = null;
   invalidateCodexStatus();
-  if (getCodexStatus().installed) return { status: "installed" };
+  const after = getCodexStatus();
+  if (after.installed && codexComponentIsCurrent(after.version)) {
+    endCodexRelaySession("core");
+    chatSession?.end();
+    methodSession?.end();
+    quickSession?.end();
+    askVaenyxSession?.cancel();
+    return { status: "installed" };
+  }
   return {
     status: "install-failed",
     ownerError: captureOwnerSafeError(

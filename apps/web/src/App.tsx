@@ -174,6 +174,7 @@ import {
   disconnectModelProvider,
   startCodexLogin,
   fetchCodexLoginStatus,
+  updateCodexComponent,
   appendConversationNote,
   setDefaultModelProvider,
   setReasoningEffort,
@@ -16644,7 +16645,7 @@ function ModelsPanel({
         <Picker
           ariaLabel={zh ? "型号" : "Model"}
           className="model-finder-select"
-          disabled={state.testing !== null}
+          disabled={state.testing !== null || (provider.id === "codex" && codexUpdating)}
           onChange={(next) => patchFinder(provider.id, { selected: next })}
           options={ids.map((id) => ({
             label: adoptedIds.includes(id)
@@ -16656,7 +16657,7 @@ function ModelsPanel({
         />
         <button
           className="capability-row-test"
-          disabled={state.testing !== null}
+          disabled={state.testing !== null || (provider.id === "codex" && codexUpdating)}
           onClick={() => void testModel(provider, selected)}
           type="button"
         >
@@ -16687,7 +16688,7 @@ function ModelsPanel({
         ) : null}
         </> : null}
         <button className="capability-row-test" type="button"
-          disabled={state.testing !== null}
+          disabled={state.testing !== null || (provider.id === "codex" && codexUpdating)}
           onClick={() => patchFinder(provider.id, { manual: !state.manual })}>
           {zh ? "输入型号" : "Enter Model ID"}
         </button>
@@ -16696,7 +16697,7 @@ function ModelsPanel({
             {zh ? "型号 ID" : "Model ID"}
             <input aria-label={zh ? "型号 ID" : "Model ID"} value={state.entered ?? ""}
               maxLength={120} autoComplete="off" spellCheck={false}
-              disabled={state.testing !== null}
+              disabled={state.testing !== null || (provider.id === "codex" && codexUpdating)}
               onChange={(event) => patchFinder(provider.id, { entered: event.target.value })} />
           </label>
           <button className="capability-row-test" type="button"
@@ -16915,6 +16916,20 @@ function ModelsPanel({
   // (or give up quietly after ~2 minutes — the card just stays as it was).
   // The CLI's own error line surfaces immediately instead of a blind wait,
   // and the sign-in URL is kept as a clickable fallback link.
+  const [codexUpdating, setCodexUpdating] = useState(false);
+  async function updateCodex() {
+    setCodexUpdating(true);
+    setError(null);
+    try {
+      const result = await updateCodexComponent();
+      applyProviders(result.providers);
+      patchFinder("codex", { open: false, models: null, error: null });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not update Codex.");
+    } finally {
+      setCodexUpdating(false);
+    }
+  }
   const [codexWaiting, setCodexWaiting] = useState(false);
   const [codexLoginUrl, setCodexLoginUrl] = useState<string | null>(null);
   async function signInCodex() {
@@ -17498,7 +17513,7 @@ function ModelsPanel({
                   {provider.kind === "cli-login" ? (
                     <button
                       className="capability-row-test"
-                      disabled={codexWaiting}
+                      disabled={codexWaiting || codexUpdating}
                       onClick={() => void signInCodex()}
                       type="button"
                     >
@@ -17509,6 +17524,13 @@ function ModelsPanel({
                         : provider.healthy
                           ? lang === "zh" ? "重新登录 ChatGPT" : "Reconnect ChatGPT"
                           : lang === "zh" ? "登录 ChatGPT" : "Sign In With ChatGPT"}
+                    </button>
+                  ) : null}
+                  {provider.kind === "cli-login" ? (
+                    <button className="capability-row-test" type="button"
+                      disabled={codexWaiting || codexUpdating}
+                      onClick={() => void updateCodex()}>
+                      {codexUpdating ? (lang === "zh" ? "正在更新 Codex…" : "Updating Codex…") : (lang === "zh" ? "更新 Codex" : "Update Codex")}
                     </button>
                   ) : null}
                   {provider.kind !== "cli-login" ? (

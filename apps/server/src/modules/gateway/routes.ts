@@ -2270,6 +2270,24 @@ export async function registerGatewayRoutes(
     },
   );
 
+  app.post("/v1/models/codex/component", {
+    schema: { response: { 200: ModelProvidersResponseSchema, 401: ErrorResponseSchema, 503: ErrorResponseSchema } },
+  }, async (request, reply) => {
+    const owner = requireOwner(request);
+    if (!owner) return reply.code(401).send({ error: "Owner login required." });
+    recordAudit(context.database, {
+      actorType: "owner", actorId: owner.id, actorName: owner.name,
+      action: "model.codex.update", decision: "allowed",
+      reason: "Owner updated the official Codex component without changing the login or selected model.",
+      resourceType: "system",
+    });
+    const result = await ensureCodexInstalled(true);
+    if (result.status === "install-failed") {
+      return reply.code(503).send({ error: result.ownerError });
+    }
+    return { providers: listModelProviders(context.config.secretsDirectory) };
+  });
+
   app.get<{ Params: { attemptId: string } }>(
     "/v1/models/codex/login/:attemptId",
     {
