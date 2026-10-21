@@ -212,6 +212,8 @@ describe("relay profiles", () => {
     for (const request of [
       { method: "GET", url: "/v1/settings" },
       { method: "GET", url: "/v1/models/providers" },
+      { method: "POST", url: "/v1/models/codex/login" },
+      { method: "GET", url: "/v1/models/codex/login/00000000-0000-4000-8000-000000000000" },
       { method: "GET", url: "/v1/app-profiles" },
     ] as const) {
       const response = await app.inject({
@@ -223,6 +225,14 @@ describe("relay profiles", () => {
       });
       expect(response.statusCode).toBe(401);
     }
+  });
+
+  it("Codex login status is Owner-only and exposes only a phase", async () => {
+    const url = "/v1/models/codex/login/00000000-0000-4000-8000-000000000000";
+    expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
+    const response = await app.inject({ method: "GET", url, headers: { cookie } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: "unknown" });
   });
 
   it("rotate: the new key works, the old key is dead, the version moved", async () => {

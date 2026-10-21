@@ -173,6 +173,7 @@ import {
   connectModelProvider,
   disconnectModelProvider,
   startCodexLogin,
+  fetchCodexLoginStatus,
   appendConversationNote,
   setDefaultModelProvider,
   setReasoningEffort,
@@ -16500,6 +16501,9 @@ function ModelsPanel({
     models: string[] | null;
     error: string | null;
     testing: string | null;
+    manual?: boolean;
+    entered?: string;
+    candidate?: string;
     /** The model picked in the menu; Test and Use act on it. */
     selected: string | null;
   }
@@ -16608,7 +16612,7 @@ function ModelsPanel({
     const adoptedIds = (adopted?.adopted[provider.id] ?? []).map(
       (entry) => entry.id,
     );
-    const found = state.models ?? [];
+    const found = [...new Set([...(state.models ?? []), ...(state.candidate ? [state.candidate] : [])])];
     // Adopted models first, whether or not today's list still names them:
     // a model in use is never hidden by a list that failed to load.
     const ids = [
@@ -16632,10 +16636,11 @@ function ModelsPanel({
   function finderControls(provider: ModelProviderInfo) {
     const { state, adoptedIds, ids, selected, test, inUse } =
       finderSelection(provider);
-    if (!state.open || !selected) return null;
+    if (!state.open) return null;
     const zh = lang === "zh";
     return (
       <>
+        {selected ? <>
         <Picker
           ariaLabel={zh ? "型号" : "Model"}
           className="model-finder-select"
@@ -16680,6 +16685,32 @@ function ModelsPanel({
             {zh ? "使用" : "Use"}
           </button>
         ) : null}
+        </> : null}
+        <button className="capability-row-test" type="button"
+          disabled={state.testing !== null}
+          onClick={() => patchFinder(provider.id, { manual: !state.manual })}>
+          {zh ? "输入型号" : "Enter Model ID"}
+        </button>
+        {state.manual ? <div className="model-finder-manual">
+          <label>
+            {zh ? "型号 ID" : "Model ID"}
+            <input aria-label={zh ? "型号 ID" : "Model ID"} value={state.entered ?? ""}
+              maxLength={120} autoComplete="off" spellCheck={false}
+              disabled={state.testing !== null}
+              onChange={(event) => patchFinder(provider.id, { entered: event.target.value })} />
+          </label>
+          <button className="capability-row-test" type="button"
+            disabled={state.testing !== null || !/^[a-zA-Z0-9._:/-]{1,120}$/.test(state.entered?.trim() ?? "")}
+            onClick={() => {
+              const model = state.entered?.trim();
+              if (model) patchFinder(provider.id, { candidate: model, selected: model, manual: false, error: null });
+            }}>
+            {zh ? "加入待测" : "Add To Test"}
+          </button>
+          <p className="library-note">{zh
+            ? "目录可能滞后。可输入厂商公布的型号；必须真实测试成功后才能使用，不会自动更换主模型。"
+            : "Catalogues can lag behind. Enter a model ID published by the provider, then Test it. Only a successful test enables Use; your main model stays unchanged."}</p>
+        </div> : null}
       </>
     );
   }
@@ -16897,7 +16928,7 @@ function ModelsPanel({
     setError(null);
     setCodexLoginUrl(null);
     try {
-      const { url, detail, cliWindowVisible } = await startCodexLogin();
+      const { url, detail, cliWindowVisible, attemptId } = await startCodexLogin();
       if (detail) {
         setError(codexSignInError(detail, false));
         return;
@@ -16908,6 +16939,14 @@ function ModelsPanel({
       }
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await new Promise((resolveWait) => setTimeout(resolveWait, 3000));
+        if (attemptId) {
+          const login = await fetchCodexLoginStatus(attemptId);
+          if (login.status === "pending") continue;
+          if (login.status !== "succeeded") {
+            setError(lang === "zh" ? "这次 ChatGPT 登录未完成。请重新登录。" : "This ChatGPT sign-in did not complete. Please sign in again.");
+            return;
+          }
+        }
         const result = await fetchModelProviders();
         setProviders(result.providers);
         if (result.providers.find((p) => p.id === "codex")?.healthy) {
@@ -17456,7 +17495,7 @@ function ModelsPanel({
                         ? "找型号"
                         : "Find models"}
                   </button>
-                  {provider.kind === "cli-login" && !provider.healthy ? (
+                  {provider.kind === "cli-login" ? (
                     <button
                       className="capability-row-test"
                       disabled={codexWaiting}
@@ -17467,7 +17506,9 @@ function ModelsPanel({
                         ? codexLoginUrl
                           ? "Waiting For Sign-In..."
                           : "Preparing The ChatGPT Sign-In (About A Minute)..."
-                        : "Sign In With ChatGPT"}
+                        : provider.healthy
+                          ? lang === "zh" ? "重新登录 ChatGPT" : "Reconnect ChatGPT"
+                          : lang === "zh" ? "登录 ChatGPT" : "Sign In With ChatGPT"}
                     </button>
                   ) : null}
                   {provider.kind !== "cli-login" ? (
@@ -17523,7 +17564,7 @@ function ModelsPanel({
                     </>
                   ) : null}
                 </div>
-                {provider.kind === "cli-login" && !provider.healthy ? (
+                {provider.kind === "cli-login" ? (
                   <>
                     {/* F1 (copy pack): a cloud-provider connect surface carries
                         the third-party notice. This sign-in IS the Codex
@@ -30331,7 +30372,7 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      const { url, detail, cliWindowVisible } = await startCodexLogin();
+      const { url, detail, cliWindowVisible, attemptId } = await startCodexLogin();
       if (detail) {
         setError(codexSignInError(detail, zh));
         setBusy(false);
@@ -30344,6 +30385,14 @@ function ModelConnectStep({ onDone }: { onDone: () => void }) {
       setCodexWaiting(true);
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
+        if (attemptId) {
+          const login = await fetchCodexLoginStatus(attemptId);
+          if (login.status === "pending") continue;
+          if (login.status !== "succeeded") {
+            setError(zh ? "这次 ChatGPT 登录未完成。请重新登录。" : "This ChatGPT sign-in did not complete. Please sign in again.");
+            return;
+          }
+        }
         const result = await fetchModelProviders().catch(() => null);
         if (result) setProviders(result.providers);
         const codex = result?.providers.find(

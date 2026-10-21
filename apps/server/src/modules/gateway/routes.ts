@@ -702,6 +702,7 @@ import {
   listCodexRelayModels,
   runForgeReadOnly,
   startCodexLogin,
+  codexLoginStatus,
 } from "../harness/codex.js";
 import {
   enablePhoneTunnel,
@@ -1099,7 +1100,7 @@ export async function registerGatewayRoutes(
   // could list app tokens, reveal one, or disconnect a provider. Any session
   // inside a Custom Mode is refused here, locked or not. Reading the provider
   // list stays open — the chat's model picker needs it, and it carries no key.
-  const ACCOUNT_PREFIXES = ["/v1/app-profiles", "/v1/relay/"];
+  const ACCOUNT_PREFIXES = ["/v1/app-profiles", "/v1/relay/", "/v1/models/codex/"];
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?")[0] ?? "";
     const accountDoor =
@@ -2269,6 +2270,36 @@ export async function registerGatewayRoutes(
     },
   );
 
+  app.get<{ Params: { attemptId: string } }>(
+    "/v1/models/codex/login/:attemptId",
+    {
+      schema: {
+        params: Type.Object({ attemptId: Type.String({ format: "uuid" }) }),
+        response: {
+          200: Type.Object(
+            {
+              status: Type.Union([
+                Type.Literal("pending"),
+                Type.Literal("succeeded"),
+                Type.Literal("failed"),
+                Type.Literal("unknown"),
+              ]),
+            },
+            { additionalProperties: false },
+          ),
+          401: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireOwner(request))
+        return reply.code(401).send({ error: "Owner login required." });
+      return {
+        status: codexLoginStatus(request.params.attemptId) ?? "unknown",
+      };
+    },
+  );
+
   // One-click Codex sign-in: spawns the official `codex login` flow on the
   // machine Vaenyx runs on and returns the sign-in URL (null when the CLI is
   // already signed in, opened the browser itself, or printed nothing in time).
@@ -2279,6 +2310,7 @@ export async function registerGatewayRoutes(
         response: {
           200: Type.Object(
             {
+              attemptId: Type.Optional(Type.String({ format: "uuid" })),
               url: Type.Union([Type.String(), Type.Null()]),
               detail: Type.Union([Type.String(), Type.Null()]),
               // Whether the CLI's OWN browser window is visible on the

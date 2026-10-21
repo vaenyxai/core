@@ -862,6 +862,7 @@ export function appendConversationNote(
 // returns the sign-in URL when the CLI printed one before opening the browser,
 // or `detail` (the CLI's first error line) when the flow could not start.
 export function startCodexLogin(): Promise<{
+  attemptId?: string;
   url: string | null;
   detail: string | null;
   // Whether the CLI's own browser window is visible on the server machine —
@@ -869,10 +870,17 @@ export function startCodexLogin(): Promise<{
   cliWindowVisible?: boolean;
 }> {
   return requestJson<{
+    attemptId?: string;
     url: string | null;
     detail: string | null;
     cliWindowVisible?: boolean;
   }>("/v1/models/codex/login", { method: "POST" });
+}
+
+export function fetchCodexLoginStatus(attemptId: string): Promise<{
+  status: "pending" | "succeeded" | "failed" | "unknown";
+}> {
+  return requestJson("/v1/models/codex/login/" + encodeURIComponent(attemptId));
 }
 
 export function connectModelProvider(

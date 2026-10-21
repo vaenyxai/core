@@ -13,6 +13,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
+import { CodexLoginCoordinator } from "./codex-login.js";
 import { codexTurnFailure } from "./codex-turn-error.js";
 
 import { loadConfig } from "../../config.js";
@@ -518,7 +519,11 @@ async function installCodexOnce(): Promise<ComponentEnsureResult> {
 // would fight over the socket and both would lose confusingly. Claude logins
 // have no port and run concurrently; only this one queues, with its own error
 // code so the second app is told "try again shortly", not "broken".
-let codexLoginInFlight: string | null = null;
+const codexLogins = new CodexLoginCoordinator();
+
+export function codexLoginStatus(attemptId: string) {
+  return codexLogins.status("core", attemptId);
+}
 
 // Whether a browser window the codex CLI opens ITSELF would actually be
 // seen: only when this server runs in the logged-on user's session. The
@@ -531,6 +536,7 @@ export function codexLoginWindowVisible(): boolean {
 }
 
 export function startCodexLogin(profileKey: string = "core"): Promise<{
+  attemptId?: string;
   url: string | null;
   detail: string | null;
   cliWindowVisible: boolean;
@@ -542,70 +548,29 @@ export function startCodexLogin(profileKey: string = "core"): Promise<{
       cliWindowVisible: codexLoginWindowVisible(),
     });
   }
-  if (codexLoginInFlight && codexLoginInFlight !== profileKey) {
-    return Promise.reject(new Error("CODEX_LOGIN_BUSY"));
-  }
-  codexLoginInFlight = profileKey;
-  setTimeout(() => {
-    if (codexLoginInFlight === profileKey) codexLoginInFlight = null;
-  }, 5 * 60_000).unref?.();
-  const executable = findCodexCommand();
-  const child = spawn(executable.command, [...executable.args, "login"], {
-    env: codexEnvironment(process.env, profileKey),
-    shell: executable.shell,
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  return new Promise((resolveLogin) => {
-    let output = "";
-    let settled = false;
-    const settle = (url: string | null, detail: string | null = null) => {
-      if (settled) return;
-      settled = true;
-      resolveLogin({
-        url,
-        detail,
-        cliWindowVisible: codexLoginWindowVisible(),
+  return codexLogins.start(
+    profileKey,
+    () => {
+      const executable = findCodexCommand();
+      return spawn(executable.command, [...executable.args, "login"], {
+        env: codexEnvironment(process.env, profileKey),
+        shell: executable.shell,
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
       });
-    };
-    const timer = setTimeout(() => settle(null), 8000);
-    timer.unref();
-    const scan = (chunk: unknown) => {
-      output = appendBoundedDiagnostic(output, chunk);
-      const match = output.match(/https:\/\/[^\s"']+/);
-      if (match) {
-        clearTimeout(timer);
-        settle(match[0].replace(/[).,]+$/, ""));
-      }
-    };
-    child.stdout?.on("data", scan);
-    child.stderr?.on("data", scan);
-    child.once("error", (error) => {
-      clearTimeout(timer);
-      settle(null, error.message.slice(0, 200));
-    });
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      if (codexLoginInFlight === profileKey) codexLoginInFlight = null;
-      // Whatever the outcome, the signed-in answer may just have changed —
-      // the next status read must ask the CLI, not the cache.
+    },
+    () => {
       invalidateCodexStatus();
-      if (code === 0) {
-        // Already signed in (or the flow finished instantly): no URL needed.
-        settle(null);
-        return;
+      endCodexRelaySession(profileKey);
+      if (profileKey === "core") {
+        chatSession?.end();
+        methodSession?.end();
+        quickSession?.end();
+        askVaenyxSession?.cancel();
       }
-      // The CLI died before the browser flow started — surface its first
-      // error line so the card can say WHY instead of waiting forever.
-      const firstLine =
-        output
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)[0] ?? "Codex CLI could not start the sign-in.";
-      settle(null, firstLine.slice(0, 200));
-    });
-    child.unref();
-  });
+    },
+    codexLoginWindowVisible(),
+  );
 }
 
 export async function runForgeReadOnly(
