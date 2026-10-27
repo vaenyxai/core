@@ -1,4 +1,5 @@
 import { DinnerPlanner } from "./dinner-planner";
+import { DinnerJournalContent } from "./dinner-journal";
 import { isDinnerView, readDinnerInput } from "./dinner-planner-data";
 import { downscalePhoto } from "./photo-upload";
 import {
@@ -11929,7 +11930,12 @@ This conversation is its home — feed it something to try it, and ask for chang
                       <strong>You</strong>
                       <small>{formatTime(entry.createdAt)}</small>
                     </div>
-                    {journalText(entry.content) ? (
+                    {isDinner && readDinnerInput(entry.content) ? (
+                      <DinnerJournalContent
+                        input={readDinnerInput(entry.content)!}
+                        language={lang}
+                      />
+                    ) : journalText(entry.content) ? (
                       <p>{journalText(entry.content)}</p>
                     ) : null}
                   </article>
