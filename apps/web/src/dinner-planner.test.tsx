@@ -59,6 +59,35 @@ describe("Dinner Planner data and result", () => {
       }),
     ).toBeNull();
   });
+  it("accepts uploaded photo identifiers and restores reviewed inputs without accepting paths", () => {
+    for (const extension of ["jpg", "png", "webp"]) {
+      const input = {
+        ...example.input,
+        attachments: [
+          {
+            assetId: "9dc99ebe-d89c-47d0-ae56-1a1fcac384a5." + extension,
+            name: "ingredients." + extension,
+            role: "ingredients",
+          },
+        ],
+      };
+      expect(readDinnerInput(input)).toEqual(input);
+      expect(readDinnerInput(JSON.parse(JSON.stringify(input)))).toEqual(input);
+    }
+    for (const assetId of [
+      "../secret.jpg",
+      "photo.jpg",
+      "9dc99ebe-d89c-47d0-ae56-1a1fcac384a5.svg",
+      "9dc99ebe-d89c-47d0-ae56-1a1fcac384a5.jpg?other=1",
+    ]) {
+      expect(
+        readDinnerInput({
+          ...example.input,
+          attachments: [{ assetId, name: "x", role: "ingredients" }],
+        }),
+      ).toBeNull();
+    }
+  });
   it("detects any relevant input change without depending on object key order", () => {
     expect(dinnerInputKey(example.input)).not.toBe(
       dinnerInputKey({ ...example.input, avoid: "Eggs" }),

@@ -87,7 +87,9 @@ export function readDinnerInput(raw: unknown): DinnerInput | null {
       (p) =>
         record(p) &&
         text(p.assetId, 100) &&
-        /^[a-zA-Z0-9_-]+$/.test(p.assetId) &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/.test(
+          p.assetId,
+        ) &&
         text(p.name, 200, true) &&
         p.role === "ingredients",
     )

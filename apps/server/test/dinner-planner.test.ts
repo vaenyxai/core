@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AppConfig } from "../src/config.js";
+import { saveImage } from "../src/modules/core/vision.js";
 import { createDatabase } from "../src/db/database.js";
 import { seedLibraryIfEmpty } from "../src/modules/core/library-seed.js";
 import {
@@ -93,11 +94,16 @@ describe("Dinner Planner", () => {
     const config = fixture();
     const database = createDatabase(config);
     const example = loadMethodExamples(methods, id)[0]!;
+    const imageId = saveImage(
+      config.dataDirectory,
+      Buffer.from("synthetic fixture"),
+      "image/jpeg",
+    );
     const input = {
       ...(example.input as object),
       attachments: [
         {
-          assetId: "synthetic-photo",
+          assetId: imageId,
           name: "ingredients.png",
           role: "ingredients",
         },
@@ -112,7 +118,7 @@ describe("Dinner Planner", () => {
         input,
         new AbortController().signal,
         {
-          imageId: "synthetic-photo",
+          imageId,
           runStep: async (_method, received) => {
             expect(received).toEqual(input);
             return {
@@ -132,7 +138,7 @@ describe("Dinner Planner", () => {
       expect(stored.viewSnapshot).toMatchObject({
         layout: "dinner-planner-v1",
       });
-      expect(stored.imageId).toBe("synthetic-photo");
+      expect(stored.imageId).toBe(imageId);
     } finally {
       database.close();
     }
