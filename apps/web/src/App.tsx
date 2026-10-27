@@ -6964,6 +6964,7 @@ function AskVaenyxPanel({
     "chat" | "journal" | "gallery"
   >("chat");
   const [dinnerChatMode, setDinnerChatMode] = useState(false);
+  const [dinnerRunRevision, setDinnerRunRevision] = useState(0);
   const [dinnerRestore, setDinnerRestore] =
     useState<RoutineJournalEntry | null>(null);
   // Friendly input (Library v2 ③): a multi-field routine returns a
@@ -8643,6 +8644,10 @@ function AskVaenyxPanel({
       setRoutineJournal(data.journal);
       setRoutineGallery(data.gallery);
       setRoutineInputFields(data.inputFields);
+      // A confirmed Chat run becomes the current modular dinner too.
+      // Tab switches alone keep the in-progress form mounted.
+      setDinnerRestore(null);
+      setDinnerRunRevision((revision) => revision + 1);
       if (speakResult) {
         const newest = [...data.gallery].sort((a, b) =>
           b.createdAt.localeCompare(a.createdAt),
@@ -11927,7 +11932,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           {isDinner && activeConversationId && (
             <div hidden={capabilityTab !== "chat" || dinnerChatMode}>
               <DinnerPlanner
-                key={activeConversationId}
+                key={`${activeConversationId}:${dinnerRunRevision}`}
                 conversationId={activeConversationId}
                 language={lang}
                 journal={routineJournal}
