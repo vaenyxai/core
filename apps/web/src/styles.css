@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   /* Global type size (Oskar, dev.150): every rem token scales off this — 18px
      base lifts the whole UI ~12% over the browser default. */
   font-size: 112.5%;
@@ -4305,6 +4305,7 @@ select {
 }
 
 .ask-vaenyx-message {
+  overflow-wrap: anywhere;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
