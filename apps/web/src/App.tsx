@@ -1,3 +1,5 @@
+import { ComposerOptions } from "./composer-options";
+import { shouldReland, type LandingPosition } from "./chat-landing";
 import { DinnerPlanner } from "./dinner-planner";
 import { DinnerJournalContent } from "./dinner-journal";
 import { isDinnerView, readDinnerInput } from "./dinner-planner-data";
@@ -8181,7 +8183,7 @@ function AskVaenyxPanel({
     pendingLandingRef.current = { key };
     cancelAnimationFrame(landingFrameRef.current);
     const startedAt = Date.now();
-    let heightAtLastLand = -1;
+    let positionAtLastLand: LandingPosition | null = null;
     let stableFrames = 0;
     let landed = false;
     setLandingHidden(true);
@@ -8218,14 +8220,19 @@ function AskVaenyxPanel({
         return;
       }
       const element = target();
-      const height = document.documentElement.scrollHeight;
+      const position = () => ({
+        height: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight,
+        scrollY: window.scrollY,
+        targetTop: element?.getBoundingClientRect().top ?? 0,
+      });
       const elapsed = Date.now() - startedAt;
-      if (element && height !== heightAtLastLand) {
-        heightAtLastLand = height;
+      if (element && shouldReland(positionAtLastLand, position())) {
         stableFrames = 0;
         landed = true;
         if (align === "end") element.scrollIntoView({ block: "end" });
         else scrollToMessageStart(element);
+        positionAtLastLand = position();
       } else if (landed) {
         stableFrames += 1;
         if (stableFrames >= LANDING_STABLE_FRAMES) setLandingHidden(false);
@@ -10849,6 +10856,34 @@ This conversation is its home — feed it something to try it, and ask for chang
     if (building && building.conversationId === activeConversationId) {
       chatChips.push({ key: "building", label: "Building…", tone: "building" });
     }
+    const composerProvider =
+      chatProviders.find(
+        (provider) => provider.id === activeConversation?.modelProviderId,
+      ) ?? defaultChatProvider;
+    const composerModel =
+      activeConversation?.modelName ??
+      (composerProvider?.id === textDefault?.provider
+        ? textDefault?.model
+        : null) ??
+      composerProvider?.model;
+    const composerEfforts = effortChoices(
+      composerProvider?.id,
+      composerModel,
+      effortCatalogue,
+    );
+    const composerEffort = effortOptions(composerEfforts, lang).find(
+      (option) =>
+        option.value ===
+        clampEffort(composerEfforts, activeConversation?.reasoningEffort),
+    )?.label;
+    const composerSummary = [
+      composerModel ??
+        composerProvider?.name ??
+        (zh ? "连接模型" : "Connect Model"),
+      composerEffort,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     const chatDomain = activeRoutine ? routineDomain(activeRoutine.tags) : null;
     const domainDisclaimer =
       chatDomain === "health"
@@ -10993,7 +11028,13 @@ This conversation is its home — feed it something to try it, and ask for chang
               )}
             </h2>
             <ThreadChipRow
-              chips={chatChips}
+              chips={chatChips.filter(
+                (chip) =>
+                  !(
+                    chip.tone === "routine" &&
+                    chip.label === activeConversation?.title?.trim()
+                  ),
+              )}
               className="chat-chips chat-chips--inline"
             />
             <div className="chat-header-actions">
@@ -12375,176 +12416,185 @@ This conversation is its home — feed it something to try it, and ask for chang
             submitLabel={isRoutine ? "Run" : "Send"}
             value={prompt}
           >
-            <div className="composer-status">
-              {chatProviders.length > 1 ? (
-                <Picker
-                  ariaLabel="Model"
-                  className="composer-level-select"
-                  disabled={!activeConversationId}
-                  onChange={(chosen) => {
-                    const next = chosen || null;
-                    if (!activeConversationId) return;
-                    onConversationsChange(
-                      conversations.map((conversation) =>
-                        conversation.id === activeConversationId
-                          ? // A provider switch also clears the pinned model —
-                            // model ids don't transfer between providers.
-                            {
-                              ...conversation,
-                              modelProviderId: next,
-                              modelName: null,
-                            }
-                          : conversation,
-                      ),
-                    );
-                    void setChatProvider(activeConversationId, next);
-                    void setChatModel(activeConversationId, null);
-                  }}
-                  // The default backend IS the empty choice — one entry,
-                  // marked inline, never listed twice (Oskar, dev.159).
-                  options={[
-                    {
-                      label: `${defaultChatProvider?.name ?? "Codex"} (Default)`,
-                      value: "",
-                    },
-                    ...chatProviders
-                      .filter(
-                        (provider) => provider.id !== defaultChatProvider?.id,
-                      )
-                      .map((provider) => ({
-                        label: provider.name,
-                        value: provider.id,
-                      })),
-                  ]}
-                  title={t("legal.notice.modelPicker")}
-                  value={activeConversation?.modelProviderId ?? ""}
-                />
-              ) : hasUsableModel ? (
-                <span className="composer-model">
-                  {chatProviders[0]?.name ?? "ChatGPT"}
+            <ComposerOptions
+              key={activeConversationId}
+              summary={composerSummary}
+              language={lang}
+            >
+              <div className="composer-status">
+                {chatProviders.length > 1 ? (
+                  <Picker
+                    ariaLabel="Model"
+                    className="composer-level-select"
+                    disabled={!activeConversationId}
+                    onChange={(chosen) => {
+                      const next = chosen || null;
+                      if (!activeConversationId) return;
+                      onConversationsChange(
+                        conversations.map((conversation) =>
+                          conversation.id === activeConversationId
+                            ? // A provider switch also clears the pinned model —
+                              // model ids don't transfer between providers.
+                              {
+                                ...conversation,
+                                modelProviderId: next,
+                                modelName: null,
+                              }
+                            : conversation,
+                        ),
+                      );
+                      void setChatProvider(activeConversationId, next);
+                      void setChatModel(activeConversationId, null);
+                    }}
+                    // The default backend IS the empty choice — one entry,
+                    // marked inline, never listed twice (Oskar, dev.159).
+                    options={[
+                      {
+                        label: `${defaultChatProvider?.name ?? "Codex"} (Default)`,
+                        value: "",
+                      },
+                      ...chatProviders
+                        .filter(
+                          (provider) => provider.id !== defaultChatProvider?.id,
+                        )
+                        .map((provider) => ({
+                          label: provider.name,
+                          value: provider.id,
+                        })),
+                    ]}
+                    title={t("legal.notice.modelPicker")}
+                    value={activeConversation?.modelProviderId ?? ""}
+                  />
+                ) : hasUsableModel ? (
+                  <span className="composer-model">
+                    {chatProviders[0]?.name ?? "ChatGPT"}
+                  </span>
+                ) : (
+                  // Skipped the first-run step (or the model stopped working):
+                  // say so honestly and go straight to where it is fixed.
+                  <button
+                    className="composer-connect-hint"
+                    onClick={onOpenSettings}
+                    type="button"
+                  >
+                    {lang === "zh" ? "先连一个模型 →" : "Connect a model →"}
+                  </button>
+                )}
+                {(() => {
+                  // "Model within the provider": a second picker with a curated
+                  // shortlist for the conversation's effective (pinned or default)
+                  // provider. Codex has no picker — it is a single-login backend.
+                  const effective =
+                    chatProviders.find(
+                      (provider) =>
+                        provider.id === activeConversation?.modelProviderId,
+                    ) ?? defaultChatProvider;
+                  // The models this account was tested and adopted with under
+                  // Models — the same list the rows in Settings offer. A
+                  // subscription login lists its models too now (2026-09-05).
+                  const choices = effective
+                    ? (adoptedModels[effective.id] ?? [])
+                    : [];
+                  if (!effective || choices.length === 0) {
+                    return null;
+                  }
+                  const defaultModel =
+                    (effective.id === textDefault?.provider
+                      ? textDefault?.model
+                      : null) ?? effective.model;
+                  return (
+                    <>
+                      <span aria-hidden="true" className="composer-sep">
+                        ·
+                      </span>
+                      <Picker
+                        ariaLabel="Model version"
+                        className="composer-level-select"
+                        disabled={!activeConversationId}
+                        onChange={(chosen) => {
+                          const next = chosen || null;
+                          if (!activeConversationId) return;
+                          onConversationsChange(
+                            conversations.map((conversation) =>
+                              conversation.id === activeConversationId
+                                ? { ...conversation, modelName: next }
+                                : conversation,
+                            ),
+                          );
+                          void setChatModel(activeConversationId, next);
+                        }}
+                        options={[
+                          {
+                            label: `${defaultModel ?? "provider default"} (Default)`,
+                            value: "",
+                          },
+                          ...choices
+                            .filter((choice) => choice !== defaultModel)
+                            .map((choice) => ({
+                              label: choice,
+                              value: choice,
+                            })),
+                        ]}
+                        value={activeConversation?.modelName ?? ""}
+                      />
+                    </>
+                  );
+                })()}
+                {(() => {
+                  // HOW HARD IT THINKS — the levels the model in front of the
+                  // Owner itself reports (Codex low…xhigh, Claude low…max), and
+                  // no picker at all where the level would change nothing.
+                  const effective =
+                    chatProviders.find(
+                      (provider) =>
+                        provider.id === activeConversation?.modelProviderId,
+                    ) ?? defaultChatProvider;
+                  const choices = effortChoices(
+                    effective?.id,
+                    activeConversation?.modelName ?? effective?.model,
+                    effortCatalogue,
+                  );
+                  if (choices.length === 0) return null;
+                  const level = clampEffort(
+                    choices,
+                    activeConversation?.reasoningEffort,
+                  );
+                  return (
+                    <>
+                      <span aria-hidden="true" className="composer-sep">
+                        ·
+                      </span>
+                      <Picker
+                        ariaLabel="Reasoning level"
+                        className="composer-level-select"
+                        disabled={!activeConversationId}
+                        onChange={(chosen) => {
+                          const next = chosen as ReasoningEffort;
+                          if (!activeConversationId) return;
+                          onConversationsChange(
+                            conversations.map((conversation) =>
+                              conversation.id === activeConversationId
+                                ? { ...conversation, reasoningEffort: next }
+                                : conversation,
+                            ),
+                          );
+                          void setReasoningEffort(activeConversationId, next);
+                        }}
+                        options={effortOptions(choices, lang)}
+                        value={level}
+                      />
+                    </>
+                  );
+                })()}
+                <span aria-hidden="true" className="composer-sep">
+                  ·
                 </span>
-              ) : (
-                // Skipped the first-run step (or the model stopped working):
-                // say so honestly and go straight to where it is fixed.
-                <button
-                  className="composer-connect-hint"
-                  onClick={onOpenSettings}
-                  type="button"
-                >
-                  {lang === "zh" ? "先连一个模型 →" : "Connect a model →"}
-                </button>
-              )}
-              {(() => {
-                // "Model within the provider": a second picker with a curated
-                // shortlist for the conversation's effective (pinned or default)
-                // provider. Codex has no picker — it is a single-login backend.
-                const effective =
-                  chatProviders.find(
-                    (provider) =>
-                      provider.id === activeConversation?.modelProviderId,
-                  ) ?? defaultChatProvider;
-                // The models this account was tested and adopted with under
-                // Models — the same list the rows in Settings offer. A
-                // subscription login lists its models too now (2026-09-05).
-                const choices = effective
-                  ? (adoptedModels[effective.id] ?? [])
-                  : [];
-                if (!effective || choices.length === 0) {
-                  return null;
-                }
-                const defaultModel =
-                  (effective.id === textDefault?.provider
-                    ? textDefault?.model
-                    : null) ?? effective.model;
-                return (
-                  <>
-                    <span aria-hidden="true" className="composer-sep">
-                      ·
-                    </span>
-                    <Picker
-                      ariaLabel="Model version"
-                      className="composer-level-select"
-                      disabled={!activeConversationId}
-                      onChange={(chosen) => {
-                        const next = chosen || null;
-                        if (!activeConversationId) return;
-                        onConversationsChange(
-                          conversations.map((conversation) =>
-                            conversation.id === activeConversationId
-                              ? { ...conversation, modelName: next }
-                              : conversation,
-                          ),
-                        );
-                        void setChatModel(activeConversationId, next);
-                      }}
-                      options={[
-                        {
-                          label: `${defaultModel ?? "provider default"} (Default)`,
-                          value: "",
-                        },
-                        ...choices
-                          .filter((choice) => choice !== defaultModel)
-                          .map((choice) => ({ label: choice, value: choice })),
-                      ]}
-                      value={activeConversation?.modelName ?? ""}
-                    />
-                  </>
-                );
-              })()}
-              {(() => {
-                // HOW HARD IT THINKS — the levels the model in front of the
-                // Owner itself reports (Codex low…xhigh, Claude low…max), and
-                // no picker at all where the level would change nothing.
-                const effective =
-                  chatProviders.find(
-                    (provider) =>
-                      provider.id === activeConversation?.modelProviderId,
-                  ) ?? defaultChatProvider;
-                const choices = effortChoices(
-                  effective?.id,
-                  activeConversation?.modelName ?? effective?.model,
-                  effortCatalogue,
-                );
-                if (choices.length === 0) return null;
-                const level = clampEffort(
-                  choices,
-                  activeConversation?.reasoningEffort,
-                );
-                return (
-                  <>
-                    <span aria-hidden="true" className="composer-sep">
-                      ·
-                    </span>
-                    <Picker
-                      ariaLabel="Reasoning level"
-                      className="composer-level-select"
-                      disabled={!activeConversationId}
-                      onChange={(chosen) => {
-                        const next = chosen as ReasoningEffort;
-                        if (!activeConversationId) return;
-                        onConversationsChange(
-                          conversations.map((conversation) =>
-                            conversation.id === activeConversationId
-                              ? { ...conversation, reasoningEffort: next }
-                              : conversation,
-                          ),
-                        );
-                        void setReasoningEffort(activeConversationId, next);
-                      }}
-                      options={effortOptions(choices, lang)}
-                      value={level}
-                    />
-                  </>
-                );
-              })()}
-              <span aria-hidden="true" className="composer-sep">
-                ·
-              </span>
-              {/* (The always-read-aloud toggle used to live here. It was a
+                {/* (The always-read-aloud toggle used to live here. It was a
                 crossed-out speaker nobody could read, and it contradicts the
                 rule that replaced it: spoken in → spoken out, plus a speak
                 button on every message. Removed 2026-07-29.) */}
-            </div>
+              </div>
+            </ComposerOptions>
             <p className="composer-disclaimer">
               {t("legal.disclaimer.aiGeneral.composer")}
             </p>

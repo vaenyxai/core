@@ -1029,7 +1029,6 @@ textarea::placeholder {
   .conversation-search-result-head small {
     white-space: normal;
   }
-
 }
 
 .sidebar-scheduled {
@@ -10550,4 +10549,130 @@ body {
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: var(--fs-label);
+}
+
+/* Keep the existing model choices together; only their phone presentation folds. */
+.composer-options {
+  position: relative;
+  min-width: 0;
+}
+.composer-options-toggle,
+.composer-options-heading {
+  display: none;
+}
+@media (max-width: 760px) {
+  .ask-vaenyx-chat-header {
+    gap: 0;
+    min-height: 44px;
+    padding: 2px 8px 2px 52px;
+  }
+  .ask-vaenyx-chat-header .focused-title-line {
+    min-height: 44px;
+    gap: 6px;
+  }
+  .ask-vaenyx-chat.focused-chat .ask-vaenyx-chat-header h2,
+  .focused-task-panel .ask-vaenyx-chat-header h2 {
+    font-size: 16px;
+  }
+  .ask-vaenyx-chat-header .capability-bar {
+    margin: 0 0 0 -44px;
+    padding: 0;
+    border: 0;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .ask-vaenyx-chat-header .capability-tab {
+    min-height: 44px;
+    padding: 4px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .ask-vaenyx-composer {
+    gap: 2px;
+    padding: 8px 4px max(6px, env(safe-area-inset-bottom));
+  }
+  .ask-vaenyx-composer-box {
+    padding: 6px;
+    gap: 6px;
+    border-radius: 20px;
+  }
+  .ask-vaenyx-composer-box textarea {
+    height: 44px;
+    min-height: 44px;
+    padding: 9px 8px;
+  }
+  .ask-vaenyx-composer-box textarea:focus {
+    height: 68px;
+  }
+  .ask-vaenyx-composer-box .primary-button {
+    min-height: 44px;
+    padding: 0 12px;
+  }
+  .composer-options-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .composer-options-toggle > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .composer-options-panel {
+    display: none;
+    position: absolute;
+    z-index: 12;
+    right: 0;
+    bottom: calc(100% + 6px);
+    width: min(360px, calc(100vw - 24px));
+    max-height: 55dvh;
+    overflow-y: auto;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-raised, #292925);
+    box-shadow: 0 6px 30px #0005;
+  }
+  .composer-options-panel.is-open {
+    display: block;
+  }
+  .composer-options-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .composer-options-heading button {
+    width: 44px;
+    min-height: 44px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 22px;
+    cursor: pointer;
+  }
+  .composer-options-panel .composer-status {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .composer-options-panel .composer-level-select {
+    min-height: 44px;
+    width: 100%;
+    font-size: 14px;
+  }
+  .composer-options-panel .composer-sep {
+    display: none;
+  }
 }

@@ -441,3 +441,15 @@
   line-height: 1.6;
   white-space: pre-wrap;
 }
+
+/* Distinct cards keep the result's modules visible on both layouts. */
+.dinner-result > section {
+  margin: 12px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dinner-accent, #557659) 5%, transparent);
+}
+.dinner-result > section h3 {
+  margin-top: 0;
+}
