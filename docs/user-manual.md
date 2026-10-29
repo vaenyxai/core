@@ -347,9 +347,11 @@ Read this inside the app: **Settings → Manual**.
 
 ## 6. Methods and Routines
 
-- **Dinner Planner** — open **Library → Routines → Dinner Planner → Start This Routine**. Its conversation opens a modular **Plan Dinner** screen. Add ingredients (or up to five photos), review any photo suggestions, set servings and total time, then press **Plan My Dinner**. Avoidances, equipment and preferences are optional and visible before running.
+- **Keep modular layouts** — renaming a Routine preserves its module layout, table columns and translated labels. If Dinner was saved by an earlier editor and reverted to a plain chat, use **Edit → Use Dinner Modules → Save New Version** to restore its module page. Historical results keep their saved presentation.
+- **Organise Routines** — new installs include **Dinner** only. Choose old items in **Organise Library**, then **Remove Selected From Library**. They move to **Removed**, where you can restore them. This only organises the main shelf: Methods, chats, photos and results stay; existing conversations and schedules are not stopped. The local server saves this choice for both phone and computer. **Family Notices** and **Warranty** are marked as planned and cannot run yet.
+- **Dinner** — open **Library → Routines → Dinner → Start This Routine**. Its conversation opens a modular **Plan Dinner** screen. Add ingredients (or up to five photos), review any photo suggestions, set servings and total time, then press **Plan My Dinner**. Avoidances, equipment and preferences are optional and visible before running.
 - **Dinner photos** — choose JPG, PNG or WebP images up to 20 MB each (five photos total). Review and correct the recognised ingredients, then tick the confirmation before planning. Uploaded photo references are kept with the saved dinner and restored with its inputs; Journal shows the photos and readable, labelled ingredient details. If reading fails, the photo stays visible so you can type the ingredients or remove it and retry.
-- **Phone layout** — long identifiers wrap inside chat records. The chat header uses less space and omits a Routine label identical to the title. Below the composer, one row shows the current model and thinking level; tap it to expand the existing provider, model and thinking choices, then close it to fold them away. Confirming Run brings the latest progress into view. The modular Dinner Planner stacks on phones and uses side-by-side input/results on computers, with distinct result cards. A newly confirmed dinner run from Chat also becomes the current result in Plan Dinner.
+- **Phone layout** — long identifiers wrap inside chat records. The chat header uses less space and omits a Routine label identical to the title. Below the composer, one row shows the current model and thinking level; tap it to expand the existing provider, model and thinking choices, then close it to fold them away. Confirming Run brings the latest progress into view. The modular Dinner stacks on phones and uses side-by-side input/results on computers, with distinct result cards. A newly confirmed dinner run from Chat also becomes the current result in Plan Dinner.
 - **Dinner results** — see quantities, available ingredients, things to buy or check, and numbered cooking steps. Changing an input marks the previous result as out of date; **Plan Dinner Again** creates a new saved result. **Journal** and **Gallery** keep previous runs; **Correct & Rerun** brings a saved input back into the planner. Shopping ticks are a temporary checklist. Photo reading requires a connected Vision model; typing works without it. The connected text model generates the dinner. Failed generation keeps the current inputs. Unsubmitted input changes stay while switching planner/history tabs, but are not saved when leaving the conversation or refreshing.
 
 - **Method** — one small job Vaenyx knows how to do, described in plain steps.
@@ -363,8 +365,8 @@ Read this inside the app: **Settings → Manual**.
   (or just say so in its chat). Every run then leads with a freshly generated
   picture. It needs a drawing model connected; without one the result simply
   arrives as it always did, and nothing ever waits on a picture.
-- **Ready-made household results** — Vaenyx includes **Receipt Record**,
-  **Warranty & Manual Record**, and **Material Takeoff Check**. Their tables keep
+- **Earlier household results** — existing installations of **Receipt Record**,
+  **Warranty & Manual Record**, and **Material Takeoff Check** remain usable; new installs no longer add them by default. Their tables keep
   each important value beside its source and certainty. Receipt records are for
   organisation, not tax/accounting advice; warranty records do not decide your
   legal rights; takeoffs are preliminary and must be checked by a competent
@@ -560,7 +562,7 @@ Read this inside the app: **Settings → Manual**.
   the backup does answer, the reply ends with one plain sentence saying which
   model stood in, why the main one could not, and the error code — never a
   quiet swap you meet later as "why does this answer look different".
-- **Text model consistency** — Dinner Planner, other Methods and quick text processing use the model selected on the Text row (or the main model it follows). A per-call test uses the model named on that test. An unavailable model fails; it is never silently replaced.
+- **Text model consistency** — Dinner, other Methods and quick text processing use the model selected on the Text row (or the main model it follows). A per-call test uses the model named on that test. An unavailable model fails; it is never silently replaced.
 - **A refused model is named** — the error identifies the requested model and the model Codex refused, with directions to AI Settings. Retrying does not silently select a different model.
 - **A model missing from the catalogue** — under Find Models, use **Enter Model ID**, paste the provider’s exact model ID and press **Add To Test**. This only adds a test candidate. Test must succeed before Use appears; the main model changes only when you select it. The provider’s catalogue can lag behind actual availability.
 - **Update Codex** — updates Vaenyx’s own Codex component to the version checked with this build, then reloads its model catalogue. It keeps the login and selected model. Use this when an old component lists retired models or cannot use a new model. An update does not grant model access; Test still verifies your account.
@@ -1078,5 +1080,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.13.27-dev** · last updated 2026-10-28.
+Manual for **v0.4.13.28-dev** · last updated 2026-10-28.
 Keep this file up to date whenever a feature changes.

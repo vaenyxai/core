@@ -1,5 +1,7 @@
 import { ComposerOptions } from "./composer-options";
 import { shouldReland, type LandingPosition } from "./chat-landing";
+import { editedRoutineView, withDinnerModules } from "./routine-edit-view";
+import { RoutineShelf } from "./routine-shelf";
 import { DinnerPlanner } from "./dinner-planner";
 import { DinnerJournalContent } from "./dinner-journal";
 import { isDinnerView, readDinnerInput } from "./dinner-planner-data";
@@ -66,7 +68,6 @@ import type {
   RoutineInputField,
   RoutineJournalEntry,
   RoutinePlan,
-  RoutineViewFootnote,
   RoutineEditSaveRequest,
   RunMethodResponse,
   PublishState,
@@ -23720,10 +23721,7 @@ function EditRoutinePanel({
   const [annotateFocus, setAnnotateFocus] = useState("");
   const [resultImage, setResultImage] = useState("");
   const [viewFields, setViewFields] = useState<EditableViewField[]>([]);
-  // H-014: the fixed footnote key rides through an edit untouched.
-  const [viewFootnote, setViewFootnote] = useState<
-    RoutineViewFootnote | undefined
-  >(undefined);
+  const [viewBase, setViewBase] = useState<unknown>(null);
   const [steps, setSteps] = useState<EditableRoutineStep[]>([]);
   const [addMethodId, setAddMethodId] = useState("");
   const [addingStep, setAddingStep] = useState(false);
@@ -23755,7 +23753,7 @@ function EditRoutinePanel({
     setAnnotateFocus(next.routine.annotateFocus ?? "");
     setResultImage(next.routine.resultImage ?? "");
     const parsedView = parseRoutineView(next.routine.view);
-    setViewFootnote(parsedView?.footnote);
+    setViewBase(next.routine.view);
     setViewFields(
       parsedView
         ? parsedView.fields.map((field) => ({
@@ -23870,15 +23868,6 @@ function EditRoutinePanel({
         problem: zh ? "至少要有一步。" : "A Routine needs at least one step.",
       };
     }
-    // Blank rows are just abandoned "Add A Field" clicks; a view with no real
-    // fields is NO view (auto layout), never a junk `{fields: []}` on disk.
-    const realViewFields = viewFields
-      .filter((field) => field.key.trim())
-      .map((field) => ({
-        key: field.key.trim(),
-        as: field.as,
-        ...(field.label.trim() ? { label: field.label.trim() } : {}),
-      }));
     return {
       body: {
         expectedContentHash: draft.routine.contentHash,
@@ -23889,13 +23878,7 @@ function EditRoutinePanel({
           .map((tag) => tag.trim())
           .filter(Boolean)
           .slice(0, 20),
-        view:
-          realViewFields.length > 0
-            ? {
-                ...(viewFootnote ? { footnote: viewFootnote } : {}),
-                fields: realViewFields,
-              }
-            : null,
+        view: editedRoutineView(viewBase, viewFields),
         annotateFocus: annotateFocus.trim() ? annotateFocus.trim() : null,
         resultImage: resultImage.trim() ? resultImage.trim() : null,
         flow,
@@ -23975,7 +23958,7 @@ function EditRoutinePanel({
     setAnnotateFocus(proposed.annotateFocus ?? "");
     setResultImage(proposed.resultImage ?? "");
     const parsedView = parseRoutineView(proposed.view);
-    setViewFootnote(parsedView?.footnote);
+    setViewBase(proposed.view);
     setViewFields(
       parsedView
         ? parsedView.fields.map((field) => ({
@@ -24505,6 +24488,11 @@ function EditRoutinePanel({
 
       <section className="settings-card">
         <p className="eyebrow">{zh ? "结果长什么样(View)" : "Result View"}</p>
+        {routineId === "vaenyx-dinner-planner" && !isDinnerView(viewBase) ? (
+          <button className="secondary-button" type="button" onClick={() => setViewBase(withDinnerModules(viewBase))}>
+            {zh ? "使用 Dinner 模块" : "Use Dinner Modules"}
+          </button>
+        ) : null}
         {viewFields.map((field, index) => (
           <div className="model-card-actions" key={index}>
             <input
@@ -24593,22 +24581,7 @@ function EditRoutinePanel({
           <RoutineResultView
             language={zh ? "zh" : "en"}
             output={sampleOutput}
-            view={
-              viewFields.some((field) => field.key.trim())
-                ? {
-                    ...(viewFootnote ? { footnote: viewFootnote } : {}),
-                    fields: viewFields
-                      .filter((field) => field.key.trim())
-                      .map((field) => ({
-                        key: field.key.trim(),
-                        as: field.as,
-                        ...(field.label.trim()
-                          ? { label: field.label.trim() }
-                          : {}),
-                      })),
-                  }
-                : undefined
-            }
+            view={editedRoutineView(viewBase, viewFields)}
           />
         </div>
       </section>
@@ -24676,22 +24649,7 @@ function EditRoutinePanel({
             <RoutineResultView
               language={zh ? "zh" : "en"}
               output={testResult.output}
-              view={
-                viewFields.length > 0
-                  ? {
-                      ...(viewFootnote ? { footnote: viewFootnote } : {}),
-                      fields: viewFields
-                        .filter((field) => field.key.trim())
-                        .map((field) => ({
-                          key: field.key.trim(),
-                          as: field.as,
-                          ...(field.label.trim()
-                            ? { label: field.label.trim() }
-                            : {}),
-                        })),
-                    }
-                  : undefined
-              }
+              view={editedRoutineView(viewBase, viewFields)}
             />
             <details className="advanced-details">
               <summary>{zh ? "每一步的原始输出" : "Raw step outputs"}</summary>
@@ -26184,17 +26142,9 @@ function RoutinesPanel({
           </p>
         </div>
       ) : (
-        <div className="library-list pills">
-          {/* MINIMAL CARDS (Oskar, 2026-08-09: 每个卡片都做到最小,点击再弹窗).
-              A card carries the name and NOTHING ELSE except the things that
-              demand action — a new version, and, on Methods, corrections
-              waiting and a failed post-update check. That exception is the
-              whole design: a badge that only appears inside the dialog is a
-              badge nobody sees, so the one class of information that has to
-              reach somebody who is not looking stays on the outside.
-              Description, tags, version, step counts, publishing: all one tap
-              away, in the dialog, where there is room to read them. */}
-          {routines.map((routine) => (
+        <RoutineShelf
+          routines={routines}
+          renderRoutine={(routine) => (
             <button
               className="library-card compact"
               key={routine.id}
@@ -26212,8 +26162,8 @@ function RoutinesPanel({
                 </AttentionChip>
               ) : null}
             </button>
-          ))}
-        </div>
+          )}
+        />
       )}
       {openedRoutine ? (
         <Modal

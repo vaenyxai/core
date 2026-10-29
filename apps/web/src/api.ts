@@ -1985,6 +1985,15 @@ export function fetchLibraryMethods(): Promise<LibraryMethodSummary[]> {
   return requestJson<LibraryMethodSummary[]>("/v1/methods");
 }
 
+export function fetchRoutineShelf(): Promise<{removedIds: string[]}> {
+  return requestJson("/v1/library/routine-shelf");
+}
+export function updateRoutineShelf(ids: string[], removed: boolean): Promise<{removedIds: string[]}> {
+  return requestJson("/v1/library/routine-shelf", {
+    method: "POST", body: JSON.stringify({ids, removed}),
+  });
+}
+
 export function fetchLibraryRoutines(): Promise<LibraryRoutineSummary[]> {
   return requestJson<LibraryRoutineSummary[]>("/v1/routines");
 }

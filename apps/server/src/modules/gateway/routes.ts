@@ -790,6 +790,8 @@ import {
 import { listMonthUsage, usageMonth } from "../core/relay-usage.js";
 import { ocrEngineConnected } from "../core/ocr.js";
 
+import { registerRoutineShelfRoutes } from "./routine-shelf.js";
+
 interface GatewayContext {
   config: AppConfig;
   database: DatabaseHandle;
@@ -10817,6 +10819,8 @@ export async function registerGatewayRoutes(
       return listMethodSummaries(context.config.libraryDirectory);
     },
   );
+
+  registerRoutineShelfRoutes(app, context);
 
   // Owner-facing Routine catalogue (Library v2). Summaries only, like Methods.
   app.get(

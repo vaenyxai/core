@@ -145,8 +145,8 @@ export function DinnerPlanner({
         <div>
           <span className="dinner-eyebrow">
             {zh
-              ? "Dinner Planner · 今晚吃什么"
-              : "Dinner Planner · Less Deciding, More Living"}
+              ? "Dinner · 今晚吃什么"
+              : "Dinner · Less Deciding, More Living"}
           </span>
           <h2>{zh ? "今晚吃什么？" : "What’s For Dinner?"}</h2>
           <p>

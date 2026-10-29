@@ -26,10 +26,20 @@ afterEach(() => {
 function makeSampleRepo(firstParty = false): string {
   const repo = mkdtempSync(resolve(tmpdir(), "vaenyx-seed-repo-"));
   temporaryDirectories.push(repo);
-  const method = resolve(repo, "sample-library", "methods", "demo-method");
+  const method = resolve(
+    repo,
+    "sample-library",
+    "methods",
+    "vaenyx-dinner-planner",
+  );
   mkdirSync(method, { recursive: true });
   writeFileSync(resolve(method, "method.json"), "{}");
-  const routine = resolve(repo, "sample-library", "routines", "demo-routine");
+  const routine = resolve(
+    repo,
+    "sample-library",
+    "routines",
+    "vaenyx-dinner-planner",
+  );
   mkdirSync(routine, { recursive: true });
   writeFileSync(resolve(routine, "routine.json"), "{}");
   if (firstParty) {
@@ -81,11 +91,13 @@ describe("seedLibraryIfEmpty", () => {
 
     expect(seedLibraryIfEmpty(cfg)).toBe(true);
     expect(
-      existsSync(resolve(cfg.libraryDirectory, "demo-method", "method.json")),
+      existsSync(
+        resolve(cfg.libraryDirectory, "vaenyx-dinner-planner", "method.json"),
+      ),
     ).toBe(true);
     expect(
       existsSync(
-        resolve(cfg.routinesDirectory, "demo-routine", "routine.json"),
+        resolve(cfg.routinesDirectory, "vaenyx-dinner-planner", "routine.json"),
       ),
     ).toBe(true);
     expect(existsSync(resolve(userdata, "library", ".seeded"))).toBe(true);
@@ -101,12 +113,12 @@ describe("seedLibraryIfEmpty", () => {
     rmSync(cfg.routinesDirectory, { force: true, recursive: true });
 
     expect(seedLibraryIfEmpty(cfg)).toBe(false);
-    expect(existsSync(resolve(cfg.libraryDirectory, "demo-method"))).toBe(
-      false,
-    );
+    expect(
+      existsSync(resolve(cfg.libraryDirectory, "vaenyx-dinner-planner")),
+    ).toBe(false);
   });
 
-  it("marks but does not copy when the library already has content", () => {
+  it("adds Dinner beside existing owner content without replacing it", () => {
     const repo = makeSampleRepo();
     const userdata = makeUserdata();
     const cfg = config(repo, userdata);
@@ -114,10 +126,10 @@ describe("seedLibraryIfEmpty", () => {
       recursive: true,
     });
 
-    expect(seedLibraryIfEmpty(cfg)).toBe(false);
-    expect(existsSync(resolve(cfg.libraryDirectory, "demo-method"))).toBe(
-      false,
-    );
+    expect(seedLibraryIfEmpty(cfg)).toBe(true);
+    expect(
+      existsSync(resolve(cfg.libraryDirectory, "vaenyx-dinner-planner")),
+    ).toBe(true);
     expect(existsSync(resolve(userdata, "library", ".seeded"))).toBe(true);
   });
 
@@ -139,7 +151,7 @@ describe("seedLibraryIfEmpty", () => {
     expect(existsSync(resolve(repo, "sample-library", ".seeded"))).toBe(false);
   });
 
-  it("adds missing first-party packages once without replacing owner content", () => {
+  it("does not install retired first-party packages or replace owner content", () => {
     const repo = makeSampleRepo(true);
     const userdata = makeUserdata();
     const cfg = config(repo, userdata);
@@ -163,7 +175,7 @@ describe("seedLibraryIfEmpty", () => {
           "method.json",
         ),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       readFileSync(
         resolve(cfg.libraryDirectory, "vaenyx-receipt-record", "method.json"),
