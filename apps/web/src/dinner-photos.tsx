@@ -106,6 +106,7 @@ export function DinnerPhotos({
           { ...photo, annotations: response.annotations ?? [] },
           response.photoError ? "" : ingredients,
         );
+        setReadingId(null);
         if (response.photoError || !ingredients) {
           throw new Error(
             zh

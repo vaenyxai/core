@@ -1082,5 +1082,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.13.30-dev** · last updated 2026-10-29.
+Manual for **v0.4.13.31-dev** · last updated 2026-10-29.
 Keep this file up to date whenever a feature changes.
