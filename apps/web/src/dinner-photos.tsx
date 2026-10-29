@@ -132,25 +132,41 @@ export function DinnerPhotos({
           ))}
         </div>
       )}
-      <label
-        className={
-          "dinner-photo-picker" +
-          (disabled || !visionReady || photos.length >= 5 ? " is-disabled" : "")
-        }
-      >
-        <span>{zh ? "＋ 添加食材照片" : "+ Add Ingredient Photos"}</span>
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          disabled={disabled || !visionReady || photos.length >= 5}
-          onChange={(event) => {
-            const files = Array.from(event.target.files ?? []);
-            event.target.value = "";
-            if (files.length) void pick(files);
-          }}
-        />
-      </label>
+      <div className="dinner-photo-actions">
+        {(["camera", "album"] as const).map((source) => (
+          <label
+            key={source}
+            className={
+              "dinner-photo-picker" +
+              (disabled || !visionReady || photos.length >= 5
+                ? " is-disabled"
+                : "")
+            }
+          >
+            <span>
+              {source === "camera"
+                ? zh
+                  ? "拍照"
+                  : "Take Photo"
+                : zh
+                  ? "从相册选择"
+                  : "Choose Photos"}
+            </span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture={source === "camera" ? "environment" : undefined}
+              multiple={source === "album"}
+              disabled={disabled || !visionReady || photos.length >= 5}
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = "";
+                if (files.length) void pick(files);
+              }}
+            />
+          </label>
+        ))}
+      </div>
       <small>
         {visionReady
           ? zh

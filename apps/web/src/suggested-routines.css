@@ -1,0 +1,78 @@
+.suggested-routines {
+  width: 100%;
+  margin: auto 0;
+  padding: 20px 0;
+}
+.suggested-routines-label {
+  margin: 0 0 10px;
+  font-size: 12px;
+  opacity: 0.65;
+}
+.suggested-routine-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.suggested-routine-card:hover {
+  background: color-mix(in srgb, currentColor 9%, transparent);
+}
+.suggested-routine-card:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+.suggested-routine-card:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.suggested-routine-icon {
+  font-size: 30px;
+}
+.suggested-routine-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 7px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.suggested-routine-copy strong {
+  font-size: 20px;
+}
+.suggested-routine-copy small {
+  font-size: 12px;
+  opacity: 0.65;
+}
+.suggested-routine-open {
+  font-size: 13px;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .suggested-routines {
+    padding: 8px 0;
+  }
+  .suggested-routine-card {
+    padding: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .suggested-routine-icon {
+    font-size: 24px;
+  }
+  .suggested-routine-open {
+    margin-left: auto;
+  }
+}
+.portal-content .simple-compose-shell:has(.suggested-routines) {
+  padding-top: clamp(12px, 4vh, 32px);
+}
+.portal-content .simple-compose-panel:has(.suggested-routines) {
+  gap: 16px;
+}

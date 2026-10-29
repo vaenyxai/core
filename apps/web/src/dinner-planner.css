@@ -134,6 +134,15 @@
   text-align: center;
   margin: -4px 0 0;
 }
+.dinner-photo-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.dinner-photo-picker:focus-within {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
 .dinner-photo-picker {
   position: relative;
   display: flex;

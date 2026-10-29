@@ -2,6 +2,7 @@ import { ComposerOptions } from "./composer-options";
 import { shouldReland, type LandingPosition } from "./chat-landing";
 import { editedRoutineView, withDinnerModules } from "./routine-edit-view";
 import { RoutineShelf } from "./routine-shelf";
+import { SuggestedRoutines, existingRoutineConversation } from "./suggested-routines";
 import { DinnerPlanner } from "./dinner-planner";
 import { DinnerJournalContent } from "./dinner-journal";
 import { isDinnerView, readDinnerInput } from "./dinner-planner-data";
@@ -10657,6 +10658,40 @@ This conversation is its home — feed it something to try it, and ask for chang
             <h2>Where should we begin?</h2>
           </div>
 
+          {view === "new" &&
+          !workspace.mode &&
+          !requestedProjectId &&
+          !startWorkPrompt.trim() &&
+          !pendingPhotos.length &&
+          !pendingDocument &&
+          !draftRecovered &&
+          !draftOmittedNames.length &&
+          !sending ? (
+            <SuggestedRoutines
+              routines={libraryRoutines}
+              language={lang}
+              onStart={async (routine) => {
+                setCapabilityTab("chat");
+                setDinnerChatMode(false);
+                setDinnerRestore(null);
+                const existing = existingRoutineConversation(
+                  workspace.threads,
+                  routine.id,
+                );
+                if (existing) {
+                  onDraftConversationStarted(existing);
+                  return;
+                }
+                const conversation = await createAskVaenyxConversation({
+                  routineId: routine.id,
+                  title: routine.name,
+                });
+                onConversationsChange([conversation, ...conversations]);
+                onDraftConversationStarted(conversation.id);
+                void onWorkspaceRefresh().catch(() => undefined);
+              }}
+            />
+          ) : null}
           {renderDraftRecoveryNotice()}
           <Composer
             attachDisabled={!defaultCanAttach}
