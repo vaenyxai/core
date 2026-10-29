@@ -1,14 +1,16 @@
+import type { ImageAnnotationItem } from "@vaenyx/contracts";
 export const DINNER_LAYOUT = "dinner-planner-v1";
 
 export type DinnerPhoto = {
   assetId: string;
   name: string;
   role: "ingredients";
+  annotations?: ImageAnnotationItem[];
 };
 export type DinnerInput = {
   ingredients: string;
-  servings: number;
-  minutes: number;
+  servings?: number;
+  minutes?: number;
   avoid: string;
   equipment: string;
   preferences: string;
@@ -75,8 +77,8 @@ export function readDinnerInput(raw: unknown): DinnerInput | null {
   if (
     !record(value) ||
     !text(value.ingredients, 6000) ||
-    !integer(value.servings, 1, 12) ||
-    !integer(value.minutes, 10, 180) ||
+    (value.servings !== undefined && !integer(value.servings, 1, 12)) ||
+    (value.minutes !== undefined && !integer(value.minutes, 10, 180)) ||
     !text(value.avoid, 2000, true) ||
     !text(value.equipment, 1000, true) ||
     !text(value.preferences, 2000, true) ||
@@ -91,7 +93,23 @@ export function readDinnerInput(raw: unknown): DinnerInput | null {
           p.assetId,
         ) &&
         text(p.name, 200, true) &&
-        p.role === "ingredients",
+        p.role === "ingredients" &&
+        (p.annotations === undefined ||
+          (Array.isArray(p.annotations) &&
+            p.annotations.length <= 30 &&
+            p.annotations.every(
+              (mark) =>
+                record(mark) &&
+                text(mark.name, 200) &&
+                typeof mark.x === "number" &&
+                Number.isFinite(mark.x) &&
+                mark.x >= 0 &&
+                mark.x <= 100 &&
+                typeof mark.y === "number" &&
+                Number.isFinite(mark.y) &&
+                mark.y >= 0 &&
+                mark.y <= 100,
+            ))),
     )
   )
     return null;
@@ -125,8 +143,6 @@ export function readDinnerOutput(value: unknown): DinnerOutput | null {
 export function emptyDinner(language: "en" | "zh"): DinnerInput {
   return {
     ingredients: "",
-    servings: 2,
-    minutes: 30,
     avoid: "",
     equipment: "",
     preferences: "",
@@ -156,4 +172,13 @@ export function recognisedIngredients(parsed: Record<string, unknown>): string {
           .join("\n")
           .slice(0, 6000)
       : "";
+}
+
+// New plans carry no invisible constraints from an old saved dinner.
+export function simpleDinnerInput(input: DinnerInput): DinnerInput {
+  return {
+    ...emptyDinner(input.language),
+    ingredients: input.ingredients,
+    attachments: input.attachments,
+  };
 }

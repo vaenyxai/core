@@ -36,7 +36,9 @@ it("installs only Dinner, persists reversible shelf changes and protects Owner-o
   const id = "vaenyx-dinner-planner";
   try {
     expect(readdirSync(config.routinesDirectory)).toEqual([id]);
-    expect(readdirSync(config.libraryDirectory)).toEqual([id]);
+    expect(readdirSync(config.libraryDirectory)).toEqual([
+      "vaenyx-dinner-dish",
+    ]);
     const unauthorised = await app.inject({
       method: "POST",
       url: path,

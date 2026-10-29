@@ -113,8 +113,8 @@ export function SuggestedRoutines({
             </span>
             <small>
               {zh
-                ? "拍照或填食材 · 选人数 · 生成晚餐"
-                : "Photo or ingredients · Servings · Dinner plan"}
+                ? "拍照或填食材 · 一键做一道菜"
+                : "Photo or ingredients · One tap, one dish"}
             </small>
           </span>
           <span className="suggested-routine-open">

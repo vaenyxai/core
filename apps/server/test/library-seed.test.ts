@@ -30,7 +30,7 @@ function makeSampleRepo(firstParty = false): string {
     repo,
     "sample-library",
     "methods",
-    "vaenyx-dinner-planner",
+    "vaenyx-dinner-dish",
   );
   mkdirSync(method, { recursive: true });
   writeFileSync(resolve(method, "method.json"), "{}");
@@ -92,7 +92,7 @@ describe("seedLibraryIfEmpty", () => {
     expect(seedLibraryIfEmpty(cfg)).toBe(true);
     expect(
       existsSync(
-        resolve(cfg.libraryDirectory, "vaenyx-dinner-planner", "method.json"),
+        resolve(cfg.libraryDirectory, "vaenyx-dinner-dish", "method.json"),
       ),
     ).toBe(true);
     expect(
@@ -114,7 +114,7 @@ describe("seedLibraryIfEmpty", () => {
 
     expect(seedLibraryIfEmpty(cfg)).toBe(false);
     expect(
-      existsSync(resolve(cfg.libraryDirectory, "vaenyx-dinner-planner")),
+      existsSync(resolve(cfg.libraryDirectory, "vaenyx-dinner-dish")),
     ).toBe(false);
   });
 
@@ -128,7 +128,7 @@ describe("seedLibraryIfEmpty", () => {
 
     expect(seedLibraryIfEmpty(cfg)).toBe(true);
     expect(
-      existsSync(resolve(cfg.libraryDirectory, "vaenyx-dinner-planner")),
+      existsSync(resolve(cfg.libraryDirectory, "vaenyx-dinner-dish")),
     ).toBe(true);
     expect(existsSync(resolve(userdata, "library", ".seeded"))).toBe(true);
   });

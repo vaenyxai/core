@@ -675,10 +675,12 @@ export function AnnotatedPhoto({
   annotations,
   imageId,
   onLoad,
+  compact = false,
 }: {
   annotations: ImageAnnotationItem[] | null;
   imageId: string;
   onLoad?: () => void;
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   const [overlayOn, setOverlayOn] = useState(true);
@@ -706,18 +708,22 @@ export function AnnotatedPhoto({
       ) : null}
       <img
         alt=""
+        role="button"
+        tabIndex={0}
+        aria-label="Enlarge Photo"
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setZoomed(true); } }}
         className="message-photo"
         onClick={() => setZoomed(true)}
         onLoad={onLoad}
         ref={ref}
         src={`/v1/vision/image/${imageId}`}
       />
-      {items && overlayOn ? <MarksOverlay placed={placed} /> : null}
+      {items && overlayOn && !compact ? <MarksOverlay placed={placed} /> : null}
       {/* The button exists ONLY when there is a layer to show or hide (Oskar,
           2026-07-29): a plain photo — one you sent, one Vaenyx drew — carries
           no controls at all. It is a layers toggle, never a magnifier: tapping
           the photo itself is what zooms. */}
-      {items ? (
+      {items && !compact ? (
         <button
           aria-label={overlayOn ? t("photo.marks.hide") : t("photo.marks.show")}
           className="voice-bubble-play annotate-button"

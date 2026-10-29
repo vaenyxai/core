@@ -1,0 +1,50 @@
+{
+  "input": {
+    "ingredients": "2 eggs, 200 g cooked rice, 1 carrot",
+    "language": "en",
+    "attachments": []
+  },
+  "output": {
+    "status": "ready",
+    "title": "Carrot & Egg Fried Rice",
+    "summary": "A quick dinner using your eggs, cooked rice and carrot. Check the pantry items before starting.",
+    "servings": 2,
+    "minutes": 20,
+    "ingredients": [
+      {
+        "name": "Eggs",
+        "quantity": "2",
+        "source": "available"
+      },
+      {
+        "name": "Cooked rice",
+        "quantity": "200 g",
+        "source": "available"
+      },
+      {
+        "name": "Carrot",
+        "quantity": "1, diced",
+        "source": "available"
+      },
+      {
+        "name": "Cooking oil",
+        "quantity": "1 tbsp",
+        "source": "check"
+      },
+      {
+        "name": "Salt",
+        "quantity": "To taste",
+        "source": "check"
+      }
+    ],
+    "steps": [
+      "Wash and dice the carrot. Beat the eggs.",
+      "Heat the oil in a frying pan. Cook the carrot until tender, then add the eggs and stir until set.",
+      "Add the cooked rice and salt. Stir-fry until everything is thoroughly hot, then divide between two bowls."
+    ],
+    "notes": [
+      "Use properly stored cooked rice."
+    ]
+  },
+  "note": "Synthetic example. Quantity estimates are suggestions, not observations from a photo."
+}

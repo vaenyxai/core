@@ -21,3 +21,6 @@ routines/*
 # Modular dinner planning package:
 !methods/vaenyx-dinner-planner/
 !routines/vaenyx-dinner-planner/
+
+# First-party single-dish Dinner Method (no instance content).
+!methods/vaenyx-dinner-dish/

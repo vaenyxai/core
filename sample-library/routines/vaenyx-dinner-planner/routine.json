@@ -1,8 +1,8 @@
 {
   "name": "Dinner",
-  "description": "Turn ingredients, a photo and tonight's preferences into one practical dinner, with a shopping list and cooking steps.",
+  "description": "Photograph or type ingredients, then make one practical dish.",
   "owner": "vaenyx",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "tags": [
     "first-party",
     "household",
@@ -15,14 +15,14 @@
   },
   "deps": [
     {
-      "methodId": "vaenyx-dinner-planner",
+      "methodId": "vaenyx-dinner-dish",
       "version": "1.0.0"
     }
   ],
   "flow": [
     {
       "id": "plan-dinner",
-      "methodId": "vaenyx-dinner-planner",
+      "methodId": "vaenyx-dinner-dish",
       "from": "journal"
     }
   ],

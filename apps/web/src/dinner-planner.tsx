@@ -9,6 +9,7 @@ import { DinnerResult } from "./dinner-result";
 import {
   dinnerInputKey,
   emptyDinner,
+  simpleDinnerInput,
   readDinnerInput,
   readDinnerOutput,
   type DinnerInput,
@@ -38,7 +39,6 @@ export function DinnerPlanner({
   const [resultInput, setResultInput] = useState<DinnerInput | null>(null);
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
-  const [reviewed, setReviewed] = useState(false);
   const [error, setError] = useState("");
   const hydrated = useRef(false);
   const running = useRef(false);
@@ -69,14 +69,13 @@ export function DinnerPlanner({
     hydrated.current = true;
     setDraft({ ...input, language });
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setReviewed(false);
     setError("");
   }, [restore, language, conversationId]);
   function change(patch: Partial<DinnerInput>) {
     hydrated.current = true;
     setDraft((current) => ({ ...current, ...patch }));
   }
-  const submitted = { ...draft, language };
+  const submitted = simpleDinnerInput({ ...draft, language });
   const stale =
     result &&
     (!resultInput || dinnerInputKey(submitted) !== dinnerInputKey(resultInput));
@@ -88,11 +87,11 @@ export function DinnerPlanner({
       ...submitted,
       ingredients: draft.ingredients.trim(),
     });
-    if (!input || (input.attachments.length > 0 && !reviewed)) {
+    if (!input) {
       setError(
         zh
-          ? "请填写食材、人数和时间；使用照片时先确认食材清单。"
-          : "Fill in ingredients, servings and time. Review the ingredient list if you added photos.",
+          ? "先拍照或填写食材。"
+          : "Take a photo or add some ingredients first.",
       );
       return;
     }
@@ -144,15 +143,13 @@ export function DinnerPlanner({
       <div className="dinner-intro">
         <div>
           <span className="dinner-eyebrow">
-            {zh
-              ? "Dinner · 今晚吃什么"
-              : "Dinner · Less Deciding, More Living"}
+            {zh ? "Dinner · 今晚吃什么" : "Dinner · Less Deciding, More Living"}
           </span>
           <h2>{zh ? "今晚吃什么？" : "What’s For Dinner?"}</h2>
           <p>
             {zh
-              ? "用家里的食材，生成一份有用量和步骤的晚餐方案。"
-              : "Your ingredients. One dinner, with quantities and clear steps."}
+              ? "拍照或填食材，一键做一道菜。"
+              : "Photo or ingredients. One tap, one dish."}
           </p>
         </div>
         <button
@@ -161,7 +158,6 @@ export function DinnerPlanner({
           disabled={disabled}
           onClick={() => {
             change(emptyDinner(language));
-            setReviewed(false);
             setError("");
           }}
         >
@@ -183,19 +179,18 @@ export function DinnerPlanner({
             draft={draft}
             disabled={disabled}
             visionReady={visionReady}
-            reviewed={reviewed}
-            onReviewed={setReviewed}
             onReading={setReading}
             onChange={change}
             onPhoto={(photo, ingredients) => {
               hydrated.current = true;
-              setReviewed(false);
               setDraft((current) => ({
                 ...current,
                 attachments: current.attachments.some(
                   (p) => p.assetId === photo.assetId,
                 )
-                  ? current.attachments
+                  ? current.attachments.map((item) =>
+                      item.assetId === photo.assetId ? photo : item,
+                    )
                   : [...current.attachments, photo],
                 ingredients: [current.ingredients, ingredients]
                   .filter(Boolean)
@@ -211,11 +206,7 @@ export function DinnerPlanner({
           )}
           <button
             className="dinner-generate"
-            disabled={
-              disabled ||
-              !draft.ingredients.trim() ||
-              (draft.attachments.length > 0 && !reviewed)
-            }
+            disabled={disabled || !draft.ingredients.trim()}
             type="submit"
           >
             {busy

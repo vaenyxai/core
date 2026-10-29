@@ -1,3 +1,4 @@
+import { AnnotatedPhoto } from "./photo-marks";
 import type { DinnerInput } from "./dinner-planner-data";
 
 export function DinnerJournalContent({
@@ -19,34 +20,31 @@ export function DinnerJournalContent({
       {input.attachments.length > 0 && (
         <div className="dinner-photo-grid">
           {input.attachments.map((photo) => (
-            <a
+            <AnnotatedPhoto
               key={photo.assetId}
-              href={"/v1/vision/image/" + encodeURIComponent(photo.assetId)}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={(zh ? "查看 " : "View ") + photo.name}
-            >
-              <img
-                src={"/v1/vision/image/" + encodeURIComponent(photo.assetId)}
-                alt={photo.name}
-                loading="lazy"
-              />
-            </a>
+              imageId={photo.assetId}
+              annotations={photo.annotations ?? null}
+              compact
+            />
           ))}
         </div>
       )}
-      <p>
-        {zh
-          ? `${input.servings} 人份 · ${input.minutes} 分钟内`
-          : `${input.servings} Servings · Within ${input.minutes} Min`}
-      </p>
+      {input.servings && input.minutes ? (
+        <p>
+          {zh
+            ? `${input.servings} 人份 · ${input.minutes} 分钟内`
+            : `${input.servings} Servings · Within ${input.minutes} Min`}
+        </p>
+      ) : null}
       <dl>
-        {fields.filter(([, value]) => value.trim()).map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
+        {fields
+          .filter(([, value]) => value.trim())
+          .map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
       </dl>
     </div>
   );
