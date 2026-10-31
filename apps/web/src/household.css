@@ -136,3 +136,21 @@
     padding: 14px;
   }
 }
+
+/* Keep source/result headings clear of the sticky conversation controls. */
+.household-output,
+.household-board .dinner-form {
+  scroll-margin-top: 140px;
+}
+@media (max-width: 600px) {
+  .household-output,
+  .household-board .dinner-form {
+    scroll-margin-top: 112px;
+  }
+}
+
+/* A structured record needs more room than a thumbnail in Gallery. */
+.routine-gallery-card:has(.household-result) {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
