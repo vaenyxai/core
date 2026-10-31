@@ -142,37 +142,6 @@ export function RoutineShelf({
             : "No active Routines. Restore one below or create a new one."}
         </p>
       ) : null}
-      <section
-        className="routine-shelf-plans"
-        aria-label={zh ? "计划中的 Routine" : "Planned Routines"}
-      >
-        <h2>{zh ? "接下来" : "Up Next"}</h2>
-        <p>
-          {zh
-            ? "将采用与 Dinner 一样的模块化操作。目前还不能运行。"
-            : "Planned with the same modular flow as Dinner. Not available to run yet."}
-        </p>
-        <div>
-          <article>
-            <span>{zh ? "计划中" : "Planned"}</span>
-            <h3>{zh ? "家庭通知" : "Family Notices"}</h3>
-            <p>
-              {zh
-                ? "照片或文字 → 核对日期与地点 → 准备清单"
-                : "Photo or text → Review dates and places → Preparation checklist"}
-            </p>
-          </article>
-          <article>
-            <span>{zh ? "计划中" : "Planned"}</span>
-            <h3>{zh ? "保修" : "Warranty"}</h3>
-            <p>
-              {zh
-                ? "收据、铭牌、说明书 → 核对资料 → 资料卡"
-                : "Receipt, label and manual → Review details → Reference card"}
-            </p>
-          </article>
-        </div>
-      </section>
       {archived.length ? (
         <details className="routine-shelf-removed">
           <summary>

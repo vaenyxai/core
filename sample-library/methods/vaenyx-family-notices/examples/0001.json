@@ -1,0 +1,33 @@
+{
+  "input": {
+    "sourceText": "Community picnic on 12 November 2026 at 10:00 at East Garden. Bring a water bottle and picnic mat.",
+    "language": "en",
+    "attachments": [],
+    "corrections": {}
+  },
+  "output": {
+    "title": "Community Picnic",
+    "summary": "Organised from the supplied text.",
+    "fields": [
+      {
+        "label": "Date",
+        "value": "12 November 2026",
+        "sourceId": "typed",
+        "quote": "12 November 2026",
+        "uncertain": false
+      },
+      {
+        "label": "Place",
+        "value": "East Garden",
+        "sourceId": "typed",
+        "quote": "East Garden",
+        "uncertain": false
+      }
+    ],
+    "checklist": [
+      "Bring a water bottle",
+      "Bring a picnic mat"
+    ],
+    "checks": []
+  }
+}

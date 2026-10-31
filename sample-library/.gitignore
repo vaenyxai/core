@@ -24,3 +24,9 @@ routines/*
 
 # First-party single-dish Dinner Method (no instance content).
 !methods/vaenyx-dinner-dish/
+
+# Modular household records (public templates only).
+!methods/vaenyx-family-notices/
+!routines/vaenyx-family-notices/
+!methods/vaenyx-warranty/
+!routines/vaenyx-warranty/

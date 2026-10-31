@@ -1,3 +1,6 @@
+import { HouseholdResult } from "./household-result";
+import { householdKind, readHouseholdInput } from "./household-data";
+import "./household.css";
 import { DinnerResult } from "./dinner-result";
 import { isDinnerView } from "./dinner-planner-data";
 import "./dinner-planner.css";
@@ -51,18 +54,37 @@ function ResultActions({
 export function RoutineResultView({
   output,
   view,
+  input,
   language = "en",
   onCorrectAndRerun,
   onRerun,
   outputValid,
 }: {
   output: unknown;
+  input?: unknown;
   outputValid?: boolean;
   view?: unknown;
   language?: ResultLanguage;
   onCorrectAndRerun?: () => void;
   onRerun?: () => void;
 }) {
+  const household = householdKind(view);
+  if (household)
+    return (
+      <div className="household-board">
+        <HouseholdResult
+          kind={household}
+          language={language}
+          output={outputValid === false ? null : output}
+          input={readHouseholdInput(input)}
+        />
+        <ResultActions
+          language={language}
+          onCorrectAndRerun={onCorrectAndRerun}
+          onRerun={onRerun}
+        />
+      </div>
+    );
   if (isDinnerView(view))
     return (
       <div className="dinner-planner">

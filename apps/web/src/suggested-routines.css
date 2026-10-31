@@ -76,3 +76,7 @@
 .portal-content .simple-compose-panel:has(.suggested-routines) {
   gap: 16px;
 }
+
+.suggested-routine-card + .suggested-routine-card {
+  margin-top: 10px;
+}

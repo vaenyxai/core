@@ -175,3 +175,28 @@ describe("sweepOrphanDocuments", () => {
     expect(sweepOrphanDocuments(database, dataDirectory)).toBe(0);
   });
 });
+
+describe("Routine source retention", () => {
+  it("keeps documents cited by a saved Routine, ignores malformed legacy sources, and releases after the last reference is removed", () => {
+    const { database, dataDirectory } = testDatabase();
+    const id = saveDocument(dataDirectory, Buffer.from("synthetic receipt"));
+    database.sqlite
+      .prepare(
+        "INSERT INTO routine_journal (id,routine_id,content) VALUES ('saved','vaenyx-warranty',?)",
+      )
+      .run(
+        JSON.stringify({ attachments: [{ kind: "document", assetId: id }] }),
+      );
+    database.sqlite
+      .prepare(
+        "INSERT INTO routine_journal (id,routine_id,content) VALUES ('legacy','old',?)",
+      )
+      .run(JSON.stringify({ attachments: ["not an object"] }));
+    expect(removeUnreferencedDocuments(database, dataDirectory, [id])).toBe(0);
+    expect(existsSync(documentPath(dataDirectory, id))).toBe(true);
+    database.sqlite
+      .prepare("DELETE FROM routine_journal WHERE id='saved'")
+      .run();
+    expect(removeUnreferencedDocuments(database, dataDirectory, [id])).toBe(1);
+  });
+});

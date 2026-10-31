@@ -1,3 +1,4 @@
+import { registerHouseholdSourceRoutes } from "./household-sources.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -10821,6 +10822,7 @@ export async function registerGatewayRoutes(
   );
 
   registerRoutineShelfRoutes(app, context);
+  registerHouseholdSourceRoutes(app, context, capabilityRefusal);
 
   // Owner-facing Routine catalogue (Library v2). Summaries only, like Methods.
   app.get(

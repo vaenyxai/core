@@ -1,8 +1,18 @@
+import { HouseholdBoard } from "./household-board";
+import { HouseholdJournalContent } from "./household-result";
+import {
+  householdKind,
+  householdScenes,
+  readHouseholdInput,
+} from "./household-data";
 import { ComposerOptions } from "./composer-options";
 import { shouldReland, type LandingPosition } from "./chat-landing";
 import { editedRoutineView, withDinnerModules } from "./routine-edit-view";
 import { RoutineShelf } from "./routine-shelf";
-import { SuggestedRoutines, existingRoutineConversation } from "./suggested-routines";
+import {
+  SuggestedRoutines,
+  existingRoutineConversation,
+} from "./suggested-routines";
 import { DinnerPlanner } from "./dinner-planner";
 import { DinnerJournalContent } from "./dinner-journal";
 import { isDinnerView, readDinnerInput } from "./dinner-planner-data";
@@ -6965,9 +6975,9 @@ function AskVaenyxPanel({
   const [capabilityTab, setCapabilityTab] = useState<
     "chat" | "journal" | "gallery"
   >("chat");
-  const [dinnerChatMode, setDinnerChatMode] = useState(false);
-  const [dinnerRunRevision, setDinnerRunRevision] = useState(0);
-  const [dinnerRestore, setDinnerRestore] =
+  const [routineChatMode, setRoutineChatMode] = useState(false);
+  const [routineRunRevision, setRoutineRunRevision] = useState(0);
+  const [routineRestore, setRoutineRestore] =
     useState<RoutineJournalEntry | null>(null);
   // Friendly input (Library v2 ③): a multi-field routine returns a
   // needs-confirmation payload instead of running; this holds the editable
@@ -7016,8 +7026,8 @@ function AskVaenyxPanel({
   // Reset the capability tab to Chat when switching chats.
   useEffect(() => {
     setCapabilityTab("chat");
-    setDinnerChatMode(false);
-    setDinnerRestore(null);
+    setRoutineChatMode(false);
+    setRoutineRestore(null);
   }, [activeConversationId]);
   // Connected model backends, for the composer's provider picker. Fetched once;
   // an empty/failed fetch just hides the picker (Codex-only stays the default).
@@ -8648,8 +8658,8 @@ function AskVaenyxPanel({
       setRoutineInputFields(data.inputFields);
       // A confirmed Chat run becomes the current modular dinner too.
       // Tab switches alone keep the in-progress form mounted.
-      setDinnerRestore(null);
-      setDinnerRunRevision((revision) => revision + 1);
+      setRoutineRestore(null);
+      setRoutineRunRevision((revision) => revision + 1);
       if (speakResult) {
         const newest = [...data.gallery].sort((a, b) =>
           b.createdAt.localeCompare(a.createdAt),
@@ -8787,9 +8797,12 @@ function AskVaenyxPanel({
   function correctAndRerunRoutineResult(item: RoutineGalleryItem): void {
     const source = sourceForRoutineResult(item);
     if (!source?.chatId || routineInputFields.length === 0) return;
-    if (isDinnerView(item.viewSnapshot) && readDinnerInput(source.content)) {
-      setDinnerRestore({ ...source });
-      setDinnerChatMode(false);
+    if (
+      (isDinnerView(item.viewSnapshot) && readDinnerInput(source.content)) ||
+      (householdKind(item.viewSnapshot) && readHouseholdInput(source.content))
+    ) {
+      setRoutineRestore({ ...source });
+      setRoutineChatMode(false);
       setCapabilityTab("chat");
       return;
     }
@@ -10672,8 +10685,8 @@ This conversation is its home — feed it something to try it, and ask for chang
               language={lang}
               onStart={async (routine) => {
                 setCapabilityTab("chat");
-                setDinnerChatMode(false);
-                setDinnerRestore(null);
+                setRoutineChatMode(false);
+                setRoutineRestore(null);
                 const existing = existingRoutineConversation(
                   workspace.threads,
                   routine.id,
@@ -10884,6 +10897,8 @@ This conversation is its home — feed it something to try it, and ask for chang
         ) ?? null)
       : null;
     const isDinner = isDinnerView(activeRoutine?.view);
+    const household = householdKind(activeRoutine?.view);
+    const isModular = isDinner || household !== null;
     // Header chips (spec §2a): same real-state chips as the sidebar, but the
     // Routine chip shows the Routine's actual name, and an in-flight build adds
     // a Building chip alongside the in-conversation banner.
@@ -11119,14 +11134,14 @@ This conversation is its home — feed it something to try it, and ask for chang
                 <button
                   className={
                     capabilityTab === tab &&
-                    !(isDinner && dinnerChatMode && tab === "chat")
+                    !(isModular && routineChatMode && tab === "chat")
                       ? "capability-tab capability-tab--active"
                       : "capability-tab"
                   }
                   key={tab}
                   onClick={() => {
                     setCapabilityTab(tab);
-                    if (tab === "chat") setDinnerChatMode(false);
+                    if (tab === "chat") setRoutineChatMode(false);
                   }}
                   type="button"
                 >
@@ -11135,9 +11150,11 @@ This conversation is its home — feed it something to try it, and ask for chang
                       ? zh
                         ? "安排晚餐"
                         : "Plan Dinner"
-                      : lang === "zh"
-                        ? "对话"
-                        : "Chat"
+                      : household
+                        ? householdScenes[household].action[zh ? 1 : 0]
+                        : lang === "zh"
+                          ? "对话"
+                          : "Chat"
                     : tab === "journal"
                       ? lang === "zh"
                         ? "记录"
@@ -11147,16 +11164,16 @@ This conversation is its home — feed it something to try it, and ask for chang
                         : "Gallery"}
                 </button>
               ))}
-              {isDinner && (
+              {isModular && (
                 <button
                   type="button"
                   className={
-                    dinnerChatMode && capabilityTab === "chat"
+                    routineChatMode && capabilityTab === "chat"
                       ? "capability-tab capability-tab--active dinner-chat-toggle"
                       : "capability-tab dinner-chat-toggle"
                   }
                   onClick={() => {
-                    setDinnerChatMode(true);
+                    setRoutineChatMode(true);
                     setCapabilityTab("chat");
                   }}
                 >
@@ -11966,15 +11983,37 @@ This conversation is its home — feed it something to try it, and ask for chang
           }
         >
           {isDinner && activeConversationId && (
-            <div hidden={capabilityTab !== "chat" || dinnerChatMode}>
+            <div hidden={capabilityTab !== "chat" || routineChatMode}>
               <DinnerPlanner
-                key={`${activeConversationId}:${dinnerRunRevision}`}
+                key={`${activeConversationId}:${routineRunRevision}`}
                 conversationId={activeConversationId}
                 language={lang}
                 journal={routineJournal}
                 gallery={routineGallery}
                 visionReady={visionReady}
-                restore={dinnerRestore}
+                restore={routineRestore}
+                onSaved={async () => {
+                  const id = activeConversationId;
+                  const data = await fetchChatRoutineData(id);
+                  if (activeConversationIdRef.current !== id) return;
+                  setRoutineJournal(data.journal);
+                  setRoutineGallery(data.gallery);
+                  setRoutineInputFields(data.inputFields);
+                  await onWorkspaceRefresh();
+                }}
+              />
+            </div>
+          )}
+          {household && activeConversationId && (
+            <div hidden={capabilityTab !== "chat" || routineChatMode}>
+              <HouseholdBoard
+                key={`${activeConversationId}:${routineRunRevision}`}
+                conversationId={activeConversationId}
+                kind={household}
+                language={lang}
+                journal={routineJournal}
+                gallery={routineGallery}
+                restore={routineRestore}
                 onSaved={async () => {
                   const id = activeConversationId;
                   const data = await fetchChatRoutineData(id);
@@ -11988,9 +12027,9 @@ This conversation is its home — feed it something to try it, and ask for chang
             </div>
           )}
           {isRoutine ? (
-            isDinner &&
+            isModular &&
             capabilityTab === "chat" &&
-            !dinnerChatMode ? null : capabilityTab === "journal" ? (
+            !routineChatMode ? null : capabilityTab === "journal" ? (
               routineJournal.length === 0 ? (
                 <div className="empty-state">
                   <strong>
@@ -12015,6 +12054,11 @@ This conversation is its home — feed it something to try it, and ask for chang
                     {isDinner && readDinnerInput(entry.content) ? (
                       <DinnerJournalContent
                         input={readDinnerInput(entry.content)!}
+                        language={lang}
+                      />
+                    ) : household && readHouseholdInput(entry.content) ? (
+                      <HouseholdJournalContent
+                        input={readHouseholdInput(entry.content)!}
                         language={lang}
                       />
                     ) : journalText(entry.content) ? (
@@ -12075,6 +12119,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                             : undefined
                         }
                         output={item.output}
+                        input={sourceForRoutineResult(item)?.content}
                         outputValid={item.outputValid}
                         view={
                           "viewSnapshot" in item
@@ -12135,14 +12180,19 @@ This conversation is its home — feed it something to try it, and ask for chang
                       </div>
                       {/* A fed photo stays a photo — with the same mark
                           button as chat photos (visual first). */}
-                      {node.entry.imageId ? (
+                      {household && readHouseholdInput(node.entry.content) ? (
+                        <HouseholdJournalContent
+                          input={readHouseholdInput(node.entry.content)!}
+                          language={lang}
+                        />
+                      ) : node.entry.imageId ? (
                         <AnnotatedPhoto
                           annotations={node.entry.imageAnnotations ?? null}
                           imageId={node.entry.imageId}
                           onLoad={reanchorAfterImageLoad}
                         />
                       ) : null}
-                      {journalText(node.entry.content) ? (
+                      {!household && journalText(node.entry.content) ? (
                         <p>{journalText(node.entry.content)}</p>
                       ) : null}
                     </article>
@@ -12180,6 +12230,7 @@ This conversation is its home — feed it something to try it, and ask for chang
                             ? () => rerunRoutineResult(node.item)
                             : undefined
                         }
+                        input={sourceForRoutineResult(node.item)?.content}
                         output={node.item.output}
                         outputValid={node.item.outputValid}
                         view={
@@ -12420,7 +12471,7 @@ This conversation is its home — feed it something to try it, and ask for chang
           ) : null}
           <div className="chat-end-anchor" ref={chatEndRef} />
         </div>
-        {!(isDinner && !dinnerChatMode) && (
+        {!(isModular && !routineChatMode) && (
           <JumpToLatest
             resetKey={activeConversationId ?? ""}
             targetRef={chatEndRef}
@@ -12429,7 +12480,7 @@ This conversation is its home — feed it something to try it, and ask for chang
 
         <form
           className="ask-vaenyx-composer"
-          hidden={isDinner && !dinnerChatMode}
+          hidden={isModular && !routineChatMode}
           onSubmit={sendMessage}
         >
           {renderDraftRecoveryNotice()}

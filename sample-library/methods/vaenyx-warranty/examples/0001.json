@@ -1,0 +1,39 @@
+{
+  "input": {
+    "sourceText": "Product: Demo Air Purifier. Model: DEMO-A200. Purchased 12 September 2026 from Example Appliances. The receipt states 24 months manufacturer warranty.",
+    "language": "en",
+    "attachments": [],
+    "corrections": {}
+  },
+  "output": {
+    "title": "Demo Air Purifier",
+    "summary": "Organised from the supplied text.",
+    "fields": [
+      {
+        "label": "Model",
+        "value": "DEMO-A200",
+        "sourceId": "typed",
+        "quote": "DEMO-A200",
+        "uncertain": false
+      },
+      {
+        "label": "Purchase Date",
+        "value": "12 September 2026",
+        "sourceId": "typed",
+        "quote": "12 September 2026",
+        "uncertain": false
+      },
+      {
+        "label": "Stated Warranty",
+        "value": "24 months manufacturer warranty",
+        "sourceId": "typed",
+        "quote": "24 months manufacturer warranty",
+        "uncertain": false
+      }
+    ],
+    "checklist": [
+      "Add the product manual"
+    ],
+    "checks": []
+  }
+}

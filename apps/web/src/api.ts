@@ -2870,3 +2870,19 @@ export function browseFolders(path: string): Promise<FolderBrowse> {
 
 // A mode's own voice, re-exported for the mode editor.
 export type { ModeVoice } from "@vaenyx/contracts";
+
+// Household modules keep source reading separate from generating a saved result.
+export function readHouseholdSource(
+  assetId: string,
+  kind: "image" | "document",
+  language: "en" | "zh",
+) {
+  return requestJson<{
+    text: string;
+    annotations: import("@vaenyx/contracts").ImageAnnotationItem[];
+    engineNote: string;
+  }>("/v1/household/sources/read", {
+    method: "POST",
+    body: JSON.stringify({ assetId, kind, language }),
+  });
+}

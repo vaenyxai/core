@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { AppConfig } from "../src/config.js";
 
-it("installs only Dinner, persists reversible shelf changes and protects Owner-only access", async () => {
+it("installs the three modular defaults, persists reversible shelf changes and protects Owner-only access", async () => {
   const dataDirectory = mkdtempSync(resolve(tmpdir(), "vaenyx-shelf-test-"));
   const repositoryRoot = resolve("../..");
   const config = {
@@ -35,9 +35,15 @@ it("installs only Dinner, persists reversible shelf changes and protects Owner-o
   const path = "/v1/library/routine-shelf";
   const id = "vaenyx-dinner-planner";
   try {
-    expect(readdirSync(config.routinesDirectory)).toEqual([id]);
+    expect(readdirSync(config.routinesDirectory).sort()).toEqual([
+      id,
+      "vaenyx-family-notices",
+      "vaenyx-warranty",
+    ]);
     expect(readdirSync(config.libraryDirectory)).toEqual([
       "vaenyx-dinner-dish",
+      "vaenyx-family-notices",
+      "vaenyx-warranty",
     ]);
     const unauthorised = await app.inject({
       method: "POST",
@@ -55,8 +61,10 @@ it("installs only Dinner, persists reversible shelf changes and protects Owner-o
       cookie: String(setup.headers["set-cookie"]).split(";")[0]!,
     };
     const list = await app.inject({ url: "/v1/routines", headers });
-    expect(list.json()).toHaveLength(1);
-    expect(list.json()[0]).toMatchObject({ id, name: "Dinner" });
+    expect(list.json()).toHaveLength(3);
+    expect(list.json()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id, name: "Dinner" })]),
+    );
     const conversation = await app.inject({
       method: "POST",
       url: "/v1/ask-vaenyx/conversations",

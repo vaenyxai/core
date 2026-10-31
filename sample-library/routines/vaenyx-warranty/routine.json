@@ -1,0 +1,79 @@
+{
+  "name": "Warranty",
+  "description": "Keep receipts, product labels and manuals in one reference card.",
+  "owner": "vaenyx",
+  "version": "1.0.0",
+  "tags": [
+    "first-party",
+    "household",
+    "modular"
+  ],
+  "mode": "accumulate",
+  "storage": {
+    "journal": true,
+    "gallery": true
+  },
+  "deps": [
+    {
+      "methodId": "vaenyx-warranty",
+      "version": "1.0.0"
+    }
+  ],
+  "flow": [
+    {
+      "id": "organise",
+      "methodId": "vaenyx-warranty",
+      "from": "journal"
+    }
+  ],
+  "view": {
+    "version": 1,
+    "layout": "warranty-v1",
+    "fields": [
+      {
+        "key": "title",
+        "as": "title"
+      },
+      {
+        "key": "summary",
+        "as": "text"
+      },
+      {
+        "key": "fields",
+        "as": "table",
+        "label": "Details",
+        "labelZh": "资料",
+        "columns": [
+          {
+            "key": "label",
+            "label": "Field",
+            "labelZh": "项目"
+          },
+          {
+            "key": "value",
+            "label": "Value",
+            "labelZh": "内容"
+          },
+          {
+            "key": "quote",
+            "label": "Source Quote",
+            "labelZh": "来源原文"
+          }
+        ]
+      },
+      {
+        "key": "checklist",
+        "as": "bullets",
+        "label": "Checklist",
+        "labelZh": "清单"
+      },
+      {
+        "key": "checks",
+        "as": "bullets",
+        "label": "Check",
+        "labelZh": "待核对"
+      }
+    ],
+    "footnote": "legal.disclaimer.legal"
+  }
+}

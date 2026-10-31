@@ -1,0 +1,138 @@
+.household-board {
+  --dinner-accent: #687d88;
+}
+.household-source-card,
+.household-field,
+.household-result > header,
+.household-result > section,
+.household-progress {
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 14px;
+  padding: 16px;
+  background: color-mix(in srgb, currentColor 3%, transparent);
+}
+.household-source-card {
+  margin-top: 12px;
+  min-width: 0;
+}
+.household-source-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.household-source-card img,
+.household-field img,
+.household-journal img {
+  max-height: 240px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+}
+.household-source-card details,
+.household-field details,
+.household-journal details {
+  margin-top: 12px;
+}
+.household-board summary,
+.household-result summary,
+.household-journal summary {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+  overflow-wrap: anywhere;
+}
+.household-board textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+.household-board input,
+.household-board select {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.household-output,
+.household-result {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.household-result h2,
+.household-result h3 {
+  margin: 0 0 10px;
+}
+.household-result h2 {
+  font-size: 24px;
+}
+.household-result h3 {
+  font-size: 14px;
+  opacity: 0.75;
+}
+.household-result p {
+  margin: 6px 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.household-result ul {
+  padding-left: 20px;
+  line-height: 1.7;
+}
+.household-result blockquote {
+  margin: 8px 0;
+  padding-left: 12px;
+  border-left: 2px solid currentColor;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.household-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.household-field.needs-review,
+.household-checks {
+  border-color: #aa8345;
+}
+.household-field small {
+  opacity: 0.75;
+}
+.household-document {
+  display: block;
+  min-height: 44px;
+  align-content: center;
+  overflow-wrap: anywhere;
+}
+.household-source-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.household-progress {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.household-journal {
+  min-width: 0;
+}
+.household-source-card .annotated-photo,
+.household-field .annotated-photo {
+  max-width: 100%;
+}
+@media (max-width: 600px) {
+  .household-field-grid {
+    grid-template-columns: 1fr;
+  }
+  .household-board input,
+  .household-board textarea,
+  .household-board select {
+    font-size: 16px;
+  }
+  .household-result > header,
+  .household-result > section,
+  .household-field {
+    padding: 14px;
+  }
+}

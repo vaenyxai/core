@@ -1,3 +1,4 @@
+import { seedHouseholdRoutines } from "./library-seed-household.js";
 import { seedDinnerPlanner } from "./library-seed-dinner.js";
 import { createHash } from "node:crypto";
 import {
@@ -163,7 +164,7 @@ export function seedLibraryIfEmpty(config: AppConfig): boolean {
 
   const libraryRoot = dirname(config.libraryDirectory);
   const marker = resolve(libraryRoot, ".seeded");
-  // Only Dinner is a default installation. Historical packages remain in the
+  // Dinner, Family Notices and Warranty are default installations. Historical packages remain in the
   // distribution for compatibility tests and upgrades, not as starter items.
   mkdirSync(libraryRoot, { recursive: true });
   if (!existsSync(marker)) writeFileSync(marker, new Date().toISOString());
@@ -179,5 +180,6 @@ export function seedLibraryIfEmpty(config: AppConfig): boolean {
     copied = true;
   }
   if (seedDinnerPlanner(config, sampleMethods, sampleRoutines)) copied = true;
+  if (seedHouseholdRoutines(config, sampleMethods, sampleRoutines)) copied = true;
   return copied;
 }

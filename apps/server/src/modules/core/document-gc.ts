@@ -29,7 +29,20 @@ function isReferenced(database: DatabaseHandle, documentId: string): boolean {
       `SELECT 1 AS found FROM ask_vaenyx_messages WHERE document_id = ? LIMIT 1`,
     )
     .get(documentId) as { found: number } | undefined;
-  return row !== undefined;
+  if (row !== undefined) return true;
+  // Saved Routine source files are referenced by canonical Journal inputs.
+  return (
+    database.sqlite
+      .prepare(
+        `
+    SELECT 1 FROM routine_journal j,
+      json_each(CASE WHEN json_valid(j.content) THEN j.content ELSE '{}' END, '$.attachments') a
+    WHERE json_extract(CASE WHEN a.type = 'object' THEN a.value ELSE '{}' END, '$.kind') = 'document'
+      AND json_extract(CASE WHEN a.type = 'object' THEN a.value ELSE '{}' END, '$.assetId') = ? LIMIT 1
+  `,
+      )
+      .get(documentId) !== undefined
+  );
 }
 
 // Delete each named document's files unless some message row — in ANY
