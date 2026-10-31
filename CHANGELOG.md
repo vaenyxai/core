@@ -4,6 +4,48 @@ User-facing release history for Vaenyx. Each released version here matches a
 Git tag and a GitHub Release with the same notes. Day-to-day development
 history lives in the commit log.
 
+## v0.4.14.0 — 2026-10-31
+
+**Dinner turns ingredients into one dish.** Open Dinner from the home suggestion
+or Library, take a photo or choose existing photos, and watch each photo's
+recognition progress. Ingredients appear in an editable list; one tap makes a
+dish with ingredients, cooking steps, estimated time and a shopping check.
+There is no separate people/time form or confirmation checkbox. Plans use the
+current ingredients rather than hidden settings from an earlier run.
+
+**Photos are smaller, and their labels stay with the plan.** Dinner compresses
+photos before upload. Tap a photo to enlarge it, switch recognition labels on
+or off, and tap the picture again to close it. Saved photos and labels return
+with the plan and in Journal. A failed compression reports an error rather
+than uploading the original image.
+
+**A simpler Library and clearer mobile results.** New installations start with
+one Dinner Routine and its Method. Family Notices and Warranty are marked as
+planned. Existing routines can be removed from the shelf without deleting their
+history; customised Dinner recipes are preserved. Dinner uses modular input
+and result cards on phones and computers. Compact chat controls leave more
+room for results, and starting a run reveals its new progress.
+
+**The selected model is used consistently.** Routine runs honour the selected
+model, tests stay associated with the model tested, and subscription refusals
+show a useful reason. Reconnecting and updating the managed Codex component
+preserve login data. Thinking levels follow each subscription model's supported
+choices.
+
+**More useful conversations, with review before saving.** Share text, links or
+photos to Vaenyx on Android as an unsent draft. Chat accepts up to five photos,
+and recording keeps the attachment tools available. Ask for a Method or Routine
+in one sentence to review its draft before saving, or turn a finished
+conversation into a reviewed Routine. A run that needs an answer waits for the
+Owner rather than continuing without it.
+
+**Reliability and clearer boundaries.** Conversations and notifications open
+more promptly; update checks and stalled downloads have time limits. User Mode
+shows explicit capability and account choices. Automatic project notes hold
+back action-steering lines for review, and first-party results carry their
+applicable notices. Release downloads now also have versioned filenames beside
+the stable download names.
+
 ## v0.4.13.0 — 2026-09-08
 
 **Vaenyx Me has a conversation of its own.** The permanent row in the sidebar

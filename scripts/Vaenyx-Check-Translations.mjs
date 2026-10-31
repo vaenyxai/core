@@ -27,8 +27,11 @@ const manifestPath = resolve(projectRoot, "docs", "translation-pairs.json");
 const writeMode = process.argv.includes("--write");
 const recordCommand = "node scripts/Vaenyx-Check-Translations.mjs --write";
 
-// Same value `git hash-object` computes, without spawning git per file.
+// Hash the repository LF form, matching .gitattributes. Editors may leave
+// CRLF bytes on Windows before Git normalises them at commit time; those
+// line endings must not make an otherwise identical translation drift.
 function gitBlobHash(buffer) {
+  buffer = Buffer.from(buffer.toString("utf8").replaceAll("\r\n", "\n"));
   return createHash("sha1")
     .update(`blob ${buffer.length}\0`)
     .update(buffer)
