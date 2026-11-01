@@ -1,3 +1,4 @@
+import { RelayConnectPanel } from "./RelayConnectPanel.js";
 import { HouseholdBoard } from "./household-board";
 import { HouseholdJournalContent } from "./household-result";
 import {
@@ -31228,15 +31229,23 @@ export function App() {
     );
   }
 
+  const relayConnectRequest = new URLSearchParams(window.location.search).get(
+    "connect",
+  );
+
   return (
     <InstallAcceptanceGate>
       <ModelConnectGate>
-        <VaenyxWorkspace
-          onLogout={logout}
-          onWorkspaceChange={setWorkspace}
-          systemStatus={systemStatus}
-          workspace={workspace}
-        />
+        {relayConnectRequest ? (
+          <RelayConnectPanel requestId={relayConnectRequest} />
+        ) : (
+          <VaenyxWorkspace
+            onLogout={logout}
+            onWorkspaceChange={setWorkspace}
+            systemStatus={systemStatus}
+            workspace={workspace}
+          />
+        )}
       </ModelConnectGate>
     </InstallAcceptanceGate>
   );

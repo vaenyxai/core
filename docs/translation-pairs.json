@@ -2,6 +2,12 @@
   "note": "Bilingual documentation pairs, verified by scripts/Vaenyx-Check-Translations.mjs as part of npm run check. The blob hashes record each side's content at the last confirmed-consistent state; after editing either side, bring the other along and re-record with: node scripts/Vaenyx-Check-Translations.mjs --write",
   "pairs": [
     {
+      "en": "docs/relay-connect.md",
+      "zh": "docs/relay-connect.zh.md",
+      "enBlob": "c5cdbd4f80e51cbf82920d0444cd6d842321d313",
+      "zhBlob": "c3c3812add449e68327bc5e53575fcda6c17726d"
+    },
+    {
       "en": "docs/glossary.md",
       "zh": "docs/glossary.zh.md",
       "enBlob": "7df26c685b03ea6c21430872059a40a0ecaf4385",
@@ -10,8 +16,8 @@
     {
       "en": "docs/user-manual.md",
       "zh": "docs/user-manual.zh.md",
-      "enBlob": "96746409a23acf2cafcfa7c9327183b39c9e9866",
-      "zhBlob": "778a6443fe92ebebc9bdc6b4dec5ddc243a5c755"
+      "enBlob": "ae3254759a2aa4b24d429edad058f49e60731562",
+      "zhBlob": "11c5f69b1b9031ca124b746139478e668afd621e"
     },
     {
       "en": "docs/MIGRATE-TO-NEW-PC.md",

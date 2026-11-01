@@ -793,6 +793,7 @@ import { listMonthUsage, usageMonth } from "../core/relay-usage.js";
 import { ocrEngineConnected } from "../core/ocr.js";
 
 import { registerRoutineShelfRoutes } from "./routine-shelf.js";
+import { registerRelayConnectRoutes } from "./relay-connect.js";
 
 interface GatewayContext {
   config: AppConfig;
@@ -6583,6 +6584,8 @@ export async function registerGatewayRoutes(
     const login = request.headers["tailscale-user-login"];
     return typeof login !== "string" || login.length === 0;
   }
+
+  registerRelayConnectRoutes(app, context, outsideTailnet);
 
   // Who may knock (phase two, 2026-08-06): a RELAY key, nothing else. The
   // shared door key is retired — every caller is an app with its own identity.

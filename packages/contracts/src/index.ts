@@ -496,3 +496,10 @@ export {
 } from "./workspace.js";
 
 export * from "./research.js";
+export {
+  RelayConnectStartSchema,
+  RelayConnectExchangeSchema,
+  type RelayConnectStart,
+  type RelayConnectExchange,
+  type RelayConnectRequestView,
+} from "./relay-connect.js";

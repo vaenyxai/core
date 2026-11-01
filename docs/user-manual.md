@@ -858,6 +858,14 @@ Read this inside the app: **Settings → Manual**.
   while your own side has no login to copy.
 - **The old shared key is retired.** Every app carries its own Model Key; a
   call on the old shared one is simply refused.
+- **Connect without copying a key** — an app implementing the
+  [connection handover](relay-connect.md) opens an Owner confirmation page.
+  Check the exact website and choose its existing Relay App before approving.
+  A short-lived, single-use exchange passes that App Key to the app, without
+  putting it in a URL or clipboard. This does not sign in a subscription, run
+  a model or grant extra capabilities. The app is responsible for safe local
+  storage and account isolation. This is the existing App Key, not a new
+  device-specific credential: rotating or revoking it affects all its copies.
 - **Prerequisite** — the app's device must be on your private network, and now
   the door itself checks: a request from outside the tailnet is refused with a
   clear answer (RELAY_TAILNET_REQUIRED), **even with a correct key**. A leaked
@@ -1115,5 +1123,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.7-dev** · last updated 2026-11-01.
+Manual for **v0.4.14.8-dev** · last updated 2026-11-01.
 Keep this file up to date whenever a feature changes.
