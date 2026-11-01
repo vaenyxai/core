@@ -31,6 +31,12 @@
 
 ## Owner 确认与返回
 
+发起该表单的文档必须使用 `Referrer-Policy: strict-origin`。
+`no-referrer`（或跨 Origin 的 `same-origin`）会让浏览器表单 POST 的 Origin
+变成 `null`，因此被拒绝。只对发起文档设置该策略；仅发送 Origin，不发送路径或查询参数。
+Vaenyx 也仅对精确的 `/?connect=<request_id>` HTML 文档设置同一策略，以提交返回表单。
+其他文档和 API 响应仍用 `no-referrer`；Origin 校验不会放宽。
+
 Vaenyx 要求 Owner 在 User Mode 登录，显示接收 Origin 和返回地址，
 并要求选择一个已启用的现有 Relay App。仅打开页面不会批准。
 已拒绝、过期、Profile 改变或已使用的请求不能重复批准。

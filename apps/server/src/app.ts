@@ -418,7 +418,7 @@ export async function buildApp(
     "frame-ancestors 'none'",
   ].join("; ");
 
-  app.addHook("onSend", async (_request, reply) => {
+  app.addHook("onSend", async (request, reply) => {
     reply.header("x-content-type-options", "nosniff");
     reply.header("x-frame-options", "DENY");
     reply.header("referrer-policy", "no-referrer");
@@ -429,6 +429,16 @@ export async function buildApp(
     const contentType = reply.getHeader("content-type");
     if (typeof contentType === "string" && contentType.includes("text/html")) {
       reply.header("cache-control", "no-cache, must-revalidate");
+      // Only the dedicated handover document submits a cross-origin form.
+      // no-referrer makes its POST Origin null; strict-origin preserves the
+      // exact HTTPS origin without exposing the request ID, path or query.
+      if (
+        (request.method === "GET" || request.method === "HEAD") &&
+        /^\/\?connect=[A-Za-z0-9_-]{43}$/.test(request.url)
+      ) {
+        reply.header("referrer-policy", "strict-origin");
+        reply.header("cache-control", "no-store");
+      }
     }
   });
 

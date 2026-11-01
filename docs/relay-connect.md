@@ -15,6 +15,13 @@ Other apps keep their own identities, rules, data, model choices and results.
 - Submit a **top-level form POST**, not fetch, to the configured Vaenyx origin's
   `/v1/relay/connect/start`, using `application/x-www-form-urlencoded`:
 
+The document initiating this form must use `Referrer-Policy: strict-origin`.
+`no-referrer` (or cross-origin `same-origin`) makes a browser form POST's Origin
+`null`, which is refused. Scope this policy to the initiating document; it sends
+only the origin, never a path or query. Vaenyx applies the same policy only to its
+exact `/?connect=<request_id>` HTML document for the return form. Other documents
+and API responses retain `no-referrer`; Origin checks are never relaxed.
+
 | Field                   | Value                                                                               |
 | ----------------------- | ----------------------------------------------------------------------------------- |
 | `version`               | `1`                                                                                 |

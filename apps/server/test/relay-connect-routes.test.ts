@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -51,6 +51,11 @@ describe("relay connection HTTP boundary", () => {
       googleOAuth: null,
       publishServiceUrl: null,
     };
+    mkdirSync(config.webDistDirectory);
+    writeFileSync(
+      join(config.webDistDirectory, "index.html"),
+      "<!doctype html><title>Synthetic App</title>",
+    );
     process.env.VAENYX_DATA_DIR = config.dataDirectory;
     app = await buildApp(config);
     const setup = await app.inject({
@@ -73,6 +78,24 @@ describe("relay connection HTTP boundary", () => {
     await app.close();
     delete process.env.VAENYX_DATA_DIR;
     rmSync(config.repositoryRoot, { recursive: true, force: true });
+  });
+  it("preserves Origin only on the bounded handover HTML document", async () => {
+    const response = await app.inject("/?connect=" + "r".repeat(43));
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.headers["referrer-policy"]).toBe("strict-origin");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    for (const url of [
+      "/",
+      "/?view=settings",
+      "/?connect=invalid",
+      "/?connect=" + "r".repeat(43) + "&connect=" + "s".repeat(43),
+      "/?connect=" + "r".repeat(43) + "&view=settings",
+      "/v1/system/status?connect=" + "r".repeat(43),
+    ]) {
+      const ordinary = await app.inject(url);
+      expect(ordinary.headers["referrer-policy"]).toBe("no-referrer");
+    }
   });
   async function start(extra = "") {
     return app.inject({
