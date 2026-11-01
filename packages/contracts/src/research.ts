@@ -29,7 +29,13 @@ export const ResearchLocatorSchema = object({
 export const ResearchFileSchema = object({
   id,
   name: Type.String({ minLength: 1, maxLength: 200 }),
-  url: Type.String({ minLength: 8, maxLength: 4000 }),
+  url: Type.Optional(Type.String({ minLength: 8, maxLength: 4000 })),
+  file_ref: Type.Optional(
+    object({
+      version: Type.Literal(1),
+      token: Type.String({ pattern: "^[A-Za-z0-9_-]{43}$" }),
+    }),
+  ),
   sha256: Type.Optional(
     nullable(Type.String({ pattern: "^[a-fA-F0-9]{64}$" })),
   ),

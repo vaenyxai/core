@@ -1,6 +1,7 @@
 ﻿import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 
 export type VaenyxMode = "development" | "test" | "production";
 
@@ -46,6 +47,8 @@ export interface AppConfig {
   // hosted core-cloud service: the user signs in there and the service holds the
   // bot token. Null = the operator-direct GitHub path above.
   publishServiceUrl: string | null;
+  // Optional operator-installed exact-file eligibility list. No HTTP path input.
+  localFileAllowlistPath?: string;
 }
 
 function readSecretJson(
@@ -214,12 +217,17 @@ export function loadConfig(): AppConfig {
     mode,
     updateProbe: process.env.VAENYX_UPDATE_PROBE === "1",
     port: readPort(process.env.VAENYX_PORT),
-    version: "0.4.14.9-dev",
+    version: "0.4.14.10-dev",
     webDistDirectory: resolve(
       serverRoot,
       process.env.VAENYX_WEB_DIST ?? "../web/dist",
     ),
     secretsDirectory,
+    localFileAllowlistPath: resolve(
+      process.env.PROGRAMDATA ?? tmpdir(),
+      "Vaenyx",
+      "local-file-allowlist.json",
+    ),
     publish: loadPublishCredentials(secretsDirectory),
     googleOAuth: loadGoogleOAuth(secretsDirectory),
     publishServiceUrl:

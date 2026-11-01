@@ -1,4 +1,8 @@
-import { ResearchFileSchema, ResearchRequestSchema, ResearchResponseSchema } from "./research.js";
+import {
+  ResearchFileSchema,
+  ResearchRequestSchema,
+  ResearchResponseSchema,
+} from "./research.js";
 import { type Static, Type } from "@sinclair/typebox";
 
 import { OwnerSafeErrorSchema } from "./owner-safe-error.js";
@@ -3741,7 +3745,8 @@ export const RelayRunRequestSchema = Type.Object(
     capability: RelayCapabilitySchema,
     query: Type.Optional(Type.String({ minLength: 1, maxLength: 20_000 })),
     allowed_domains: Type.Optional(
-      Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { maxItems: 20,
+      Type.Array(Type.String({ minLength: 1, maxLength: 253 }), {
+        maxItems: 20,
       }),
     ),
     max_results: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
@@ -3763,7 +3768,8 @@ export const RelayRunRequestSchema = Type.Object(
             sha256: ResearchFileSchema.properties.sha256,
             mime: ResearchFileSchema.properties.mime,
             name: Type.String({ minLength: 1, maxLength: 200 }),
-            url: Type.String({ minLength: 8, maxLength: 4000 }),
+            url: Type.Optional(Type.String({ minLength: 8, maxLength: 4000 })),
+            file_ref: ResearchFileSchema.properties.file_ref,
           },
           { additionalProperties: false },
         ),

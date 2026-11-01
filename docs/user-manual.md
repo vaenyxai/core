@@ -783,7 +783,7 @@ Read this inside the app: **Settings → Manual**.
 - **What it can do** — a valid Model Key automatically gets every safe ability
   that its selected Subscription engine has passed in a real test: text,
   structured results, image/PDF input and auditable Web Search. There are no
-  per-ability switches on a Model Key. Voice, image creation, shell, local
+  per-ability switches on a Model Key. Voice, image creation, shell, arbitrary local
   files, browser sessions, settings and account actions never come through
   this door.
 - **Test all capabilities** — runs real Subscription calls and lists each
@@ -813,6 +813,15 @@ Read this inside the app: **Settings → Manual**.
   stopping reason. Partial research is not a finished business report. Long PDFs
   can be read by page ranges; static webpage reading cannot expand interactive
   content. No paid OCR or automatic model substitution is enabled.
+- **Temporary local PDF approval** — an operator can install an exact file list
+  outside the repository. In `/?local-files=1`, the Owner selects eligible files
+  for the preassigned App, website and task. There is no path input or folder scan.
+  Each reference lasts ten minutes and permits only its approved pages. Revocation,
+  key rotation, disabling the App or restarting Vaenyx invalidates it. The App uses
+  [the local-file protocol](relay-local-files.md) with the existing research call;
+  cloud download links continue to work unchanged. Repeating the identical completed
+  request within its lifetime returns the saved in-memory response, without another
+  model call. Running, failed or changed attempts cannot be silently resubmitted.
 - **Reading and citation recovery** — an initial bounded read can discover the
   actual text length without guessing a range. Exact out-of-range requests return
   the available length and retain the failed operation. A rejected answer gets
@@ -1123,5 +1132,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.8-dev** · last updated 2026-11-01.
+Manual for **v0.4.14.10-dev** · last updated 2026-11-01.
 Keep this file up to date whenever a feature changes.

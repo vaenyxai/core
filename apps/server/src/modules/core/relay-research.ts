@@ -17,6 +17,7 @@ import type {
 } from "@vaenyx/contracts";
 import { ResearchSources } from "./research-sources.js";
 import type { ResearchDownloader } from "./research-fetch.js";
+import type { LocalFileRead } from "./local-file-types.js";
 import {
   normalizeSearchRunEvidence,
   relaySearchPrompt,
@@ -53,6 +54,7 @@ export interface ResearchRunInput {
   modelCall: ResearchModel;
   download?: ResearchDownloader;
   signal?: AbortSignal;
+  localRead?: LocalFileRead;
 }
 function safeError(
   error: unknown,
@@ -184,6 +186,7 @@ export async function runResearch(
       signal: controller.signal,
       download: input.download,
       visionEnabled: input.visionEnabled,
+      localRead: input.localRead,
     });
     // One final analysis is allowed after the last dispatched tool. No persistent session state.
     for (let turn = 0; turn <= request.budget.max_tool_actions + 2; turn++) {

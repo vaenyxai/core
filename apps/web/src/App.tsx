@@ -1,4 +1,5 @@
 import { RelayConnectPanel } from "./RelayConnectPanel.js";
+import { LocalFilesPanel } from "./LocalFilesPanel.js";
 import { HouseholdBoard } from "./household-board";
 import { HouseholdJournalContent } from "./household-result";
 import {
@@ -31236,7 +31237,9 @@ export function App() {
   return (
     <InstallAcceptanceGate>
       <ModelConnectGate>
-        {relayConnectRequest ? (
+        {new URLSearchParams(window.location.search).has("local-files") ? (
+          <LocalFilesPanel />
+        ) : relayConnectRequest ? (
           <RelayConnectPanel requestId={relayConnectRequest} />
         ) : (
           <VaenyxWorkspace

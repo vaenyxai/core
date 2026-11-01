@@ -31,6 +31,13 @@ export function assertResearchRequest(
   )
     throw new Error("invalid_research_input");
   const ids = files.map((file) => (file as ResearchFile).id);
+  if (
+    files.some((file) => {
+      const f = file as ResearchFile;
+      return Boolean(f.url) === Boolean(f.file_ref);
+    })
+  )
+    throw new Error("invalid_research_input");
   if (new Set(ids).size !== ids.length) throw new Error("duplicate_file_id");
   if (Buffer.byteLength(JSON.stringify({ value, files })) > 500000)
     throw new Error("input_too_large");

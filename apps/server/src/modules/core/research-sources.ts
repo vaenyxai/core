@@ -16,6 +16,7 @@ import {
 } from "./research-documents.js";
 import { renderRelayPdfPages } from "./relay-pdf.js";
 import { ResearchRangeError } from "./research-errors.js";
+import type { LocalFileRead } from "./local-file-types.js";
 
 export interface ResearchRead {
   source: ResearchSource;
@@ -36,6 +37,7 @@ interface Stored {
 export class ResearchSources {
   readonly entries = new Map<string, Stored>();
   downloadedBytes = 0;
+  private readBytes = 0;
   constructor(
     readonly options: {
       files: ResearchFile[];
@@ -48,6 +50,7 @@ export class ResearchSources {
       signal: AbortSignal;
       download?: ResearchDownloader;
       visionEnabled?: boolean;
+      localRead?: LocalFileRead;
     },
   ) {
     for (const file of options.files) this.add(null, file);
@@ -96,28 +99,49 @@ export class ResearchSources {
     const source = entry.source;
     const previousRepresentation = source.representation;
     try {
+      // Recheck scope, revocation and expiry on EVERY read, including cache hits.
+      const local = entry.file?.file_ref
+        ? await (
+            this.options.localRead ??
+            (() => {
+              throw new Error("local_file_denied");
+            })
+          )(
+            entry.file,
+            input.from,
+            input.to,
+            Math.min(
+              this.options.maxFileBytes,
+              this.options.maxBytes - (entry.body ? 0 : this.readBytes),
+            ),
+            this.options.signal,
+          )
+        : null;
       if (!entry.body) {
         const hosts = entry.file
           ? this.options.fileHosts
           : this.options.allowedDomains.length
             ? this.options.allowedDomains
             : null;
-        const downloaded = await (
-          this.options.download ?? downloadResearchSource
-        )(
-          entry.file?.url ?? source.url!,
-          hosts,
-          Math.min(
-            this.options.maxFileBytes,
-            this.options.maxBytes - this.downloadedBytes,
-          ),
-          this.options.signal,
-          (bytes) => {
-            this.downloadedBytes += bytes;
-            if (this.downloadedBytes > this.options.maxBytes)
-              throw new Error("download_budget_exhausted");
-          },
-        );
+        const downloaded =
+          local ??
+          (await (this.options.download ?? downloadResearchSource)(
+            entry.file?.url ?? source.url!,
+            hosts,
+            Math.min(
+              this.options.maxFileBytes,
+              this.options.maxBytes - this.readBytes,
+            ),
+            this.options.signal,
+            (bytes) => {
+              this.downloadedBytes += bytes;
+              this.readBytes += bytes;
+              if (this.readBytes > this.options.maxBytes)
+                throw new Error("download_budget_exhausted");
+            },
+          ));
+        // Local input consumes the byte budget but is not a network download.
+        if (local) this.readBytes += local.body.length;
         this.options.signal.throwIfAborted();
         const hash = createHash("sha256").update(downloaded.body).digest("hex");
         if (entry.file?.sha256 && hash !== entry.file.sha256.toLowerCase())

@@ -794,6 +794,7 @@ import { ocrEngineConnected } from "../core/ocr.js";
 
 import { registerRoutineShelfRoutes } from "./routine-shelf.js";
 import { registerRelayConnectRoutes } from "./relay-connect.js";
+import { registerLocalFileRoutes } from "./local-files.js";
 
 interface GatewayContext {
   config: AppConfig;
@@ -6586,6 +6587,7 @@ export async function registerGatewayRoutes(
   }
 
   registerRelayConnectRoutes(app, context, outsideTailnet);
+  const localFiles = registerLocalFileRoutes(app, context, outsideTailnet);
 
   // Who may knock (phase two, 2026-08-06): a RELAY key, nothing else. The
   // shared door key is retired — every caller is an app with its own identity.
@@ -6669,7 +6671,7 @@ export async function registerGatewayRoutes(
           } catch {
             return reply.code(400).send({ error: "invalid_research_input" });
           }
-        } else if (body?.research !== undefined)
+        } else if (body?.research !== undefined || body?.files?.some(f => f.file_ref || !f.url))
           return reply.code(400).send({ error: "invalid_research_input" });
       },
       schema: {
@@ -6728,11 +6730,13 @@ export async function registerGatewayRoutes(
 
       const started = Date.now();
       try {
-        const result = await runRelay(
+        const execute = async (localRead?: import("../core/local-file-types.js").LocalFileRead) => {
+          const result = await runRelay(
           context.database,
           context.config.secretsDirectory,
           {
             research: request.body.research,
+            localRead,
             task: request.body.task,
             prompt: request.body.prompt,
             engine: request.body.engine,
@@ -6757,10 +6761,20 @@ export async function registerGatewayRoutes(
           failure: result.research && result.research.status !== "complete" ? result.research.stop_reason : null,
           appId: knocker.profileId,
         });
+          return result;
+        };
+        const limits = readRelayConfig(context.database);
+        const result = request.body.files?.some(f => f.file_ref)
+          ? await localFiles.execute(knocker.profileId, request.headers.origin ?? "",
+            request.body.research!, request.body.files as import("@vaenyx/contracts").ResearchFile[],
+            request.body, Math.min(limits.maxFileBytes, limits.maxTotalBytes), execute)
+          : await execute();
         return result;
       } catch (error) {
         // Every failure carries its own name so the calling app can tell "fall
         // back to your free model" from "tell the user something is wrong".
+        if (error instanceof Error && /^local_file_[a-z_]+$/.test(error.message))
+          return reply.code(409).send({ error: "RELAY_" + error.message.toUpperCase() });
         const code = publicRelayError(error, request.body.engine);
         recordRelayCall(context.database, {
           task: request.body.task,

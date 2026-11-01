@@ -665,10 +665,12 @@ export interface RelayFileRequest {
   sha256?: string | null;
   mime?: string | null;
   name: string;
-  url: string;
+  url?: string;
+  file_ref?: { version: 1; token: string };
 }
 
 export interface RelayRunRequest {
+  localRead?: import("./local-file-types.js").LocalFileRead;
   research?: ResearchRequest;
   task: string;
   prompt?: string;
@@ -764,7 +766,7 @@ async function fetchLinkedFiles(
   for (const file of files) {
     let host: string;
     try {
-      const parsed = new URL(file.url);
+      const parsed = new URL(file.url!);
       if (parsed.protocol !== "https:") throw new Error("insecure");
       host = parsed.hostname.toLowerCase();
     } catch {
@@ -777,7 +779,7 @@ async function fetchLinkedFiles(
 
     let response: Response;
     try {
-      response = await fetch(file.url, {
+      response = await fetch(file.url!, {
         redirect: "follow",
         signal: AbortSignal.timeout(config.timeoutSeconds * 1000),
       });
@@ -1228,6 +1230,8 @@ export async function runRelay(
 ): Promise<RelayRunResult> {
   const config = readRelayConfig(database);
   if (!config.enabled) throw new Error("RELAY_OFF");
+  if (request.capability !== "research" && request.files.some((f) => f.file_ref || !f.url))
+    throw new Error("RELAY_LOCAL_FILE_RESEARCH_REQUIRED");
   assertRelayRateLimit(request.appProfileId, config.maxCallsPerMinute);
   if (request.capability === "research") {
     assertResearchRequest(request.research, request.files, request.model);
@@ -1259,6 +1263,7 @@ export async function runRelay(
       maxFileBytes: Math.min(config.maxFileBytes, config.maxTotalBytes),
       maxFiles: config.maxFiles,
       visionEnabled: !capabilityOff(database, "vision"),
+      localRead: request.localRead,
       modelCall: async (prompt, imagePaths, web, signal) => {
         chosen ??= await resolveRelaySelection(
           request.engine,
