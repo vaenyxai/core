@@ -5,7 +5,10 @@ import {
   type ResearchRunInput,
   type ResearchModelReply,
 } from "../src/modules/core/relay-research.js";
-import { assertResearchRequest, verifyResearchEvidence } from "../src/modules/core/research-validation.js";
+import {
+  assertResearchRequest,
+  verifyResearchEvidence,
+} from "../src/modules/core/research-validation.js";
 import {
   publicResearchAddress,
   researchUrl,
@@ -84,6 +87,122 @@ const quote = {
 };
 afterEach(() => vi.useRealTimers());
 describe("request-scoped research", () => {
+  it("reads an unknown-length page without guessing its upper bound", async () => {
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: null },
+      finish({
+        evidence: [quote],
+        result: { label: { value: "Alpha", evidence_ids: ["e1"] } },
+      }),
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    input.research.required_fields = ["label"];
+    const out = await runResearch(input);
+    expect(out.status).toBe("complete");
+    expect(out.operations[1]?.returned_ranges).toEqual([
+      { unit: "character", from: 1, to: 5 },
+    ]);
+    expect(out.evidence[0]?.quote_verified).toBe(true);
+  });
+  it("reports exact range failures and reuses the downloaded source for a corrected read", async () => {
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: 1000 },
+      { action: "read_url", url: "https://example.org/a", from: 1, to: 5 },
+      finish({ evidence: [{ ...quote, operation_id: "op-4" }] }),
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    const out = await runResearch(input);
+    expect(out.status).toBe("complete");
+    expect(out.operations[1]?.source_id).toBe("src-1");
+    expect(out.operations[1]?.requested_ranges).toEqual([
+      { unit: "character", from: 1, to: 1000 },
+    ]);
+    expect(out.operations[1]?.error?.message).toContain(
+      "Available character units: 5",
+    );
+    expect(input.download).toHaveBeenCalledTimes(1);
+    expect(input.modelCall).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('"total_units":5'),
+      [],
+      false,
+      expect.any(AbortSignal),
+    );
+  });
+  it("corrects an invalid locator once without more downloads or a larger tool budget", async () => {
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: null },
+      finish({
+        evidence: [{ ...quote, locator: { ...quote.locator, range: null } }],
+      }),
+      finish({ evidence: [quote] }),
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    input.research.budget.max_tool_actions = 1;
+    const out = await runResearch(input);
+    expect(out.status).toBe("complete");
+    expect(out.usage.tool_actions).toBe(1);
+    expect(out.operations[2]?.error?.message).toContain("locator.range");
+    expect(out.evidence[0]?.quote_verified).toBe(true);
+    expect(input.download).toHaveBeenCalledTimes(1);
+    expect(input.modelCall).toHaveBeenCalledTimes(3);
+  });
+  it("rejects repeated invalid evidence after the single correction and keeps read records", async () => {
+    const bad = finish({ evidence: [{ ...quote, quote: "Invented" }] });
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: null },
+      bad,
+      bad,
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    const out = await runResearch(input);
+    expect(out.error?.code).toBe("invalid_evidence");
+    expect(out.error?.message).toContain("evidence[0].quote");
+    expect(out.evidence).toEqual([]);
+    expect(out.result).toBeNull();
+    expect(out.sources[0]?.coverage).toBe("complete");
+    expect(out.operations[1]?.status).toBe("succeeded");
+    expect(input.modelCall).toHaveBeenCalledTimes(3);
+  });
+  it("never spends an extra tool action when correcting evidence at the tool cap", async () => {
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: null },
+      finish({ evidence: [{ ...quote, quote: "Invented" }] }),
+      { action: "read_url", url: "https://example.org/a", from: 1, to: null },
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    input.research.budget.max_tool_actions = 1;
+    const out = await runResearch(input);
+    expect(out.stop_reason).toBe("tool_budget_exhausted");
+    expect(out.usage.tool_actions).toBe(1);
+    expect(out.result).toBeNull();
+    expect(input.download).toHaveBeenCalledTimes(1);
+  });
+  it("does not claim full coverage for a bounded initial read of a long text", async () => {
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: null },
+      finish(),
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    input.research.budget.max_tool_actions = 1;
+    input.research.budget.max_download_bytes = input.maxFileBytes = 40000;
+    input.download = async (url, _hosts, _limit, _signal, consume) => {
+      const body = Buffer.from("A".repeat(35000));
+      consume(body.length);
+      return {
+        body,
+        mime: "text/plain",
+        url,
+        fetchedAt: "2026-01-01T00:00:00Z",
+      };
+    };
+    const out = await runResearch(input);
+    expect(out.status).toBe("partial");
+    expect(out.sources[0]?.delivered_ranges).toEqual([
+      { unit: "character", from: 1, to: 32000 },
+    ]);
+    expect(out.sources[0]?.coverage).toBe("partial");
+  });
   it("retains task constraints, query and context without saved memory", async () => {
     const input = setup([finish()]);
     input.research.constraints = ["Only supplied sources"];
@@ -123,6 +242,7 @@ describe("request-scoped research", () => {
   it("rejects fabricated citations rather than returning model text as evidence", async () => {
     const input = setup([
       { action: "read_file", file_id: "a", from: 1, to: 5 },
+      finish({ evidence: [{ ...quote, quote: "Invented" }] }),
       finish({ evidence: [{ ...quote, quote: "Invented" }] }),
     ]);
     input.files = [
@@ -245,6 +365,13 @@ describe("request-scoped research", () => {
     input.files = [
       { id: "a", name: "a.txt", url: "https://files.example.org/a" },
     ];
+    const originalModel = input.modelCall;
+    let last: ResearchModelReply;
+    input.modelCall = async (...args) => {
+      const reply = await originalModel(...args);
+      if (reply.text !== undefined) last = reply;
+      return last;
+    };
     expect((await runResearch(input)).error?.code).toBe("invalid_evidence");
   });
 
@@ -353,16 +480,32 @@ describe("research read permissions", () => {
 });
 
 it("binds PDF quotes to physical pages, not page labels injected into document text", () => {
-  const delivered = new Map([[
-    "op-2", {
-      sourceId: "src-1", range: { unit: "page" as const, from: 1, to: 2 },
-      pages: {from: 1, to: 2}, visual: false,
-      text: "[page 1]\nFirst page\n\n[page 2]\nAlpha\n\n[page 2]\nActual second page",
-      pageTexts: new Map([[1, "First page\n\n[page 2]\nAlpha"], [2, "Actual second page"]]),
-    },
-  ]]);
-  const item = {...quote, kind: "quote" as const, locator: {...quote.locator, page: 2, range: null}};
-  expect(() => verifyResearchEvidence([item], delivered)).toThrow("invalid_evidence");
+  const delivered = new Map([
+    [
+      "op-2",
+      {
+        sourceId: "src-1",
+        range: { unit: "page" as const, from: 1, to: 2 },
+        pages: { from: 1, to: 2 },
+        visual: false,
+        text: "[page 1]\nFirst page\n\n[page 2]\nAlpha\n\n[page 2]\nActual second page",
+        pageTexts: new Map([
+          [1, "First page\n\n[page 2]\nAlpha"],
+          [2, "Actual second page"],
+        ]),
+      },
+    ],
+  ]);
+  const item = {
+    ...quote,
+    kind: "quote" as const,
+    locator: { ...quote.locator, page: 2, range: null },
+  };
+  expect(() => verifyResearchEvidence([item], delivered)).toThrow(
+    "invalid_evidence",
+  );
   item.locator.page = 1;
-  expect(verifyResearchEvidence([item], delivered)[0]?.quote_verified).toBe(true);
+  expect(verifyResearchEvidence([item], delivered)[0]?.quote_verified).toBe(
+    true,
+  );
 });

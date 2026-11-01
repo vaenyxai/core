@@ -813,6 +813,11 @@ Read this inside the app: **Settings → Manual**.
   stopping reason. Partial research is not a finished business report. Long PDFs
   can be read by page ranges; static webpage reading cannot expand interactive
   content. No paid OCR or automatic model substitution is enabled.
+- **Reading and citation recovery** — an initial bounded read can discover the
+  actual text length without guessing a range. Exact out-of-range requests return
+  the available length and retain the failed operation. A rejected answer gets
+  at most one evidence correction within the same time and tool limits; invalid
+  citations remain rejected, while successful source reads stay in the record.
 - **Research limits** — the action budget counts Vaenyx's dispatched search/read
   actions, not hidden provider sub-actions or fees. Unknown usage stays unknown;
   unenforceable token/cost caps are refused. Apps use `null` for unset token/cost
@@ -1100,5 +1105,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.4-dev** · last updated 2026-11-01.
+Manual for **v0.4.14.5-dev** · last updated 2026-11-01.
 Keep this file up to date whenever a feature changes.

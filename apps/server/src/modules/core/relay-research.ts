@@ -1,6 +1,10 @@
 import { PROTOCOL } from "./research-protocol.js";
 import { finishResearch } from "./research-output.js";
 import { researchDeadline } from "./research-deadline.js";
+import {
+  ResearchRangeError,
+  ResearchValidationError,
+} from "./research-errors.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,13 +64,18 @@ function safeError(
   const raw = error instanceof Error ? error.message : "";
   const code = aborted
     ? "timeout"
-    : /^[a-z_0-9]+$/.test(raw)
-      ? raw
-      : "research_engine_failed";
+    : error instanceof ResearchValidationError
+      ? error.code
+      : /^[a-z_0-9]+$/.test(raw)
+        ? raw
+        : "research_engine_failed";
   return {
     code,
     stage,
-    message: code.replace(/_/g, " "),
+    message:
+      error instanceof ResearchValidationError && !aborted
+        ? error.message
+        : code.replace(/_/g, " "),
     execution_state: started
       ? aborted
         ? "unknown"
@@ -120,6 +129,7 @@ export async function runResearch(
   const history: unknown[] = [];
   const images: string[] = [];
   let requestedFollowup = false;
+  let correctedEvidence = false;
   const allowed = new Set(request.allowed_tools);
   const operation = (
     action: ResearchOperation["action"],
@@ -176,7 +186,7 @@ export async function runResearch(
       visionEnabled: input.visionEnabled,
     });
     // One final analysis is allowed after the last dispatched tool. No persistent session state.
-    for (let turn = 0; turn <= request.budget.max_tool_actions + 1; turn++) {
+    for (let turn = 0; turn <= request.budget.max_tool_actions + 2; turn++) {
       controller.signal.throwIfAborted();
       stage = "analysis";
       const envelope = {
@@ -214,7 +224,37 @@ export async function runResearch(
       if (!decision || typeof decision !== "object" || Array.isArray(decision))
         throw new Error("invalid_output");
       if (decision.action === "finish") {
-        finishResearch(decision, response, request, sources.list(), delivered);
+        // Stage untrusted output; a failed attempt cannot contaminate a later answer.
+        const candidate = structuredClone(response);
+        try {
+          finishResearch(
+            decision,
+            candidate,
+            request,
+            sources.list(),
+            delivered,
+          );
+        } catch (error) {
+          analysis.status = "failed";
+          analysis.error = safeError(
+            error,
+            "analysis",
+            true,
+            delivered.size > 0,
+            false,
+          );
+          if (!(error instanceof ResearchValidationError) || correctedEvidence)
+            throw error;
+          correctedEvidence = true;
+          history.push({
+            host_feedback:
+              "The finish was rejected. Correct the stated evidence error using successful reads already in history. One correction is allowed within the existing deadline. Do not invent evidence or repeat a failed read without a useful change.",
+            validation_error: analysis.error.message,
+            rejected_finish: decision,
+          });
+          continue;
+        }
+        Object.assign(response, candidate);
         if (
           response.status === "partial" &&
           !requestedFollowup &&
@@ -305,7 +345,7 @@ export async function runResearch(
                   : undefined,
               url: typeof decision.url === "string" ? decision.url : undefined,
               from: Number(decision.from),
-              to: Number(decision.to),
+              to: decision.to === null ? null : Number(decision.to),
               visual: decision.visual === true,
             }),
             controller.signal,
@@ -338,6 +378,19 @@ export async function runResearch(
         op.status = "succeeded";
       } catch (error) {
         if (controller.signal.aborted) throw error;
+        if (error instanceof ResearchRangeError) {
+          op.source_id = error.sourceId;
+          op.requested_ranges = error.requested ? [error.requested] : null;
+          history.push({
+            operation_id: op.id,
+            source_id: error.sourceId,
+            available_range:
+              error.totalUnits > 0
+                ? { unit: error.unit, from: 1, to: error.totalUnits }
+                : null,
+            total_units: error.totalUnits,
+          });
+        }
         op.status = "failed";
         op.error = safeError(
           error,

@@ -15,6 +15,7 @@ import {
   type ResearchDocument,
 } from "./research-documents.js";
 import { renderRelayPdfPages } from "./relay-pdf.js";
+import { ResearchRangeError } from "./research-errors.js";
 
 export interface ResearchRead {
   source: ResearchSource;
@@ -83,7 +84,7 @@ export class ResearchSources {
     file_id?: string;
     url?: string;
     from: number;
-    to: number;
+    to: number | null;
     visual: boolean;
   }): Promise<ResearchRead> {
     const entry = [...this.entries.values()].find((item) =>
@@ -144,7 +145,12 @@ export class ResearchSources {
           ? 1
           : entry.document!.parts[0]!.length;
       const unit = pdf || isImage ? "page" : "character";
-      const { from, to } = input;
+      const from = input.from;
+      // Explicit bounded mode, not silent truncation of an exact range.
+      const to =
+        input.to === null
+          ? Math.min(max, from + (unit === "character" ? 32000 : 1) - 1)
+          : input.to;
       if (
         !Number.isInteger(from) ||
         !Number.isInteger(to) ||
@@ -152,7 +158,17 @@ export class ResearchSources {
         to < from ||
         to > max
       )
-        throw new Error("invalid_read_range");
+        throw new ResearchRangeError(
+          source.id,
+          Number.isSafeInteger(from) &&
+            Number.isSafeInteger(to) &&
+            from >= 1 &&
+            to >= from
+            ? { unit, from, to }
+            : null,
+          unit,
+          max,
+        );
       const range: ResearchRange = { unit, from, to };
       let text = "";
       let images: string[] = [];

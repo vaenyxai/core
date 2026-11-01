@@ -1,4 +1,5 @@
 import { Ajv } from "ajv";
+import { ResearchValidationError } from "./research-errors.js";
 import {
   ResearchRequestSchema,
   ResearchResponseSchema,
@@ -37,7 +38,15 @@ export function assertResearchRequest(
 export function assertResearchResponse(
   value: unknown,
 ): asserts value is ResearchResponse {
-  if (!validateResponse(value)) throw new Error("invalid_output");
+  if (!validateResponse(value)) {
+    const error = validateResponse.errors?.[0];
+    const path =
+      error?.instancePath?.replace(/[^a-zA-Z0-9_/-]/g, "").slice(0, 160) || "/";
+    throw new ResearchValidationError(
+      "invalid_output",
+      `Response schema mismatch at ${path} (${error?.keyword ?? "schema"}). Include all required evidence fields; nullable fields still need null.`,
+    );
+  }
   const result = value as ResearchResponse;
   const unique = (items: { id: string }[]) =>
     new Set(items.map((item) => item.id)).size === items.length;
@@ -67,16 +76,25 @@ export function assertResearchResponse(
       !rangeValid(operation.returned_ranges)
     )
       throw new Error("invalid_output");
-  for (const evidence of result.evidence) {
+  for (const [index, evidence] of result.evidence.entries()) {
     if (
       evidence.locator?.range &&
       evidence.locator.range.to < evidence.locator.range.from
     )
-      throw new Error("invalid_evidence");
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        `evidence[${index}].locator.range has reversed endpoints.`,
+      );
     if (evidence.source_id && !sources.has(evidence.source_id))
-      throw new Error("invalid_evidence");
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        `evidence[${index}].source_id is not a known source.`,
+      );
     if (evidence.operation_id && !operations.has(evidence.operation_id))
-      throw new Error("invalid_evidence");
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        `evidence[${index}].operation_id is not a recorded operation.`,
+      );
     if (evidence.kind === "quote" || evidence.kind === "visual_observation") {
       const op = evidence.operation_id
         ? operations.get(evidence.operation_id)
@@ -87,12 +105,18 @@ export function assertResearchResponse(
         op.status !== "succeeded" ||
         !["read_file", "read_url"].includes(op.action)
       )
-        throw new Error("invalid_evidence");
+        throw new ResearchValidationError(
+          "invalid_evidence",
+          `evidence[${index}] must reference a successful read of its source.`,
+        );
     }
   }
   for (const missing of result.missing)
     if (missing.attempted_operation_ids.some((id) => !operations.has(id)))
-      throw new Error("invalid_evidence");
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        "missing.attempted_operation_ids must reference recorded operations.",
+      );
 }
 export interface DeliveredEvidence {
   sourceId: string;
@@ -112,18 +136,26 @@ export function verifyResearchEvidence(
   const visiting = new Set<string>();
   const visited = new Set<string>();
   const check = (id: string): void => {
-    if (visiting.has(id)) throw new Error("invalid_evidence");
+    if (visiting.has(id))
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        "Evidence premises contain a cycle.",
+      );
     if (visited.has(id)) return;
     visiting.add(id);
     for (const premise of byId.get(id)?.premise_evidence_ids ?? []) {
-      if (!byId.has(premise)) throw new Error("invalid_evidence");
+      if (!byId.has(premise))
+        throw new ResearchValidationError(
+          "invalid_evidence",
+          "Evidence premise references an unknown evidence ID.",
+        );
       check(premise);
     }
     visiting.delete(id);
     visited.add(id);
   };
   evidence.forEach((item) => check(item.id));
-  return evidence.map((item) => {
+  return evidence.map((item, index) => {
     const read = item.operation_id
       ? delivered.get(item.operation_id)
       : undefined;
@@ -135,7 +167,10 @@ export function verifyResearchEvidence(
         !item.quote ||
         !read.text.includes(item.quote)
       )
-        throw new Error("invalid_evidence");
+        throw new ResearchValidationError(
+          "invalid_evidence",
+          `evidence[${index}].quote is not exact text delivered by the referenced read of this source.`,
+        );
       if (!read.pages) {
         const range = item.locator?.range;
         const offset = read.range.from + read.text.indexOf(item.quote);
@@ -147,16 +182,26 @@ export function verifyResearchEvidence(
           range.from > offset ||
           range.to < offset + item.quote.length - 1
         )
-          throw new Error("invalid_evidence");
+          throw new ResearchValidationError(
+            "invalid_evidence",
+            `evidence[${index}].locator.range must enclose the quote within the delivered range. Reuse the read range if offsets are uncertain.`,
+          );
       }
       if (
         read.pages &&
         (!page || page < read.pages.from || page > read.pages.to)
       )
-        throw new Error("invalid_evidence");
+        throw new ResearchValidationError(
+          "invalid_evidence",
+          `evidence[${index}].locator.page is outside the delivered physical pages.`,
+        );
       if (page) {
         const part = read.pageTexts.get(page);
-        if (!part?.includes(item.quote)) throw new Error("invalid_evidence");
+        if (!part?.includes(item.quote))
+          throw new ResearchValidationError(
+            "invalid_evidence",
+            `evidence[${index}].quote is not on the cited physical page.`,
+          );
       }
       return { ...item, quote_verified: true };
     }
@@ -169,13 +214,19 @@ export function verifyResearchEvidence(
         item.locator.page < read.pages.from ||
         item.locator.page > read.pages.to)
     )
-      throw new Error("invalid_evidence");
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        `evidence[${index}] requires a delivered page image and its physical page number.`,
+      );
     if (
       item.kind === "inference" &&
       (item.premise_evidence_ids.length === 0 ||
         item.premise_evidence_ids.some((id) => !ids.has(id) || id === item.id))
     )
-      throw new Error("invalid_evidence");
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        `evidence[${index}] requires valid non-self evidence premises.`,
+      );
     return { ...item, quote_verified: null };
   });
 }
@@ -194,7 +245,10 @@ export function validateEvidenceReferences(
       (!Array.isArray(child) ||
         child.some((id) => typeof id !== "string" || !ids.has(id)))
     )
-      throw new Error("invalid_evidence");
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        "Result/conflict evidence_ids must reference accepted evidence IDs.",
+      );
     validateEvidenceReferences(child, ids);
   }
 }
