@@ -494,3 +494,5 @@ export {
   CapabilityTestResultSchema,
   type CapabilityTestResult,
 } from "./workspace.js";
+
+export * from "./research.js";

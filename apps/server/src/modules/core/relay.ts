@@ -1,3 +1,11 @@
+import type {
+  ResearchRequest,
+  ResearchResponse,
+  ResearchFile,
+} from "@vaenyx/contracts";
+import { readFileSync } from "node:fs";
+import { runResearch } from "./relay-research.js";
+import { assertResearchRequest } from "./research-validation.js";
 // THE SUBSCRIPTION DOOR (Oskar, 2026-07-29). His apps live on Cloudflare and
 // can only reach free models; his paid ChatGPT and Claude subscriptions can
 // only be used by a machine that runs their CLIs. Vaenyx is that machine, so it
@@ -28,6 +36,7 @@ import {
   codexLoginConnectedAt,
   codexProfileSignedIn,
   runCodexRelay,
+  runCodexResearchTurn,
 } from "../harness/codex.js";
 import {
   claudeLoginConnectedAt,
@@ -67,6 +76,7 @@ export const RELAY_CAPABILITIES = [
   "vision_analysis",
   "document_analysis",
   "web_search",
+  "research",
   // v1 aliases remain accepted on /v1/ai/run.
   "text",
   "web",
@@ -97,7 +107,9 @@ const ENGINE_CAPABILITIES: Record<RelayEngine, RelaySafeCapability[]> = {
   "claude-cli": [...RELAY_SAFE_CAPABILITIES],
 };
 
-function canonicalCapability(capability: RelayCapability): RelaySafeCapability | null {
+function canonicalCapability(
+  capability: RelayCapability,
+): RelaySafeCapability | null {
   const aliases: Partial<Record<RelayCapability, RelaySafeCapability>> = {
     text: "text_analysis",
     text_analysis: "text_analysis",
@@ -124,11 +136,15 @@ function engineEfforts(engine: RelayEngine): string[] {
 function engineModels(engine: RelayEngine, profileId: string): string[] {
   const catalogue = cachedRelayModelCatalogue(engine, profileId);
   return catalogue
-    ? catalogue.models.filter((model) => model.selectable).map((model) => model.id)
+    ? catalogue.models
+        .filter((model) => model.selectable)
+        .map((model) => model.id)
     : [];
 }
 
-function catalogueVerifiedAt(engine: RelayEngine, profileId: string): string | null {
+function catalogueVerifiedAt(
+  engine: RelayEngine, profileId: string,
+): string | null {
   return cachedRelayModelCatalogue(engine, profileId)?.verified_at ?? null;
 }
 
@@ -148,14 +164,19 @@ interface StoredModelProbe {
 }
 
 type StoredModelProbes = Partial<
-  Record<RelayEngine, Record<string, Partial<Record<RelaySafeCapability, StoredModelProbe>>>>
+  Record<
+    RelayEngine,
+    Record<string, Partial<Record<RelaySafeCapability, StoredModelProbe>>>
+  >
 >;
 
 function modelProbeKey(profileId: string): string {
   return `relay.model-probes.${profileId}`;
 }
 
-function readModelProbes(database: DatabaseHandle, profileId: string): StoredModelProbes {
+function readModelProbes(
+  database: DatabaseHandle, profileId: string,
+): StoredModelProbes {
   const row = database.sqlite
     .prepare("SELECT value FROM instance_settings WHERE key = ?")
     .get(modelProbeKey(profileId)) as { value?: string } | undefined;
@@ -342,7 +363,11 @@ async function resolveRelaySelection(
   }
   let catalogue: RelayModelCatalogue;
   try {
-    catalogue = await loadRelayModelCatalogue(engine, profileId, secretsDirectory);
+    catalogue = await loadRelayModelCatalogue(
+      engine,
+      profileId,
+      secretsDirectory,
+    );
   } catch {
     throw new Error("RELAY_MODEL_CATALOGUE_UNAVAILABLE");
   }
@@ -371,13 +396,17 @@ interface StoredProbe {
   revision: string;
 }
 
-type StoredProbes = Partial<Record<RelayEngine, Partial<Record<RelaySafeCapability, StoredProbe>>>>;
+type StoredProbes = Partial<
+  Record<RelayEngine, Partial<Record<RelaySafeCapability, StoredProbe>>>
+>;
 
 function probeKey(profileId: string): string {
   return `relay.probes.${profileId}`;
 }
 
-function readStoredProbes(database: DatabaseHandle, profileId: string): StoredProbes {
+function readStoredProbes(
+  database: DatabaseHandle, profileId: string,
+): StoredProbes {
   const row = database.sqlite
     .prepare("SELECT value FROM instance_settings WHERE key = ?")
     .get(probeKey(profileId)) as { value?: string } | undefined;
@@ -473,7 +502,10 @@ export function writeRelayConfig(
     400 * 1024 * 1024,
     Math.max(0, Math.round(next.maxTotalBytes)),
   );
-  next.timeoutSeconds = Math.min(600, Math.max(10, Math.round(next.timeoutSeconds)));
+  next.timeoutSeconds = Math.min(
+    600,
+    Math.max(10, Math.round(next.timeoutSeconds)),
+  );
   next.maxCallsPerMinute = Math.min(
     600,
     Math.max(1, Math.round(next.maxCallsPerMinute)),
@@ -567,7 +599,7 @@ function capabilityStatuses(
               ? "DISABLED_BY_OWNER_SAFETY_CEILING"
               : !currentProbe
                 ? "NOT_PROBED"
-                : probe?.unavailableReason ?? "PROBE_FAILED",
+                : (probe?.unavailableReason ?? "PROBE_FAILED"),
       provider: currentProbe ? (probe?.provider ?? null) : null,
       model: currentProbe ? (probe?.model ?? null) : null,
       last_probe_at: currentProbe ? (probe?.probedAt ?? null) : null,
@@ -600,7 +632,10 @@ export function relayHealth(
         capability_status: openaiStatus,
         efforts: engineEfforts("openai-cli"),
         models: engineModels("openai-cli", profileId),
-        model_catalogue_verified_at: catalogueVerifiedAt("openai-cli", profileId),
+        model_catalogue_verified_at: catalogueVerifiedAt(
+          "openai-cli",
+          profileId,
+        ),
       },
       {
         id: "claude-cli",
@@ -609,7 +644,10 @@ export function relayHealth(
         capability_status: claudeStatus,
         efforts: engineEfforts("claude-cli"),
         models: engineModels("claude-cli", profileId),
-        model_catalogue_verified_at: catalogueVerifiedAt("claude-cli", profileId),
+        model_catalogue_verified_at: catalogueVerifiedAt(
+          "claude-cli",
+          profileId,
+        ),
       },
     ],
     limits: {
@@ -623,11 +661,15 @@ export function relayHealth(
 }
 
 export interface RelayFileRequest {
+  id?: string;
+  sha256?: string | null;
+  mime?: string | null;
   name: string;
   url: string;
 }
 
 export interface RelayRunRequest {
+  research?: ResearchRequest;
   task: string;
   prompt?: string;
   engine: RelayEngine;
@@ -653,6 +695,7 @@ export interface RelayRunRequest {
 }
 
 export interface RelayRunResult {
+  research?: ResearchResponse;
   text: string;
   engine: RelayEngine;
   provider: string;
@@ -807,20 +850,34 @@ export function relayProfileEngineStatus(
         connected: codexProfileSignedIn(profileId),
         connectedAt: codexLoginConnectedAt(profileId),
         capabilities: [...ENGINE_CAPABILITIES["openai-cli"]],
-        capability_status: capabilityStatuses(database, profileId, "openai-cli"),
+        capability_status: capabilityStatuses(
+          database,
+          profileId,
+          "openai-cli",
+        ),
         efforts: engineEfforts("openai-cli"),
         models: engineModels("openai-cli", profileId),
-        model_catalogue_verified_at: catalogueVerifiedAt("openai-cli", profileId),
+        model_catalogue_verified_at: catalogueVerifiedAt(
+          "openai-cli",
+          profileId,
+        ),
       },
       {
         id: "claude-cli",
         connected: claudeMachineLogin(profileId),
         connectedAt: claudeLoginConnectedAt(profileId),
         capabilities: [...ENGINE_CAPABILITIES["claude-cli"]],
-        capability_status: capabilityStatuses(database, profileId, "claude-cli"),
+        capability_status: capabilityStatuses(
+          database,
+          profileId,
+          "claude-cli",
+        ),
         efforts: engineEfforts("claude-cli"),
         models: engineModels("claude-cli", profileId),
-        model_catalogue_verified_at: catalogueVerifiedAt("claude-cli", profileId),
+        model_catalogue_verified_at: catalogueVerifiedAt(
+          "claude-cli",
+          profileId,
+        ),
       },
     ],
   };
@@ -879,24 +936,25 @@ export async function probeRelayModel(
   const started = Date.now();
   const scratch = resolve(tmpdir(), "vaenyx-relay-model-test", randomUUID());
   mkdirSync(scratch, { recursive: true });
-  const finish = (
-    outcome: {
+  const finish = (outcome: {
       ok: boolean;
       reason: string | null;
       model: string | null;
       reported: boolean;
       effort: string | null;
       effortReported: boolean;
-    },
-  ): RelayModelTestResult => {
-    recordRelayModelProbe(database, profileId, request.engine, chosen.id, capability, {
+  }): RelayModelTestResult => {
+    recordRelayModelProbe(
+      database,
+      profileId, request.engine, chosen.id, capability, {
       ok: outcome.ok,
       reason: outcome.reason,
       actualModel: outcome.model,
       modelReportedByEngine: outcome.reported,
       effort: outcome.effort,
       path: "test",
-    });
+      },
+    );
     return {
       engine: request.engine,
       capability,
@@ -950,14 +1008,16 @@ export async function probeRelayModel(
             image ? { base64: image.toString("base64"), mediaType: "image/png" } : undefined,
             profileId,
             false,
-            { model: chosen.id, expectedModel: chosen.resolved_id, effort: request.effort },
+            { model: chosen.id, expectedModel: chosen.resolved_id, effort: request.effort,
+            },
           );
     let ok: boolean;
     if (capability === "vision_analysis") {
       ok = namesRed(output.text);
     } else if (capability === "structured_output") {
       try {
-        ok = (JSON.parse(output.text) as { vaenyx_probe?: unknown }).vaenyx_probe === "ok";
+        ok = (JSON.parse(output.text) as { vaenyx_probe?: unknown })
+            .vaenyx_probe === "ok";
       } catch {
         ok = false;
       }
@@ -1032,7 +1092,8 @@ export async function probeRelayCapabilities(
           secretsDirectory,
           prompt,
           options.pdf
-            ? { base64: document.toString("base64"), mediaType: "application/pdf" }
+            ? { base64: document.toString("base64"), mediaType: "application/pdf",
+              }
             : options.image
               ? { base64: image.toString("base64"), mediaType: "image/png" }
               : undefined,
@@ -1049,7 +1110,7 @@ export async function probeRelayCapabilities(
   ) =>
     recordRelayCapabilityProbe(database, profileId, engine, capability, {
       available,
-      unavailableReason: available ? null : detail.reason ?? "PROBE_FAILED",
+      unavailableReason: available ? null : (detail.reason ?? "PROBE_FAILED"),
       provider: detail.provider ?? null,
       model: detail.model ?? null,
     });
@@ -1063,7 +1124,10 @@ export async function probeRelayCapabilities(
       );
       const parsed = JSON.parse(output.text) as { vaenyx_probe?: unknown };
       const ok = parsed.vaenyx_probe === "ok";
-      for (const capability of ["text_analysis", "structured_output"] as const) {
+      for (const capability of [
+        "text_analysis",
+        "structured_output",
+      ] as const) {
         note(engine, capability, ok, {
           provider: output.provider,
           model: output.model,
@@ -1071,7 +1135,10 @@ export async function probeRelayCapabilities(
         });
       }
     } catch (error) {
-      for (const capability of ["text_analysis", "structured_output"] as const) {
+      for (const capability of [
+        "text_analysis",
+        "structured_output",
+      ] as const) {
         note(engine, capability, false, {
           reason: publicRelayError(error, engine),
         });
@@ -1101,16 +1168,13 @@ export async function probeRelayCapabilities(
         "Read the attached PDF and reply with the exact VAENYX code printed on its page. Reply with the code only.",
         { pdf: true },
       );
-      note(
-        engine,
-        "document_analysis",
+      note(engine, "document_analysis",
         output.text.includes(documentCode),
         {
           provider: output.provider,
           model: output.model,
           reason: "DOCUMENT_PROBE_FAILED",
-        },
-      );
+      });
     } catch (error) {
       note(engine, "document_analysis", false, {
         reason: publicRelayError(error, engine),
@@ -1165,8 +1229,114 @@ export async function runRelay(
   const config = readRelayConfig(database);
   if (!config.enabled) throw new Error("RELAY_OFF");
   assertRelayRateLimit(request.appProfileId, config.maxCallsPerMinute);
+  if (request.capability === "research") {
+    assertResearchRequest(request.research, request.files, request.model);
+    if (!request.prompt?.trim()) throw new Error("RELAY_PROMPT_REQUIRED");
+    const researchRequest = request.research;
+    if (
+      researchRequest.budget.max_download_bytes > config.maxTotalBytes ||
+      researchRequest.budget.max_elapsed_ms > config.timeoutSeconds * 1000
+    )
+      throw new Error("RELAY_RESEARCH_LIMIT_EXCEEDED");
+    if (
+      (researchRequest.allowed_tools.some(
+        (tool) => tool === "search" || tool === "read_url",
+      ) &&
+        capabilityOff(database, "web")) ||
+      (researchRequest.allowed_tools.some((tool) => tool === "read_file" || tool === "read_url") &&
+        capabilityOff(database, "reading"))
+    )
+      throw new Error("RELAY_CAPABILITY_OFF:research");
+    let chosen: RelayCatalogueModel | null = null;
+    const research = await runResearch({
+      research: researchRequest,
+      files: request.files as ResearchFile[],
+      prompt: request.prompt,
+      query: request.query,
+      model: request.model!,
+      fileHosts: config.fileHosts,
+      allowedDomains: request.allowedDomains ?? [],
+      maxFileBytes: Math.min(config.maxFileBytes, config.maxTotalBytes),
+      maxFiles: config.maxFiles,
+      visionEnabled: !capabilityOff(database, "vision"),
+      modelCall: async (prompt, imagePaths, web, signal) => {
+        chosen ??= await resolveRelaySelection(
+          request.engine,
+          request.appProfileId,
+          secretsDirectory,
+          request.model,
+          request.effort,
+        );
+        signal.throwIfAborted();
+        recordEngineUsage(database, request.appProfileId, request.engine);
+        if (request.engine === "openai-cli")
+          return runCodexResearchTurn(
+            prompt,
+            imagePaths,
+            request.appProfileId,
+            web,
+            request.effort,
+            chosen!.id,
+            signal,
+          );
+        const attachments = imagePaths.map((path) => {
+          const body = readFileSync(path);
+          return {
+            base64: body.toString("base64"),
+            mediaType:
+              body[0] === 0xff
+                ? "image/jpeg"
+                : body.subarray(8, 12).toString() === "WEBP"
+                  ? "image/webp"
+                  : "image/png",
+          };
+        });
+        return claudeSubscriptionRelay(
+          secretsDirectory,
+          prompt,
+          attachments,
+          request.appProfileId,
+          web,
+          {
+            model: chosen!.id,
+            expectedModel: chosen!.resolved_id,
+            effort: request.effort,
+            signal,
+          },
+        );
+      },
+    });
+    return {
+      text: JSON.stringify(research.result),
+      engine: request.engine,
+      provider: request.engine === "openai-cli" ? "openai" : "anthropic",
+      model: research.model.actual ?? "unknown",
+      requested_model: request.model!,
+      model_reported_by_engine: research.model.actual !== null,
+      model_evidence: research.model.evidence ?? "unknown",
+      effort: request.effort ?? null,
+      effort_reported_by_engine: false,
+      contract_revision: "2.2",
+      ms: Math.round(research.usage.elapsed_ms),
+      searched_at: null,
+      query: request.query ?? null,
+      results: [],
+      citations: research.sources.flatMap((source) =>
+        source.url ? [source.url] : [],
+      ),
+      fallback_occurred: false,
+      fallback_disclosure:
+        "No fallback. Only the selected subscription engine was used.",
+      capability_probe_revision: RELAY_CAPABILITY_PROBE_REVISION,
+      research,
+    };
+  }
+  if (request.research !== undefined) throw new Error("invalid_research_input");
   const capability = canonicalCapability(request.capability);
-  if (!capability || !ENGINE_CAPABILITIES[request.engine].includes(capability)) {
+  if (
+    !capability ||
+    !ENGINE_CAPABILITIES[request.engine].includes(capability)
+  ) {
     throw new Error(
       `RELAY_CAPABILITY_UNSUPPORTED:${request.engine}:${request.capability}`,
     );
@@ -1219,10 +1389,15 @@ export async function runRelay(
     ) {
       throw new Error("RELAY_NO_FILE");
     }
-    if (capability === "vision_analysis" && !attachment?.mediaType.startsWith("image/")) {
+    if (
+      capability === "vision_analysis" &&
+      !attachment?.mediaType.startsWith("image/")
+    ) {
       throw new Error("RELAY_IMAGE_REQUIRED");
     }
-    if (capability === "document_analysis" && attachment?.mediaType !== "application/pdf") {
+    if (
+      capability === "document_analysis" && attachment?.mediaType !== "application/pdf"
+    ) {
       throw new Error("RELAY_PDF_REQUIRED");
     }
 
@@ -1281,10 +1456,13 @@ export async function runRelay(
           );
 
     const results = allowWeb
-      ? normalizeSearchRunEvidence(engineResult.searchEvidence, engineResult.text, {
+      ? normalizeSearchRunEvidence(
+          engineResult.searchEvidence,
+          engineResult.text, {
           allowedDomains: request.allowedDomains,
           maxResults: request.maxResults,
-        })
+          },
+        )
       : [];
     if (allowWeb && results.length === 0) {
       recordRelayCapabilityProbe(
@@ -1316,14 +1494,17 @@ export async function runRelay(
     // A successful ordinary call refreshes the DEFAULT-model evidence only when
     // it ran on the default; a call on a chosen model proves that model.
     if (chosen) {
-      recordRelayModelProbe(database, request.appProfileId, request.engine, chosen.id, capability, {
+      recordRelayModelProbe(
+        database,
+        request.appProfileId, request.engine, chosen.id, capability, {
         ok: true,
         reason: null,
         actualModel: engineResult.model,
         modelReportedByEngine: engineResult.modelReportedByEngine,
         effort: engineResult.reasoningEffort ?? request.effort ?? null,
         path: "run",
-      });
+        },
+      );
     } else {
       recordRelayCapabilityProbe(
         database,
@@ -1440,6 +1621,9 @@ export function publicRelayError(error: unknown, engine: RelayEngine): string {
   const raw = error instanceof Error ? error.message : "";
   const exact = new Set([
     "RELAY_OFF",
+    "RELAY_RESEARCH_LIMIT_EXCEEDED",
+    "invalid_research_input",
+    "duplicate_file_id",
     "RELAY_TOO_MANY_FILES",
     "RELAY_FILE_TOO_LARGE",
     "RELAY_TOTAL_TOO_LARGE",

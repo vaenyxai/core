@@ -256,3 +256,24 @@ describe("managed Codex component update", () => {
     expect(wire.installs).toHaveLength(0);
   });
 });
+
+describe("isolated research model transport", () => {
+  it("disables machine tools and inherited context before dispatch, with explicit web mode", async () => {
+    const { runCodexResearchTurn } = await import("../src/modules/harness/codex.js");
+    for (const web of [false, true]) {
+      const reply = await runCodexResearchTurn("Synthetic research", [],
+        "00000000-0000-4000-8000-000000000001", web, undefined,
+        "research-choice", new AbortController().signal);
+      expect(reply.model).toBe("research-choice");
+      expect(wire.starts.at(-1)).toEqual(expect.arrayContaining([
+        `web_search="${web ? "live" : "disabled"}"`,
+        "features.shell_tool=false", "features.apps=false", "features.plugins=false",
+        "features.memories=false", "features.multi_agent=false", "features.js_repl=false",
+        "memories.use_memories=false", "memories.generate_memories=false",
+        "tools.view_image=false", "project_doc_max_bytes=0", "mcp_servers={}",
+      ]));
+    }
+    expect(wire.requests.filter(r => r.method === "thread/start").every(r =>
+      r.params.ephemeral === true && r.params.model === "research-choice")).toBe(true);
+  });
+});

@@ -19,7 +19,23 @@ describe("subscription relay billing isolation", () => {
     expect(environment.OPENAI_BASE_URL).toBeUndefined();
     expect(environment.AZURE_OPENAI_API_KEY).toBeUndefined();
     expect(environment.CODEX_API_KEY).toBeUndefined();
-    expect(environment.CODEX_HOME).toContain("11111111-2222-4333-8444-555555555555");
+    expect(environment.CODEX_HOME).toContain(
+      "11111111-2222-4333-8444-555555555555",
+    );
+  });
+
+  it("does not inherit an Owner OAuth token when the profile uses its own login", () => {
+    const previous = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = "synthetic-owner-token";
+    try {
+      expect(
+        cleanChildEnvironment(null, "11111111-2222-4333-8444-555555555555")
+          .CLAUDE_CODE_OAUTH_TOKEN,
+      ).toBeUndefined();
+    } finally {
+      if (previous === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+      else process.env.CLAUDE_CODE_OAUTH_TOKEN = previous;
+    }
   });
 
   it("strips Anthropic API billing while preserving subscription auth", () => {

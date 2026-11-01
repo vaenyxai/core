@@ -48,6 +48,8 @@ async function loadPdfJs(): Promise<{
 export async function renderRelayPdfPages(
   pdf: Buffer,
   directory: string,
+  range?: { from: number; to: number },
+  signal?: AbortSignal,
 ): Promise<string[]> {
   const pdfjs = await loadPdfJs();
   const standardFonts = pathToFileURL(
@@ -63,12 +65,23 @@ export async function renderRelayPdfPages(
   try {
     const document = await loadingTask.promise;
     if (document.numPages < 1) throw new Error("RELAY_PDF_UNREADABLE");
-    if (document.numPages > MAX_RELAY_PDF_PAGES) {
+    if (
+      (!range && document.numPages > MAX_RELAY_PDF_PAGES) ||
+      (range &&
+        (range.to - range.from + 1 > MAX_RELAY_PDF_PAGES ||
+          range.from < 1 ||
+          range.to > document.numPages ||
+          range.to < range.from))
+    ) {
       throw new Error("RELAY_PDF_TOO_MANY_PAGES");
     }
 
     const paths: string[] = [];
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    for (
+      let pageNumber = range?.from ?? 1; pageNumber <= (range?.to ?? document.numPages);
+      pageNumber += 1
+    ) {
+      signal?.throwIfAborted();
       const page = await document.getPage(pageNumber);
       const base = page.getViewport({ scale: 1 });
       const scale = Math.min(
@@ -90,6 +103,7 @@ export async function renderRelayPdfPages(
         directory,
         `pdf-page-${String(pageNumber).padStart(3, "0")}.png`,
       );
+      signal?.throwIfAborted();
       writeFileSync(path, canvas.toBuffer("image/png"));
       paths.push(path);
     }

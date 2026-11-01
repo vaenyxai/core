@@ -806,6 +806,18 @@ Read this inside the app: **Settings → Manual**.
   reads a PDF directly. For OpenAI, Vaenyx privately turns up to 20 PDF pages
   into temporary pictures and sends those to Codex; no API key, paid API or
   outside converter is used.
+- **Research for your apps** — apps can explicitly request bounded search,
+  webpage/file reading and analysis through the existing Relay. Each app keeps
+  its own memory, rules and saved results; Vaenyx uses only that request's data.
+  Results include source/page evidence, missing information, conflicts and a
+  stopping reason. Partial research is not a finished business report. Long PDFs
+  can be read by page ranges; static webpage reading cannot expand interactive
+  content. No paid OCR or automatic model substitution is enabled.
+- **Research limits** — the action budget counts Vaenyx's dispatched search/read
+  actions, not hidden provider sub-actions or fees. Unknown usage stays unknown;
+  unenforceable token/cost caps are refused. After an uncertain timeout the app
+  must not blindly resend. Live research quality and cloud connectivity require
+  separate verification; an offline test is not proof of either.
 - **What is written down** — time, kind of job, which subscription, how long,
   worked or not. **Never** the prompt, the file, or the answer.
 - **This month** — the same card shows who spent what this month, per app and
@@ -1086,5 +1098,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.2-dev** · last updated 2026-10-31.
+Manual for **v0.4.14.3-dev** · last updated 2026-11-01.
 Keep this file up to date whenever a feature changes.

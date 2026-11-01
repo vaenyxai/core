@@ -1,3 +1,4 @@
+import { assertResearchRequest } from "../core/research-validation.js";
 import { registerHouseholdSourceRoutes } from "./household-sources.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -1103,7 +1104,11 @@ export async function registerGatewayRoutes(
   // could list app tokens, reveal one, or disconnect a provider. Any session
   // inside a Custom Mode is refused here, locked or not. Reading the provider
   // list stays open — the chat's model picker needs it, and it carries no key.
-  const ACCOUNT_PREFIXES = ["/v1/app-profiles", "/v1/relay/", "/v1/models/codex/"];
+  const ACCOUNT_PREFIXES = [
+    "/v1/app-profiles",
+    "/v1/relay/",
+    "/v1/models/codex/",
+  ];
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?")[0] ?? "";
     const accountDoor =
@@ -2273,8 +2278,12 @@ export async function registerGatewayRoutes(
     },
   );
 
-  app.post("/v1/models/codex/component", {
-    schema: { response: { 200: ModelProvidersResponseSchema, 401: ErrorResponseSchema, 503: ErrorResponseSchema } },
+  app.post(
+    "/v1/models/codex/component",
+    {
+    schema: { response: { 200: ModelProvidersResponseSchema, 401: ErrorResponseSchema, 503: ErrorResponseSchema,
+        },
+      },
   }, async (request, reply) => {
     const owner = requireOwner(request);
     if (!owner) return reply.code(401).send({ error: "Owner login required." });
@@ -2289,7 +2298,8 @@ export async function registerGatewayRoutes(
       return reply.code(503).send({ error: result.ownerError });
     }
     return { providers: listModelProviders(context.config.secretsDirectory) };
-  });
+    },
+  );
 
   app.get<{ Params: { attemptId: string } }>(
     "/v1/models/codex/login/:attemptId",
@@ -2540,7 +2550,8 @@ export async function registerGatewayRoutes(
     "/v1/models/adopted",
     {
       schema: {
-        response: { 200: AdoptedModelsResponseSchema, 401: ErrorResponseSchema },
+        response: { 200: AdoptedModelsResponseSchema, 401: ErrorResponseSchema,
+        },
       },
     },
     async (request, reply) => {
@@ -2586,7 +2597,11 @@ export async function registerGatewayRoutes(
         // The same path a chat takes, with this one model named on this one
         // call. Judged by the answer, not by the absence of an error.
         const answer = await target.sendChat(
-          [{ role: "owner", content: "Reply with exactly the single word PONG." }],
+          [
+            {
+              role: "owner", content: "Reply with exactly the single word PONG.",
+            },
+          ],
           undefined,
           { model, signal: AbortSignal.timeout(120_000) },
         );
@@ -2615,7 +2630,10 @@ export async function registerGatewayRoutes(
           modelReportedByEngine: false,
           message: error instanceof Error && error.message.startsWith("RELAY_MODEL_NOT_AVAILABLE:")
             ? ownerSafeErrorText(error, "model-response", pushLanguage()).text
-            : (error instanceof Error ? error.message : String(error)).slice(0, 300),
+            : (error instanceof Error ? error.message : String(error)).slice(
+                  0,
+                  300,
+                ),
           durationMs: Date.now() - startedAt,
           timestamp: new Date().toISOString(),
         };
@@ -2669,11 +2687,11 @@ export async function registerGatewayRoutes(
           reason:
             "Owner " +
             (verb === "adopt" ? "started" : "stopped") +
-            " using \"" +
+            ' using "' +
             model +
-            "\" on \"" +
+            '" on "' +
             request.params.id +
-            "\".",
+            '".',
           resourceType: "system",
         });
         return adoptedResponse();
@@ -6107,7 +6125,10 @@ export async function registerGatewayRoutes(
       if (!owner) {
         return reply.code(401).send({ error: "Owner login required." });
       }
-      return listPendingInstructionHolds(context.database, owner.modeId ?? null);
+      return listPendingInstructionHolds(
+        context.database,
+        owner.modeId ?? null,
+      );
     },
   );
 
@@ -6141,7 +6162,9 @@ export async function registerGatewayRoutes(
         );
       } catch (error) {
         if (error instanceof Error && error.message === "HOLD_NOT_FOUND") {
-          return reply.code(404).send({ error: "That item is not waiting any more." });
+          return reply
+            .code(404)
+            .send({ error: "That item is not waiting any more." });
         }
         throw error;
       }
@@ -6255,7 +6278,7 @@ export async function registerGatewayRoutes(
           return reply.code(400).send({
             error: zh
               ? "这个对话里还没有做完的事可以存成 Routine。先让 Vaenyx 做一次,再说「以后都这样做」。"
-              : "Nothing has been done in this conversation yet to save as a Routine. Have Vaenyx do it once, then say \"do it like this from now on\".",
+              : 'Nothing has been done in this conversation yet to save as a Routine. Have Vaenyx do it once, then say "do it like this from now on".',
           });
         }
         if (
@@ -6271,7 +6294,11 @@ export async function registerGatewayRoutes(
               : "Vaenyx could not draft a usable Routine this time, and nothing was saved. Say it again to try once more.",
           });
         }
-        const safe = ownerSafeErrorResponse(error, "model-response", pushLanguage());
+        const safe = ownerSafeErrorResponse(
+          error,
+          "model-response",
+          pushLanguage(),
+        );
         return reply.code(400).send({ error: safe.error });
       }
     },
@@ -6325,7 +6352,11 @@ export async function registerGatewayRoutes(
                 : "Vaenyx could not draft a usable one this time, and nothing was saved. Describe it again to try once more.",
           });
         }
-        const safe = ownerSafeErrorResponse(error, "model-response", pushLanguage());
+        const safe = ownerSafeErrorResponse(
+          error,
+          "model-response",
+          pushLanguage(),
+        );
         return reply.code(400).send({ error: safe.error });
       }
     },
@@ -6609,6 +6640,35 @@ export async function registerGatewayRoutes(
   app.post<{ Body: RelayRunRequest }>(
     "/v1/ai/run",
     {
+      preValidation: async (request, reply) => {
+        const body = request.body;
+        if (body?.capability === "research") {
+          try {
+            const keys = new Set([
+              "task",
+              "prompt",
+              "engine",
+              "capability",
+              "query",
+              "allowed_domains",
+              "max_results",
+              "language",
+              "region",
+              "caller",
+              "files",
+              "effort",
+              "model",
+              "research",
+            ]);
+            if (Object.keys(body).some((key) => !keys.has(key)))
+              throw new Error("invalid_research_input");
+            assertResearchRequest(body.research, body.files ?? [], body.model);
+          } catch {
+            return reply.code(400).send({ error: "invalid_research_input" });
+          }
+        } else if (body?.research !== undefined)
+          return reply.code(400).send({ error: "invalid_research_input" });
+      },
       schema: {
         body: RelayRunRequestSchema,
         response: {
@@ -6669,6 +6729,7 @@ export async function registerGatewayRoutes(
           context.database,
           context.config.secretsDirectory,
           {
+            research: request.body.research,
             task: request.body.task,
             prompt: request.body.prompt,
             engine: request.body.engine,
@@ -6689,8 +6750,8 @@ export async function registerGatewayRoutes(
           engine: request.body.engine,
           capability: request.body.capability,
           ms: result.ms,
-          ok: true,
-          failure: null,
+          ok: result.research ? result.research.status === "complete" : true,
+          failure: result.research && result.research.status !== "complete" ? result.research.stop_reason : null,
           appId: knocker.profileId,
         });
         return result;
@@ -7385,7 +7446,10 @@ export async function registerGatewayRoutes(
       schema: {
         params: Type.Object({
           id: Type.String({ minLength: 1 }),
-          answer: Type.Union([Type.Literal("reenable"), Type.Literal("dismiss")]),
+          answer: Type.Union([
+            Type.Literal("reenable"),
+            Type.Literal("dismiss"),
+          ]),
         }),
         response: {
           200: Type.Object({ capabilities: Type.Array(Type.String()) }),
@@ -15404,13 +15468,11 @@ export async function registerGatewayRoutes(
       const check = `Main model quick test — ${providerId}${requestedModel ? ` / ${requestedModel}` : ""}`;
       const startedAt = Date.now();
       const timestamp = new Date().toISOString();
-      const remember = (
-        record: {
+      const remember = (record: {
           status: "passed" | "failed" | "blocked";
           message: string;
           model: string | null;
-        },
-      ) => {
+      }) => {
         try {
           writeChatTestRecord(context.database, {
             provider: providerId,
@@ -15506,7 +15568,8 @@ export async function registerGatewayRoutes(
         const message = passed
           ? `Test passed on ${providerId}${requestedModel ? ` / ${requestedModel}` : ""}. Engine reported: ${answeredBy ?? "no model name"}.`
           : (failure?.text ?? "Chat test returned no visible answer.");
-        remember({ status: passed ? "passed" : "failed", message, model: answeredBy });
+        remember({ status: passed ? "passed" : "failed", message, model: answeredBy,
+        });
         return {
           status: passed ? "passed" : "failed",
           check,

@@ -259,3 +259,57 @@ concurrent calls on one profile never share a choice.
 No profile status response carries credentials. Relay call logs contain app
 id, engine, capability, duration and safe outcome only — never prompts, files,
 answers, tokens, local paths or provider diagnostics.
+
+## Research Requests (Contract 2.2, Research Version 1)
+
+`POST /v1/ai/run` accepts opt-in `capability: "research"`. Existing capabilities
+keep their existing behavior. The machine remains Owner-only behind its existing
+Relay identity and network boundary; this is not a public service or a cloud
+connectivity feature. No business app is required to use it.
+
+The executable request/response definitions are in
+`packages/contracts/src/research.ts`. Supply an explicit engine/model, prompt,
+research version, request/task identifiers, constraints identifier, constraints,
+required fields, URLs, allowed tools, budget and explicit context. Each research
+file has a unique caller-supplied id and a short-lived download URL, with optional
+expected SHA-256 and MIME. Query and prompt are both preserved in research mode.
+Unknown protocol fields fail validation. The constraints identifier is echoed;
+it does not certify that the host recomputed the caller's rules hash.
+
+- The calling app owns memory, business rules, persisted tasks, cumulative budgets,
+  evidence archives and results. This executor uses only the current request.
+- The host dispatches bounded search/read actions. Each search reuses the selected
+  engine's native tool loop. Native internal searches are not all observable:
+  `max_tool_actions` and `usage.tool_actions` count host dispatches, not provider
+  sub-actions, tokens or fees. Non-null token/cost hard caps are rejected before
+  execution until they can be enforced. Null never means free.
+- Read tools are limited to request files, supplied URLs and discovered public
+  URLs. HTTPS redirects and resolved addresses are checked; downloads are capped
+  while streaming. File hosts remain restricted by the existing configuration.
+- PDF text extraction preserves physical pages (up to the safety ceiling),
+  including pages with no text. Requested page images are rendered in batches of
+  at most 20. Text reads are bounded to 32,000 characters per action; oversized
+  ranges fail and must be narrowed. This is not paid OCR. HTML reading is static:
+  it does not execute page scripts, log in or click expansion controls.
+- Sources report representation, coverage and returned ranges. Coverage of an
+  extracted representation does not prove visual completeness or that a model
+  understood every word. Mixed representations are conservatively partial.
+- Host operations, content hashes and verified quote matches are generated from
+  execution. Search snippets remain discovery. Inferences cite premises; visual
+  observations cite supplied pages. A quote match does not certify truth.
+- `response.research` carries results, evidence, missing fields, conflicts,
+  operations, actual-model evidence and usage. Unknown observations are null.
+  Complete requires no reported missing/conflicting obligations or incomplete
+  sources; the caller must still apply its own business qualification rules.
+- This API has no durable job lookup, result recovery or exactly-once guarantee.
+  A timeout after dispatch is an unknown outcome, not proof that no work ran.
+  Do not automatically resend. The caller must retain its attempt and budget
+  reservation; any continuation is explicit input, not hidden server memory.
+- Temporary documents/page images are removed after the request. Routine logs
+  contain metadata, not prompts, answers, signed file URLs or document contents.
+  Core does not switch models or enable another paid provider after failure.
+
+Offline tests cover synthetic source/quote binding, follow-up actions, byte and
+host limits, timeout outcomes, both attachments and late pages of synthetic long
+PDFs. These tests are not a claim of live model quality, real document acceptance,
+customer authorization or a working cloud-to-device route.

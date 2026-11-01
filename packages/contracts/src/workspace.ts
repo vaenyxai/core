@@ -1,3 +1,4 @@
+import { ResearchRequestSchema, ResearchResponseSchema } from "./research.js";
 import { type Static, Type } from "@sinclair/typebox";
 
 import { OwnerSafeErrorSchema } from "./owner-safe-error.js";
@@ -67,7 +68,10 @@ export const ProjectSchema = Type.Object(
       Type.Union([
         Type.Object(
           {
-            changedBy: Type.Union([Type.Literal("vaenyx"), Type.Literal("owner")]),
+            changedBy: Type.Union([
+              Type.Literal("vaenyx"),
+              Type.Literal("owner"),
+            ]),
             kind: Type.Union([
               Type.Literal("rewrite"),
               Type.Literal("approve"),
@@ -3622,7 +3626,9 @@ export type DescriptionDraft = Static<typeof DescriptionDraftSchema>;
 export type DescriptionDraftRequest = Static<
   typeof DescriptionDraftRequestSchema
 >;
-export type ProjectInstructionHold = Static<typeof ProjectInstructionHoldSchema>;
+export type ProjectInstructionHold = Static<
+  typeof ProjectInstructionHoldSchema
+>;
 export type ProjectInstructionHoldCategory = Static<
   typeof ProjectInstructionHoldCategorySchema
 >;
@@ -3711,6 +3717,7 @@ export const RelayCapabilitySchema = Type.Union([
   Type.Literal("vision_analysis"),
   Type.Literal("document_analysis"),
   Type.Literal("web_search"),
+  Type.Literal("research"),
   Type.Literal("text"),
   // Text that may search the live internet. Off for every key until the Owner
   // grants it per app, with its own approval step — see NEEDS_OWN_TOKEN_APPROVAL.
@@ -3727,13 +3734,15 @@ export const RelayRunRequestSchema = Type.Object(
   {
     // What kind of job this is. Shows up in the door's log so the Owner can see
     // what his apps have been asking for, without any of the content.
+    research: Type.Optional(ResearchRequestSchema),
     task: Type.String({ minLength: 1, maxLength: 60 }),
     prompt: Type.Optional(Type.String({ minLength: 1, maxLength: 200_000 })),
     engine: RelayEngineSchema,
     capability: RelayCapabilitySchema,
     query: Type.Optional(Type.String({ minLength: 1, maxLength: 20_000 })),
     allowed_domains: Type.Optional(
-      Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { maxItems: 20 }),
+      Type.Array(Type.String({ minLength: 1, maxLength: 253 }), { maxItems: 20,
+      }),
     ),
     max_results: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
     language: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
@@ -3750,6 +3759,16 @@ export const RelayRunRequestSchema = Type.Object(
       Type.Array(
         Type.Object(
           {
+            id: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
+            sha256: Type.Optional(
+              Type.Union([
+                Type.String({ pattern: "^[a-fA-F0-9]{64}$" }),
+                Type.Null(),
+              ]),
+            ),
+            mime: Type.Optional(
+              Type.Union([Type.String({ maxLength: 200 }), Type.Null()]),
+            ),
             name: Type.String({ minLength: 1, maxLength: 200 }),
             url: Type.String({ minLength: 8, maxLength: 4000 }),
           },
@@ -3771,6 +3790,7 @@ export const RelayRunRequestSchema = Type.Object(
 
 export const RelayRunResponseSchema = Type.Object(
   {
+    research: Type.Optional(ResearchResponseSchema),
     text: Type.String(),
     engine: RelayEngineSchema,
     provider: Type.String(),

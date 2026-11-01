@@ -111,7 +111,8 @@ describe("relay profiles", () => {
     const statusOne = await app.inject({
       method: "GET",
       url: "/v1/relay/profile",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${first.token}` },
+      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${first.token}`,
+      },
     });
     expect(statusOne.statusCode).toBe(200);
     const bodyOne = statusOne.json() as {
@@ -129,12 +130,15 @@ describe("relay profiles", () => {
     expect(bodyOne.mode).toBe("dedicated");
     expect(bodyOne.contract_version).toBe(2);
     expect(bodyOne.capabilities).toContain("web_search");
-    expect(bodyOne.engines.every((engine) => engine.capability_status.length === 5)).toBe(true);
+    expect(
+      bodyOne.engines.every((engine) => engine.capability_status.length === 5),
+    ).toBe(true);
 
     const statusTwo = await app.inject({
       method: "GET",
       url: "/v1/relay/profile",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${second.token}` },
+      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${second.token}`,
+      },
     });
     const bodyTwo = statusTwo.json() as { key: { hint: string } };
     expect(bodyTwo.key.hint).not.toBe(bodyOne.key.hint);
@@ -154,6 +158,54 @@ describe("relay profiles", () => {
       payload: { action: "new" },
     });
     expect(mintGone.statusCode).toBe(404);
+  });
+
+  it("rejects unknown research fields before schema stripping and keeps the Relay identity gate", async () => {
+    const research = {
+      version: 1,
+      request_id: "attempt",
+      task_id: "task",
+      constraints_hash: "rules",
+      constraints: [],
+      required_fields: [],
+      urls: [],
+      allowed_tools: [],
+      budget: {
+        max_elapsed_ms: 1000,
+        max_tool_actions: 0,
+        max_download_bytes: 0,
+        max_tokens: null,
+        max_cost: null,
+      },
+      context: { subject: null, prior_evidence: [], feedback: [] },
+    };
+    const payload = {
+      task: "test",
+      prompt: "test",
+      engine: "openai-cli",
+      model: "test-model",
+      capability: "research",
+      research,
+    };
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/v1/ai/run",
+      payload: { ...payload, research: { ...research, hidden: true } },
+    });
+    expect(unknown.statusCode).toBe(400);
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/v1/ai/run",
+      payload,
+    });
+    expect(forbidden.statusCode).toBe(403);
+    const noKey = await app.inject({
+      method: "POST",
+      url: "/v1/ai/run",
+      headers: { "tailscale-user-login": "owner@example.com" },
+      payload,
+    });
+    expect(noKey.statusCode).toBe(401);
   });
 
   it("outside the tailnet is refused with its OWN code, before any key check", async () => {
@@ -199,7 +251,8 @@ describe("relay profiles", () => {
     const status = await app.inject({
       method: "GET",
       url: "/v1/relay/profile",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}` },
+      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}`,
+      },
     });
     const raw = status.body;
     // The full key appears nowhere; only its 18-character prefix may.
@@ -214,7 +267,8 @@ describe("relay profiles", () => {
       { method: "GET", url: "/v1/models/providers" },
       { method: "POST", url: "/v1/models/codex/login" },
       { method: "POST", url: "/v1/models/codex/component" },
-      { method: "GET", url: "/v1/models/codex/login/00000000-0000-4000-8000-000000000000" },
+      { method: "GET", url: "/v1/models/codex/login/00000000-0000-4000-8000-000000000000",
+      },
       { method: "GET", url: "/v1/app-profiles" },
     ] as const) {
       const response = await app.inject({
@@ -231,7 +285,8 @@ describe("relay profiles", () => {
   it("Codex login status is Owner-only and exposes only a phase", async () => {
     const url = "/v1/models/codex/login/00000000-0000-4000-8000-000000000000";
     expect((await app.inject({ method: "GET", url })).statusCode).toBe(401);
-    const response = await app.inject({ method: "GET", url, headers: { cookie } });
+    const response = await app.inject({ method: "GET", url, headers: { cookie },
+    });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: "unknown" });
   });
@@ -241,7 +296,8 @@ describe("relay profiles", () => {
     const rotate = await app.inject({
       method: "POST",
       url: "/v1/relay/profile/key/rotate",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}` },
+      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}`,
+      },
     });
     expect(rotate.statusCode).toBe(200);
     const rotated = rotate.json() as { token: string; keyVersion: number };
@@ -251,14 +307,16 @@ describe("relay profiles", () => {
     const oldKey = await app.inject({
       method: "GET",
       url: "/v1/relay/profile",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}` },
+      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}`,
+      },
     });
     expect(oldKey.statusCode).toBe(401);
 
     const newKey = await app.inject({
       method: "GET",
       url: "/v1/relay/profile",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${rotated.token}` },
+      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${rotated.token}`,
+      },
     });
     expect(newKey.statusCode).toBe(200);
     expect((newKey.json() as { key: { version: number } }).key.version).toBe(2);
@@ -282,7 +340,8 @@ describe("relay profiles", () => {
     const status = await app.inject({
       method: "GET",
       url: "/v1/relay/profile",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}` },
+      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}`,
+      },
     });
     const body = status.json() as {
       mode: string;
@@ -393,11 +452,15 @@ describe("relay profiles", () => {
     // Windows cannot exec .mjs directly; go through node. The login module
     // spawns exactly this string as the executable with fixed args, so the
     // wrapper script re-execs node with the fake.
-    const wrapper = join(fakeDir, process.platform === "win32" ? "fake.cmd" : "fake.sh");
+    const wrapper = join(
+      fakeDir,
+      process.platform === "win32" ? "fake.cmd" : "fake.sh",
+    );
     if (process.platform === "win32") {
       writeFileSync(wrapper, `@echo off\r\nnode "${fake}"\r\n`);
     } else {
-      writeFileSync(wrapper, `#!/bin/sh\nexec node "${fake}"\n`, { mode: 0o755 });
+      writeFileSync(wrapper, `#!/bin/sh\nexec node "${fake}"\n`, { mode: 0o755,
+      });
     }
     process.env.VAENYX_CLAUDE_LOGIN_COMMAND = wrapper;
     try {
@@ -407,7 +470,8 @@ describe("relay profiles", () => {
       const startOne = await app.inject({
         method: "POST",
         url: "/v1/relay/profile/login/start",
-        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${first.token}` },
+        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${first.token}`,
+        },
         payload: { engine: "claude-cli" },
       });
       expect(startOne.statusCode).toBe(200);
@@ -416,7 +480,8 @@ describe("relay profiles", () => {
       const startTwo = await app.inject({
         method: "POST",
         url: "/v1/relay/profile/login/complete",
-        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${second.token}` },
+        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${second.token}`,
+        },
         payload: { engine: "claude-cli", code: "good-code" },
       });
       // Second app never started; its complete is its own clean error, not the
@@ -429,7 +494,8 @@ describe("relay profiles", () => {
       const completeOne = await app.inject({
         method: "POST",
         url: "/v1/relay/profile/login/complete",
-        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${first.token}` },
+        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${first.token}`,
+        },
         payload: { engine: "claude-cli", code: "good-code" },
       });
       expect(completeOne.statusCode).toBe(200);
@@ -442,7 +508,8 @@ describe("relay profiles", () => {
       const statusOne = await app.inject({
         method: "GET",
         url: "/v1/relay/profile",
-        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${first.token}` },
+        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${first.token}`,
+        },
       });
       const bodyOne = statusOne.json() as {
         mode: string;
@@ -456,7 +523,8 @@ describe("relay profiles", () => {
       const statusTwo = await app.inject({
         method: "GET",
         url: "/v1/relay/profile",
-        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${second.token}` },
+        headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${second.token}`,
+        },
       });
       const bodyTwo = statusTwo.json() as {
         mode: string;
@@ -474,9 +542,7 @@ describe("relay profiles", () => {
 
   it("usage: counted per app and month, listed for the Owner, names joined", async () => {
     const profile = await makeProfile("app-usage");
-    const { recordEngineUsage } = await import(
-      "../src/modules/core/relay-usage.js"
-    );
+    const { recordEngineUsage } = await import("../src/modules/core/relay-usage.js");
     const { createDatabase } = await import("../src/db/database.js");
     const database = createDatabase(config);
     recordEngineUsage(database, profile.id, "openai-cli");
@@ -519,7 +585,8 @@ describe("relay profiles", () => {
     const viaApp = await app.inject({
       method: "GET",
       url: "/v1/relay/usage",
-      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}` },
+      headers: { "tailscale-user-login": "owner@example.com", authorization: `Bearer ${profile.token}`,
+      },
     });
     expect(viaApp.statusCode).toBe(401);
   });

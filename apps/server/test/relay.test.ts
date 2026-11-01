@@ -103,6 +103,15 @@ function runOnce(
 }
 
 describe("the subscription door", () => {
+  it("routes opt-in research failures without contacting a model", async () => {
+    const database = createTestDatabase(); writeRelayConfig(database, OPEN_DOOR);
+    const result = await runOnce(database, { capability: "research", model: "synthetic-model", research: { version: 1, request_id: "attempt", task_id: "task", constraints_hash: "rules", constraints: [], required_fields: [], urls: [], allowed_tools: [], context: { subject: null, prior_evidence: [], feedback: [] }, budget: { max_elapsed_ms: 1000, max_tool_actions: 0, max_download_bytes: 0, max_tokens: null, max_cost: 0 } } });
+    expect(result.research?.error?.code).toBe("budget_not_enforceable");
+    expect(result.research?.error?.execution_state).toBe("not_started");
+    expect(result.research?.operations).toEqual([]);
+    expect(result.fallback_occurred).toBe(false);
+  });
+
   it("starts shut", () => {
     const database = createTestDatabase();
     expect(readRelayConfig(database)).toEqual(DEFAULT_RELAY_CONFIG);
