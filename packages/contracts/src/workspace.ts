@@ -1,4 +1,4 @@
-import { ResearchRequestSchema, ResearchResponseSchema } from "./research.js";
+import { ResearchFileSchema, ResearchRequestSchema, ResearchResponseSchema } from "./research.js";
 import { type Static, Type } from "@sinclair/typebox";
 
 import { OwnerSafeErrorSchema } from "./owner-safe-error.js";
@@ -3760,15 +3760,8 @@ export const RelayRunRequestSchema = Type.Object(
         Type.Object(
           {
             id: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
-            sha256: Type.Optional(
-              Type.Union([
-                Type.String({ pattern: "^[a-fA-F0-9]{64}$" }),
-                Type.Null(),
-              ]),
-            ),
-            mime: Type.Optional(
-              Type.Union([Type.String({ maxLength: 200 }), Type.Null()]),
-            ),
+            sha256: ResearchFileSchema.properties.sha256,
+            mime: ResearchFileSchema.properties.mime,
             name: Type.String({ minLength: 1, maxLength: 200 }),
             url: Type.String({ minLength: 8, maxLength: 4000 }),
           },

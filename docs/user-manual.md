@@ -815,7 +815,9 @@ Read this inside the app: **Settings → Manual**.
   content. No paid OCR or automatic model substitution is enabled.
 - **Research limits** — the action budget counts Vaenyx's dispatched search/read
   actions, not hidden provider sub-actions or fees. Unknown usage stays unknown;
-  unenforceable token/cost caps are refused. After an uncertain timeout the app
+  unenforceable token/cost caps are refused. Apps use `null` for unset token/cost
+  caps; the interface preserves it rather than turning it into a zero-cost cap.
+  After an uncertain timeout the app
   must not blindly resend. Live research quality and cloud connectivity require
   separate verification; an offline test is not proof of either.
 - **What is written down** — time, kind of job, which subscription, how long,
@@ -1098,5 +1100,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.3-dev** · last updated 2026-11-01.
+Manual for **v0.4.14.4-dev** · last updated 2026-11-01.
 Keep this file up to date whenever a feature changes.

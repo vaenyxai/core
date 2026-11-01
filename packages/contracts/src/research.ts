@@ -1,7 +1,9 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 
+// A single type union preserves null under Fastify/Ajv coercion. An anyOf
+// branch may otherwise turn an unknown number into zero or text into "".
 const nullable = <T extends TSchema>(schema: T) =>
-  Type.Union([schema, Type.Null()]);
+  Type.Unsafe<Static<T> | null>({ ...schema, type: [schema.type, "null"] });
 const object = <T extends Record<string, TSchema>>(properties: T) =>
   Type.Object(properties, { additionalProperties: false });
 const id = Type.String({ minLength: 1, maxLength: 160 });
