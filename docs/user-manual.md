@@ -818,6 +818,8 @@ Read this inside the app: **Settings → Manual**.
   the available length and retain the failed operation. A rejected answer gets
   at most one evidence correction within the same time and tool limits; invalid
   citations remain rejected, while successful source reads stay in the record.
+  This includes wrongly labelling new findings as caller-provided or historical
+  material: those labels require matching evidence actually supplied by the app.
 - **Research limits** — the action budget counts Vaenyx's dispatched search/read
   actions, not hidden provider sub-actions or fees. Unknown usage stays unknown;
   unenforceable token/cost caps are refused. Apps use `null` for unset token/cost
@@ -1105,5 +1107,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.5-dev** · last updated 2026-11-01.
+Manual for **v0.4.14.6-dev** · last updated 2026-11-01.
 Keep this file up to date whenever a feature changes.

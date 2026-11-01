@@ -87,6 +87,48 @@ const quote = {
 };
 afterEach(() => vi.useRealTimers());
 describe("request-scoped research", () => {
+  it("corrects a false caller-evidence label without accepting invented provenance", async () => {
+    const fakePrior = {
+      ...quote,
+      kind: "human_provided",
+      quote: null,
+      observation: "Source URL from caller",
+      locator: null,
+    };
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: null },
+      finish({ evidence: [fakePrior] }),
+      finish({ evidence: [quote] }),
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    const out = await runResearch(input);
+    expect(out.status).toBe("complete");
+    expect(out.evidence[0]?.kind).toBe("quote");
+    expect(out.evidence[0]?.quote_verified).toBe(true);
+    expect(out.operations[2]?.error?.message).toContain(
+      "context.prior_evidence",
+    );
+    expect(input.modelCall).toHaveBeenCalledTimes(3);
+  });
+  it("rejects repeated invented history while retaining successful reads", async () => {
+    const bad = finish({
+      evidence: [{ ...quote, kind: "historical_summary" }],
+    });
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: null },
+      bad,
+      bad,
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    const out = await runResearch(input);
+    expect(out.status).toBe("partial");
+    expect(out.error?.code).toBe("invalid_evidence");
+    expect(out.error?.message).toContain("evidence[0].kind");
+    expect(out.evidence).toEqual([]);
+    expect(out.result).toBeNull();
+    expect(out.sources[0]?.coverage).toBe("complete");
+    expect(input.modelCall).toHaveBeenCalledTimes(3);
+  });
   it("reads an unknown-length page without guessing its upper bound", async () => {
     const input = setup([
       { action: "read_url", url: "https://example.org/a", from: 1, to: null },

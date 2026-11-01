@@ -9,6 +9,7 @@ import {
   validateEvidenceReferences,
   type DeliveredEvidence,
 } from "./research-validation.js";
+import { ResearchValidationError } from "./research-errors.js";
 export function finishResearch(
   decision: Record<string, unknown>,
   response: ResearchResponse,
@@ -30,7 +31,7 @@ export function finishResearch(
   const ids = new Set(response.evidence.map((item) => item.id));
   validateEvidenceReferences(response.result, ids);
   validateEvidenceReferences(response.conflicts, ids);
-  for (const evidence of response.evidence) {
+  for (const [index, evidence] of response.evidence.entries()) {
     if (
       ["human_provided", "historical_summary"].includes(evidence.kind) &&
       !request.context.prior_evidence.some(
@@ -44,7 +45,10 @@ export function finishResearch(
             evidence.observation,
       )
     )
-      throw new Error("invalid_evidence");
+      throw new ResearchValidationError(
+        "invalid_evidence",
+        `evidence[${index}].kind claims caller-provided or historical evidence that is absent from context.prior_evidence. Use evidence from a successful read; do not invent caller material.`,
+      );
   }
   const result =
     response.result &&
