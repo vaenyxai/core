@@ -85,13 +85,20 @@ export function finishResearch(
         attempted_operation_ids: [],
       });
   }
+  // Coverage describes each source, not whether every discovered candidate was
+  // necessary to answer the task. Evidence above must still pass read validation.
   response.status =
+    response.error !== null ||
+    response.operations.some(
+      (operation) =>
+        operation.error?.code === "source_hash_mismatch" ||
+        operation.status === "unknown" ||
+        operation.error?.execution_state === "unknown",
+    ) ||
+    response.stop_reason !== "completed" ||
     response.missing.length ||
     response.conflicts.some((conflict) => conflict.resolution === null) ||
-    response.result === null ||
-    response.sources.some(
-      (source) => source.coverage !== "complete" || source.truncated !== false,
-    )
+    response.result === null
       ? "partial"
       : "complete";
   if (response.status === "partial" && response.stop_reason === "completed")

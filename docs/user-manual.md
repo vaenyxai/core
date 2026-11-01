@@ -820,6 +820,14 @@ Read this inside the app: **Settings → Manual**.
   citations remain rejected, while successful source reads stay in the record.
   This includes wrongly labelling new findings as caller-provided or historical
   material: those labels require matching evidence actually supplied by the app.
+- **Task completion and source coverage** — a task can finish when its requested
+  fields and necessary evidence are satisfied, even if unused search candidates
+  or other document ranges remain unread. Source coverage and unread ranges stay
+  visible; completion never relabels them as read. Missing task requirements,
+  unresolved conflicts and invalid citations still prevent completion. If the
+  task requires a full review or cross-check, that scope must actually be done.
+  Vaenyx validates structured evidence; it cannot independently prove that every
+  natural-language requirement has been interpreted correctly.
 - **Research limits** — the action budget counts Vaenyx's dispatched search/read
   actions, not hidden provider sub-actions or fees. Unknown usage stays unknown;
   unenforceable token/cost caps are refused. Apps use `null` for unset token/cost
@@ -1107,5 +1115,5 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.6-dev** · last updated 2026-11-01.
+Manual for **v0.4.14.7-dev** · last updated 2026-11-01.
 Keep this file up to date whenever a feature changes.

@@ -87,6 +87,96 @@ const quote = {
 };
 afterEach(() => vi.useRealTimers());
 describe("request-scoped research", () => {
+  it("finishes grounded search results without reading unused discoveries", async () => {
+    const input = setup([
+      { action: "search", query: "sample" },
+      {
+        results: [
+          { url: "https://example.org/a", snippet: "Alpha" },
+          { url: "https://example.org/b", snippet: "Bravo" },
+        ],
+      },
+      { action: "read_url", url: "https://example.org/a", from: 1, to: 5 },
+      finish({
+        result: { label: { value: "Alpha", evidence_ids: ["e1"] } },
+        evidence: [{ ...quote, operation_id: "op-4" }],
+      }),
+    ]);
+    input.research.required_fields = ["label"];
+    const base = input.modelCall;
+    input.modelCall = async (...args) => ({
+      ...(await base(...args)),
+      searchEvidence: args[2] ? [{ type: "search" }] : [],
+    });
+    const out = await runResearch(input);
+    expect(out.status).toBe("complete");
+    expect(out.stop_reason).toBe("completed");
+    expect(out.sources.map((s) => s.coverage)).toEqual([
+      "complete",
+      "discovered",
+    ]);
+    expect(out.sources[1]?.read_ranges).toEqual([]);
+    expect(out.sources[1]?.fetched_at).toBeNull();
+    expect(out.evidence[0]?.quote_verified).toBe(true);
+    expect(out.usage.tool_actions).toBe(2);
+    expect(input.download).toHaveBeenCalledTimes(1);
+  });
+  it("does not promote an explicitly unmet task scope even when a field is grounded", async () => {
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: 5 },
+      finish({ evidence: [quote], stop_reason: "unresolved_requirements" }),
+      finish({ evidence: [quote], stop_reason: "unresolved_requirements" }),
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    const out = await runResearch(input);
+    expect(out.status).toBe("partial");
+    expect(out.stop_reason).toBe("unresolved_requirements");
+    expect(out.evidence[0]?.quote_verified).toBe(true);
+  });
+  it("keeps missing full-review requirements partial despite valid page evidence", async () => {
+    const incomplete = finish({
+      evidence: [quote],
+      missing: [
+        {
+          field: "full_review",
+          reason: "Required document review remains unfinished",
+          attempted_operation_ids: ["op-2"],
+        },
+      ],
+    });
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: 5 },
+      incomplete,
+      incomplete,
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    input.research.constraints = ["Review the complete document"];
+    const out = await runResearch(input);
+    expect(out.status).toBe("partial");
+    expect(out.missing[0]?.field).toBe("full_review");
+    expect(out.stop_reason).toBe("unresolved_requirements");
+  });
+  it("keeps unresolved conflicts partial even after a successful read", async () => {
+    const incomplete = finish({
+      evidence: [quote],
+      conflicts: [
+        {
+          field: "label",
+          candidates: [{ value: "Alpha", evidence_ids: ["e1"] }],
+          resolution: null,
+        },
+      ],
+    });
+    const input = setup([
+      { action: "read_url", url: "https://example.org/a", from: 1, to: 5 },
+      incomplete,
+      incomplete,
+    ]);
+    input.research.urls = ["https://example.org/a"];
+    const out = await runResearch(input);
+    expect(out.status).toBe("partial");
+    expect(out.conflicts[0]?.resolution).toBeNull();
+  });
   it("corrects a false caller-evidence label without accepting invented provenance", async () => {
     const fakePrior = {
       ...quote,
@@ -220,16 +310,20 @@ describe("request-scoped research", () => {
     expect(out.result).toBeNull();
     expect(input.download).toHaveBeenCalledTimes(1);
   });
-  it("does not claim full coverage for a bounded initial read of a long text", async () => {
+  it("completes an evidenced field without claiming full coverage of its long source", async () => {
     const input = setup([
       { action: "read_url", url: "https://example.org/a", from: 1, to: null },
-      finish(),
+      finish({
+        result: { label: { value: "Alpha", evidence_ids: ["e1"] } },
+        evidence: [quote],
+      }),
     ]);
+    input.research.required_fields = ["label"];
     input.research.urls = ["https://example.org/a"];
     input.research.budget.max_tool_actions = 1;
     input.research.budget.max_download_bytes = input.maxFileBytes = 40000;
     input.download = async (url, _hosts, _limit, _signal, consume) => {
-      const body = Buffer.from("A".repeat(35000));
+      const body = Buffer.from("Alpha" + "A".repeat(34995));
       consume(body.length);
       return {
         body,
@@ -239,11 +333,15 @@ describe("request-scoped research", () => {
       };
     };
     const out = await runResearch(input);
-    expect(out.status).toBe("partial");
+    expect(out.status).toBe("complete");
+    expect(out.stop_reason).toBe("completed");
+    expect(out.evidence[0]?.quote_verified).toBe(true);
     expect(out.sources[0]?.delivered_ranges).toEqual([
       { unit: "character", from: 1, to: 32000 },
     ]);
     expect(out.sources[0]?.coverage).toBe("partial");
+    expect(out.sources[0]?.truncated).toBe(false);
+    expect(out.sources[0]?.unread_ranges).toBeNull();
   });
   it("retains task constraints, query and context without saved memory", async () => {
     const input = setup([finish()]);
@@ -343,12 +441,13 @@ describe("request-scoped research", () => {
     expect(out.status).toBe("partial");
     expect(out.missing[0]?.field).toBe("price");
   });
-  it("does not count an unread supplied source as complete", async () => {
+  it("retains unread supplied source coverage independently of task completion", async () => {
     const input = setup([finish(), finish()]);
     input.research.urls = ["https://example.org/a"];
     const out = await runResearch(input);
-    expect(out.status).toBe("partial");
+    expect(out.status).toBe("complete");
     expect(out.sources[0]?.coverage).toBe("discovered");
+    expect(out.sources[0]?.read_ranges).toEqual([]);
   });
   it("reports unknown execution on timeout and does not continue or retry", async () => {
     vi.useFakeTimers();
