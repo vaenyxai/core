@@ -3716,6 +3716,8 @@ export const RelayEngineSchema = Type.Union([
 ]);
 
 export const RelayApiEngineSchema = Type.Union([
+  Type.Literal("api-deepseek"),
+  Type.Literal("api-zai"),
   Type.Literal("api-gemini"),
   Type.Literal("api-groq"),
   Type.Literal("api-openai"),

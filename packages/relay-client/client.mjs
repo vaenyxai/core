@@ -1,3 +1,4 @@
+import { apiModelHonoured } from "./providers.mjs";
 import { exactOrigin, problem, requestJSON } from "./protocol.mjs";
 export function relayJSON({
   address,
@@ -89,6 +90,74 @@ export function createRelayClient({ connection, fetcher = globalThis.fetch }) {
         operation: "models",
         write: refresh,
       }),
+
+    configuredSelection: async (capability = "text_analysis") => {
+      const [profile, routing] = await Promise.all([
+        request("/v1/relay/profile", { timeoutMs: 4000 }),
+        request("/v1/relay/routing", { timeoutMs: 4000 }),
+      ]);
+      const choice = routing.overrides?.[capability] || routing.primary;
+      if (
+        profile.mode !== "dedicated" ||
+        !profile.configured_selection ||
+        typeof routing.revision !== "string" ||
+        !routing.revision ||
+        typeof choice?.engine !== "string" ||
+        typeof choice?.model !== "string"
+      )
+        throw problem("configure_in_vaenyx", { unknown: false });
+      const engine = profile.engines?.find((e) => e.engine === choice.engine);
+      if (engine?.login_status !== "connected")
+        throw problem("engine_not_connected", { unknown: false });
+      return {
+        ...choice,
+        routing_revision: routing.revision,
+        capability_probe_revision: profile.capability_probe_revision,
+        may_charge: choice.engine.startsWith("api-"),
+      };
+    },
+    runConfigured: async (body, options = {}) => {
+      if (!body?.capability)
+        throw problem("invalid_request", { unknown: false });
+      const wire = {
+        ...body,
+        engine: undefined,
+        model: undefined,
+        effort: undefined,
+        selection: "configured",
+      };
+      const result = await request("/v1/ai/run", {
+        operation: "run",
+        write: true,
+        body: wire,
+        run: true,
+        timeoutMs: 125000,
+        ...options,
+      });
+      if (
+        !/^2\./.test(result.contract_revision || "") ||
+        result.selection_source !== "app_profile" ||
+        !result.routing_revision ||
+        typeof result.text !== "string" ||
+        !result.text.trim() ||
+        typeof result.requested_model !== "string" ||
+        !result.requested_model ||
+        typeof result.model !== "string" ||
+        !result.model ||
+        typeof result.engine !== "string" ||
+        !result.engine ||
+        result.fallback_occurred !== false ||
+        (body.routing_revision &&
+          result.routing_revision !== body.routing_revision) ||
+        !apiModelHonoured(
+          result.engine.startsWith("api-") ? result.engine.slice(4) : "",
+          result.requested_model,
+          result.model,
+        )
+      )
+        throw problem("response_binding_mismatch", { unknown: true });
+      return result;
+    },
     run: (body, options = {}) => {
       if (
         !body?.capability ||

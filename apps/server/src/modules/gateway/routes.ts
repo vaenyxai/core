@@ -6741,7 +6741,7 @@ export async function registerGatewayRoutes(
       const started = Date.now();
       try {
         const execute = async (localRead?: import("../core/local-file-types.js").LocalFileRead) => {
-          const resolved=resolveAppRoute(context.database,knocker.profileId,request.body);
+          const resolved=resolveAppRoute(context.database,knocker.profileId,request.body,context.config.secretsDirectory);
           request.body=resolved.request;
           const paid=isApiEngine(resolved.request.engine);
           if(!paid && request.body.requirements) throw new Error("RELAY_REQUIREMENT_UNSUPPORTED");

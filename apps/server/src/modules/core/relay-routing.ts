@@ -2,8 +2,12 @@
 import { randomUUID } from "node:crypto";
 import type { RelayRunRequest } from "@vaenyx/contracts";
 import type { DatabaseHandle } from "../../db/database.js";
-import { relayModelCatalogue, relayProfileEngineStatus } from "./relay.js";
-import { apiCatalogue } from "./relay-api.js";
+import {
+  relayModelCatalogue,
+  relayProfileEngineStatus,
+  relayModelProofs,
+} from "./relay.js";
+import { apiCatalogue, apiModelProofs } from "./relay-api.js";
 import { isApiEngine } from "./relay-api-config.js";
 import { ApiRelayError, refuse } from "./relay-api-wire.js";
 export interface RelayChoice {
@@ -116,6 +120,7 @@ export function resolveAppRoute(
   db: DatabaseHandle,
   profile: string,
   request: RelayRunRequest,
+  secrets: string,
 ): {
   request: RelayRunRequest & {
     engine: NonNullable<RelayRunRequest["engine"]>;
@@ -147,6 +152,22 @@ export function resolveAppRoute(
       (request.effort && request.effort !== choice!.effort)
     )
       refuse("RELAY_SELECTION_MANAGED");
+    const requiredProof = routing.overrides[
+      canonical[request.capability] ?? request.capability
+    ]
+      ? (canonical[request.capability] ?? request.capability)
+      : "text_analysis";
+    const proof = [
+      ...apiModelProofs(db, secrets, profile),
+      ...relayModelProofs(db, profile),
+    ].find(
+      (p) =>
+        p.engine === choice!.engine &&
+        p.model === choice!.model &&
+        p.capability === requiredProof &&
+        (p.effort ?? null) === (choice!.effort ?? null),
+    );
+    if (!proof?.ok) refuse("RELAY_MODEL_TEST_REQUIRED");
     return {
       request: {
         ...request,

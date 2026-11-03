@@ -78,8 +78,16 @@ try {
   Write-Host "Building $version..." -ForegroundColor Cyan
   Invoke-LoggedNpm "run build" "The DEV build failed; Vaenyx remains stopped."
 
-  cmd.exe /d /s /c "`"$(Join-Path $root "Vaenyx-Start.cmd")`" --no-browser"
-  if ($LASTEXITCODE -ne 0) { throw "Vaenyx did not restart after the DEV build." }
+  # A native pipeline waits on inherited output handles held by the background
+  # service console. Start a detached, hidden launcher and wait only for that
+  # launcher; health below still verifies the actual server before success.
+  $launcher = Start-Process -FilePath $env:ComSpec -ArgumentList @(
+    "/d", "/s", "/c", ('""{0}" --no-browser"' -f (Join-Path $root "Vaenyx-Start.cmd"))
+  ) -WorkingDirectory $root -WindowStyle Hidden -PassThru
+  $launcher.Handle | Out-Null
+  $launcher.WaitForExit()
+  $launcher.Refresh()
+  if ($launcher.ExitCode -ne 0) { throw "Vaenyx did not restart after the DEV build." }
 
   $status = Invoke-RestMethod -Uri "http://127.0.0.1:3000/v1/system/status" -TimeoutSec 5
   if (

@@ -92,6 +92,7 @@ async function modelsFor(
   return value;
 }
 interface Probe {
+  probeRevision?: string;
   ok?: boolean;
   reason?: string | null;
   path?: "run" | "test";
@@ -113,7 +114,11 @@ export function apiModelProofs(
     const c = readApiConnection(db, secrets, profile, p.id);
     return c
       ? probes(db, profile, p.id)
-          .filter((x) => x.revision === c.revision)
+          .filter(
+            (x) =>
+              x.revision === c.revision &&
+              x.probeRevision === API_PROBE_REVISION,
+          )
           .map((x) => ({
             engine: "api-" + p.id,
             model: x.model,
@@ -155,7 +160,7 @@ function note(
         x.effort === p.effort
       ),
   );
-  next.push(p);
+  next.push({ ...p, probeRevision: API_PROBE_REVISION });
   db.sqlite
     .prepare(
       "INSERT INTO instance_settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -239,7 +244,8 @@ export async function apiCatalogue(
           fetcher,
         );
         const evidence = probes(db, profile, p.id).filter(
-          (x) => x.revision === c.revision,
+          (x) =>
+            x.revision === c.revision && x.probeRevision === API_PROBE_REVISION,
         );
         return {
           ...base,

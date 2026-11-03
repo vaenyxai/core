@@ -65,6 +65,7 @@ const refusedBeforeRun = new Set([
   "RELAY_SELECTION_MANAGED",
   "RELAY_PROFILE_REQUIRED",
   "RELAY_MODEL_NOT_AVAILABLE",
+  "RELAY_MODEL_TEST_REQUIRED",
   "RELAY_MODEL_CATALOGUE_UNAVAILABLE",
 ]);
 export function safeFailure(status, body, run = false) {

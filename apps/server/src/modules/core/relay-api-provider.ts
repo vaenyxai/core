@@ -18,7 +18,13 @@ export interface ApiAttachment {
   mime: string;
   base64: string;
 }
+export interface ApiMessage {
+  role: "user" | "assistant";
+  text: string;
+  files?: ApiAttachment[];
+}
 export interface ApiInvocation {
+  messages?: ApiMessage[];
   model: string;
   capability: string;
   prompt: string;
@@ -78,7 +84,14 @@ export async function apiModels(
       input: string[];
       efforts: string[];
       selectable: boolean;
-      unavailable_reason: null;
+      unavailable_reason: string | null;
+      ownedBy: string;
+      contextWindow: number | null;
+      retired: boolean;
+      status: string;
+      shutdown_date: string;
+      description: string;
+      inputTokenLimit: number | null;
       resolved_id: string;
       default: boolean;
       default_effort: null;
@@ -86,6 +99,7 @@ export async function apiModels(
       model_reported_by_engine: boolean;
       verified: unknown[];
     }[] = [];
+  const cursors = new Set<string>();
   let next = "",
     pages = 0;
   do {
@@ -105,6 +119,8 @@ export async function apiModels(
       signal,
       fetcher,
     );
+    if (!Array.isArray(id === "gemini" ? response.models : response.data))
+      refuse("RELAY_PROVIDER_RESPONSE_INVALID");
     for (const raw of array(response.models ?? response.data)) {
       const row = object(raw),
         model = string(row.id) || string(row.name).replace(/^models\//, "");
@@ -120,12 +136,31 @@ export async function apiModels(
         display_name:
           string(row.display_name) ||
           string(row.displayName) ||
-          string(row.name) ||
+          (id === "gemini" ? "" : string(row.name)) ||
           model,
-        input: [],
+        ownedBy: string(row.owned_by),
+        contextWindow:
+          typeof row.context_window === "number" ? row.context_window : null,
+        description: string(row.description),
+        inputTokenLimit:
+          typeof row.inputTokenLimit === "number" ? row.inputTokenLimit : null,
+        input: array(row.input_modalities).filter(
+          (x): x is string => typeof x === "string",
+        ),
         efforts: [],
-        selectable: true,
-        unavailable_reason: null,
+        retired: row.retired === true,
+        status: string(row.status),
+        shutdown_date: string(row.shutdown_date),
+        selectable:
+          row.active !== false &&
+          row.retired !== true &&
+          !["retired", "deprecated", "disabled"].includes(
+            string(row.status).toLowerCase(),
+          ) &&
+          (!string(row.shutdown_date) ||
+            Date.parse(string(row.shutdown_date)) > Date.now()),
+
+        unavailable_reason: row.active === false ? "MODEL_INACTIVE" : null,
         default: false,
         default_effort: null,
         upgrade_to: null,
@@ -139,6 +174,13 @@ export async function apiModels(
         : id === "anthropic" && response.has_more === true
           ? string(response.last_id)
           : "";
+    if (
+      (id === "anthropic" && response.has_more === true && !next) ||
+      (id !== "anthropic" && id !== "gemini" && response.has_more === true)
+    )
+      refuse("RELAY_MODEL_CATALOGUE_INCOMPLETE");
+    if (next && cursors.has(next)) refuse("RELAY_MODEL_CATALOGUE_INCOMPLETE");
+    if (next) cursors.add(next);
     if (++pages >= 20 && next) refuse("RELAY_MODEL_CATALOGUE_LIMIT");
   } while (next);
   return models;
@@ -189,6 +231,21 @@ async function dispatchApi(
     web = r.capability === "web_search";
   if (!apiCapabilities(id).includes(r.capability))
     refuse("RELAY_CAPABILITY_UNSUPPORTED");
+  if (
+    r.messages &&
+    (p.wire !== "gemini" ||
+      r.files.length ||
+      !r.messages.length ||
+      r.messages.length > 100 ||
+      r.messages.some(
+        (t) =>
+          !["user", "assistant"].includes(t.role) || typeof t.text !== "string",
+      ))
+  )
+    refuse("RELAY_REQUIREMENT_UNSUPPORTED");
+  const allFiles = r.messages
+    ? r.messages.flatMap((t) => t.files ?? [])
+    : r.files;
   const opts = parameters(r, p.wire),
     schema = r.requirements?.schema,
     json = r.capability === "structured_output" || !!schema;
@@ -198,11 +255,11 @@ async function dispatchApi(
   )
     refuse("RELAY_REQUIREMENT_UNSUPPORTED");
   if (
-    r.files.length > 20 ||
-    r.files.reduce((sum, f) => sum + f.base64.length, 0) > 44000000
+    allFiles.length > 20 ||
+    allFiles.reduce((sum, f) => sum + f.base64.length, 0) > 44000000
   )
     refuse("RELAY_TOTAL_TOO_LARGE");
-  for (const f of r.files) {
+  for (const f of allFiles) {
     if (
       !/^[A-Za-z0-9+/]+={0,2}$/.test(f.base64) ||
       !f.mime ||
@@ -354,7 +411,17 @@ async function dispatchApi(
       })),
     ];
     const body: Json = {
-      contents: [{ role: "user", parts }],
+      contents: r.messages
+        ? r.messages.map((t) => ({
+            role: t.role === "assistant" ? "model" : "user",
+            parts: [
+              { text: t.text },
+              ...(t.files ?? []).map((f) => ({
+                inlineData: { mimeType: f.mime, data: f.base64 },
+              })),
+            ],
+          }))
+        : [{ role: "user", parts }],
       generationConfig: {
         ...opts,
         ...(json

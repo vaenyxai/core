@@ -3,6 +3,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDirectClient } from "../direct.mjs";
 const wires = {
+  zai: "chat",
+  deepseek: "chat",
   gemini: "gemini",
   groq: "chat",
   openai: "responses",
@@ -223,4 +225,36 @@ test("redirects and stalled native responses are bounded and never forwarded or 
     }),
     (e) => e.unknown,
   );
+});
+
+test("few-shot Gemini messages retain roles and media through the shared adapter", async () => {
+  let body;
+  const c = createDirectClient({
+    provider: "gemini",
+    apiKey: "SYNTHETIC-KEY",
+    fetcher: async (_, init) => {
+      body = JSON.parse(init.body);
+      return Response.json(reply("gemini", "fixture"));
+    },
+  });
+  await c.run(
+    { model: "fixture", capability: "structured_output", prompt: "ignored" },
+    {
+      messages: [
+        { role: "user", text: "Example question" },
+        { role: "assistant", text: '{"ok":false}' },
+        {
+          role: "user",
+          text: "Now classify",
+          files: [{ name: "sample", mime: "image/png", base64: "QUJD" }],
+        },
+      ],
+    },
+  );
+  assert.equal(body.contents[1].role, "model");
+  assert.equal(body.contents[1].parts[0].text, '{"ok":false}');
+  assert.deepEqual(body.contents[2].parts[1].inlineData, {
+    mimeType: "image/png",
+    data: "QUJD",
+  });
 });

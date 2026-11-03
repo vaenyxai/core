@@ -19,7 +19,9 @@ export const providers = () =>
     id,
     name,
     engine: "api-" + id,
-    capabilities: apiCapabilities(id),
+    capabilities: apiCapabilities(id).filter(
+      (capability) => capability !== "research",
+    ),
   }));
 export function createDirectClient({
   provider,
@@ -63,7 +65,7 @@ export function createDirectClient({
   return {
     models: () =>
       bounded((signal) => apiModels(provider, connection, signal, fetcher)),
-    run: (request, { attachments = [] } = {}) =>
+    run: (request, { attachments = [], messages } = {}) =>
       bounded(async (signal) => {
         const started = Date.now(),
           capability = aliases[request.capability] || request.capability;
@@ -85,6 +87,7 @@ export function createDirectClient({
             capability,
             prompt: request.prompt || request.query || "",
             files: attachments,
+            messages,
             effort: request.effort,
             requirements: request.requirements,
             allowedDomains: request.allowed_domains,

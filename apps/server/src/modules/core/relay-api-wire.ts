@@ -36,7 +36,13 @@ export async function providerJSON(
       headers: {
         "content-type": "application/json",
         ...(wire === "anthropic"
-          ? { "x-api-key": key, "anthropic-version": "2023-06-01" }
+          ? {
+              "x-api-key": key,
+              "anthropic-version": "2023-06-01",
+              ...(Object.hasOwn(globalThis, "window")
+                ? { "anthropic-dangerous-direct-browser-access": "true" }
+                : {}),
+            }
           : wire === "gemini"
             ? { "x-goog-api-key": key }
             : { authorization: "Bearer " + key }),

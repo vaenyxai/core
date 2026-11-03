@@ -49,4 +49,16 @@ export const API_PROVIDERS = [
         base: "https://open.bigmodel.cn/api/paas/v4",
         wire: "chat",
     },
+    {
+        id: "deepseek",
+        name: "DeepSeek",
+        base: "https://api.deepseek.com/v1",
+        wire: "chat",
+    },
+    {
+        id: "zai",
+        name: "Z.ai",
+        base: "https://api.z.ai/api/paas/v4",
+        wire: "chat",
+    },
 ];

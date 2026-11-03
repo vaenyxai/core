@@ -325,7 +325,7 @@ describe("one central API Relay", () => {
       expect(
         (await app.inject({ url: "/v1/relay/providers", headers })).json()
           .providers.length,
-      ).toBe(9);
+      ).toBe(11);
       expect(
         (
           await app.inject({
@@ -410,19 +410,29 @@ describe("one central API Relay", () => {
       overrides: {},
     });
     expect(first.revision).not.toBe(other.revision);
-    const resolved = resolveAppRoute(db, A, {
-      task: "synthetic",
-      capability: "structured_output",
-      prompt: "test",
-      selection: "configured",
-    });
+    const resolved = resolveAppRoute(
+      db,
+      A,
+      {
+        task: "synthetic",
+        capability: "structured_output",
+        prompt: "test",
+        selection: "configured",
+      },
+      secrets,
+    );
     expect(resolved.request.engine).toBe("api-openai");
     expect(resolved.request.model).toBe("fixture-model");
     expect(() =>
-      resolveAppRoute(db, A, { ...request, model: "App-overrode-model" }),
+      resolveAppRoute(
+        db,
+        A,
+        { ...request, model: "App-overrode-model" },
+        secrets,
+      ),
     ).toThrow("RELAY_SELECTION_MANAGED");
     expect(() =>
-      resolveAppRoute(db, A, { ...request, routing_revision: "old" }),
+      resolveAppRoute(db, A, { ...request, routing_revision: "old" }, secrets),
     ).toThrow("RELAY_ROUTING_CHANGED");
     expect(readAppRouting(db, B).revision).toBe(other.revision);
     await expect(
@@ -451,21 +461,109 @@ describe("one central API Relay", () => {
   });
 });
 
-it("keeps authorized local-file research available on an API model without exposing a file reference",async()=>{
- const {db,secrets}=fixture();saveApiConnection(db,secrets,A,"openai","synthetic-api-key");
- const localRead=vi.fn(async()=>({body:Buffer.from("synthetic"),mime:"text/plain",fetchedAt:null}));
- let turn=0;const fetcher:typeof fetch=async(_,init)=>{
-  if(init?.method!=="POST")return Response.json({data:[{id:"fixture-model"}]});
-  const text=++turn===1?JSON.stringify({action:"read_file",file_id:"synthetic-file",from:1,to:9}):
-   JSON.stringify({action:"finish",result:{summary:"done"},evidence:[],missing:[],conflicts:[],stop_reason:"completed"});
-  return Response.json({status:"completed",model:"fixture-model",output:[{type:"message",content:[{type:"output_text",text}]}]});
- };
- const result=await runApiRelay(db,secrets,A,{...request,capability:"research",
-  files:[{id:"synthetic-file",name:"Synthetic.txt",file_ref:{version:1,token:"a".repeat(43)}}],
-  research:{version:1,request_id:"synthetic-request",task_id:"synthetic-task",constraints_hash:"synthetic-rules",constraints:[],required_fields:[],urls:[],
-   allowed_tools:["read_file"],budget:{max_elapsed_ms:10000,max_tool_actions:2,max_download_bytes:1024,max_tokens:null,max_cost:null},
-   context:{subject:null,prior_evidence:[],feedback:[]}}},{fetcher,localRead});
- expect(localRead).toHaveBeenCalledOnce();
- expect(result.research?.operations.some(o=>o.action==="read_file"&&o.status==="succeeded")).toBe(true);
- expect(JSON.stringify(result)).not.toContain("a".repeat(43));
+it("keeps authorized local-file research available on an API model without exposing a file reference", async () => {
+  const { db, secrets } = fixture();
+  saveApiConnection(db, secrets, A, "openai", "synthetic-api-key");
+  const localRead = vi.fn(async () => ({
+    body: Buffer.from("synthetic"),
+    mime: "text/plain",
+    fetchedAt: null,
+  }));
+  let turn = 0;
+  const fetcher: typeof fetch = async (_, init) => {
+    if (init?.method !== "POST")
+      return Response.json({ data: [{ id: "fixture-model" }] });
+    const text =
+      ++turn === 1
+        ? JSON.stringify({
+            action: "read_file",
+            file_id: "synthetic-file",
+            from: 1,
+            to: 9,
+          })
+        : JSON.stringify({
+            action: "finish",
+            result: { summary: "done" },
+            evidence: [],
+            missing: [],
+            conflicts: [],
+            stop_reason: "completed",
+          });
+    return Response.json({
+      status: "completed",
+      model: "fixture-model",
+      output: [{ type: "message", content: [{ type: "output_text", text }] }],
+    });
+  };
+  const result = await runApiRelay(
+    db,
+    secrets,
+    A,
+    {
+      ...request,
+      capability: "research",
+      files: [
+        {
+          id: "synthetic-file",
+          name: "Synthetic.txt",
+          file_ref: { version: 1, token: "a".repeat(43) },
+        },
+      ],
+      research: {
+        version: 1,
+        request_id: "synthetic-request",
+        task_id: "synthetic-task",
+        constraints_hash: "synthetic-rules",
+        constraints: [],
+        required_fields: [],
+        urls: [],
+        allowed_tools: ["read_file"],
+        budget: {
+          max_elapsed_ms: 10000,
+          max_tool_actions: 2,
+          max_download_bytes: 1024,
+          max_tokens: null,
+          max_cost: null,
+        },
+        context: { subject: null, prior_evidence: [], feedback: [] },
+      },
+    },
+    { fetcher, localRead },
+  );
+  expect(localRead).toHaveBeenCalledOnce();
+  expect(
+    result.research?.operations.some(
+      (o) => o.action === "read_file" && o.status === "succeeded",
+    ),
+  ).toBe(true);
+  expect(JSON.stringify(result)).not.toContain("a".repeat(43));
+});
+
+it("requires a fresh primary test after replacing this App's provider credential", async () => {
+  const { db, secrets } = fixture();
+  saveApiConnection(db, secrets, A, "openai", "synthetic-old");
+  vi.stubGlobal("fetch", mockProvider([]));
+  await runApiRelay(db, secrets, A, {
+    ...request,
+    capability: "text_analysis",
+  });
+  await saveAppRouting(db, secrets, A, {
+    revision: null,
+    primary: { engine: "api-openai", model: "fixture-model" },
+    overrides: {},
+  });
+  saveApiConnection(db, secrets, A, "openai", "synthetic-new");
+  expect(() =>
+    resolveAppRoute(
+      db,
+      A,
+      {
+        task: "synthetic",
+        capability: "text_analysis",
+        prompt: "fixture",
+        selection: "configured",
+      },
+      secrets,
+    ),
+  ).toThrow("RELAY_MODEL_TEST_REQUIRED");
 });
