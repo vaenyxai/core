@@ -106,8 +106,10 @@ export function createRelayClient({ connection, fetcher = globalThis.fetch }) {
         typeof choice?.model !== "string"
       )
         throw problem("configure_in_vaenyx", { unknown: false });
-      const engine = profile.engines?.find((e) => e.engine === choice.engine);
-      if (engine?.login_status !== "connected")
+      const engine = profile.engines?.find(
+        (e) => (e.engine ?? e.id) === choice.engine,
+      );
+      if (!(engine?.login_status === "connected" || engine?.connected === true))
         throw problem("engine_not_connected", { unknown: false });
       return {
         ...choice,

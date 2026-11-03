@@ -1,3 +1,7 @@
+import {
+  decodeRelayInlineFile,
+  MAX_INLINE_TOTAL_BYTES,
+} from "./relay-inline-files.js";
 import { redSquarePng, namesRed } from "./capability-probe.js";
 import type {
   RelayRunRequest,
@@ -35,7 +39,7 @@ import {
 import { runResearch } from "./relay-research.js";
 import { normalizeSearchEvidence } from "./relay-search.js";
 
-export const API_REVISION = "2.3",
+export const API_REVISION = "2.4",
   API_PROBE_REVISION = "2026-11-03.api.1";
 type Models = Awaited<ReturnType<typeof apiModels>>;
 type CatalogueEngine = RelayModelCatalogue["engines"][number];
@@ -520,10 +524,34 @@ async function runApiRelayInner(
   if (!request.prompt?.trim() && !request.query?.trim())
     refuse("RELAY_PROMPT_REQUIRED");
   const files: ApiAttachment[] = [...(options.attachments ?? [])];
-  let consumed = 0;
+  let consumed = 0,
+    inlineTotal = 0;
   if ((request.files?.length ?? 0) > config.maxFiles)
     refuse("RELAY_TOO_MANY_FILES");
   for (const file of request.files ?? []) {
+    let inline;
+    try {
+      inline = decodeRelayInlineFile(file, config.maxFileBytes);
+    } catch (error) {
+      refuse(
+        error instanceof Error ? error.message : "RELAY_INLINE_FILE_INVALID",
+      );
+    }
+    if (inline) {
+      inlineTotal += inline.body.length;
+      consumed += inline.body.length;
+      if (
+        inlineTotal > MAX_INLINE_TOTAL_BYTES ||
+        consumed > config.maxTotalBytes
+      )
+        refuse("RELAY_TOTAL_TOO_LARGE");
+      files.push({
+        name: file.name,
+        mime: inline.mime,
+        base64: inline.body.toString("base64"),
+      });
+      continue;
+    }
     if (!file.url || file.file_ref)
       refuse("RELAY_LOCAL_FILE_RESEARCH_REQUIRED");
     const source = await (options.download ?? downloadResearchSource)(
@@ -566,6 +594,16 @@ async function runApiRelayInner(
     files.some((f) => f.mime !== "application/pdf")
   )
     refuse("RELAY_PDF_REQUIRED");
+  if (
+    files.some((f) => f.mime.startsWith("image/")) &&
+    capabilityOff(db, "vision")
+  )
+    refuse("RELAY_CAPABILITY_OFF:vision_analysis");
+  if (
+    files.some((f) => f.mime === "application/pdf") &&
+    capabilityOff(db, "reading")
+  )
+    refuse("RELAY_CAPABILITY_OFF:document_analysis");
   return envelope(
     await call(
       request.query ?? request.prompt ?? "",

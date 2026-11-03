@@ -3728,7 +3728,10 @@ export const RelayApiEngineSchema = Type.Union([
   Type.Literal("api-cerebras"),
   Type.Literal("api-zhipu"),
 ]);
-const RelayAnyEngineSchema = Type.Union([RelayEngineSchema, RelayApiEngineSchema]);
+const RelayAnyEngineSchema = Type.Union([
+  RelayEngineSchema,
+  RelayApiEngineSchema,
+]);
 
 export const RelayCapabilitySchema = Type.Union([
   Type.Literal("text_analysis"),
@@ -3752,7 +3755,9 @@ export const RelayCapabilitySchema = Type.Union([
 export const RelayRunRequestSchema = Type.Object(
   {
     selection: Type.Optional(Type.Literal("configured")),
-    routing_revision: Type.Optional(Type.String({minLength:1,maxLength:80})),
+    routing_revision: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 80 }),
+    ),
     requirements: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     // What kind of job this is. Shows up in the door's log so the Owner can see
     // what his apps have been asking for, without any of the content.
@@ -3787,6 +3792,9 @@ export const RelayRunRequestSchema = Type.Object(
             mime: ResearchFileSchema.properties.mime,
             name: Type.String({ minLength: 1, maxLength: 200 }),
             url: Type.Optional(Type.String({ minLength: 8, maxLength: 4000 })),
+            inline_base64: Type.Optional(
+              Type.String({ minLength: 4, maxLength: 2796204 }),
+            ),
             file_ref: ResearchFileSchema.properties.file_ref,
           },
           { additionalProperties: false },

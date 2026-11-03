@@ -373,7 +373,7 @@ test("configured selection uses each App capability and exposes paid route witho
           ? {
               mode: "dedicated",
               configured_selection: true,
-              engines: [{ engine: "api-gemini", login_status: "connected" }],
+              engines: [{ id: "api-gemini", connected: true }],
             }
           : {
               revision: "r1",
@@ -390,4 +390,20 @@ test("configured selection uses each App capability and exposes paid route witho
   assert.equal(r.may_charge, true);
   assert.equal(paths.length, 2);
   assert.ok(paths.every((p) => !p.endsWith("/run")));
+});
+
+import { inlineFile } from "../files.mjs";
+test("the common file envelope binds existing bytes without another upload endpoint", async () => {
+  const f = await inlineFile({
+    name: "sample.png",
+    mime: "image/png",
+    base64: "iVBORw0KGgoAAAAA",
+  });
+  assert.equal(f.url, undefined);
+  assert.equal(f.inline_base64, "iVBORw0KGgoAAAAA");
+  assert.equal(f.sha256.length, 64);
+  await assert.rejects(
+    inlineFile({ name: "bad", mime: "text/html", base64: "QUJD" }),
+    (e) => e.unknown === false,
+  );
 });

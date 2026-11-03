@@ -1132,7 +1132,7 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.14-dev** · last updated 2026-11-03.
+Manual for **v0.4.14.15-dev** · last updated 2026-11-03.
 Keep this file up to date whenever a feature changes.
 
 
@@ -1141,3 +1141,5 @@ Keep this file up to date whenever a feature changes.
 - A connected App may use Vaenyx or its independent Direct API route. In Vaenyx, open Settings → AI Settings → the App's connection and choose **Model For This App**. The choice can use its dedicated subscription login or one of its own API connections. Find Models reads the current catalogue; Test calls the selected model; Use saves it for the next task. Other Apps and other Vaenyx machines keep their choices.
 - API keys are encrypted and isolated by App profile. A connected key is not a passed capability test. The App sends its task and output/tool/file requirements; incompatible requirements fail rather than silently switching models. Actual model and routing revision accompany the response.
 - Direct API remains independent when Vaenyx is offline. Automatic paid backup is off by default: it needs a separately selected compatible backup, advance paid authorization, an enforceable budget and atomic budget reservation. Unknown outcomes never automatically retry or switch.
+
+- Apps can send an already-held image or PDF through the same private App request, with a SHA-256 digest and declared media type. Inline files are limited to 2 MiB each and 5 MiB combined (8 MB request limit); malformed, mixed-source, mismatched or oversized inputs stop before a model call. Existing authorized HTTPS references and research file references remain supported. Every CLI attachment is passed to the engine; an unsupported requirement fails explicitly.

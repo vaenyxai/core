@@ -21,6 +21,7 @@ import {
   runApiRelay,
 } from "../src/modules/core/relay-api.js";
 import { writeRelayConfig } from "../src/modules/core/relay.js";
+import { writeGlobalCapabilities } from "../src/modules/core/capabilities.js";
 import { providerJSON } from "../src/modules/core/relay-api-wire.js";
 
 const roots: string[] = [],
@@ -566,4 +567,66 @@ it("requires a fresh primary test after replacing this App's provider credential
       secrets,
     ),
   ).toThrow("RELAY_MODEL_TEST_REQUIRED");
+});
+
+it("runs bounded hash-checked inline images through the same API without downloading them", async () => {
+  const { db, secrets } = fixture(),
+    calls: {
+      url: string;
+      body: Record<string, unknown> | null;
+      authorization: string | null;
+    }[] = [];
+  const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0]),
+    { createHash } = await import("node:crypto");
+  const file = {
+    name: "synthetic.png",
+    mime: "image/png",
+    inline_base64: bytes.toString("base64"),
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+  saveApiConnection(db, secrets, A, "openai", "synthetic-api-key-a");
+  const result = await runApiRelay(
+    db,
+    secrets,
+    A,
+    { ...request, files: [file] },
+    {
+      fetcher: mockProvider(calls),
+      download: async () => {
+        throw Error("Inline input must not download");
+      },
+    },
+  );
+  expect(result.structured).toEqual({ ok: true });
+  expect(JSON.stringify(calls[1].body)).toContain(
+    "data:image/png;base64," + file.inline_base64,
+  );
+  const before = calls.length;
+  await expect(
+    runApiRelay(
+      db,
+      secrets,
+      A,
+      { ...request, files: [{ ...file, sha256: "0".repeat(64) }] },
+      { fetcher: mockProvider(calls) },
+    ),
+  ).rejects.toMatchObject({
+    message: "RELAY_FILE_HASH_MISMATCH",
+    started: false,
+  });
+  expect(calls).toHaveLength(before);
+  writeGlobalCapabilities(db, { vision: false });
+  await expect(
+    runApiRelay(
+      db,
+      secrets,
+      A,
+      { ...request, files: [file] },
+      { fetcher: mockProvider(calls) },
+    ),
+  ).rejects.toMatchObject({
+    message: "RELAY_CAPABILITY_OFF:vision_analysis",
+    started: false,
+  });
+  expect(calls).toHaveLength(before);
 });

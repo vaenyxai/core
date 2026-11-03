@@ -1,4 +1,8 @@
-import {ApiRelayError} from "./relay-api-wire.js";
+import {
+  decodeRelayInlineFile,
+  MAX_INLINE_TOTAL_BYTES,
+} from "./relay-inline-files.js";
+import { ApiRelayError } from "./relay-api-wire.js";
 import type {
   ResearchRequest,
   ResearchResponse,
@@ -144,7 +148,8 @@ function engineModels(engine: RelayEngine, profileId: string): string[] {
 }
 
 function catalogueVerifiedAt(
-  engine: RelayEngine, profileId: string,
+  engine: RelayEngine,
+  profileId: string,
 ): string | null {
   return cachedRelayModelCatalogue(engine, profileId)?.verified_at ?? null;
 }
@@ -177,7 +182,8 @@ function modelProbeKey(profileId: string): string {
 }
 
 function readModelProbes(
-  database: DatabaseHandle, profileId: string,
+  database: DatabaseHandle,
+  profileId: string,
 ): StoredModelProbes {
   const row = database.sqlite
     .prepare("SELECT value FROM instance_settings WHERE key = ?")
@@ -207,7 +213,10 @@ export function recordRelayModelProbe(
         ...forEngine[model],
         [capability]: {
           ...probe,
-          credentialVersion: engine === "openai-cli" ? codexLoginConnectedAt(profileId) : claudeLoginConnectedAt(profileId),
+          credentialVersion:
+            engine === "openai-cli"
+              ? codexLoginConnectedAt(profileId)
+              : claudeLoginConnectedAt(profileId),
           probedAt: new Date().toISOString(),
           revision: RELAY_CAPABILITY_PROBE_REVISION,
         },
@@ -244,7 +253,15 @@ export function modelVerifications(
   const probes = readModelProbes(database, profileId)[engine]?.[model] ?? {};
   return RELAY_SAFE_CAPABILITIES.flatMap((capability) => {
     const probe = probes[capability];
-    if (!probe || probe.revision !== RELAY_CAPABILITY_PROBE_REVISION || probe.credentialVersion !== (engine === "openai-cli" ? codexLoginConnectedAt(profileId) : claudeLoginConnectedAt(profileId))) return [];
+    if (
+      !probe ||
+      probe.revision !== RELAY_CAPABILITY_PROBE_REVISION ||
+      probe.credentialVersion !==
+        (engine === "openai-cli"
+          ? codexLoginConnectedAt(profileId)
+          : claudeLoginConnectedAt(profileId))
+    )
+      return [];
     return [
       {
         capability,
@@ -260,10 +277,17 @@ export function modelVerifications(
   });
 }
 
-export function relayModelProofs(database:DatabaseHandle,profileId:string){
- return RELAY_ENGINES.flatMap(engine=>engineSignedIn(engine,profileId)?
-  Object.keys(readModelProbes(database,profileId)[engine]??{}).flatMap(model=>
-   modelVerifications(database,profileId,engine,model).map(proof=>({...proof,engine,model}))):[]);
+export function relayModelProofs(database: DatabaseHandle, profileId: string) {
+  return RELAY_ENGINES.flatMap((engine) =>
+    engineSignedIn(engine, profileId)
+      ? Object.keys(readModelProbes(database, profileId)[engine] ?? {}).flatMap(
+          (model) =>
+            modelVerifications(database, profileId, engine, model).map(
+              (proof) => ({ ...proof, engine, model }),
+            ),
+        )
+      : [],
+  );
 }
 export interface RelayModelCatalogueEngine {
   engine: RelayEngine;
@@ -380,7 +404,8 @@ async function resolveRelaySelection(
     throw new Error("RELAY_MODEL_CATALOGUE_UNAVAILABLE");
   }
   const chosen = findRelayModel(catalogue, requestedModel);
-  if (!chosen) throw new Error(`RELAY_MODEL_INVALID:${engine}:${requestedModel}`);
+  if (!chosen)
+    throw new Error(`RELAY_MODEL_INVALID:${engine}:${requestedModel}`);
   if (!chosen.selectable) {
     throw new Error(`RELAY_MODEL_NOT_AVAILABLE:${engine}:${requestedModel}`);
   }
@@ -413,7 +438,8 @@ function probeKey(profileId: string): string {
 }
 
 function readStoredProbes(
-  database: DatabaseHandle, profileId: string,
+  database: DatabaseHandle,
+  profileId: string,
 ): StoredProbes {
   const row = database.sqlite
     .prepare("SELECT value FROM instance_settings WHERE key = ?")
@@ -586,7 +612,8 @@ function capabilityStatuses(
     const globalOff =
       (capability === "web_search" && capabilityOff(database, "web")) ||
       (capability === "vision_analysis" && capabilityOff(database, "vision")) ||
-      (capability === "document_analysis" && capabilityOff(database, "reading"));
+      (capability === "document_analysis" &&
+        capabilityOff(database, "reading"));
     const currentProbe = probe?.revision === RELAY_CAPABILITY_PROBE_REVISION;
     const available = Boolean(
       supported && signedIn && !globalOff && currentProbe && probe?.available,
@@ -674,6 +701,7 @@ export interface RelayFileRequest {
   mime?: string | null;
   name: string;
   url?: string;
+  inline_base64?: string;
   file_ref?: { version: 1; token: string };
 }
 
@@ -769,9 +797,30 @@ async function fetchLinkedFiles(
 ): Promise<{ path: string; base64: string; mediaType: string }[]> {
   if (files.length > config.maxFiles) throw new Error("RELAY_TOO_MANY_FILES");
   const fetched: { path: string; base64: string; mediaType: string }[] = [];
-  let total = 0;
+  let total = 0,
+    inlineTotal = 0;
 
   for (const file of files) {
+    const inline = decodeRelayInlineFile(file, config.maxFileBytes);
+    if (inline) {
+      inlineTotal += inline.body.length;
+      total += inline.body.length;
+      if (inlineTotal > MAX_INLINE_TOTAL_BYTES || total > config.maxTotalBytes)
+        throw Error("RELAY_TOTAL_TOO_LARGE");
+      const path = resolve(
+        directory,
+        randomUUID() +
+          "-" +
+          file.name.replace(/[^a-zA-Z0-9._ -]/g, "_").slice(-60),
+      );
+      writeFileSync(path, inline.body);
+      fetched.push({
+        path,
+        base64: inline.body.toString("base64"),
+        mediaType: inline.mime,
+      });
+      continue;
+    }
     let host: string;
     try {
       const parsed = new URL(file.url!);
@@ -947,22 +996,26 @@ export async function probeRelayModel(
   const scratch = resolve(tmpdir(), "vaenyx-relay-model-test", randomUUID());
   mkdirSync(scratch, { recursive: true });
   const finish = (outcome: {
-      ok: boolean;
-      reason: string | null;
-      model: string | null;
-      reported: boolean;
-      effort: string | null;
-      effortReported: boolean;
+    ok: boolean;
+    reason: string | null;
+    model: string | null;
+    reported: boolean;
+    effort: string | null;
+    effortReported: boolean;
   }): RelayModelTestResult => {
     recordRelayModelProbe(
       database,
-      profileId, request.engine, chosen.id, capability, {
-      ok: outcome.ok,
-      reason: outcome.reason,
-      actualModel: outcome.model,
-      modelReportedByEngine: outcome.reported,
-      effort: outcome.effort,
-      path: "test",
+      profileId,
+      request.engine,
+      chosen.id,
+      capability,
+      {
+        ok: outcome.ok,
+        reason: outcome.reason,
+        actualModel: outcome.model,
+        modelReportedByEngine: outcome.reported,
+        effort: outcome.effort,
+        path: "test",
       },
     );
     return {
@@ -1015,10 +1068,15 @@ export async function probeRelayModel(
         : await claudeSubscriptionRelay(
             secretsDirectory,
             prompt,
-            image ? { base64: image.toString("base64"), mediaType: "image/png" } : undefined,
+            image
+              ? { base64: image.toString("base64"), mediaType: "image/png" }
+              : undefined,
             profileId,
             false,
-            { model: chosen.id, expectedModel: chosen.resolved_id, effort: request.effort,
+            {
+              model: chosen.id,
+              expectedModel: chosen.resolved_id,
+              effort: request.effort,
             },
           );
     let ok: boolean;
@@ -1026,7 +1084,8 @@ export async function probeRelayModel(
       ok = namesRed(output.text);
     } else if (capability === "structured_output") {
       try {
-        ok = (JSON.parse(output.text) as { vaenyx_probe?: unknown })
+        ok =
+          (JSON.parse(output.text) as { vaenyx_probe?: unknown })
             .vaenyx_probe === "ok";
       } catch {
         ok = false;
@@ -1090,11 +1149,7 @@ export async function probeRelayCapabilities(
     return engine === "openai-cli"
       ? runCodexRelay(
           prompt,
-          options.pdf
-            ? documentPaths
-            : options.image
-              ? imagePath
-              : undefined,
+          options.pdf ? documentPaths : options.image ? imagePath : undefined,
           profileId,
           options.web === true,
         )
@@ -1102,7 +1157,9 @@ export async function probeRelayCapabilities(
           secretsDirectory,
           prompt,
           options.pdf
-            ? { base64: document.toString("base64"), mediaType: "application/pdf",
+            ? {
+                base64: document.toString("base64"),
+                mediaType: "application/pdf",
               }
             : options.image
               ? { base64: image.toString("base64"), mediaType: "image/png" }
@@ -1178,12 +1235,10 @@ export async function probeRelayCapabilities(
         "Read the attached PDF and reply with the exact VAENYX code printed on its page. Reply with the code only.",
         { pdf: true },
       );
-      note(engine, "document_analysis",
-        output.text.includes(documentCode),
-        {
-          provider: output.provider,
-          model: output.model,
-          reason: "DOCUMENT_PROBE_FAILED",
+      note(engine, "document_analysis", output.text.includes(documentCode), {
+        provider: output.provider,
+        model: output.model,
+        reason: "DOCUMENT_PROBE_FAILED",
       });
     } catch (error) {
       note(engine, "document_analysis", false, {
@@ -1206,8 +1261,8 @@ export async function probeRelayCapabilities(
           output.searchEvidence,
           output.text,
           {
-          allowedDomains: ["openai.com", "chatgpt.com"],
-          maxResults: 3,
+            allowedDomains: ["openai.com", "chatgpt.com"],
+            maxResults: 3,
           },
         );
         note(engine, "web_search", evidence.length > 0, {
@@ -1238,7 +1293,10 @@ export async function runRelay(
 ): Promise<RelayRunResult> {
   const config = readRelayConfig(database);
   if (!config.enabled) throw new Error("RELAY_OFF");
-  if (request.capability !== "research" && request.files.some((f) => f.file_ref || !f.url))
+  if (
+    request.capability !== "research" &&
+    request.files.some((f) => f.file_ref || (!f.url && !f.inline_base64))
+  )
     throw new Error("RELAY_LOCAL_FILE_RESEARCH_REQUIRED");
   assertRelayRateLimit(request.appProfileId, config.maxCallsPerMinute);
   if (request.capability === "research") {
@@ -1255,7 +1313,9 @@ export async function runRelay(
         (tool) => tool === "search" || tool === "read_url",
       ) &&
         capabilityOff(database, "web")) ||
-      (researchRequest.allowed_tools.some((tool) => tool === "read_file" || tool === "read_url") &&
+      (researchRequest.allowed_tools.some(
+        (tool) => tool === "read_file" || tool === "read_url",
+      ) &&
         capabilityOff(database, "reading"))
     )
       throw new Error("RELAY_CAPABILITY_OFF:research");
@@ -1370,9 +1430,12 @@ export async function runRelay(
   // per-key capability grant here; the key, Tailnet boundary, engine login and
   // machine-wide safety ceiling are the complete authorization chain.
   const prompt = request.prompt?.trim();
-  const query = request.query?.trim() || (capability === "web_search" ? prompt : "");
-  if (capability === "web_search" && !query) throw new Error("RELAY_QUERY_REQUIRED");
-  if (capability !== "web_search" && !prompt) throw new Error("RELAY_PROMPT_REQUIRED");
+  const query =
+    request.query?.trim() || (capability === "web_search" ? prompt : "");
+  if (capability === "web_search" && !query)
+    throw new Error("RELAY_QUERY_REQUIRED");
+  if (capability !== "web_search" && !prompt)
+    throw new Error("RELAY_PROMPT_REQUIRED");
 
   // Per-call model/effort (contract 2.1): resolved against the engine's LIVE
   // catalogue for this profile and refused echoing the caller's own word —
@@ -1397,19 +1460,31 @@ export async function runRelay(
     const files = await fetchLinkedFiles(request.files, config, scratch);
     const attachment = files[0];
     if (
-      (capability === "vision_analysis" || capability === "document_analysis") &&
+      files.some((f) => f.mediaType.startsWith("image/")) &&
+      capabilityOff(database, "vision")
+    )
+      throw Error("RELAY_CAPABILITY_OFF:vision_analysis");
+    if (
+      files.some((f) => f.mediaType === "application/pdf") &&
+      capabilityOff(database, "reading")
+    )
+      throw Error("RELAY_CAPABILITY_OFF:document_analysis");
+    if (
+      (capability === "vision_analysis" ||
+        capability === "document_analysis") &&
       !attachment
     ) {
       throw new Error("RELAY_NO_FILE");
     }
     if (
       capability === "vision_analysis" &&
-      !attachment?.mediaType.startsWith("image/")
+      files.some((file) => !file.mediaType.startsWith("image/"))
     ) {
       throw new Error("RELAY_IMAGE_REQUIRED");
     }
     if (
-      capability === "document_analysis" && attachment?.mediaType !== "application/pdf"
+      capability === "document_analysis" &&
+      files.some((file) => file.mediaType !== "application/pdf")
     ) {
       throw new Error("RELAY_PDF_REQUIRED");
     }
@@ -1431,30 +1506,40 @@ export async function runRelay(
           region: request.region,
         })
       : prompt!;
-    const codexImagePaths =
-      request.engine === "openai-cli" && attachment
-        ? attachment.mediaType === "application/pdf"
-          ? await renderRelayPdfPages(
-              Buffer.from(attachment.base64, "base64"),
-              scratch,
-            )
-          : attachment.mediaType.startsWith("image/")
-            ? [attachment.path]
-            : []
-        : [];
+    const codexImagePaths: string[] = [];
+    if (request.engine === "openai-cli")
+      for (const file of files) {
+        if (file.mediaType === "application/pdf") {
+          const folder = resolve(scratch, randomUUID());
+          mkdirSync(folder, { recursive: true });
+          codexImagePaths.push(
+            ...(await renderRelayPdfPages(
+              Buffer.from(file.base64, "base64"),
+              folder,
+            )),
+          );
+        } else if (file.mediaType.startsWith("image/"))
+          codexImagePaths.push(file.path);
+        else throw Error("RELAY_FILE_TYPE_UNSUPPORTED");
+      }
     const engineResult =
       request.engine === "claude-cli"
         ? await claudeSubscriptionRelay(
             secretsDirectory,
             enginePrompt,
-            attachment
-              ? { base64: attachment.base64, mediaType: attachment.mediaType }
+            files.length
+              ? files.map((file) => ({
+                  base64: file.base64,
+                  mediaType: file.mediaType,
+                }))
               : undefined,
             profileKey,
             allowWeb,
             chosen || request.effort
               ? {
-                  ...(chosen ? { model: chosen.id, expectedModel: chosen.resolved_id } : {}),
+                  ...(chosen
+                    ? { model: chosen.id, expectedModel: chosen.resolved_id }
+                    : {}),
                   ...(request.effort ? { effort: request.effort } : {}),
                 }
               : undefined,
@@ -1471,9 +1556,10 @@ export async function runRelay(
     const results = allowWeb
       ? normalizeSearchRunEvidence(
           engineResult.searchEvidence,
-          engineResult.text, {
-          allowedDomains: request.allowedDomains,
-          maxResults: request.maxResults,
+          engineResult.text,
+          {
+            allowedDomains: request.allowedDomains,
+            maxResults: request.maxResults,
           },
         )
       : [];
@@ -1509,13 +1595,17 @@ export async function runRelay(
     if (chosen) {
       recordRelayModelProbe(
         database,
-        request.appProfileId, request.engine, chosen.id, capability, {
-        ok: true,
-        reason: null,
-        actualModel: engineResult.model,
-        modelReportedByEngine: engineResult.modelReportedByEngine,
-        effort: engineResult.reasoningEffort ?? request.effort ?? null,
-        path: "run",
+        request.appProfileId,
+        request.engine,
+        chosen.id,
+        capability,
+        {
+          ok: true,
+          reason: null,
+          actualModel: engineResult.model,
+          modelReportedByEngine: engineResult.modelReportedByEngine,
+          effort: engineResult.reasoningEffort ?? request.effort ?? null,
+          path: "run",
         },
       );
     } else {
@@ -1545,7 +1635,8 @@ export async function runRelay(
         : "thread_config_echo_and_turn_completed",
       effort: engineResult.reasoningEffort ?? request.effort ?? null,
       effort_reported_by_engine:
-        request.engine === "openai-cli" && engineResult.reasoningEffort !== null,
+        request.engine === "openai-cli" &&
+        engineResult.reasoningEffort !== null,
       contract_revision: RELAY_CONTRACT_REVISION,
       ms: Date.now() - started,
       searched_at: allowWeb ? new Date().toISOString() : null,
@@ -1631,13 +1722,20 @@ export function listRelayCalls(database: DatabaseHandle): {
 }
 
 export function publicRelayError(error: unknown, engine: RelayEngine): string {
-  if(error instanceof ApiRelayError&&/^RELAY_[A-Z0-9_]+$/.test(error.message))return error.message;
+  if (
+    error instanceof ApiRelayError &&
+    /^RELAY_[A-Z0-9_]+$/.test(error.message)
+  )
+    return error.message;
   const raw = error instanceof Error ? error.message : "";
   const exact = new Set([
     "RELAY_OFF",
     "RELAY_RESEARCH_LIMIT_EXCEEDED",
     "invalid_research_input",
     "duplicate_file_id",
+    "RELAY_INLINE_FILE_INVALID",
+    "RELAY_FILE_TYPE_UNSUPPORTED",
+    "RELAY_FILE_HASH_MISMATCH",
     "RELAY_TOO_MANY_FILES",
     "RELAY_FILE_TOO_LARGE",
     "RELAY_TOTAL_TOO_LARGE",
