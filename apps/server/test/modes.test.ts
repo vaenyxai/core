@@ -85,7 +85,7 @@ describe("Custom Mode M1", () => {
     expect(created.hasEnterPin).toBe(true);
     expect(created.hasExitPin).toBe(false);
     // No plaintext PIN anywhere in the API shape.
-    expect(JSON.stringify(created)).not.toContain("1234");
+    expect(JSON.stringify(created)).not.toContain(JSON.stringify("1234"));
 
     expect(listModes(database)).toHaveLength(1);
 

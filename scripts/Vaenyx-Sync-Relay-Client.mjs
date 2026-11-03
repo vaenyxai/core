@@ -15,6 +15,7 @@ const names = [
   "search.mjs",
   "direct.mjs",
   "routes.mjs",
+  "journal.mjs",
 ];
 const target = process.argv[2],
   check = process.argv.includes("--check");
@@ -23,7 +24,7 @@ if (!target)
     "Usage: node scripts/Vaenyx-Sync-Relay-Client.mjs <vendor-directory> [--check]",
   );
 const folder = path.resolve(target);
-const manifest = { name: "vaenyx-relay-client", version: "1.2.0", files: {} };
+const manifest = { name: "vaenyx-relay-client", version: "1.3.0", files: {} };
 for (const name of names) {
   const bytes = fs.readFileSync(path.join(source, name));
   manifest.files[name] = createHash("sha256").update(bytes).digest("hex");
@@ -41,5 +42,5 @@ if (check) {
     throw Error("SDK manifest differs");
 } else fs.writeFileSync(path.join(folder, "manifest.json"), text);
 console.log(
-  "Vaenyx Relay Client 1.2.0 " + (check ? "verified" : "synchronized"),
+  "Vaenyx Relay Client 1.3.0 " + (check ? "verified" : "synchronized"),
 );
