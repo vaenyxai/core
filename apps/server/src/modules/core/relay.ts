@@ -1,3 +1,4 @@
+import {ApiRelayError} from "./relay-api-wire.js";
 import type {
   ResearchRequest,
   ResearchResponse,
@@ -161,6 +162,7 @@ interface StoredModelProbe {
   path: "run" | "test";
   probedAt: string;
   revision: string;
+  credentialVersion: string | null;
 }
 
 type StoredModelProbes = Partial<
@@ -193,7 +195,7 @@ export function recordRelayModelProbe(
   engine: RelayEngine,
   model: string,
   capability: RelaySafeCapability,
-  probe: Omit<StoredModelProbe, "probedAt" | "revision">,
+  probe: Omit<StoredModelProbe, "probedAt" | "revision" | "credentialVersion">,
 ): void {
   const current = readModelProbes(database, profileId);
   const forEngine = current[engine] ?? {};
@@ -205,6 +207,7 @@ export function recordRelayModelProbe(
         ...forEngine[model],
         [capability]: {
           ...probe,
+          credentialVersion: engine === "openai-cli" ? codexLoginConnectedAt(profileId) : claudeLoginConnectedAt(profileId),
           probedAt: new Date().toISOString(),
           revision: RELAY_CAPABILITY_PROBE_REVISION,
         },
@@ -232,7 +235,7 @@ export interface RelayModelVerification {
   at: string;
 }
 
-function modelVerifications(
+export function modelVerifications(
   database: DatabaseHandle,
   profileId: string,
   engine: RelayEngine,
@@ -241,7 +244,7 @@ function modelVerifications(
   const probes = readModelProbes(database, profileId)[engine]?.[model] ?? {};
   return RELAY_SAFE_CAPABILITIES.flatMap((capability) => {
     const probe = probes[capability];
-    if (!probe || probe.revision !== RELAY_CAPABILITY_PROBE_REVISION) return [];
+    if (!probe || probe.revision !== RELAY_CAPABILITY_PROBE_REVISION || probe.credentialVersion !== (engine === "openai-cli" ? codexLoginConnectedAt(profileId) : claudeLoginConnectedAt(profileId))) return [];
     return [
       {
         capability,
@@ -257,6 +260,11 @@ function modelVerifications(
   });
 }
 
+export function relayModelProofs(database:DatabaseHandle,profileId:string){
+ return RELAY_ENGINES.flatMap(engine=>engineSignedIn(engine,profileId)?
+  Object.keys(readModelProbes(database,profileId)[engine]??{}).flatMap(model=>
+   modelVerifications(database,profileId,engine,model).map(proof=>({...proof,engine,model}))):[]);
+}
 export interface RelayModelCatalogueEngine {
   engine: RelayEngine;
   login_status: "connected" | "not_connected";
@@ -1623,6 +1631,7 @@ export function listRelayCalls(database: DatabaseHandle): {
 }
 
 export function publicRelayError(error: unknown, engine: RelayEngine): string {
+  if(error instanceof ApiRelayError&&/^RELAY_[A-Z0-9_]+$/.test(error.message))return error.message;
   const raw = error instanceof Error ? error.message : "";
   const exact = new Set([
     "RELAY_OFF",
@@ -1651,6 +1660,13 @@ export function publicRelayError(error: unknown, engine: RelayEngine): string {
   }
   if (exact.has(raw)) return raw;
   const safePrefixes = [
+    "RELAY_PROVIDER_",
+    "RELAY_REQUIREMENT_",
+    "RELAY_CONNECTION_",
+    "RELAY_ROUTING_",
+    "RELAY_SELECTION_",
+    "RELAY_MODEL_TEST_REQUIRED",
+    "RELAY_VERIFIABLE_",
     "RELAY_CAPABILITY_OFF:",
     "RELAY_CAPABILITY_UNSUPPORTED:",
     "RELAY_EFFORT_INVALID:",

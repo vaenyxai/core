@@ -68,3 +68,19 @@ const calls=[];const client=createRelayClient({connection:{read:async()=>({data:
 for(const capability of ['text_analysis','structured_output','vision_analysis','document_analysis','web_search','research']){
 const request={engine:'openai-cli',model:'fixture',capability,query:'synthetic',allowed_domains:['example.com'],max_results:2,files:[],research:{allowed_tools:[]}};
 await client.run(request);assert.deepEqual(calls.at(-1),request);}assert.equal(calls.length,6);});
+
+test('API providers use the same scoped client and redact provider-key echoes',async()=>{
+ const calls=[],key='fixture-provider-key';
+ const connection={read:async()=>({data:{connection:{relay_origin:relay,token:'fixture-app-token'}}})};
+ const client=createRelayClient({connection,fetcher:async(url,init)=>{calls.push({url,init});return Response.json({connected:true});}});
+ await client.providers();await client.connectProvider({provider:'openai',apiKey:key});await client.disconnectProvider({provider:'openai',expectedRevision:'revision'});
+ assert.equal(calls[0].url,relay+'/v1/relay/providers');
+ assert.equal(calls[1].init.credentials,'omit');assert.equal(JSON.parse(calls[1].init.body).api_key,key);
+ assert.equal(calls[2].init.method,'DELETE');
+ const unsafe=createRelayClient({connection,fetcher:async()=>Response.json({error:key})});
+ await assert.rejects(unsafe.connectProvider({provider:'openai',apiKey:key}),e=>e.code==='unsafe_response'&&!e.message.includes(key));
+ let run;
+ const paid=createRelayClient({connection,fetcher:async(url,init)=>{run=JSON.parse(init.body);return Response.json({text:'synthetic'});}});
+ await paid.run({engine:'api-gemini',model:'fixture-model',capability:'structured_output',requirements:{max_output_tokens:123},prompt:'synthetic'});
+ assert.equal(run.engine,'api-gemini');assert.equal(run.requirements.max_output_tokens,123);
+});

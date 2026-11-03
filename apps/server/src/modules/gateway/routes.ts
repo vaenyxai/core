@@ -1,3 +1,8 @@
+import {ApiRelayError} from "../core/relay-api-wire.js";
+import {resolveAppRoute} from "../core/relay-routing.js";
+import {apiProfileStatus,apiCatalogue,runApiRelay,testApiModel} from "../core/relay-api.js";
+import {isApiEngine} from "../core/relay-api-config.js";
+import {registerRelayApiRoutes} from "./relay-api.js";
 import { assertResearchRequest } from "../core/research-validation.js";
 import { registerHouseholdSourceRoutes } from "./household-sources.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -818,6 +823,7 @@ const ErrorResponseSchema = Type.Object(
   {
     error: Type.String(),
     ownerError: Type.Optional(OwnerSafeErrorSchema),
+    execution_started: Type.Optional(Type.Boolean()),
   },
   {
     additionalProperties: false,
@@ -6638,7 +6644,8 @@ export async function registerGatewayRoutes(
           .code(401)
           .send({ error: "A valid App Token is required." });
       }
-      return relayHealth(context.database, knocker.profileId);
+      const status=relayHealth(context.database, knocker.profileId);
+      return {...status,engines:[...status.engines,...apiProfileStatus(context.database,context.config.secretsDirectory,knocker.profileId).map(e=>({...e,signedIn:e.connected}))]};
     },
   );
 
@@ -6664,6 +6671,9 @@ export async function registerGatewayRoutes(
               "effort",
               "model",
               "research",
+              "requirements",
+              "selection",
+              "routing_revision",
             ]);
             if (Object.keys(body).some((key) => !keys.has(key)))
               throw new Error("invalid_research_input");
@@ -6731,7 +6741,11 @@ export async function registerGatewayRoutes(
       const started = Date.now();
       try {
         const execute = async (localRead?: import("../core/local-file-types.js").LocalFileRead) => {
-          const result = await runRelay(
+          const resolved=resolveAppRoute(context.database,knocker.profileId,request.body);
+          request.body=resolved.request;
+          const paid=isApiEngine(resolved.request.engine);
+          if(!paid && request.body.requirements) throw new Error("RELAY_REQUIREMENT_UNSUPPORTED");
+          const result = paid ? await runApiRelay(context.database,context.config.secretsDirectory,knocker.profileId,request.body,{localRead}) : await runRelay(
           context.database,
           context.config.secretsDirectory,
           {
@@ -6739,7 +6753,7 @@ export async function registerGatewayRoutes(
             localRead,
             task: request.body.task,
             prompt: request.body.prompt,
-            engine: request.body.engine,
+            engine: request.body.engine as "openai-cli" | "claude-cli",
             capability: request.body.capability,
             query: request.body.query,
             allowedDomains: request.body.allowed_domains,
@@ -6754,14 +6768,16 @@ export async function registerGatewayRoutes(
         );
         recordRelayCall(context.database, {
           task: request.body.task,
-          engine: request.body.engine,
+          engine: request.body.engine ?? "configured",
           capability: request.body.capability,
           ms: result.ms,
           ok: result.research ? result.research.status === "complete" : true,
           failure: result.research && result.research.status !== "complete" ? result.research.stop_reason : null,
           appId: knocker.profileId,
         });
-          return result;
+          const after=knocking(request);
+          if(!after||after==="wrong-kind"||after.profileId!==knocker.profileId)throw new Error("RELAY_PROFILE_CHANGED");
+          return resolved.binding?{...result,routing_revision:resolved.binding.revision!,selection_source:"app_profile" as const}:result;
         };
         const limits = readRelayConfig(context.database);
         const result = request.body.files?.some(f => f.file_ref)
@@ -6775,10 +6791,11 @@ export async function registerGatewayRoutes(
         // back to your free model" from "tell the user something is wrong".
         if (error instanceof Error && /^local_file_[a-z_]+$/.test(error.message))
           return reply.code(409).send({ error: "RELAY_" + error.message.toUpperCase() });
-        const code = publicRelayError(error, request.body.engine);
+        const code = publicRelayError(error, request.body.engine as "openai-cli" | "claude-cli");
+        const outcome=isApiEngine(request.body.engine??"")&&error instanceof ApiRelayError?{execution_started:error.started}:{};
         recordRelayCall(context.database, {
           task: request.body.task,
-          engine: request.body.engine,
+          engine: request.body.engine ?? "configured",
           capability: request.body.capability,
           ms: Date.now() - started,
           ok: false,
@@ -6798,7 +6815,7 @@ export async function registerGatewayRoutes(
             resourceType: "capability",
             resourceId: request.body.capability,
           });
-          return reply.code(403).send({ error: code });
+          return reply.code(403).send({ error: code,...outcome });
         }
         const status =
           code === "RELAY_RATE_LIMITED"
@@ -6842,7 +6859,7 @@ export async function registerGatewayRoutes(
                   code === "RELAY_STRUCTURED_OUTPUT_INVALID"
                 ? 400
                 : 502;
-        return reply.code(status).send({ error: code });
+        return reply.code(status).send({ error: code,...outcome });
       }
     },
   );
@@ -6907,8 +6924,10 @@ export async function registerGatewayRoutes(
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
       }
-      const status = relayProfileEngineStatus(context.database, profile.id);
+      const subscriptionStatus = relayProfileEngineStatus(context.database, profile.id);
+      const status={...subscriptionStatus,engines:[...subscriptionStatus.engines,...apiProfileStatus(context.database,context.config.secretsDirectory,profile.id)]};
       return {
+        configured_selection:true,
         contract_version: status.contract_version,
         contract_revision: status.contract_revision,
         capability_probe_revision: status.capability_probe_revision,
@@ -6921,6 +6940,21 @@ export async function registerGatewayRoutes(
       };
     },
   );
+
+  registerRelayApiRoutes(app,{database:context.database,secretsDirectory:context.config.secretsDirectory,authorize:(request,reply)=>{
+    allowRelayOrigin(request,reply);
+    if(request.method==="OPTIONS")return null;
+    if(outsideTailnet(request)){reply.code(403).send({error:"RELAY_TAILNET_REQUIRED"});return null;}
+    const profile=knockingProfile(request);
+    if(profile==="wrong-kind"){reply.code(403).send({error:"RELAY_KEY_WRONG_KIND"});return null;}
+    if(!profile){reply.code(401).send({error:"RELAY_PROFILE_REQUIRED"});return null;}
+    return profile.id;
+  },authorizeOwner:(request,reply)=>{
+    const owner=requireOwner(request);if(!owner){reply.code(401).send({error:"Owner login required."});return null;}
+    const profileId=(request.params as {profile?:string}).profile;
+    if(!profileId||!listAppProfiles(context.database).some(p=>p.id===profileId&&p.kind==="relay"&&p.enabled)){reply.code(404).send({error:"RELAY_PROFILE_REQUIRED"});return null;}
+    return profileId;
+  }});
 
   app.post(
     "/v1/relay/profile/probe",
@@ -6999,12 +7033,8 @@ export async function registerGatewayRoutes(
       if (!profile) {
         return reply.code(401).send({ error: "RELAY_PROFILE_REQUIRED" });
       }
-      return relayModelCatalogue(
-        context.database,
-        context.config.secretsDirectory,
-        profile.id,
-        { force: request.query.refresh === "1" },
-      );
+      const catalogue=await relayModelCatalogue(context.database,context.config.secretsDirectory,profile.id,{force:request.query.refresh==="1"});
+      return {...catalogue,engines:[...catalogue.engines,...await apiCatalogue(context.database,context.config.secretsDirectory,profile.id,request.query.refresh==="1")]};
     },
   );
 
@@ -7038,15 +7068,15 @@ export async function registerGatewayRoutes(
       }
       const started = Date.now();
       try {
-        const result = await probeRelayModel(
+        const result = isApiEngine(request.body.engine)?await testApiModel(context.database,context.config.secretsDirectory,profile.id,request.body):await probeRelayModel(
           context.database,
           context.config.secretsDirectory,
           profile.id,
-          request.body,
+          {...request.body,engine:request.body.engine as "openai-cli" | "claude-cli"},
         );
         recordRelayCall(context.database, {
           task: `model-test:${request.body.capability ?? "text_analysis"}`,
-          engine: request.body.engine,
+          engine: request.body.engine ?? "configured",
           capability: request.body.capability ?? "text_analysis",
           ms: result.ms,
           ok: result.status === "ok",
@@ -7058,10 +7088,10 @@ export async function registerGatewayRoutes(
         // Refusals BEFORE the engine is reached (bad model, bad effort, not
         // connected, off, rate-limited) come back as codes; a failure inside
         // the engine is a "failed" result above, never a 5xx.
-        const code = publicRelayError(error, request.body.engine);
+        const code = publicRelayError(error, request.body.engine as "openai-cli" | "claude-cli");
         recordRelayCall(context.database, {
           task: `model-test:${request.body.capability ?? "text_analysis"}`,
-          engine: request.body.engine,
+          engine: request.body.engine ?? "configured",
           capability: request.body.capability ?? "text_analysis",
           ms: Date.now() - started,
           ok: false,

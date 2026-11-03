@@ -29,7 +29,7 @@
     "test:update:windows": "node scripts/update-windows-rehearsal.mjs",
     "test:ui": "playwright test",
     "typecheck": "npm run build -w @vaenyx/contracts && npm run typecheck -w @vaenyx/server && npm run typecheck -w @vaenyx/web",
-    "check:relay-client": "node --test packages/relay-client/test/*.mjs"
+    "check:relay-client": "node scripts/Vaenyx-Build-Relay-Providers.mjs --check && node --test packages/relay-client/test/*.mjs"
   },
   "engines": {
     "node": ">=24.0.0",

@@ -2886,3 +2886,18 @@ export function readHouseholdSource(
     body: JSON.stringify({ assetId, kind, language }),
   });
 }
+
+export interface AppApiProvider {id:string;name:string;engine:string;connected:boolean;revision:string|null;connected_at:string|null;capabilities:string[]}
+export const fetchAppApiProviders=(profile:string)=>requestJson<{providers:AppApiProvider[]}>("/v1/app-profiles/"+encodeURIComponent(profile)+"/api-providers");
+export const connectAppApiProvider=(profile:string,input:{provider:string;api_key:string;expected_revision:string|null})=>requestJson("/v1/app-profiles/"+encodeURIComponent(profile)+"/api-providers",{method:"POST",body:JSON.stringify(input)});
+export const disconnectAppApiProvider=(profile:string,provider:string,revision:string)=>requestJson("/v1/app-profiles/"+encodeURIComponent(profile)+"/api-providers/"+encodeURIComponent(provider),{method:"DELETE",body:JSON.stringify({expected_revision:revision})});
+
+export interface AppRelayChoice {engine:string;model:string;effort?:string}
+export interface AppRelayRouting {revision:string|null;primary:AppRelayChoice|null;overrides:Record<string,AppRelayChoice>}
+export interface AppRelayProof {engine:string;model:string;capability:string;effort:string|null;ok:boolean;reason:string|null;at:string}
+export const fetchAppRelayProofs=(profile:string)=>requestJson<{proofs:AppRelayProof[]}>("/v1/app-profiles/"+encodeURIComponent(profile)+"/relay-model-proofs");
+export interface AppRelayCatalogue {engines:{engine:string;catalogue_status:string;unavailable_reason:string|null;models:{id:string;display_name:string;selectable:boolean;efforts:string[];verified:Omit<AppRelayProof,"engine"|"model">[]}[]}[]}
+export const fetchAppRelayRouting=(profile:string)=>requestJson<AppRelayRouting>("/v1/app-profiles/"+encodeURIComponent(profile)+"/relay-routing");
+export const saveAppRelayRouting=(profile:string,body:AppRelayRouting)=>requestJson<AppRelayRouting>("/v1/app-profiles/"+encodeURIComponent(profile)+"/relay-routing",{method:"PUT",body:JSON.stringify(body)});
+export const fetchAppRelayModels=(profile:string)=>requestJson<AppRelayCatalogue>("/v1/app-profiles/"+encodeURIComponent(profile)+"/relay-models");
+export const testAppRelayModel=(profile:string,body:AppRelayChoice&{capability:string})=>requestJson<{status:string;unavailable_reason:string|null}>("/v1/app-profiles/"+encodeURIComponent(profile)+"/relay-models/test",{method:"POST",body:JSON.stringify(body)});

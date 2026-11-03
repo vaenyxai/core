@@ -10677,3 +10677,18 @@ body {
     display: none;
   }
 }
+
+/* Per-App Relay settings share existing Door controls and remain usable on phones. */
+.relay-api-connections,
+.relay-model-routing { display: grid; gap: 12px; min-width: 0; margin-top: 16px; }
+.relay-api-connections h3,
+.relay-model-routing h3,
+.relay-api-connections p,
+.relay-model-routing p { margin: 0; overflow-wrap: anywhere; }
+.relay-api-connections label,
+.relay-model-routing label { display: grid; gap: 6px; min-width: 0; }
+.relay-api-connections input,
+.relay-api-connections select,
+.relay-model-routing select { min-width: 0; width: 100%; box-sizing: border-box; }
+.relay-api-connections > button,
+.relay-model-routing > button { justify-self: start; min-height: 44px; }

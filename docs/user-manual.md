@@ -1132,5 +1132,12 @@ countdown every visit.
 
 ---
 
-Manual for **v0.4.14.10-dev** · last updated 2026-11-01.
+Manual for **v0.4.14.12-dev** · last updated 2026-11-03.
 Keep this file up to date whenever a feature changes.
+
+
+## App Relay And Direct API
+
+- A connected App may use Vaenyx or its independent Direct API route. In Vaenyx, open Settings → AI Settings → the App's connection and choose **Model For This App**. The choice can use its dedicated subscription login or one of its own API connections. Find Models reads the current catalogue; Test calls the selected model; Use saves it for the next task. Other Apps and other Vaenyx machines keep their choices.
+- API keys are encrypted and isolated by App profile. A connected key is not a passed capability test. The App sends its task and output/tool/file requirements; incompatible requirements fail rather than silently switching models. Actual model and routing revision accompany the response.
+- Direct API remains independent when Vaenyx is offline. Automatic paid backup is off by default: it needs a separately selected compatible backup, advance paid authorization, an enforceable budget and atomic budget reservation. Unknown outcomes never automatically retry or switch.

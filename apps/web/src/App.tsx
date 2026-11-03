@@ -1,3 +1,5 @@
+import {RelayModelRouting} from "./RelayModelRouting";
+import {RelayApiConnections} from "./RelayApiConnections";
 import { RelayConnectPanel } from "./RelayConnectPanel.js";
 import { LocalFilesPanel } from "./LocalFilesPanel.js";
 import { HouseholdBoard } from "./household-board";
@@ -14460,7 +14462,7 @@ function SubscriptionDoorPanel() {
   return (
     <section className="settings-card">
       <p className="eyebrow">For your other apps</p>
-      <h2>Subscription Door</h2>
+      <h2>{lang === "zh" ? "App Relay" : "App Relay"}</h2>
       {/* One fold per app (Oskar, 2026-09-05: 每一个折叠的是一个 app); the
           switch, the address, the limits and the usage stay in sight. */}
 
@@ -14468,8 +14470,7 @@ function SubscriptionDoorPanel() {
         <div>
           <strong>{settings.enabled ? "Open" : "Closed"}</strong>
           <p>
-            Lends your ChatGPT and Claude subscriptions to your own apps.
-            Reachable only from inside your private network.
+            {lang === "zh" ? "为每个 App 选择独立订阅或 API 型号。仅在你的私网内可用。" : "Select a dedicated subscription or API model for each App. Available only inside your private network."}
           </p>
         </div>
         <input
@@ -14509,8 +14510,8 @@ function SubscriptionDoorPanel() {
       <ul className="settings-dots">
         <li>
           {lang === "zh"
-            ? "一个 app 一把钥匙、一个订阅身份"
-            : "One Model Key and one subscription identity per app"}
+            ? "每个 App 独立 Key、登录与 API 连接"
+            : "Each App has its own Relay Key, logins and API connections"}
         </li>
         <li>
           {lang === "zh"
@@ -14716,6 +14717,8 @@ function SubscriptionDoorPanel() {
                 })}
               </div>
             ) : null}
+            <RelayApiConnections profileId={appProfile.id} lang={lang}/>
+            <RelayModelRouting profileId={appProfile.id} lang={lang}/>
           </details>
         );
       })}

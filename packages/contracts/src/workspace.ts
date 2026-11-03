@@ -3715,6 +3715,19 @@ export const RelayEngineSchema = Type.Union([
   Type.Literal("claude-cli"),
 ]);
 
+export const RelayApiEngineSchema = Type.Union([
+  Type.Literal("api-gemini"),
+  Type.Literal("api-groq"),
+  Type.Literal("api-openai"),
+  Type.Literal("api-anthropic"),
+  Type.Literal("api-grok"),
+  Type.Literal("api-openrouter"),
+  Type.Literal("api-mistral"),
+  Type.Literal("api-cerebras"),
+  Type.Literal("api-zhipu"),
+]);
+const RelayAnyEngineSchema = Type.Union([RelayEngineSchema, RelayApiEngineSchema]);
+
 export const RelayCapabilitySchema = Type.Union([
   Type.Literal("text_analysis"),
   Type.Literal("structured_output"),
@@ -3736,12 +3749,15 @@ export const RelayCapabilitySchema = Type.Union([
 
 export const RelayRunRequestSchema = Type.Object(
   {
+    selection: Type.Optional(Type.Literal("configured")),
+    routing_revision: Type.Optional(Type.String({minLength:1,maxLength:80})),
+    requirements: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
     // What kind of job this is. Shows up in the door's log so the Owner can see
     // what his apps have been asking for, without any of the content.
     research: Type.Optional(ResearchRequestSchema),
     task: Type.String({ minLength: 1, maxLength: 60 }),
     prompt: Type.Optional(Type.String({ minLength: 1, maxLength: 200_000 })),
-    engine: RelayEngineSchema,
+    engine: Type.Optional(RelayAnyEngineSchema),
     capability: RelayCapabilitySchema,
     query: Type.Optional(Type.String({ minLength: 1, maxLength: 20_000 })),
     allowed_domains: Type.Optional(
@@ -3782,16 +3798,18 @@ export const RelayRunRequestSchema = Type.Object(
     // illegal value echoing the caller's own word, which a schema enum's
     // generic 400 could not.
     effort: Type.Optional(Type.String({ minLength: 1, maxLength: 20 })),
-    model: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
+    model: Type.Optional(Type.String({ minLength: 1, maxLength: 160 })),
   },
   { additionalProperties: false },
 );
 
 export const RelayRunResponseSchema = Type.Object(
   {
+    routing_revision: Type.Optional(Type.String()),
+    selection_source: Type.Optional(Type.Literal("app_profile")),
     research: Type.Optional(ResearchResponseSchema),
     text: Type.String(),
-    engine: RelayEngineSchema,
+    engine: RelayAnyEngineSchema,
     provider: Type.String(),
     model: Type.String(),
     ms: Type.Integer(),
@@ -3829,7 +3847,7 @@ export const RelayRunResponseSchema = Type.Object(
 
 export const RelayCapabilityStatusSchema = Type.Object(
   {
-    engine: RelayEngineSchema,
+    engine: RelayAnyEngineSchema,
     login_status: Type.Union([
       Type.Literal("connected"),
       Type.Literal("not_connected"),
@@ -3860,7 +3878,7 @@ export const RelayHealthSchema = Type.Object(
     engines: Type.Array(
       Type.Object(
         {
-          id: RelayEngineSchema,
+          id: RelayAnyEngineSchema,
           signedIn: Type.Boolean(),
           capabilities: Type.Array(RelayCapabilitySchema),
           capability_status: Type.Array(RelayCapabilityStatusSchema),
@@ -3931,6 +3949,7 @@ export const RelayPanelSchema = Type.Object(
 // version and prefix, nothing a thief could sign in with.
 export const RelayProfileStatusSchema = Type.Object(
   {
+    configured_selection: Type.Optional(Type.Boolean()),
     contract_version: Type.Literal(2),
     contract_revision: Type.String(),
     capability_probe_revision: Type.String(),
@@ -3941,7 +3960,7 @@ export const RelayProfileStatusSchema = Type.Object(
     engines: Type.Array(
       Type.Object(
         {
-          id: RelayEngineSchema,
+          id: RelayAnyEngineSchema,
           connected: Type.Boolean(),
           connectedAt: Type.Union([Type.String(), Type.Null()]),
           capabilities: Type.Array(RelayCapabilitySchema),
@@ -4082,7 +4101,7 @@ export const RelayModelCatalogueSchema = Type.Object(
     engines: Type.Array(
       Type.Object(
         {
-          engine: RelayEngineSchema,
+          engine: RelayAnyEngineSchema,
           login_status: Type.Union([
             Type.Literal("connected"),
             Type.Literal("not_connected"),
@@ -4107,8 +4126,8 @@ export const RelayModelCatalogueSchema = Type.Object(
 
 export const RelayModelTestRequestSchema = Type.Object(
   {
-    engine: RelayEngineSchema,
-    model: Type.String({ minLength: 1, maxLength: 60 }),
+    engine: RelayAnyEngineSchema,
+    model: Type.String({ minLength: 1, maxLength: 160 }),
     effort: Type.Optional(Type.String({ minLength: 1, maxLength: 20 })),
     capability: Type.Optional(
       Type.Union([
@@ -4123,7 +4142,7 @@ export const RelayModelTestRequestSchema = Type.Object(
 
 export const RelayModelTestResultSchema = Type.Object(
   {
-    engine: RelayEngineSchema,
+    engine: RelayAnyEngineSchema,
     capability: Type.Union([
       Type.Literal("text_analysis"),
       Type.Literal("structured_output"),

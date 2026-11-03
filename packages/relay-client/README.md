@@ -26,3 +26,11 @@ static module tree and server source tree. Commit the generated manifest. Use
 --check in consumer tests to reject drift. Consumers ship local files; no remote
 JavaScript or automatic latest-version update is used. Credentials never enter
 the SDK source, manifests or synchronization process.
+
+## Two Independent Routes
+
+The local Vaenyx instance owns each Relay App profile's selected engine/model. Use selection: "configured" and send task requirements; GET /v1/relay/routing reports its revision. An explicitly selected old client remains compatible until that App is configured; then it cannot override the Owner's choice.
+
+Direct API uses createDirectClient from direct.mjs, independently of Vaenyx availability. Provider adapters are generated from the same Core TypeScript source with Vaenyx-Build-Relay-Providers.mjs. Never edit generated adapter files. New model IDs are discovered dynamically; protocol changes require a pinned SDK rollout.
+
+createAIClient from routes.mjs requires a durable, scope-bound journal. Automatic paid fallback is off by default. Enabling it also requires a selected compatible Direct API backup, explicit paid authorization, a positive budget/maximum cost and trusted atomic bounded-budget reservation/settlement callbacks. Unknown dispatch outcomes block backup and repeat dispatch. The caller remains responsible for authorization, secret storage, business validation and an honest named-switch UI.
