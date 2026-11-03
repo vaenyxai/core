@@ -11,7 +11,7 @@
   "scripts": {
     "build": "npm run build -w @vaenyx/contracts && npm run build -w @vaenyx/server && npm run build -w @vaenyx/web",
     "backup": "node scripts/backup.mjs",
-    "check": "npm run check:naming && npm run check:architecture && npm run check:translations && npm run lint && npm run typecheck && npm run test && npm run build",
+    "check": "npm run check:relay-client && npm run check:naming && npm run check:architecture && npm run check:translations && npm run lint && npm run typecheck && npm run test && npm run build",
     "check:architecture": "node scripts/Vaenyx-Check-Architecture.mjs",
     "check:naming": "node scripts/Vaenyx-Check-Naming.mjs",
     "check:translations": "node scripts/Vaenyx-Check-Translations.mjs",
@@ -28,7 +28,8 @@
     "test:ops": "node scripts/ops-smoke.mjs && node scripts/update-transaction-smoke.mjs && node scripts/version-policy-smoke.mjs",
     "test:update:windows": "node scripts/update-windows-rehearsal.mjs",
     "test:ui": "playwright test",
-    "typecheck": "npm run build -w @vaenyx/contracts && npm run typecheck -w @vaenyx/server && npm run typecheck -w @vaenyx/web"
+    "typecheck": "npm run build -w @vaenyx/contracts && npm run typecheck -w @vaenyx/server && npm run typecheck -w @vaenyx/web",
+    "check:relay-client": "node --test packages/relay-client/test/*.mjs"
   },
   "engines": {
     "node": ">=24.0.0",
